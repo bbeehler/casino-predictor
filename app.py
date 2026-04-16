@@ -237,34 +237,44 @@ with tab2:
                 
                 st.line_chart(df_f.set_index("Date")["Visitors"], color="#FFCC00")
 
-    # --- SECTION B: LEDGER SEARCH & EDIT (FIXED) ---
+   # --- SECTION B: LEDGER SEARCH & EDIT (FULL COLUMN VIEW) ---
     st.markdown("### 🔍 3. Search & Edit Historical Ledger")
     with st.container(border=True):
         if ledger_data:
             df_edit = pd.DataFrame(ledger_data)
-            
-            # Ensure the entry_date column is treated as a string for easy matching
             df_edit['entry_date'] = df_edit['entry_date'].astype(str)
             
-            search_date = st.date_input("Search a past date to verify data", 
+            search_date = st.date_input("Search a past date to verify all data points", 
                                        value=pd.to_datetime(df_edit['entry_date']).max().date())
             
-            # CONVERSION: Turn the picker date into a string that matches the DB format
             search_str = search_date.strftime("%Y-%m-%d")
-            
             found = df_edit[df_edit['entry_date'] == search_str]
             
             if not found.empty:
                 row = found.iloc[0]
-                st.success(f"**Record Found for {search_str}**")
+                st.success(f"**Full Record Found for {search_str}**")
                 
-                # Bento-style result display
-                r1, r2, r3 = st.columns(3)
+                # 1. THE SUMMARY CARDS (Top Level)
+                r1, r2, r3, r4 = st.columns(4)
                 r1.metric("Actual Traffic", f"{int(row['actual_traffic']):,}")
                 r2.metric("Actual Revenue", f"${row['actual_coin_in']:,.0f}")
-                r3.metric("AI Accuracy", f"{(1 - (abs(row['actual_traffic'] - row['predicted_traffic']) / row['actual_traffic'])) * 100:.1f}%")
+                r3.metric("Digital Lift", f"{int(row.get('digital_lift_visitors', 0)):,}")
+                
+                # Calculate Accuracy for this specific day
+                error = abs(row['actual_traffic'] - row['predicted_traffic'])
+                acc = (1 - (error / row['actual_traffic'])) * 100 if row['actual_traffic'] > 0 else 0
+                r4.metric("AI Accuracy", f"{acc:.1f}%")
+                
+                # 2. THE FULL AUDIT (Every Column)
+                st.write("---")
+                st.markdown("**Detailed Variable Audit:**")
+                # We transpose the single row so it looks like a clean vertical list of every column
+                audit_df = found.T
+                audit_df.columns = ["Value"]
+                st.table(audit_df)
+                
             else:
-                st.warning(f"No entry exists for {search_str}. Use the 'Log Actuals' form above to create one.")
+                st.warning(f"No entry exists for {search_str}.")
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
     st.header("📈 Strategic Reporting Center")
