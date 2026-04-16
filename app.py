@@ -41,11 +41,25 @@ tab1, tab2, tab3, tab4 = st.tabs(["📊 Executive Dashboard", "📝 Daily Tracke
 # --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
     st.header("YTD Property Overview")
+    
+    # Row 1: Core Property Metrics (Updated to vs Last Month)
     col1, col2, col3 = st.columns(3)
-    col1.metric(label="Total Foot Traffic YTD", value="452,193", delta="12% vs Last Year")
-    col2.metric(label="Digital Contribution", value="43,053 Visitors", delta="+ 4.2%")
-    col3.metric(label="Weather Penalty", value="-109,872 Visitors", delta="Severe Winter", delta_color="inverse")
+    col1.metric(label="Total Foot Traffic", value="452,193", delta="+5.2% vs Last Month")
+    col2.metric(label="Digital Contribution", value="43,053 Visitors", delta="+4.2% vs Last Month")
+    col3.metric(label="Weather Penalty", value="-109,872 Visitors", delta="-12% vs Last Month", delta_color="inverse")
+    
     st.divider()
+    
+    # Row 2: Social Media & Top-of-Funnel Stats (New Section)
+    st.subheader("📱 Digital Marketing Performance")
+    soc1, soc2, soc3 = st.columns(3)
+    soc1.metric(label="Total Ad Impressions", value="14.2M", delta="+8.1% vs Last Month")
+    soc2.metric(label="Total Engagements", value="458,200", delta="+3.4% vs Last Month")
+    soc3.metric(label="Total Ad Clicks", value="112,450", delta="+5.5% vs Last Month")
+    
+    st.divider()
+    
+    # Row 3: Revenue
     st.subheader("Estimated Coin-In YTD: $57.7M")
     st.progress(0.75)
 
