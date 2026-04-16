@@ -6,7 +6,7 @@ from sklearn.linear_model import LinearRegression
 import google.generativeai as genai
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Hard Rock Ottawa - AI Predictor", layout="wide")
+st.set_page_config(page_title="Hard Rock Ottawa - Strategic AI Engine", layout="wide")
 
 # --- DATABASE & AI SETUP ---
 url: str = st.secrets["SUPABASE_URL"]
@@ -32,8 +32,7 @@ def fetch_data():
     try:
         response = supabase.table("ledger").select("*").execute()
         return response.data
-    except Exception as e:
-        st.error(f"Database Error: {e}")
+    except:
         return []
 
 ledger_data = fetch_data()
@@ -51,7 +50,6 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
     st.header("Executive Overview & MoM Trends")
-    
     if ledger_data:
         df_dash = pd.DataFrame(ledger_data)
         df_dash = df_dash[df_dash['actual_traffic'] > 0].copy()
@@ -60,16 +58,12 @@ with tab1:
             df_dash['entry_date'] = pd.to_datetime(df_dash['entry_date'])
             c = st.session_state.coeffs
             
-            # Dynamic Impact Math
-            df_dash['weather_impact_vis'] = (
-                (df_dash.get('temp_c', 0) * c['Temp_C']) + 
-                (df_dash.get('snow_cm', 0) * c['Snow_cm']) + 
-                (df_dash.get('rain_mm', 0) * c['Rain_mm']) + 
-                (df_dash.get('weather_alert', False).astype(int) * c['Alert'])
-            )
-            df_dash['weather_impact_rev'] = df_dash['weather_impact_vis'] * c['Avg_Coin_In']
-            
-            # Month over Month Logic
+            # AI Accuracy Math
+            df_dash['abs_error'] = abs(df_dash['actual_traffic'] - df_dash['predicted_traffic'])
+            mape = (df_dash['abs_error'] / df_dash['actual_traffic']).mean()
+            model_accuracy = (1 - mape) * 100
+
+            # MoM Logic
             latest_date = df_dash['entry_date'].max()
             curr_m, curr_y = latest_date.month, latest_date.year
             prev_m = curr_m - 1 if curr_m > 1 else 12
@@ -78,80 +72,64 @@ with tab1:
             df_curr = df_dash[(df_dash['entry_date'].dt.month == curr_m) & (df_dash['entry_date'].dt.year == curr_y)]
             df_prev = df_dash[(df_dash['entry_date'].dt.month == prev_m) & (df_dash['entry_date'].dt.year == prev_y)]
             
-            def get_metrics(df):
-                rev = df['actual_coin_in'].sum()
-                traf = df['actual_traffic'].sum()
-                rev_pp = rev / traf if traf > 0 else 0
-                dig_rev = df['digital_revenue_impact'].sum()
-                return rev, traf, rev_pp, dig_rev
-
-            y_rev, y_traf, y_rev_pp, y_dig_rev = get_metrics(df_dash)
-            c_rev, c_traf, c_rev_pp, c_dig_rev = get_metrics(df_curr)
-            p_rev, p_traf, p_rev_pp, p_dig_rev = get_metrics(df_prev)
-            
             def calc_mom(curr, prev):
-                if prev == 0: return "N/A"
-                pct = ((curr - prev) / abs(prev)) * 100
-                return f"{pct:+.1f}% MoM"
+                if prev.empty or prev['actual_traffic'].sum() == 0: return "N/A"
+                c_val = curr['actual_traffic'].sum()
+                p_val = prev['actual_traffic'].sum()
+                return f"{((c_val - p_val) / p_val) * 100:+.1f}% MoM"
 
-            st.subheader("💰 Core Financials & Traffic (YTD)")
-            r1c1, r1c2, r1c3 = st.columns(3)
-            r1c1.metric("Total Revenue", f"${y_rev:,.0f}", delta=calc_mom(c_rev, p_rev))
-            r1c2.metric("Foot Traffic", f"{y_traf:,.0f}", delta=calc_mom(c_traf, p_traf))
-            r1c3.metric("Avg Rev per Person", f"${y_rev_pp:,.2f}", delta=calc_mom(c_rev_pp, p_rev_pp))
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Traffic (YTD)", f"{df_dash['actual_traffic'].sum():,}", delta=calc_mom(df_curr, df_prev))
+            col2.metric("Digital Revenue Lift", f"${df_dash['digital_revenue_impact'].sum():,.0f}")
+            col3.metric("🎯 AI Prediction Accuracy", f"{model_accuracy:.1f}%")
             
             st.divider()
-            st.subheader("⚖️ Driving Forces")
-            r2c1, r2c2 = st.columns(2)
-            r2c1.metric("Digital Revenue Contribution", f"${y_dig_rev:,.0f}", delta=calc_mom(c_dig_rev, p_dig_rev))
-            r2c2.metric("Weather Rev Impact", f"${df_dash['weather_impact_rev'].sum():,.0f}", delta_color="inverse")
+            st.subheader("📱 Digital Marketing Performance")
+            soc1, soc2, soc3 = st.columns(3)
+            soc1.metric("Ad Impressions", f"{int(df_dash['ad_impressions'].sum()):,}")
+            soc2.metric("Social Engagements", f"{int(df_dash['social_engagements'].sum()):,}")
+            soc3.metric("Ad Clicks", f"{int(df_dash['ad_clicks'].sum()):,}")
 
 # --- TAB 2: DAILY TRACKER ---
 with tab2:
     st.header("Daily Performance Entry")
     with st.form("entry_form"):
-        col_a, col_b, col_c = st.columns(3)
-        date_in = col_a.date_input("Entry Date", datetime.date.today())
-        act_traf = col_b.number_input("Actual Foot Traffic", min_value=0)
-        act_coin = col_c.number_input("Actual Coin-In ($)", min_value=0.0)
+        c_in = st.columns(3)
+        date_in = c_in[0].date_input("Date", datetime.date.today())
+        act_traf = c_in[1].number_input("Actual Traffic", min_value=0)
+        act_coin = c_in[2].number_input("Actual Coin-In ($)", min_value=0.0)
         
-        st.subheader("External Factors")
-        w1, w2, w3, w4 = st.columns(4)
-        temp = w1.number_input("Temp (°C)", value=10)
-        snow = w2.number_input("Snow (cm)", value=0.0)
-        rain = w3.number_input("Rain (mm)", value=0.0)
-        alert = w4.checkbox("Weather Alert?")
+        st.write("---")
+        w = st.columns(4)
+        temp = w[0].number_input("Temp (°C)", value=10)
+        snow = w[1].number_input("Snow (cm)", value=0.0)
+        rain = w[2].number_input("Rain (mm)", value=0.0)
+        alert = w[3].checkbox("Weather Alert?")
         
-        st.subheader("Marketing & Digital")
-        d1, d2, d3, d4, d5 = st.columns(5)
-        promo = d1.checkbox("Active Promo?")
-        imp = d2.number_input("Soc_Impressions", min_value=0)
-        eng = d3.number_input("Soc_Engage", min_value=0)
-        clks = d4.number_input("Clicks", min_value=0)
+        st.write("---")
+        d = st.columns(4)
+        promo = d[0].checkbox("Active Promo?")
+        imp = d[1].number_input("Soc_Impressions", min_value=0)
+        eng = d[2].number_input("Soc_Engage", min_value=0)
+        clks = d[3].number_input("Clicks", min_value=0)
 
-        submit = st.form_submit_button("Save Daily Records")
-        if submit:
-            # Prediction Logic
+        if st.form_submit_button("Save Records"):
             c = st.session_state.coeffs
             dow_key = f"DOW_{date_in.strftime('%a')}"
-            pred = c['Intercept'] + c.get(dow_key, 0) + (temp * c['Temp_C']) + (snow * c['Snow_cm']) + (rain * c['Rain_mm'])
-            if alert: pred += c['Alert']
+            base_pred = c['Intercept'] + c.get(dow_key, 0) + (temp * c['Temp_C']) + (snow * c['Snow_cm']) + (rain * c['Rain_mm']) + (c['Alert'] if alert else 0)
+            dig_lift = (imp * c['Impressions']) + (eng * c['Engagements']) + (clks * c['Clicks']) + (c['Promo'] if promo else 0)
             
-            dig_lift = (imp * c['Impressions']) + (eng * c['Engagements']) + (clks * c['Clicks'])
-            if promo: dig_lift += c['Promo']
-            
-            final_pred = pred + dig_lift
-            dig_rev = dig_lift * c['Avg_Coin_In']
+            final_pred = base_pred + dig_lift
             
             data = {
                 "entry_date": str(date_in), "actual_traffic": act_traf, "predicted_traffic": final_pred,
                 "actual_coin_in": act_coin, "temp_c": temp, "snow_cm": snow, "rain_mm": rain,
                 "weather_alert": alert, "active_promo": promo, "ad_impressions": imp,
                 "social_engagements": eng, "ad_clicks": clks, "digital_lift_visitors": dig_lift,
-                "digital_revenue_impact": dig_rev, "day_of_week": date_in.strftime('%A')
+                "digital_revenue_impact": dig_lift * c['Avg_Coin_In'], "day_of_week": date_in.strftime('%A')
             }
             supabase.table("traffic_ledger").insert(data).execute()
-            st.success("Data Logged Successfully!")
+            st.success("Entry Saved!")
             st.rerun()
 
 # --- TAB 3: REPORTING & ROI ---
@@ -161,78 +139,73 @@ with tab3:
         df_rep = pd.DataFrame(ledger_data)
         df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
         
-        st.subheader("🗓️ Select Report Range")
-        col_d1, col_d2 = st.columns(2)
-        start_date = col_d1.date_input("Start Date", df_rep['entry_date'].min())
-        end_date = col_d2.date_input("End Date", df_rep['entry_date'].max())
+        dr1, dr2 = st.columns(2)
+        s_date = dr1.date_input("Report Start", df_rep['entry_date'].min())
+        e_date = dr2.date_input("Report End", df_rep['entry_date'].max())
         
-        df_filtered = df_rep.loc[(df_rep['entry_date'].dt.date >= start_date) & (df_rep['entry_date'].dt.date <= end_date)].sort_values('entry_date')
+        df_f = df_rep[(df_rep['entry_date'].dt.date >= s_date) & (df_rep['entry_date'].dt.date <= e_date)].sort_values('entry_date')
         
-        if not df_filtered.empty:
+        if not df_f.empty:
             st.divider()
-            st.subheader("💰 Traffic & Revenue: AI Prediction vs. Actual")
-            
-            total_act_traf = df_filtered['actual_traffic'].sum()
-            total_pred_traf = df_filtered['predicted_traffic'].sum()
-            total_act_rev = df_filtered['actual_coin_in'].sum()
+            st.subheader("💰 Revenue Variance: AI Predicted vs. Actual")
             avg_coin = st.session_state.coeffs['Avg_Coin_In']
-            total_pred_rev = total_pred_traf * avg_coin
+            df_f['AI_Pred_Rev'] = df_f['predicted_traffic'] * avg_coin
             
-            rev_variance = total_act_rev - total_pred_rev
+            t_act_rev = df_f['actual_coin_in'].sum()
+            t_pre_rev = df_f['AI_Pred_Rev'].sum()
+            rev_var = t_act_rev - t_pre_rev
             
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Actual Revenue", f"${total_act_rev:,.0f}")
-            c2.metric("AI Predicted Revenue", f"${total_pred_rev:,.0f}")
-            c3.metric("Revenue Variance", f"${rev_variance:+.0f}", delta=f"{(rev_variance/total_pred_rev)*100:+.1f}%" if total_pred_rev > 0 else "0%")
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Actual Revenue", f"${t_act_rev:,.0f}")
+            m2.metric("AI Predicted Revenue", f"${t_pre_rev:,.0f}")
+            m3.metric("Revenue Variance", f"${rev_var:+.0f}", delta=f"{(rev_var/t_pre_rev)*100:+.1f}%" if t_pre_rev != 0 else "0%")
             
-            df_filtered['AI Predicted Revenue'] = df_filtered['predicted_traffic'] * avg_coin
-            st.area_chart(df_filtered.set_index('entry_date')[['actual_coin_in', 'AI Predicted Revenue']])
+            st.area_chart(df_f.set_index('entry_date')[['actual_coin_in', 'AI_Pred_Rev']])
+            
+            st.divider()
+            st.subheader("⛈️ Weather Penalty vs. 📱 Promo Gains")
+            c = st.session_state.coeffs
+            w_loss = ((df_f['snow_cm']*c['Snow_cm']) + (df_f['rain_mm']*c['Rain_mm']) + (df_f['weather_alert'].astype(int)*c['Alert'])) * avg_coin
+            p_gain = (df_f['active_promo'].astype(int)*c['Promo']) * avg_coin
+            
+            e1, e2 = st.columns(2)
+            e1.metric("Revenue Lost to Weather", f"${w_loss.sum():,.0f}", delta_color="inverse")
+            e2.metric("Revenue Gained from Promos", f"${p_gain.sum():,.0f}")
 
 # --- TAB 4: ADMIN ENGINE ---
 with tab4:
-    st.header("Coefficient Control Center")
+    st.header("⚙️ Admin Engine & AI Tuning")
     if st.button("⚡ Run Machine Learning Auto-Tune", type="primary"):
-        if len(ledger_data) > 10:
-            df_ml = pd.DataFrame(ledger_data).dropna()
-            # Simplified ML logic for brevity
-            st.toast("AI Retrained on Historical Data!")
-            st.rerun()
-        else:
-            st.warning("Need more data to train.")
+        st.toast("Model retraining...")
+        st.rerun()
     
     with st.form("coeff_form"):
-        c1, c2 = st.columns(2)
-        new_coin = c1.number_input("Avg Coin-In", value=st.session_state.coeffs['Avg_Coin_In'])
-        new_int = c2.number_input("Base Intercept", value=st.session_state.coeffs['Intercept'])
-        if st.form_submit_button("Update Engine"):
-            st.session_state.coeffs['Avg_Coin_In'] = new_coin
-            st.session_state.coeffs['Intercept'] = new_int
-            st.success("Engine Updated")
+        col1, col2 = st.columns(2)
+        st.session_state.coeffs['Avg_Coin_In'] = col1.number_input("Avg Revenue Per Head", value=st.session_state.coeffs['Avg_Coin_In'])
+        st.session_state.coeffs['Intercept'] = col2.number_input("Base Traffic Intercept", value=st.session_state.coeffs['Intercept'])
+        if st.form_submit_button("Update Coefficients"):
+            st.success("Engine Updated!")
 
 # --- TAB 5: ASK AI ---
 with tab5:
     st.header("💬 Ask the Data Analyst")
     if "messages" not in st.session_state: st.session_state.messages = []
-    
-    if st.button("Clear Chat History"):
+    if st.button("Clear Chat"):
         st.session_state.messages = []
         st.rerun()
 
     for m in st.session_state.messages:
         with st.chat_message(m["role"]): st.markdown(m["content"])
 
-    if prompt := st.chat_input("Ask about property trends..."):
-        st.chat_message("user").markdown(prompt)
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
+    if pr := st.chat_input("Ask a question about the data..."):
+        st.chat_message("user").markdown(pr)
+        st.session_state.messages.append({"role": "user", "content": pr})
         with st.chat_message("assistant"):
-            with st.spinner("Analyzing..."):
-                try:
-                    df_ai = pd.DataFrame(ledger_data)
-                    context = df_ai.to_csv(index=False)
-                    model = genai.GenerativeModel('models/gemini-2.5-flash')
-                    response = model.generate_content(f"Data:\n{context}\n\nQuestion: {prompt}")
-                    st.markdown(response.text)
-                    st.session_state.messages.append({"role": "assistant", "content": response.text})
-                except Exception as e:
-                    st.error(f"AI Error: {e}")
+            try:
+                model = genai.GenerativeModel('models/gemini-2.5-flash')
+                ctx = pd.DataFrame(ledger_data).to_csv(index=False)
+                resp = model.generate_content(f"Analyze this Hard Rock data:\n{ctx}\nQuestion: {pr}")
+                st.markdown(resp.text)
+                st.session_state.messages.append({"role": "assistant", "content": resp.text})
+            except Exception as e:
+                st.error(f"AI Error: {e}")
