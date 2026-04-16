@@ -265,14 +265,6 @@ with tab2:
                 acc = (1 - (error / row['actual_traffic'])) * 100 if row['actual_traffic'] > 0 else 0
                 r4.metric("AI Accuracy", f"{acc:.1f}%")
                 
-                # 2. THE FULL AUDIT (Every Column)
-                st.write("---")
-                st.markdown("**Detailed Variable Audit:**")
-                # We transpose the single row so it looks like a clean vertical list of every column
-                audit_df = found.T
-                audit_df.columns = ["Value"]
-                st.table(audit_df)
-                
             else:
                 st.warning(f"No entry exists for {search_str}.")
 # --- TAB 3: REPORTING & ROI ---
