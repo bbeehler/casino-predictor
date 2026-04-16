@@ -333,25 +333,44 @@ with tab3:
         df_filtered = df_rep.loc[mask].sort_values('entry_date')
         
         if not df_filtered.empty:
-            # --- 2. REPORT MODULE: TRAFFIC VARIANCE ---
+            # --- 2. REPORT MODULE: TRAFFIC & REVENUE VARIANCE ---
             st.divider()
-            st.subheader("🚗 Traffic Variance & Prediction Accuracy")
+            st.subheader("💰 Traffic & Revenue: AI Prediction vs. Actual")
             
-            # Math for Variance
-            total_act = df_filtered['actual_traffic'].sum()
-            total_pred = df_filtered['predicted_traffic'].sum()
-            variance = total_act - total_pred
-            var_pct = (variance / total_pred) * 100 if total_pred > 0 else 0
+            # Core Math
+            total_act_traf = df_filtered['actual_traffic'].sum()
+            total_pred_traf = df_filtered['predicted_traffic'].sum()
             
-            v1, v2, v3 = st.columns(3)
-            v1.metric("Actual Traffic", f"{total_act:,}")
-            v2.metric("AI Predicted", f"{total_pred:,.0f}")
-            v3.metric("Variance", f"{variance:+.0f}", delta=f"{var_pct:+.1f}%")
+            # Revenue Math
+            # Actual Revenue is from the database; Predicted Revenue = Predicted Traffic * Avg Coin-In
+            total_act_rev = df_filtered['actual_coin_in'].sum()
+            avg_coin = st.session_state.coeffs['Avg_Coin_In']
+            total_pred_rev = total_pred_traf * avg_coin
             
-            st.line_chart(df_filtered.set_index('entry_date')[['actual_traffic', 'predicted_traffic']])
+            rev_variance = total_act_rev - total_pred_rev
+            rev_var_pct = (rev_variance / total_pred_rev) * 100 if total_pred_rev > 0 else 0
+
+            # Traffic Row
+            st.write("**Foot Traffic Performance**")
+            t1, t2, t3 = st.columns(3)
+            t1.metric("Actual Traffic", f"{total_act_traf:,}")
+            t2.metric("AI Predicted", f"{total_pred_traf:,.0f}")
+            t3.metric("Traffic Variance", f"{total_act_traf - total_pred_traf:+.0f}")
+
+            # Revenue Row
+            st.write("**Revenue Performance (Actual vs. AI Baseline)**")
+            r1, r2, r3 = st.columns(3)
+            r1.metric("Actual Revenue", f"${total_act_rev:,.0f}")
+            r2.metric("AI Predicted Revenue", f"${total_pred_rev:,.0f}")
+            r3.metric("Revenue Variance", f"${rev_variance:+.0f}", delta=f"{rev_var_pct:+.1f}%")
             
-            with st.expander("📝 View Detailed Traffic Log"):
-                st.dataframe(df_filtered[['entry_date', 'actual_traffic', 'predicted_traffic', 'temp_c', 'active_promo']], use_container_width=True)
+            # Dual Axis Style Chart (or simplified comparison)
+            st.write("**Revenue Trend vs. AI Expectation**")
+            # Create a comparison dataframe for the chart
+            df_filtered['Predicted_Revenue'] = df_filtered['predicted_traffic'] * avg_coin
+            chart_data_rev = df_filtered.set_index('entry_date')[['actual_coin_in', 'Predicted_Revenue']]
+            chart_data_rev.columns = ['Actual Revenue', 'AI Predicted Revenue']
+            st.area_chart(chart_data_rev)
 
             # --- 3. REPORT MODULE: DIGITAL ROI ---
             st.divider()
