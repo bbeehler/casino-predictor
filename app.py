@@ -7,7 +7,6 @@ st.set_page_config(page_title="Casino Traffic Predictor", layout="wide")
 st.title("🎰 Property Traffic & Digital Lift Engine")
 
 # --- DATABASE CONNECTION ---
-# This securely connects to your Supabase project using the secrets you saved
 @st.cache_resource
 def init_connection():
     url = st.secrets["SUPABASE_URL"]
@@ -28,7 +27,7 @@ if 'coeffs' not in st.session_state:
     }
 
 # Fetch Ledger Data from Supabase
-@st.cache_data(ttl=60) # Refreshes every 60 seconds
+@st.cache_data(ttl=60)
 def load_ledger():
     response = supabase.table("ledger").select("*").order("entry_date", desc=True).execute()
     return response.data
@@ -42,7 +41,6 @@ tab1, tab2, tab3, tab4 = st.tabs(["📊 Executive Dashboard", "📝 Daily Tracke
 with tab1:
     st.header("YTD Property Overview")
     
-    # Row 1: Core Property Metrics (Updated to vs Last Month)
     col1, col2, col3 = st.columns(3)
     col1.metric(label="Total Foot Traffic", value="452,193", delta="+5.2% vs Last Month")
     col2.metric(label="Digital Contribution", value="43,053 Visitors", delta="+4.2% vs Last Month")
@@ -50,7 +48,6 @@ with tab1:
     
     st.divider()
     
-    # Row 2: Social Media & Top-of-Funnel Stats (New Section)
     st.subheader("📱 Digital Marketing Performance")
     soc1, soc2, soc3 = st.columns(3)
     soc1.metric(label="Total Ad Impressions", value="14.2M", delta="+8.1% vs Last Month")
@@ -59,7 +56,6 @@ with tab1:
     
     st.divider()
     
-    # Row 3: Revenue
     st.subheader("Estimated Coin-In YTD: $57.7M")
     st.progress(0.75)
 
@@ -107,7 +103,7 @@ with tab2:
         estimated_digital_rev = digital_lift * c['Avg_Coin_In']
         st.success(f"Estimated Revenue from Digital Marketing today: **${estimated_digital_rev:,.2f}**")
         
-if st.button("💾 Save Daily Entry to Database", use_container_width=True):
+        if st.button("💾 Save Daily Entry to Database", use_container_width=True):
             entry = {
                 "entry_date": entry_date.strftime("%Y-%m-%d"),
                 "day_of_week": dow_name,
@@ -117,7 +113,6 @@ if st.button("💾 Save Daily Entry to Database", use_container_width=True):
                 "digital_lift_visitors": int(digital_lift),
                 "digital_revenue_impact": float(estimated_digital_rev),
                 "actual_coin_in": float(actual_coinin),
-                # --- NEW COLUMNS ---
                 "temp_c": int(temp),
                 "snow_cm": float(snow),
                 "rain_mm": float(rain),
@@ -127,8 +122,9 @@ if st.button("💾 Save Daily Entry to Database", use_container_width=True):
                 "social_engagements": int(engagements),
                 "ad_clicks": int(clicks)
             }
-            # Push to Supabase
             supabase.table("ledger").insert(entry).execute()
+            st.toast("✅ Saved securely to Database!")
+            st.cache_data.clear()
 
     st.divider()
     st.subheader("🔍 Search & Edit Ledger")
@@ -136,8 +132,11 @@ if st.button("💾 Save Daily Entry to Database", use_container_width=True):
     if ledger_data:
         df_ledger = pd.DataFrame(ledger_data)
         
-        # We need to make sure we pull ALL columns from the dataframe so they can be edited
-        display_df = df_ledger[['entry_date', 'day_of_week', 'actual_traffic', 'predicted_traffic', 'variance', 'actual_coin_in', 'digital_lift_visitors', 'digital_revenue_impact']]
+        # Pull columns for the display and edit logic
+        display_cols = ['entry_date', 'day_of_week', 'actual_traffic', 'predicted_traffic', 'variance', 'actual_coin_in', 'digital_lift_visitors', 'digital_revenue_impact']
+        # Only pull columns that actually exist in the dataframe to prevent errors if migration isn't run yet
+        available_cols = [col for col in display_cols if col in df_ledger.columns]
+        display_df = df_ledger[available_cols]
         
         search_col, result_col = st.columns([1, 2])
         
@@ -158,37 +157,31 @@ if st.button("💾 Save Daily Entry to Database", use_container_width=True):
                 else:
                     st.success(f"Record found for {search_date_str}!")
                     
-                    # Extract the existing data
                     existing_data = found_record.iloc[0]
                     
-                    # Create a Full-Scale Edit Form
                     with st.expander("✏️ Edit this Record", expanded=True):
                         with st.form("edit_form"):
-                            
                             safe_day_name = existing_data['day_of_week']
                             st.markdown(f"**Editing Date:** {search_date_str} ({safe_day_name})")
                             
-                            # Split into two columns so the form isn't too long
                             edit_col1, edit_col2 = st.columns(2)
                             
                             with edit_col1:
                                 st.markdown("**Actuals**")
-                                new_traffic = st.number_input("Actual Traffic", value=int(existing_data['actual_traffic']), step=100)
-                                new_coin_in = st.number_input("Actual Coin-In ($)", value=float(existing_data['actual_coin_in']), step=1000.0)
+                                new_traffic = st.number_input("Actual Traffic", value=int(existing_data.get('actual_traffic', 0)), step=100)
+                                new_coin_in = st.number_input("Actual Coin-In ($)", value=float(existing_data.get('actual_coin_in', 0.0)), step=1000.0)
                             
                             with edit_col2:
                                 st.markdown("**Model Estimates**")
-                                new_pred = st.number_input("Predicted Traffic", value=int(existing_data['predicted_traffic']), step=100)
-                                new_dig_lift = st.number_input("Digital Lift (Visitors)", value=int(existing_data['digital_lift_visitors']), step=50)
-                                new_dig_rev = st.number_input("Digital Revenue ($)", value=float(existing_data['digital_revenue_impact']), step=500.0)
+                                new_pred = st.number_input("Predicted Traffic", value=int(existing_data.get('predicted_traffic', 0)), step=100)
+                                new_dig_lift = st.number_input("Digital Lift (Visitors)", value=int(existing_data.get('digital_lift_visitors', 0)), step=50)
+                                new_dig_rev = st.number_input("Digital Revenue ($)", value=float(existing_data.get('digital_revenue_impact', 0.0)), step=500.0)
                             
                             submit_update = st.form_submit_button("Save All Changes to Database")
                             
                             if submit_update:
-                                # Recalculate variance based on the new traffic/prediction numbers
                                 new_variance = int(new_traffic) - int(new_pred)
                                 
-                                # Send the UPDATE command for ALL fields
                                 supabase.table("ledger").update({
                                     "actual_traffic": int(new_traffic),
                                     "predicted_traffic": int(new_pred),
@@ -199,15 +192,19 @@ if st.button("💾 Save Daily Entry to Database", use_container_width=True):
                                 }).eq("entry_date", search_date_str).execute()
                                 
                                 st.success("All fields updated successfully in the database!")
-                                st.cache_data.clear() # Force app to pull fresh data
-                                st.rerun() # Refresh the screen instantly
+                                st.cache_data.clear()
+                                st.rerun()
 
-        # Display the Table (We drop the digital lift here just to keep the visual table clean)
-        visual_df = display_df.drop(columns=['digital_lift_visitors'])
+        if 'digital_lift_visitors' in display_df.columns:
+            visual_df = display_df.drop(columns=['digital_lift_visitors'])
+        else:
+            visual_df = display_df
+            
         st.dataframe(visual_df, use_container_width=True, hide_index=True)
         
     else:
         st.info("Your database is currently empty. Save an entry to start tracking!")
+
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
     st.header("Historical Reporting & Revenue Implications")
@@ -215,18 +212,19 @@ with tab3:
     if ledger_data:
         df_ledger = pd.DataFrame(ledger_data)
         
-        total_actual = df_ledger['actual_traffic'].sum()
-        total_pred = df_ledger['predicted_traffic'].sum()
-        total_digital_rev = df_ledger['digital_revenue_impact'].sum()
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Period Actual Traffic", f"{total_actual:,}")
-        c2.metric("Period Predicted Traffic", f"{total_pred:,}")
-        c3.metric("Total Digital Revenue ROI", f"${total_digital_rev:,.2f}")
-        
-        st.subheader("Traffic Trends: Actual vs Model")
-        chart_data = df_ledger[['entry_date', 'actual_traffic', 'predicted_traffic']].set_index('entry_date')
-        st.line_chart(chart_data)
+        if 'actual_traffic' in df_ledger.columns:
+            total_actual = df_ledger['actual_traffic'].sum()
+            total_pred = df_ledger['predicted_traffic'].sum()
+            total_digital_rev = df_ledger['digital_revenue_impact'].sum()
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Period Actual Traffic", f"{total_actual:,}")
+            c2.metric("Period Predicted Traffic", f"{total_pred:,}")
+            c3.metric("Total Digital Revenue ROI", f"${total_digital_rev:,.2f}")
+            
+            st.subheader("Traffic Trends: Actual vs Model")
+            chart_data = df_ledger[['entry_date', 'actual_traffic', 'predicted_traffic']].set_index('entry_date')
+            st.line_chart(chart_data)
     else:
         st.warning("Save entries in the Daily Tracker to generate reports!")
 
