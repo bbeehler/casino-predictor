@@ -83,23 +83,19 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
 # --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
-    # This is the "Bento Header"
+    # 1. THE HERO CARD (AI Strategy)
     st.markdown("### 🤖 Strategic Intelligence")
     
-    # We wrap the content in a container with border=True to create the "Card"
-    with st.container(border=True):
-        if ledger_data:
-            df_dash = pd.DataFrame(ledger_data)
-            df_dash = df_dash[df_dash['actual_traffic'] > 0].copy()
-            
+    if ledger_data:
+        df_dash = pd.DataFrame(ledger_data)
+        df_dash = df_dash[df_dash['actual_traffic'] > 0].copy()
+        
+        with st.container(border=True):
             if not df_dash.empty:
-                st.write("Click the button below to have Gemini synthesize your property data into a strategic narrative.")
-                
-                # The AI Action Button
+                st.write("Click below to have Gemini synthesize your data into a strategic narrative.")
                 if st.button("✨ Generate AI Executive Briefing", use_container_width=True):
-                    with st.spinner("AI is analyzing performance and 7-day forecast..."):
+                    with st.spinner("AI is analyzing performance..."):
                         try:
-                            # Contextual data prep (Last 30 days + Future 7-day outlook)
                             df_dash['entry_date'] = pd.to_datetime(df_dash['entry_date'])
                             recent_30 = df_dash.sort_values('entry_date', ascending=False).head(30).to_csv(index=False)
                             
@@ -112,94 +108,56 @@ with tab1:
                                 f_outlook += f"{d.strftime('%a %d')}: Est. {int(base)} visitors; "
 
                             model = genai.GenerativeModel('models/gemini-1.5-flash')
-                            prompt = f"""
-                            You are the Senior Strategy Lead for Hard Rock Hotel & Casino Ottawa. 
-                            Write a highly professional, data-driven Executive Summary for the General Manager.
-                            
-                            DATA SNAPSHOT (Last 30 Days): {recent_30}
-                            PREDICTIVE 7-DAY OUTLOOK: {f_outlook}
-                            
-                            STRUCTURE:
-                            1. PERFORMANCE: Mention top days and Digital ROI.
-                            2. OUTLOOK: Analyze the upcoming week's forecast.
-                            3. ACTION: One specific recommendation.
-                            
-                            Keep it under 200 words.
-                            """
+                            prompt = f"Senior Strategy Lead for Hard Rock Ottawa. Summarize this data: {recent_30}. Outlook: {f_outlook}. Max 200 words."
                             
                             response = model.generate_content(prompt)
                             st.markdown("---")
                             st.markdown(response.text)
                         except Exception as e:
-                            st.error(f"AI Briefing Error: {e}")
+                            st.error(f"AI Error: {e}")
             else:
-                st.info("Insufficient data to generate a briefing. Please log more daily entries.")
-        else:
-            st.info("Database is empty. Dashboard will populate once daily entries are logged.")
-# This creates a space between the AI box and the new cards
-    st.markdown("---")
-    st.markdown("### 📊 Performance Pulse")
+                st.info("Log daily entries to see AI insights.")
 
-    # We create 3 columns for our "Small Cards"
-    col1, col2, col3 = st.columns(3)
+        # 2. THE METRIC GRID (Small Cards)
+        st.markdown("---")
+        st.markdown("### 📊 Performance Pulse")
+        m1, m2, m3 = st.columns(3)
 
-    if ledger_data and not df_dash.empty:
-        # 1. Total Revenue Card
-        with col1:
+        with m1:
             with st.container(border=True):
-                total_rev = df_dash['actual_coin_in'].sum()
-                st.metric("Total Revenue (YTD)", f"${total_rev:,.0f}")
-
-        # 2. Foot Traffic Card
-        with col2:
+                st.metric("Total Revenue (YTD)", f"${df_dash['actual_coin_in'].sum():,.0f}")
+        with m2:
             with st.container(border=True):
-                total_traf = df_dash['actual_traffic'].sum()
-                st.metric("Total Traffic", f"{int(total_traf):,}")
-
-        # 3. AI Accuracy Card
-        with col3:
+                st.metric("Total Traffic", f"{int(df_dash['actual_traffic'].sum()):,}")
+        with m3:
             with st.container(border=True):
-                # Simple Accuracy Calculation
                 df_dash['error'] = abs(df_dash['actual_traffic'] - df_dash['predicted_traffic'])
                 mape = (df_dash['error'] / df_dash['actual_traffic']).mean()
-                acc = (1 - mape) * 100
-                st.metric("AI Accuracy", f"{acc:.1f}%")
+                st.metric("AI Accuracy", f"{(1 - mape) * 100:.1f}%")
 
-st.markdown("---")
-    
-    # We use a 2:1 column ratio to give the chart more room (The Bento look)
-    col_chart, col_side = st.columns([2, 1])
+        # 3. ANALYTICS CARDS (Mixed Sizes)
+        st.markdown("---")
+        col_chart, col_side = st.columns([2, 1])
 
-    if ledger_data and not df_dash.empty:
-        # 1. THE REVENUE TREND CARD
         with col_chart:
             with st.container(border=True):
-                st.subheader("📈 Revenue Trend vs. Forecast")
-                # Creating a clean chart with Hard Rock Gold
+                st.subheader("📈 Revenue Trend")
                 chart_data = df_dash.set_index('entry_date')[['actual_coin_in']]
-                st.area_chart(chart_data, color="#FFCC00") 
-                st.caption("Historical actual revenue tracked over time.")
+                st.area_chart(chart_data, color="#FFCC00")
 
-        # 2. THE DIGITAL ROI CARD
         with col_side:
             with st.container(border=True):
                 st.subheader("📱 Digital Lift")
-                total_dig_rev = df_dash['digital_revenue_impact'].sum()
-                total_dig_vis = df_dash['digital_lift_visitors'].sum()
-                
-                st.write(f"**Total Revenue Impact:**")
-                st.title(f"${total_dig_rev:,.0f}")
-                
-                st.write(f"**Visitor Contribution:**")
-                st.metric("Total Lift", f"{int(total_dig_vis):,} Visitors")
-                
-                st.divider()
-                st.info("This calculates the dollar value of social engagements and ad clicks.")
+                st.write(f"**Impact:**")
+                st.title(f"${df_dash['digital_revenue_impact'].sum():,.0f}")
+                st.metric("Visitor Lift", f"{int(df_dash['digital_lift_visitors'].sum()):,}")
 
-    # 3. THE FULL DATA TABLE (Collapsible)
-    st.markdown("---")
-    with st.expander("📂 View Full Performance Ledger (Raw Data)"):
-        st.dataframe(df_dash.sort_values('entry_date', ascending=False), use_container_width=True)
+        # 4. RAW DATA
+        st.markdown("---")
+        with st.expander("📂 View Full Ledger"):
+            st.dataframe(df_dash.sort_values('entry_date', ascending=False), use_container_width=True)
+    else:
+        st.info("Database is empty. Log entries in Tab 2 to populate dashboard.")
 
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
