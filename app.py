@@ -10,7 +10,7 @@ if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 st.set_page_config(page_title="Casino Traffic Predictor", layout="wide")
-st.title("🎰 Property Traffic & Digital Lift Engine")
+st.title("🎰 Property Traffic Engine - VERSION 2")
 
 # --- DATABASE CONNECTION ---
 @st.cache_resource
