@@ -49,103 +49,111 @@ with tab1:
     
     if ledger_data:
         df_dash = pd.DataFrame(ledger_data)
+        # Ensure we only analyze days where actual data exists
         df_dash = df_dash[df_dash['actual_traffic'] > 0].copy()
         
         if not df_dash.empty:
             df_dash['entry_date'] = pd.to_datetime(df_dash['entry_date'])
             c = st.session_state.coeffs
             
-            # --- AI EXECUTIVE BRIEFING GENERATION ---
-            with st.expander("🤖 Generate AI Executive Briefing", expanded=True):
-                if st.button("✨ Refresh Executive Summary"):
-                    with st.spinner("AI is analyzing performance and forecast..."):
+            # --- 1. AI STRATEGIC BRIEFING ---
+            with st.container(border=True):
+                st.subheader("🤖 AI Strategic Analyst")
+                if st.button("✨ Generate Executive Briefing"):
+                    with st.spinner("Gemini is synthesizing historical data and forecasting..."):
                         try:
-                            # 1. Prepare Historical Context (Last 30 Days)
-                            recent_history = df_dash.sort_values('entry_date', ascending=False).head(30).to_csv(index=False)
+                            # Contextual data prep
+                            recent_30 = df_dash.sort_values('entry_date', ascending=False).head(30).to_csv(index=False)
                             
-                            # 2. Prepare 7-Day Forecast Context
+                            # Future 7-day outlook context
                             f_dates = [datetime.date.today() + datetime.timedelta(days=x) for x in range(1, 8)]
-                            f_context = ""
+                            f_outlook = ""
                             for d in f_dates:
-                                dow_key = f"DOW_{d.strftime('%a')}"
-                                p = c['Intercept'] + c.get(dow_key, 0) # Baseline forecast
-                                f_context += f"{d.strftime('%a %d')}: Est. {int(p)} visitors; "
+                                d_key = f"DOW_{d.strftime('%a')}"
+                                base = c['Intercept'] + c.get(d_key, 0)
+                                f_outlook += f"{d.strftime('%a %d')}: Est. {int(base)} visitors; "
 
-                            # 3. Prompt Gemini
-                            model = genai.GenerativeModel('models/gemini-2.5-flash')
-                            briefing_prompt = f"""
-                            You are a Senior Strategic Analyst for Hard Rock Hotel & Casino Ottawa. 
-                            Write a concise, high-level Executive Summary (max 200 words) for the leadership team.
+                            model = genai.GenerativeModel('models/gemini-1.5-flash')
+                            prompt = f"""
+                            You are the Senior Strategy Lead for Hard Rock Hotel & Casino Ottawa. 
+                            Write a highly professional, data-driven Executive Summary for the General Manager.
                             
-                            HISTORICAL PERFORMANCE (Last 30 Days):
-                            {recent_history}
+                            DATA SNAPSHOT (Last 30 Days):
+                            {recent_30}
                             
-                            7-DAY OUTLOOK:
-                            {f_context}
+                            PREDICTIVE 7-DAY OUTLOOK:
+                            {f_outlook}
                             
-                            Identify:
-                            1. Top-line performance trends (Traffic & Revenue).
-                            2. Effectiveness of recent digital marketing/promos.
-                            3. Critical insights for the upcoming week based on the forecast.
+                            STRUCTURE:
+                            1. HIGHLIGHTS: Mention top performing days and any surprising Digital ROI.
+                            2. RISK/OPPORTUNITY: Analyze the upcoming week's forecast.
+                            3. ACTION: One specific recommendation for the marketing or floor team.
                             
-                            Tone: Professional, urgent where necessary, and data-driven.
+                            Keep it under 250 words. Be sharp, executive-focused, and prioritize revenue impact.
                             """
                             
-                            response = model.generate_content(briefing_prompt)
-                            st.info(response.text)
+                            response = model.generate_content(prompt)
+                            st.markdown(response.text)
                         except Exception as e:
                             st.error(f"AI Briefing Error: {e}")
 
             st.divider()
+
+            # --- 2. CORE PERFORMANCE METRICS ---
+            st.subheader("💰 Financial & Traffic Performance")
             
-            # --- EXISTING METRICS LOGIC ---
-            # (Keep the rest of your dashboard metrics below this)
+            # Math for MoM (Month over Month)
             latest_date = df_dash['entry_date'].max()
-            # ... [Rest of your Dashboard code: Core Financials, MoM, etc.] ...
+            curr_m, curr_y = latest_date.month, latest_date.year
+            prev_m = curr_m - 1 if curr_m > 1 else 12
+            prev_y = curr_y if curr_m > 1 else curr_y - 1
+            
+            df_curr = df_dash[(df_dash['entry_date'].dt.month == curr_m) & (df_dash['entry_date'].dt.year == curr_y)]
+            df_prev = df_dash[(df_dash['entry_date'].dt.month == prev_m) & (df_dash['entry_date'].dt.year == prev_y)]
+            
+            def get_mom_metrics(df):
+                if df.empty: return 0, 0, 0
+                return df['actual_coin_in'].sum(), df['actual_traffic'].sum(), df['digital_revenue_impact'].sum()
 
-            # --- 2. ROW 1: CORE FINANCIALS ---
-            st.subheader("💰 Core Financials & Traffic (YTD)")
-            r1c1, r1c2, r1c3 = st.columns(3)
-            r1c1.metric("Total Revenue", f"${y_rev:,.0f}", delta=calc_mom(c_rev, p_rev))
-            r1c2.metric("Foot Traffic", f"{y_traf:,.0f}", delta=calc_mom(c_traf, p_traf))
-            r1c3.metric("Avg Rev per Person", f"${y_rev_pp:,.2f}", delta=calc_mom(c_rev_pp, p_rev_pp))
-            
-            st.divider()
-            
-            # --- 3. ROW 2: DIGITAL VS WEATHER IMPACT ---
-            st.subheader("⚖️ Driving Forces: Digital vs. Weather (YTD)")
-            r2c1, r2c2, r2c3, r2c4 = st.columns(4)
-            r2c1.metric("Digital Lift (Visits)", f"{y_dig_vis:,.0f}", delta=calc_mom(c_dig_vis, p_dig_vis))
-            r2c2.metric("Digital Contribution ($)", f"${y_dig_rev:,.0f}", delta=calc_mom(c_dig_rev, p_dig_rev))
-            r2c3.metric("Weather Impact (Visits)", f"{y_wea_vis:,.0f}", delta=calc_mom(c_wea_vis, p_wea_vis), delta_color="inverse")
-            r2c4.metric("Weather Impact ($)", f"${y_wea_rev:,.0f}", delta=calc_mom(c_wea_rev, p_wea_rev), delta_color="inverse")
-            
+            c_rev, c_traf, c_dig = get_mom_metrics(df_curr)
+            p_rev, p_traf, p_dig = get_mom_metrics(df_prev)
+
+            def format_delta(curr, prev):
+                if prev == 0: return "N/A"
+                pct = ((curr - prev) / prev) * 100
+                return f"{pct:+.1f}% vs Last Month"
+
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Current Month Revenue", f"${c_rev:,.0f}", delta=format_delta(c_rev, p_rev))
+            m2.metric("Current Month Traffic", f"{int(c_traf):,}", delta=format_delta(c_traf, p_traf))
+            m3.metric("Digital Rev Impact", f"${c_dig:,.0f}", delta=format_delta(c_dig, p_dig))
+
             st.divider()
 
-            # --- 4. ROW 3: AI ACCURACY & SOCIAL METRICS ---
-            st.subheader("🤖 Engine Accuracy & Social Performance")
+            # --- 3. AI PRECISION & TRENDS ---
+            st.subheader("🎯 Model Integrity & Trends")
             
-            # Calculate AI Accuracy
+            # AI Accuracy (MAPE)
             df_dash['abs_error'] = abs(df_dash['actual_traffic'] - df_dash['predicted_traffic'])
             mape = (df_dash['abs_error'] / df_dash['actual_traffic']).mean()
-            model_accuracy = (1 - mape) * 100
+            accuracy_score = (1 - mape) * 100
             
-            # Safe Social Metric Calculations
-            def get_soc(df, col): return int(df.get(col, pd.Series([0])).sum())
-            y_imp, c_imp, p_imp = get_soc(df_dash, 'ad_impressions'), get_soc(df_curr, 'ad_impressions'), get_soc(df_prev, 'ad_impressions')
-            y_eng, c_eng, p_eng = get_soc(df_dash, 'social_engagements'), get_soc(df_curr, 'social_engagements'), get_soc(df_prev, 'social_engagements')
-            y_clk, c_clk, p_clk = get_soc(df_dash, 'ad_clicks'), get_soc(df_curr, 'ad_clicks'), get_soc(df_prev, 'ad_clicks')
+            # Digital Lift (Visitors)
+            total_lift = df_dash['digital_lift_visitors'].sum()
+            
+            t1, t2 = st.columns(2)
+            t1.metric("Overall Prediction Accuracy", f"{accuracy_score:.1f}%", help="Higher is better. Based on mean absolute percentage error.")
+            t2.metric("Total Digital Visitor Lift", f"{int(total_lift):,}")
 
-            r3c1, r3c2, r3c3, r3c4 = st.columns(4)
-            r3c1.metric("🎯 AI Prediction Accuracy", f"{model_accuracy:.1f}%", help="Based on Mean Absolute Percentage Error (MAPE)")
-            r3c2.metric("Ad Impressions", f"{y_imp:,.0f}", delta=calc_mom(c_imp, p_imp))
-            r3c3.metric("Social Engagements", f"{y_eng:,.0f}", delta=calc_mom(c_eng, p_eng))
-            r3c4.metric("Ad Clicks", f"{y_clk:,.0f}", delta=calc_mom(c_clk, p_clk))
+            # Cumulative Revenue Area Chart
+            st.write("**Revenue Progression vs. Forecast Range**")
+            df_dash['Cumulative_Revenue'] = df_dash['actual_coin_in'].cumsum()
+            st.area_chart(df_dash.set_index('entry_date')['Cumulative_Revenue'])
 
         else:
-            st.info("No completed actuals found. Save some daily entries to generate YTD metrics.")
+            st.warning("Insufficient actual data to generate dashboard metrics.")
     else:
-        st.info("Database is empty. Add data to see the Executive Dashboard.")
+        st.info("No data found in database. Dashboard will populate once daily entries are logged.")
 
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
