@@ -136,6 +136,34 @@ with tab1:
                 st.info("Insufficient data to generate a briefing. Please log more daily entries.")
         else:
             st.info("Database is empty. Dashboard will populate once daily entries are logged.")
+# This creates a space between the AI box and the new cards
+    st.markdown("---")
+    st.markdown("### 📊 Performance Pulse")
+
+    # We create 3 columns for our "Small Cards"
+    col1, col2, col3 = st.columns(3)
+
+    if ledger_data and not df_dash.empty:
+        # 1. Total Revenue Card
+        with col1:
+            with st.container(border=True):
+                total_rev = df_dash['actual_coin_in'].sum()
+                st.metric("Total Revenue (YTD)", f"${total_rev:,.0f}")
+
+        # 2. Foot Traffic Card
+        with col2:
+            with st.container(border=True):
+                total_traf = df_dash['actual_traffic'].sum()
+                st.metric("Total Traffic", f"{int(total_traf):,}")
+
+        # 3. AI Accuracy Card
+        with col3:
+            with st.container(border=True):
+                # Simple Accuracy Calculation
+                df_dash['error'] = abs(df_dash['actual_traffic'] - df_dash['predicted_traffic'])
+                mape = (df_dash['error'] / df_dash['actual_traffic']).mean()
+                acc = (1 - mape) * 100
+                st.metric("AI Accuracy", f"{acc:.1f}%")
 
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
