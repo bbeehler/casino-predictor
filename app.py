@@ -510,7 +510,7 @@ with tab5:
                         """
                         
                         # We use the full model path which we confirmed works during the dropdown test
-                        model = genai.GenerativeModel('models/gemini-1.5-flash')
+                        model = genai.GenerativeModel('models/gemini-2.5-flash')
                         
                         response = model.generate_content(system_prompt)
                         
