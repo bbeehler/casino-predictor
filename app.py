@@ -258,8 +258,79 @@ with tab3:
 # --- TAB 4: ADMIN ENGINE ---
 with tab4:
     st.header("Coefficient Control Center")
+    
+    # --- NEW: MACHINE LEARNING AUTO-TUNER ---
+    st.subheader("🤖 AI Auto-Calibration")
+    st.markdown("Click below to train a Multiple Linear Regression model on your historical database. This will automatically find the mathematically optimal weights for all variables based on your actual past performance.")
+    
+    if st.button("⚡ Run Machine Learning Auto-Tune", type="primary", use_container_width=True):
+        if ledger_data and len(ledger_data) > 10:
+            # 1. Prepare the Data
+            df_ml = pd.DataFrame(ledger_data)
+            
+            # Ensure we only train on rows that have complete data
+            ml_cols = ['actual_traffic', 'day_of_week', 'temp_c', 'snow_cm', 'rain_mm', 'weather_alert', 'active_promo', 'ad_impressions', 'social_engagements', 'ad_clicks', 'actual_coin_in']
+            # Only proceed if we have the columns
+            if all(c in df_ml.columns for c in ml_cols):
+                df_clean = df_ml.dropna(subset=ml_cols).copy()
+                
+                # Convert booleans to 1s and 0s
+                df_clean['weather_alert'] = df_clean['weather_alert'].astype(int)
+                df_clean['active_promo'] = df_clean['active_promo'].astype(int)
+                
+                # Convert Day of Week into numbers
+                dow_dummies = pd.get_dummies(df_clean['day_of_week'], prefix='DOW')
+                days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                for day in days:
+                    if f'DOW_{day}' not in dow_dummies.columns:
+                        dow_dummies[f'DOW_{day}'] = 0
+                
+                df_clean = pd.concat([df_clean, dow_dummies], axis=1)
+                
+                # Define Features (X) and Target (y)
+                features = [f'DOW_{d}' for d in days] + ['temp_c', 'snow_cm', 'rain_mm', 'weather_alert', 'active_promo', 'ad_impressions', 'social_engagements', 'ad_clicks']
+                X = df_clean[features]
+                y = df_clean['actual_traffic']
+                
+                # 2. Train the Model
+                model = LinearRegression()
+                model.fit(X, y)
+                
+                # 3. Apply the new mathematically perfect coefficients to the app
+                st.session_state.coeffs['Intercept'] = float(model.intercept_)
+                st.session_state.coeffs['DOW_Mon'] = float(model.coef_[0])
+                st.session_state.coeffs['DOW_Tue'] = float(model.coef_[1])
+                st.session_state.coeffs['DOW_Wed'] = float(model.coef_[2])
+                st.session_state.coeffs['DOW_Thu'] = float(model.coef_[3])
+                st.session_state.coeffs['DOW_Fri'] = float(model.coef_[4])
+                st.session_state.coeffs['DOW_Sat'] = float(model.coef_[5])
+                st.session_state.coeffs['DOW_Sun'] = float(model.coef_[6])
+                st.session_state.coeffs['Temp_C'] = float(model.coef_[7])
+                st.session_state.coeffs['Snow_cm'] = float(model.coef_[8])
+                st.session_state.coeffs['Rain_mm'] = float(model.coef_[9])
+                st.session_state.coeffs['Alert'] = float(model.coef_[10])
+                st.session_state.coeffs['Promo'] = float(model.coef_[11])
+                st.session_state.coeffs['Impressions'] = float(model.coef_[12])
+                st.session_state.coeffs['Engagements'] = float(model.coef_[13])
+                st.session_state.coeffs['Clicks'] = float(model.coef_[14])
+                
+                # Update Average Coin-In dynamically based on history
+                total_traffic = df_clean['actual_traffic'].sum()
+                total_coin = df_clean['actual_coin_in'].sum()
+                if total_traffic > 0:
+                    st.session_state.coeffs['Avg_Coin_In'] = float(total_coin / total_traffic)
+
+                st.success("✅ Model successfully retrained! The dials below have been updated to reflect the new optimal weights.")
+            else:
+                st.error("Missing columns. Make sure the database migration was completed.")
+        else:
+            st.warning("You need at least 10 days of historical data to train the AI.")
+
+    st.divider()
+
+    # --- MANUAL CONTROL FORM ---
     with st.form("coeff_form"):
-        st.subheader("Core Baselines")
+        st.subheader("Core Baselines (Manual Override)")
         c1, c2 = st.columns(2)
         c_coin = c1.number_input("Average Coin-In per Visitor ($)", value=float(st.session_state.coeffs['Avg_Coin_In']))
         c_int = c2.number_input("Base Traffic (Intercept)", value=float(st.session_state.coeffs['Intercept']))
@@ -292,9 +363,8 @@ with tab4:
         c_eng = d3.number_input("Engagements (per 1)", value=float(st.session_state.coeffs['Engagements']), format="%.4f", step=0.01)
         c_clicks = d4.number_input("Clicks (per 1)", value=float(st.session_state.coeffs['Clicks']), format="%.4f", step=0.01)
         
-        submit = st.form_submit_button("Update Engine Parameters")
+        submit = st.form_submit_button("Lock In & Update Engine Parameters")
         if submit:
-            # Update all session variables
             st.session_state.coeffs['Avg_Coin_In'] = c_coin
             st.session_state.coeffs['Intercept'] = c_int
             st.session_state.coeffs['DOW_Mon'] = c_mon
@@ -313,4 +383,4 @@ with tab4:
             st.session_state.coeffs['Engagements'] = c_eng
             st.session_state.coeffs['Clicks'] = c_clicks
             
-            st.success("Parameters updated! The model has been fully recalibrated.")
+            st.success("Parameters saved! The predictive model is fully updated.")
