@@ -124,7 +124,7 @@ with tab2:
             st.cache_data.clear() # Forces the table to refresh
 
 st.divider()
-    st.subheader("🔍 Search Database Ledger")
+st.subheader("🔍 Search Database Ledger")
     
     if ledger_data:
         df_ledger = pd.DataFrame(ledger_data)
