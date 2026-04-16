@@ -237,36 +237,59 @@ with tab2:
                 
                 st.line_chart(df_f.set_index("Date")["Visitors"], color="#FFCC00")
 
-   # --- SECTION B: LEDGER SEARCH & EDIT (FULL COLUMN VIEW) ---
-    st.markdown("### 🔍 3. Search & Edit Historical Ledger")
+   # --- SECTION B: LEDGER RANGE SEARCH ---
+    st.markdown("### 🔍 3. Historical Ledger Audit")
     with st.container(border=True):
         if ledger_data:
             df_edit = pd.DataFrame(ledger_data)
-            df_edit['entry_date'] = df_edit['entry_date'].astype(str)
+            df_edit['entry_date'] = pd.to_datetime(df_edit['entry_date'])
             
-            search_date = st.date_input("Search a past date to verify all data points", 
-                                       value=pd.to_datetime(df_edit['entry_date']).max().date())
+            # 1. Date Range Picker
+            search_range = st.date_input(
+                "Select Date Range to Audit",
+                value=[df_edit['entry_date'].max().date() - datetime.timedelta(days=7), 
+                       df_edit['entry_date'].max().date()],
+                help="Select the start and end date to view all logged data for that period."
+            )
             
-            search_str = search_date.strftime("%Y-%m-%d")
-            found = df_edit[df_edit['entry_date'] == search_str]
-            
-            if not found.empty:
-                row = found.iloc[0]
-                st.success(f"**Full Record Found for {search_str}**")
-                
-                # 1. THE SUMMARY CARDS (Top Level)
-                r1, r2, r3, r4 = st.columns(4)
-                r1.metric("Actual Traffic", f"{int(row['actual_traffic']):,}")
-                r2.metric("Actual Revenue", f"${row['actual_coin_in']:,.0f}")
-                r3.metric("Digital Lift", f"{int(row.get('digital_lift_visitors', 0)):,}")
-                
-                # Calculate Accuracy for this specific day
-                error = abs(row['actual_traffic'] - row['predicted_traffic'])
-                acc = (1 - (error / row['actual_traffic'])) * 100 if row['actual_traffic'] > 0 else 0
-                r4.metric("AI Accuracy", f"{acc:.1f}%")
-                
-            else:
-                st.warning(f"No entry exists for {search_str}.")
+            # Ensure we have both a start and end date before filtering
+            if isinstance(search_range, list) or isinstance(search_range, tuple):
+                if len(search_range) == 2:
+                    start_search, end_search = search_range
+                    
+                    # Filter the dataframe
+                    mask = (df_edit['entry_date'].dt.date >= start_search) & (df_edit['entry_date'].dt.date <= end_search)
+                    found_range = df_edit.loc[mask].sort_values('entry_date', ascending=False)
+                    
+                    if not found_range.empty:
+                        st.success(f"Displaying {len(found_range)} records from {start_search} to {end_search}")
+                        
+                        # 2. Summary Metrics for the Selected Range
+                        r1, r2, r3 = st.columns(3)
+                        avg_acc = (1 - (abs(found_range['actual_traffic'] - found_range['predicted_traffic']) / found_range['actual_traffic']).mean()) * 100
+                        
+                        r1.metric("Range Total Revenue", f"${found_range['actual_coin_in'].sum():,.0f}")
+                        r2.metric("Range Total Traffic", f"{int(found_range['actual_traffic'].sum()):,}")
+                        r3.metric("Avg. Model Accuracy", f"{avg_acc:.1f}%")
+                        
+                        # 3. The Full Data Table
+                        st.write("---")
+                        # We format the date column back to a clean string for the table
+                        found_range['entry_date'] = found_range['entry_date'].dt.strftime('%Y-%m-%d')
+                        st.dataframe(found_range, use_container_width=True, hide_index=True)
+                        
+                        # 4. CSV Download for the range
+                        csv = found_range.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="📥 Download Selected Range as CSV",
+                            data=csv,
+                            file_name=f"HardRock_Audit_{start_search}_to_{end_search}.csv",
+                            mime='text/csv',
+                        )
+                    else:
+                        st.warning("No records found for this specific date range.")
+        else:
+            st.info("Database is empty. Log entries above to see them here.")
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
     st.header("📈 Strategic Reporting Center")
