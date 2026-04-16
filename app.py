@@ -40,59 +40,98 @@ tab1, tab2, tab3, tab4 = st.tabs(["📊 Executive Dashboard", "📝 Daily Tracke
 
 # --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
-    st.header("YTD Property Overview")
+    st.header("Executive Overview & MoM Trends")
     
     if ledger_data:
         df_dash = pd.DataFrame(ledger_data)
-        
-        # Filter down to days where Actual Traffic is greater than 0 (to avoid dividing by zero in our math)
         df_dash = df_dash[df_dash['actual_traffic'] > 0].copy()
         
         if not df_dash.empty:
-            # --- 1. CORE METRICS CALCULATION ---
-            total_actual = int(df_dash['actual_traffic'].sum())
-            total_digital_rev = float(df_dash['digital_revenue_impact'].sum())
+            # --- 1. DATA PREP & ON-THE-FLY MATH ---
+            df_dash['entry_date'] = pd.to_datetime(df_dash['entry_date'])
             
-            # --- 2. AI ACCURACY CALCULATION ---
-            # Calculate the absolute variance for each day
+            # Calculate Weather Impact dynamically based on current AI coefficients
+            c = st.session_state.coeffs
+            df_dash['weather_impact_vis'] = (
+                (df_dash.get('temp_c', 0) * c['Temp_C']) + 
+                (df_dash.get('snow_cm', 0) * c['Snow_cm']) + 
+                (df_dash.get('rain_mm', 0) * c['Rain_mm']) + 
+                (df_dash.get('weather_alert', False).astype(int) * c['Alert'])
+            )
+            df_dash['weather_impact_rev'] = df_dash['weather_impact_vis'] * c['Avg_Coin_In']
+            
+            # Determine Current vs Previous Month
+            latest_date = df_dash['entry_date'].max()
+            curr_m, curr_y = latest_date.month, latest_date.year
+            prev_m = curr_m - 1 if curr_m > 1 else 12
+            prev_y = curr_y if curr_m > 1 else curr_y - 1
+            
+            df_curr = df_dash[(df_dash['entry_date'].dt.month == curr_m) & (df_dash['entry_date'].dt.year == curr_y)]
+            df_prev = df_dash[(df_dash['entry_date'].dt.month == prev_m) & (df_dash['entry_date'].dt.year == prev_y)]
+            
+            # Helper function to extract totals
+            def get_metrics(df):
+                rev = df['actual_coin_in'].sum()
+                traf = df['actual_traffic'].sum()
+                rev_pp = rev / traf if traf > 0 else 0
+                dig_vis = df['digital_lift_visitors'].sum()
+                dig_rev = df['digital_revenue_impact'].sum()
+                wea_vis = df['weather_impact_vis'].sum()
+                wea_rev = df['weather_impact_rev'].sum()
+                return rev, traf, rev_pp, dig_vis, dig_rev, wea_vis, wea_rev
+
+            # YTD Totals
+            y_rev, y_traf, y_rev_pp, y_dig_vis, y_dig_rev, y_wea_vis, y_wea_rev = get_metrics(df_dash)
+            # Current Month Totals
+            c_rev, c_traf, c_rev_pp, c_dig_vis, c_dig_rev, c_wea_vis, c_wea_rev = get_metrics(df_curr)
+            # Previous Month Totals
+            p_rev, p_traf, p_rev_pp, p_dig_vis, p_dig_rev, p_wea_vis, p_wea_rev = get_metrics(df_prev)
+            
+            # Helper function for safe percentage calculation
+            def calc_mom(curr, prev):
+                if prev == 0 and curr == 0: return "0.0% MoM"
+                if prev == 0: return "N/A (No prior data)"
+                pct = ((curr - prev) / abs(prev)) * 100
+                return f"{pct:+.1f}% MoM"
+
+            # --- 2. ROW 1: CORE FINANCIALS ---
+            st.subheader("💰 Core Financials & Traffic (YTD)")
+            r1c1, r1c2, r1c3 = st.columns(3)
+            r1c1.metric("Total Revenue", f"${y_rev:,.0f}", delta=calc_mom(c_rev, p_rev))
+            r1c2.metric("Foot Traffic", f"{y_traf:,.0f}", delta=calc_mom(c_traf, p_traf))
+            r1c3.metric("Avg Rev per Person", f"${y_rev_pp:,.2f}", delta=calc_mom(c_rev_pp, p_rev_pp))
+            
+            st.divider()
+            
+            # --- 3. ROW 2: DIGITAL VS WEATHER IMPACT ---
+            st.subheader("⚖️ Driving Forces: Digital vs. Weather (YTD)")
+            r2c1, r2c2, r2c3, r2c4 = st.columns(4)
+            r2c1.metric("Digital Lift (Visits)", f"{y_dig_vis:,.0f}", delta=calc_mom(c_dig_vis, p_dig_vis))
+            r2c2.metric("Digital Contribution ($)", f"${y_dig_rev:,.0f}", delta=calc_mom(c_dig_rev, p_dig_rev))
+            r2c3.metric("Weather Impact (Visits)", f"{y_wea_vis:,.0f}", delta=calc_mom(c_wea_vis, p_wea_vis), delta_color="inverse")
+            r2c4.metric("Weather Impact ($)", f"${y_wea_rev:,.0f}", delta=calc_mom(c_wea_rev, p_wea_rev), delta_color="inverse")
+            
+            st.divider()
+
+            # --- 4. ROW 3: AI ACCURACY & SOCIAL METRICS ---
+            st.subheader("🤖 Engine Accuracy & Social Performance")
+            
+            # Calculate AI Accuracy
             df_dash['abs_error'] = abs(df_dash['actual_traffic'] - df_dash['predicted_traffic'])
-            # Calculate the percentage error per day, then find the average
             mape = (df_dash['abs_error'] / df_dash['actual_traffic']).mean()
-            # Convert to an Accuracy Percentage (e.g., 0.05 error becomes 95.0% accuracy)
             model_accuracy = (1 - mape) * 100
             
-            # --- 3. DISPLAY TOP ROW ---
-            col1, col2, col3 = st.columns(3)
-            col1.metric(label="Total Foot Traffic (YTD)", value=f"{total_actual:,}")
-            col2.metric(label="Digital Revenue Lift (YTD)", value=f"${total_digital_rev:,.0f}")
-            col3.metric(label="🎯 AI Prediction Accuracy", value=f"{model_accuracy:.1f}%", help="Based on the Average Absolute Percentage Error across all historical records.")
-            
-            st.divider()
-            
-            # --- 4. DISPLAY DIGITAL METRICS ---
-            st.subheader("📱 Digital Marketing Performance")
-            soc1, soc2, soc3 = st.columns(3)
-            
-            # Safe gets in case some historical rows don't have this data yet
-            total_imp = int(df_dash.get('ad_impressions', pd.Series([0])).sum())
-            total_eng = int(df_dash.get('social_engagements', pd.Series([0])).sum())
-            total_clicks = int(df_dash.get('ad_clicks', pd.Series([0])).sum())
-            
-            soc1.metric(label="Total Ad Impressions", value=f"{total_imp:,}")
-            soc2.metric(label="Total Engagements", value=f"{total_eng:,}")
-            soc3.metric(label="Total Ad Clicks", value=f"{total_clicks:,}")
-            
-            st.divider()
-            
-            # --- 5. VISUALIZING ACCURACY OVER TIME ---
-            st.subheader("Recent Accuracy Tracking (Last 14 Days)")
-            # Sort by date and grab the most recent 14 entries
-            recent_df = df_dash.sort_values('entry_date', ascending=False).head(14).copy()
-            recent_df = recent_df.sort_values('entry_date', ascending=True) # Sort back chronological for the chart
-            
-            # Create a simple line chart comparing Actual vs Predicted
-            chart_data = recent_df[['entry_date', 'actual_traffic', 'predicted_traffic']].set_index('entry_date')
-            st.line_chart(chart_data)
+            # Safe Social Metric Calculations
+            def get_soc(df, col): return int(df.get(col, pd.Series([0])).sum())
+            y_imp, c_imp, p_imp = get_soc(df_dash, 'ad_impressions'), get_soc(df_curr, 'ad_impressions'), get_soc(df_prev, 'ad_impressions')
+            y_eng, c_eng, p_eng = get_soc(df_dash, 'social_engagements'), get_soc(df_curr, 'social_engagements'), get_soc(df_prev, 'social_engagements')
+            y_clk, c_clk, p_clk = get_soc(df_dash, 'ad_clicks'), get_soc(df_curr, 'ad_clicks'), get_soc(df_prev, 'ad_clicks')
+
+            r3c1, r3c2, r3c3, r3c4 = st.columns(4)
+            r3c1.metric("🎯 AI Prediction Accuracy", f"{model_accuracy:.1f}%", help="Based on Mean Absolute Percentage Error (MAPE)")
+            r3c2.metric("Ad Impressions", f"{y_imp:,.0f}", delta=calc_mom(c_imp, p_imp))
+            r3c3.metric("Social Engagements", f"{y_eng:,.0f}", delta=calc_mom(c_eng, p_eng))
+            r3c4.metric("Ad Clicks", f"{y_clk:,.0f}", delta=calc_mom(c_clk, p_clk))
 
         else:
             st.info("No completed actuals found. Save some daily entries to generate YTD metrics.")
