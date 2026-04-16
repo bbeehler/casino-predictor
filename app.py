@@ -237,18 +237,34 @@ with tab2:
                 
                 st.line_chart(df_f.set_index("Date")["Visitors"], color="#FFCC00")
 
-    # --- HISTORICAL SEARCH (Section B) ---
+    # --- SECTION B: LEDGER SEARCH & EDIT (FIXED) ---
     st.markdown("### 🔍 3. Search & Edit Historical Ledger")
     with st.container(border=True):
         if ledger_data:
             df_edit = pd.DataFrame(ledger_data)
-            search_date = st.date_input("Search a past date to verify data", value=pd.to_datetime(df_edit['entry_date']).max().date())
-            found = df_edit[df_edit['entry_date'] == str(search_date)]
+            
+            # Ensure the entry_date column is treated as a string for easy matching
+            df_edit['entry_date'] = df_edit['entry_date'].astype(str)
+            
+            search_date = st.date_input("Search a past date to verify data", 
+                                       value=pd.to_datetime(df_edit['entry_date']).max().date())
+            
+            # CONVERSION: Turn the picker date into a string that matches the DB format
+            search_str = search_date.strftime("%Y-%m-%d")
+            
+            found = df_edit[df_edit['entry_date'] == search_str]
+            
             if not found.empty:
-                st.success(f"Record found: {int(found.iloc[0]['actual_traffic'])} visitors | ${found.iloc[0]['actual_coin_in']:,.0f} revenue")
+                row = found.iloc[0]
+                st.success(f"**Record Found for {search_str}**")
+                
+                # Bento-style result display
+                r1, r2, r3 = st.columns(3)
+                r1.metric("Actual Traffic", f"{int(row['actual_traffic']):,}")
+                r2.metric("Actual Revenue", f"${row['actual_coin_in']:,.0f}")
+                r3.metric("AI Accuracy", f"{(1 - (abs(row['actual_traffic'] - row['predicted_traffic']) / row['actual_traffic'])) * 100:.1f}%")
             else:
-                st.warning("No entry for this date.")
-
+                st.warning(f"No entry exists for {search_str}. Use the 'Log Actuals' form above to create one.")
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
     st.header("📈 Strategic Reporting Center")
