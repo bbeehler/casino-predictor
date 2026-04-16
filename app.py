@@ -235,25 +235,79 @@ with tab2:
         else:
             st.error("Start date must be before end date.")
 
-    # --- SECTION B: LEDGER SEARCH & EDIT (STAYS AT BOTTOM) ---
+# --- SECTION B: LEDGER SEARCH & EDIT ---
     st.divider()
     st.subheader("🔍 3. Search & Edit Historical Ledger")
     
     if ledger_data:
         df_ledger = pd.DataFrame(ledger_data)
-        enable_search = st.toggle("Filter & Edit Specific Date")
+        
+        # Search controls
+        search_col, status_col = st.columns([1, 2])
+        with search_col:
+            enable_search = st.toggle("Filter & Edit Specific Date")
+            if enable_search:
+                search_date = st.date_input("Select Date to Edit", value=pd.to_datetime(df_ledger['entry_date']).max().date())
+                search_date_str = search_date.strftime("%Y-%m-%d")
         
         if enable_search:
-            search_date = st.date_input("Select Date to Edit", value=pd.to_datetime(df_ledger['entry_date']).max().date())
-            search_date_str = search_date.strftime("%Y-%m-%d")
             found = df_ledger[df_ledger['entry_date'] == search_date_str]
             
-            if not found.empty:
-                existing = found.iloc[0]
-                with st.expander(f"✏️ Editing: {search_date_str}", expanded=True):
-                    with st.form("edit_form"):
-                        e_c1, e_c2, e_c3 = st.columns(3)
-                        new_traffic = e_c1.number_input("Actual Traffic", value=int(existing.get('actual_traffic', 0)))
+            with status_col:
+                if not found.empty:
+                    existing = found.iloc[0]
+                    st.success(f"Found record for {search_date_str}. Use the editor below.")
+                    
+                    # THE SELF-CONTAINED EDIT FORM
+                    with st.expander(f"✏️ Editing Record: {search_date_str}", expanded=True):
+                        with st.form(key=f"edit_form_{search_date_str}"):
+                            e1, e2, e3 = st.columns(3)
+                            
+                            with e1:
+                                st.markdown("**Core Metrics**")
+                                up_traffic = st.number_input("Actual Traffic", value=int(existing.get('actual_traffic', 0)))
+                                up_coin = st.number_input("Actual Coin-In ($)", value=float(existing.get('actual_coin_in', 0.0)))
+                                up_pred = st.number_input("Predicted Traffic", value=int(existing.get('predicted_traffic', 0)))
+                            
+                            with e2:
+                                st.markdown("**Weather**")
+                                up_temp = st.number_input("Temp (°C)", value=int(existing.get('temp_c', 0)))
+                                up_snow = st.number_input("Snow (cm)", value=float(existing.get('snow_cm', 0.0)))
+                                up_alert = st.checkbox("Weather Alert", value=bool(existing.get('weather_alert', False)))
+                            
+                            with e3:
+                                st.markdown("**Digital**")
+                                up_promo = st.checkbox("Active Promo", value=bool(existing.get('active_promo', False)))
+                                up_imp = st.number_input("Impressions", value=int(existing.get('ad_impressions', 0)))
+                                up_eng = st.number_input("Engagements", value=int(existing.get('social_engagements', 0)))
+                                up_clks = st.number_input("Clicks", value=int(existing.get('ad_clicks', 0)))
+
+                            # THE MISSING SUBMIT BUTTON
+                            if st.form_submit_button("💾 Save Changes to Database"):
+                                # Recalculate variance for accuracy
+                                new_var = int(up_traffic) - int(up_pred)
+                                
+                                supabase.table("ledger").update({
+                                    "actual_traffic": int(up_traffic),
+                                    "predicted_traffic": int(up_pred),
+                                    "actual_coin_in": float(up_coin),
+                                    "variance": int(new_var),
+                                    "temp_c": int(up_temp),
+                                    "snow_cm": float(up_snow),
+                                    "weather_alert": up_alert,
+                                    "active_promo": up_promo,
+                                    "ad_impressions": int(up_imp),
+                                    "social_engagements": int(up_eng),
+                                    "ad_clicks": int(up_clks)
+                                }).eq("entry_date", search_date_str).execute()
+                                
+                                st.toast("✅ Database record updated!")
+                                st.rerun()
+                else:
+                    st.warning(f"No entry found for {search_date_str}.")
+
+        # Display the main table
+        st.dataframe(df_ledger.sort_values('entry_date', ascending=False), use_container_width=True, hide_index=True)
 
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
