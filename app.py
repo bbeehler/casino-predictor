@@ -42,24 +42,62 @@ tab1, tab2, tab3, tab4 = st.tabs(["📊 Executive Dashboard", "📝 Daily Tracke
 with tab1:
     st.header("YTD Property Overview")
     
-    col1, col2, col3 = st.columns(3)
-    col1.metric(label="Total Foot Traffic", value="452,193", delta="+5.2% vs Last Month")
-    col2.metric(label="Digital Contribution", value="43,053 Visitors", delta="+4.2% vs Last Month")
-    col3.metric(label="Weather Penalty", value="-109,872 Visitors", delta="-12% vs Last Month", delta_color="inverse")
-    
-    st.divider()
-    
-    st.subheader("📱 Digital Marketing Performance")
-    soc1, soc2, soc3 = st.columns(3)
-    soc1.metric(label="Total Ad Impressions", value="14.2M", delta="+8.1% vs Last Month")
-    soc2.metric(label="Total Engagements", value="458,200", delta="+3.4% vs Last Month")
-    soc3.metric(label="Total Ad Clicks", value="112,450", delta="+5.5% vs Last Month")
-    
-    st.divider()
-    
-    st.subheader("Estimated Coin-In YTD: $57.7M")
-    st.progress(0.75)
+    if ledger_data:
+        df_dash = pd.DataFrame(ledger_data)
+        
+        # Filter down to days where Actual Traffic is greater than 0 (to avoid dividing by zero in our math)
+        df_dash = df_dash[df_dash['actual_traffic'] > 0].copy()
+        
+        if not df_dash.empty:
+            # --- 1. CORE METRICS CALCULATION ---
+            total_actual = int(df_dash['actual_traffic'].sum())
+            total_digital_rev = float(df_dash['digital_revenue_impact'].sum())
+            
+            # --- 2. AI ACCURACY CALCULATION ---
+            # Calculate the absolute variance for each day
+            df_dash['abs_error'] = abs(df_dash['actual_traffic'] - df_dash['predicted_traffic'])
+            # Calculate the percentage error per day, then find the average
+            mape = (df_dash['abs_error'] / df_dash['actual_traffic']).mean()
+            # Convert to an Accuracy Percentage (e.g., 0.05 error becomes 95.0% accuracy)
+            model_accuracy = (1 - mape) * 100
+            
+            # --- 3. DISPLAY TOP ROW ---
+            col1, col2, col3 = st.columns(3)
+            col1.metric(label="Total Foot Traffic (YTD)", value=f"{total_actual:,}")
+            col2.metric(label="Digital Revenue Lift (YTD)", value=f"${total_digital_rev:,.0f}")
+            col3.metric(label="🎯 AI Prediction Accuracy", value=f"{model_accuracy:.1f}%", help="Based on the Average Absolute Percentage Error across all historical records.")
+            
+            st.divider()
+            
+            # --- 4. DISPLAY DIGITAL METRICS ---
+            st.subheader("📱 Digital Marketing Performance")
+            soc1, soc2, soc3 = st.columns(3)
+            
+            # Safe gets in case some historical rows don't have this data yet
+            total_imp = int(df_dash.get('ad_impressions', pd.Series([0])).sum())
+            total_eng = int(df_dash.get('social_engagements', pd.Series([0])).sum())
+            total_clicks = int(df_dash.get('ad_clicks', pd.Series([0])).sum())
+            
+            soc1.metric(label="Total Ad Impressions", value=f"{total_imp:,}")
+            soc2.metric(label="Total Engagements", value=f"{total_eng:,}")
+            soc3.metric(label="Total Ad Clicks", value=f"{total_clicks:,}")
+            
+            st.divider()
+            
+            # --- 5. VISUALIZING ACCURACY OVER TIME ---
+            st.subheader("Recent Accuracy Tracking (Last 14 Days)")
+            # Sort by date and grab the most recent 14 entries
+            recent_df = df_dash.sort_values('entry_date', ascending=False).head(14).copy()
+            recent_df = recent_df.sort_values('entry_date', ascending=True) # Sort back chronological for the chart
+            
+            # Create a simple line chart comparing Actual vs Predicted
+            chart_data = recent_df[['entry_date', 'actual_traffic', 'predicted_traffic']].set_index('entry_date')
+            st.line_chart(chart_data)
 
+        else:
+            st.info("No completed actuals found. Save some daily entries to generate YTD metrics.")
+    else:
+        st.info("Database is empty. Add data to see the Executive Dashboard.")
 # --- TAB 2: DAILY TRACKER (DATA ENTRY) ---
 with tab2:
     st.header("Daily Entry & Validation")
