@@ -161,169 +161,93 @@ with tab1:
 
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
-    st.header("Daily Performance & Predictive Sandbox")
+    st.markdown("### 🕹️ Property Control Panel")
     
-    # --- SECTION A: TOP ROW (ENTRY + FORECAST) ---
-    col_entry, col_forecast = st.columns([1, 1.2])
+    # We create a 2-column layout for the "Bento Box" feel
+    col_input, col_sandbox = st.columns([1, 1.2])
     
-    with col_entry:
-        st.subheader("📝 1. Log Daily Actuals")
-        with st.form("entry_form"):
-            entry_date = st.date_input("Date", datetime.date.today())
-            actual_traffic = st.number_input("Actual Foot Traffic", min_value=0, step=100)
-            actual_coinin = st.number_input("Actual Coin-In ($)", min_value=0, step=1000)
-            
-            st.markdown("**Contextual Variables**")
-            w1, w2 = st.columns(2)
-            temp = w1.slider("Temp (°C)", -30, 40, 15)
-            snow = w2.slider("Snow (cm)", 0, 50, 0)
-            
-            d1, d2 = st.columns(2)
-            promo = d1.checkbox("Active Promotion")
-            alert = d2.checkbox("Weather Alert")
-            
-            with st.expander("Digital Input Details"):
-                rain = st.number_input("Rain (mm)", 0, 50, 0)
-                impressions = st.number_input("Ad Impressions", 0, 1000000, 300000)
-                engagements = st.number_input("Social Engagements", 0, 10000, 500)
-                clicks = st.number_input("Ad Clicks", 0, 5000, 200)
-
-            if st.form_submit_button("💾 Save Daily Entry"):
-                c = st.session_state.coeffs
-                dow_key = f"DOW_{entry_date.strftime('%a')}"
+    with col_input:
+        with st.container(border=True):
+            st.subheader("📝 1. Log Actuals")
+            with st.form("entry_form", clear_on_submit=True):
+                date_in = st.date_input("Date", datetime.date.today())
+                act_traf = st.number_input("Actual Traffic", min_value=0, step=100)
+                act_coin = st.number_input("Actual Coin-In ($)", min_value=0, step=1000)
                 
-                # Math
-                base = c['Intercept'] + c.get(dow_key, 0)
-                weather = (temp * c['Temp_C']) + (snow * c['Snow_cm']) + (rain * c['Rain_mm']) + (alert * c['Alert'])
-                dig_lift = (promo * c['Promo']) + (impressions * c['Impressions']) + (engagements * c['Engagements']) + (clicks * c['Clicks'])
-                total_pred = base + weather + dig_lift
+                st.divider()
+                st.markdown("**Environment & Marketing**")
+                w1, w2 = st.columns(2)
+                temp = w1.slider("Temp (°C)", -30, 40, 15)
+                snow = w2.slider("Snow (cm)", 0, 50, 0)
                 
-                entry = {
-                    "entry_date": entry_date.strftime("%Y-%m-%d"),
-                    "day_of_week": entry_date.strftime("%A"),
-                    "actual_traffic": actual_traffic,
-                    "predicted_traffic": int(total_pred),
-                    "variance": int(actual_traffic - total_pred),
-                    "digital_lift_visitors": int(dig_lift),
-                    "digital_revenue_impact": float(dig_lift * c['Avg_Coin_In']),
-                    "actual_coin_in": float(actual_coinin),
-                    "temp_c": int(temp), "snow_cm": float(snow), "rain_mm": float(rain),
-                    "weather_alert": alert, "active_promo": promo,
-                    "ad_impressions": int(impressions), "social_engagements": int(engagements), "ad_clicks": int(clicks)
-                }
-                supabase.table("ledger").upsert(entry, on_conflict="entry_date").execute()
-                st.toast("✅ Database Updated!")
-                st.rerun()
+                promo = st.checkbox("Active Promotion")
+                
+                with st.expander("Detailed Digital Metrics"):
+                    imp = st.number_input("Ad Impressions", 0, 1000000, 300000)
+                    eng = st.number_input("Social Engagements", 0, 10000, 500)
+                    clks = st.number_input("Ad Clicks", 0, 5000, 200)
 
-    with col_forecast:
-        st.subheader("🔮 2. Strategic Forecast Sandbox")
-        st.markdown("Select a future range and simulate conditions.")
-        
-        f_col1, f_col2 = st.columns(2)
-        f_start = f_col1.date_input("Forecast Start", datetime.date.today() + datetime.timedelta(days=1))
-        f_end = f_col2.date_input("Forecast End", datetime.date.today() + datetime.timedelta(days=7))
-        
-        st.write("---")
-        s1, s2, s3 = st.columns(3)
-        sim_temp = s1.slider("Simulated Temp (°C)", -30, 40, 15)
-        sim_snow = s2.number_input("Simulated Snow (cm)", 0.0)
-        sim_promo = s3.checkbox("Apply Promo to Range?")
-        
-        if f_start <= f_end:
-            forecast_range = pd.date_range(start=f_start, end=f_end)
-            c = st.session_state.coeffs
-            f_data = []
-            
-            for d in forecast_range:
-                dow_key = f"DOW_{d.strftime('%a')}"
-                pred = c['Intercept'] + c.get(dow_key, 0) + (sim_temp * c['Temp_C']) + (sim_snow * c['Snow_cm'])
-                if sim_promo: pred += c['Promo']
-                f_data.append({"Date": d.strftime('%a, %b %d'), "Visitors": int(pred), "Revenue": pred * c['Avg_Coin_In']})
-            
-            df_f = pd.DataFrame(f_data)
-            
-            # Summary Metrics
-            m_col1, m_col2 = st.columns(2)
-            m_col1.metric("Projected Visitors", f"{df_f['Visitors'].sum():,}")
-            m_col2.metric("Projected Revenue", f"${df_f['Revenue'].sum():,.0f}")
-            
-            st.line_chart(df_f.set_index("Date")["Visitors"])
-        else:
-            st.error("Start date must be before end date.")
-
-# --- SECTION B: LEDGER SEARCH & EDIT ---
-    st.divider()
-    st.subheader("🔍 3. Search & Edit Historical Ledger")
-    
-    if ledger_data:
-        df_ledger = pd.DataFrame(ledger_data)
-        
-        # Search controls
-        search_col, status_col = st.columns([1, 2])
-        with search_col:
-            enable_search = st.toggle("Filter & Edit Specific Date")
-            if enable_search:
-                search_date = st.date_input("Select Date to Edit", value=pd.to_datetime(df_ledger['entry_date']).max().date())
-                search_date_str = search_date.strftime("%Y-%m-%d")
-        
-        if enable_search:
-            found = df_ledger[df_ledger['entry_date'] == search_date_str]
-            
-            with status_col:
-                if not found.empty:
-                    existing = found.iloc[0]
-                    st.success(f"Found record for {search_date_str}. Use the editor below.")
+                if st.form_submit_button("💾 Save Daily Records", use_container_width=True):
+                    c = st.session_state.coeffs
+                    dow_key = f"DOW_{date_in.strftime('%a')}"
                     
-                    # THE SELF-CONTAINED EDIT FORM
-                    with st.expander(f"✏️ Editing Record: {search_date_str}", expanded=True):
-                        with st.form(key=f"edit_form_{search_date_str}"):
-                            e1, e2, e3 = st.columns(3)
-                            
-                            with e1:
-                                st.markdown("**Core Metrics**")
-                                up_traffic = st.number_input("Actual Traffic", value=int(existing.get('actual_traffic', 0)))
-                                up_coin = st.number_input("Actual Coin-In ($)", value=float(existing.get('actual_coin_in', 0.0)))
-                                up_pred = st.number_input("Predicted Traffic", value=int(existing.get('predicted_traffic', 0)))
-                            
-                            with e2:
-                                st.markdown("**Weather**")
-                                up_temp = st.number_input("Temp (°C)", value=int(existing.get('temp_c', 0)))
-                                up_snow = st.number_input("Snow (cm)", value=float(existing.get('snow_cm', 0.0)))
-                                up_alert = st.checkbox("Weather Alert", value=bool(existing.get('weather_alert', False)))
-                            
-                            with e3:
-                                st.markdown("**Digital**")
-                                up_promo = st.checkbox("Active Promo", value=bool(existing.get('active_promo', False)))
-                                up_imp = st.number_input("Impressions", value=int(existing.get('ad_impressions', 0)))
-                                up_eng = st.number_input("Engagements", value=int(existing.get('social_engagements', 0)))
-                                up_clks = st.number_input("Clicks", value=int(existing.get('ad_clicks', 0)))
+                    # Math for Prediction
+                    base = c['Intercept'] + c.get(dow_key, 0)
+                    weather = (temp * c['Temp_C']) + (snow * c['Snow_cm'])
+                    dig_lift = (promo * c['Promo']) + (imp * c['Impressions']) + (eng * c['Engagements']) + (clks * c['Clicks'])
+                    final_pred = base + weather + dig_lift
+                    
+                    data = {
+                        "entry_date": str(date_in), "day_of_week": date_in.strftime("%A"),
+                        "actual_traffic": act_traf, "actual_coin_in": float(act_coin),
+                        "predicted_traffic": int(final_pred), "variance": int(act_traf - final_pred),
+                        "temp_c": int(temp), "snow_cm": float(snow), "active_promo": promo,
+                        "ad_impressions": int(imp), "social_engagements": int(eng), "ad_clicks": int(clks),
+                        "digital_lift_visitors": int(dig_lift), "digital_revenue_impact": float(dig_lift * c['Avg_Coin_In'])
+                    }
+                    supabase.table("ledger").upsert(data, on_conflict="entry_date").execute()
+                    st.toast("✅ Record saved to Ledger")
+                    st.rerun()
 
-                            # THE MISSING SUBMIT BUTTON
-                            if st.form_submit_button("💾 Save Changes to Database"):
-                                # Recalculate variance for accuracy
-                                new_var = int(up_traffic) - int(up_pred)
-                                
-                                supabase.table("ledger").update({
-                                    "actual_traffic": int(up_traffic),
-                                    "predicted_traffic": int(up_pred),
-                                    "actual_coin_in": float(up_coin),
-                                    "variance": int(new_var),
-                                    "temp_c": int(up_temp),
-                                    "snow_cm": float(up_snow),
-                                    "weather_alert": up_alert,
-                                    "active_promo": up_promo,
-                                    "ad_impressions": int(up_imp),
-                                    "social_engagements": int(up_eng),
-                                    "ad_clicks": int(up_clks)
-                                }).eq("entry_date", search_date_str).execute()
-                                
-                                st.toast("✅ Database record updated!")
-                                st.rerun()
-                else:
-                    st.warning(f"No entry found for {search_date_str}.")
+    with col_sandbox:
+        with st.container(border=True):
+            st.subheader("🔮 2. Forecast Sandbox")
+            st.write("Simulate future dates to see projected revenue.")
+            
+            f_range = st.date_input("Forecast Range", [datetime.date.today() + datetime.timedelta(days=1), datetime.date.today() + datetime.timedelta(days=7)])
+            
+            s1, s2 = st.columns(2)
+            sim_temp = s1.slider("Simulated Temp", -30, 40, 15)
+            sim_promo = s2.checkbox("Apply Promo to all dates?")
+            
+            if len(f_range) == 2:
+                dates = pd.date_range(f_range[0], f_range[1])
+                c = st.session_state.coeffs
+                f_list = []
+                for d in dates:
+                    dk = f"DOW_{d.strftime('%a')}"
+                    p = c['Intercept'] + c.get(dk, 0) + (sim_temp * c['Temp_C']) + (c['Promo'] if sim_promo else 0)
+                    f_list.append({"Date": d.strftime("%a %d"), "Visitors": int(p), "Revenue": p * c['Avg_Coin_In']})
+                
+                df_f = pd.DataFrame(f_list)
+                
+                v1, v2 = st.columns(2)
+                v1.metric("Est. Total Visitors", f"{df_f['Visitors'].sum():,}")
+                v2.metric("Est. Total Revenue", f"${df_f['Revenue'].sum():,.0f}")
+                
+                st.line_chart(df_f.set_index("Date")["Visitors"], color="#FFCC00")
 
-        # Display the main table
-        st.dataframe(df_ledger.sort_values('entry_date', ascending=False), use_container_width=True, hide_index=True)
+    # --- HISTORICAL SEARCH (Section B) ---
+    st.markdown("### 🔍 3. Search & Edit Historical Ledger")
+    with st.container(border=True):
+        if ledger_data:
+            df_edit = pd.DataFrame(ledger_data)
+            search_date = st.date_input("Search a past date to verify data", value=pd.to_datetime(df_edit['entry_date']).max().date())
+            found = df_edit[df_edit['entry_date'] == str(search_date)]
+            if not found.empty:
+                st.success(f"Record found: {int(found.iloc[0]['actual_traffic'])} visitors | ${found.iloc[0]['actual_coin_in']:,.0f} revenue")
+            else:
+                st.warning("No entry for this date.")
 
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
