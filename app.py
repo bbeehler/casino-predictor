@@ -123,13 +123,42 @@ with tab2:
             st.toast("✅ Saved securely to Database!")
             st.cache_data.clear() # Forces the table to refresh
 
-    st.divider()
-    st.subheader("Database Ledger (Live)")
+st.divider()
+    st.subheader("🔍 Search Database Ledger")
+    
     if ledger_data:
         df_ledger = pd.DataFrame(ledger_data)
-        # Clean up columns for display
+        # Select the columns we want to show
         display_df = df_ledger[['entry_date', 'day_of_week', 'actual_traffic', 'predicted_traffic', 'variance', 'digital_revenue_impact']]
-        st.dataframe(display_df, use_container_width=True)
+        
+        # Build the Search UI
+        search_col, result_col = st.columns([1, 2])
+        
+        with search_col:
+            # A toggle switch so the user can turn the search on and off
+            enable_search = st.toggle("Filter by Specific Date")
+            
+            if enable_search:
+                # Find the earliest and latest dates in the database so the calendar doesn't let them pick empty years
+                min_date = pd.to_datetime(df_ledger['entry_date']).min().date()
+                max_date = pd.to_datetime(df_ledger['entry_date']).max().date()
+                
+                search_date = st.date_input("Select Date to Search", min_value=min_date, max_value=max_date, value=max_date)
+        
+        # Apply the Filter Logic
+        if enable_search:
+            search_date_str = search_date.strftime("%Y-%m-%d")
+            display_df = display_df[display_df['entry_date'] == search_date_str]
+            
+            with result_col:
+                if display_df.empty:
+                    st.warning(f"No records found for {search_date_str}.")
+                else:
+                    st.success(f"Record found for {search_date_str}!")
+
+        # Display the Table (either full or filtered)
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        
     else:
         st.info("Your database is currently empty. Save an entry to start tracking!")
 
