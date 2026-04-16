@@ -72,7 +72,7 @@ with tab1:
                                 f_context += f"{d.strftime('%a %d')}: Est. {int(p)} visitors; "
 
                             # 3. Prompt Gemini
-                            model = genai.GenerativeModel('models/gemini-1.5-flash')
+                            model = genai.GenerativeModel('models/gemini-2.5-flash')
                             briefing_prompt = f"""
                             You are a Senior Strategic Analyst for Hard Rock Hotel & Casino Ottawa. 
                             Write a concise, high-level Executive Summary (max 200 words) for the leadership team.
