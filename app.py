@@ -83,115 +83,59 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
 # --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
-    st.header("Executive Summary & AI Briefing")
+    # This is the "Bento Header"
+    st.markdown("### 🤖 Strategic Intelligence")
     
-    if ledger_data:
-        df_dash = pd.DataFrame(ledger_data)
-        # Ensure we only analyze days where actual data exists
-        df_dash = df_dash[df_dash['actual_traffic'] > 0].copy()
-        
-        if not df_dash.empty:
-            df_dash['entry_date'] = pd.to_datetime(df_dash['entry_date'])
-            c = st.session_state.coeffs
+    # We wrap the content in a container with border=True to create the "Card"
+    with st.container(border=True):
+        if ledger_data:
+            df_dash = pd.DataFrame(ledger_data)
+            df_dash = df_dash[df_dash['actual_traffic'] > 0].copy()
             
-            # --- 1. AI STRATEGIC BRIEFING ---
-            with st.container(border=True):
-                st.subheader("🤖 AI Strategic Analyst")
-                if st.button("✨ Generate Executive Briefing"):
-                    with st.spinner("Gemini is synthesizing historical data and forecasting..."):
+            if not df_dash.empty:
+                st.write("Click the button below to have Gemini synthesize your property data into a strategic narrative.")
+                
+                # The AI Action Button
+                if st.button("✨ Generate AI Executive Briefing", use_container_width=True):
+                    with st.spinner("AI is analyzing performance and 7-day forecast..."):
                         try:
-                            # Contextual data prep
+                            # Contextual data prep (Last 30 days + Future 7-day outlook)
+                            df_dash['entry_date'] = pd.to_datetime(df_dash['entry_date'])
                             recent_30 = df_dash.sort_values('entry_date', ascending=False).head(30).to_csv(index=False)
                             
-                            # Future 7-day outlook context
-                            f_dates = [datetime.date.today() + datetime.timedelta(days=x) for x in range(1, 8)]
+                            c = st.session_state.coeffs
                             f_outlook = ""
-                            for d in f_dates:
+                            for i in range(1, 8):
+                                d = datetime.date.today() + datetime.timedelta(days=i)
                                 d_key = f"DOW_{d.strftime('%a')}"
                                 base = c['Intercept'] + c.get(d_key, 0)
                                 f_outlook += f"{d.strftime('%a %d')}: Est. {int(base)} visitors; "
 
-                            model = genai.GenerativeModel('models/gemini-2.5-flash')
+                            model = genai.GenerativeModel('models/gemini-1.5-flash')
                             prompt = f"""
                             You are the Senior Strategy Lead for Hard Rock Hotel & Casino Ottawa. 
                             Write a highly professional, data-driven Executive Summary for the General Manager.
                             
-                            DATA SNAPSHOT (Last 30 Days):
-                            {recent_30}
-                            
-                            PREDICTIVE 7-DAY OUTLOOK:
-                            {f_outlook}
+                            DATA SNAPSHOT (Last 30 Days): {recent_30}
+                            PREDICTIVE 7-DAY OUTLOOK: {f_outlook}
                             
                             STRUCTURE:
-                            1. HIGHLIGHTS: Mention top performing days and any surprising Digital ROI.
-                            2. RISK/OPPORTUNITY: Analyze the upcoming week's forecast.
-                            3. ACTION: One specific recommendation for the marketing or floor team.
+                            1. PERFORMANCE: Mention top days and Digital ROI.
+                            2. OUTLOOK: Analyze the upcoming week's forecast.
+                            3. ACTION: One specific recommendation.
                             
-                            Keep it under 250 words. Be sharp, executive-focused, and prioritize revenue impact.
+                            Keep it under 200 words.
                             """
                             
                             response = model.generate_content(prompt)
+                            st.markdown("---")
                             st.markdown(response.text)
                         except Exception as e:
                             st.error(f"AI Briefing Error: {e}")
-
-            st.divider()
-
-            # --- 2. CORE PERFORMANCE METRICS ---
-            st.subheader("💰 Financial & Traffic Performance")
-            
-            # Math for MoM (Month over Month)
-            latest_date = df_dash['entry_date'].max()
-            curr_m, curr_y = latest_date.month, latest_date.year
-            prev_m = curr_m - 1 if curr_m > 1 else 12
-            prev_y = curr_y if curr_m > 1 else curr_y - 1
-            
-            df_curr = df_dash[(df_dash['entry_date'].dt.month == curr_m) & (df_dash['entry_date'].dt.year == curr_y)]
-            df_prev = df_dash[(df_dash['entry_date'].dt.month == prev_m) & (df_dash['entry_date'].dt.year == prev_y)]
-            
-            def get_mom_metrics(df):
-                if df.empty: return 0, 0, 0
-                return df['actual_coin_in'].sum(), df['actual_traffic'].sum(), df['digital_revenue_impact'].sum()
-
-            c_rev, c_traf, c_dig = get_mom_metrics(df_curr)
-            p_rev, p_traf, p_dig = get_mom_metrics(df_prev)
-
-            def format_delta(curr, prev):
-                if prev == 0: return "N/A"
-                pct = ((curr - prev) / prev) * 100
-                return f"{pct:+.1f}% vs Last Month"
-
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Current Month Revenue", f"${c_rev:,.0f}", delta=format_delta(c_rev, p_rev))
-            m2.metric("Current Month Traffic", f"{int(c_traf):,}", delta=format_delta(c_traf, p_traf))
-            m3.metric("Digital Rev Impact", f"${c_dig:,.0f}", delta=format_delta(c_dig, p_dig))
-
-            st.divider()
-
-            # --- 3. AI PRECISION & TRENDS ---
-            st.subheader("🎯 Model Integrity & Trends")
-            
-            # AI Accuracy (MAPE)
-            df_dash['abs_error'] = abs(df_dash['actual_traffic'] - df_dash['predicted_traffic'])
-            mape = (df_dash['abs_error'] / df_dash['actual_traffic']).mean()
-            accuracy_score = (1 - mape) * 100
-            
-            # Digital Lift (Visitors)
-            total_lift = df_dash['digital_lift_visitors'].sum()
-            
-            t1, t2 = st.columns(2)
-            t1.metric("Overall Prediction Accuracy", f"{accuracy_score:.1f}%", help="Higher is better. Based on mean absolute percentage error.")
-            t2.metric("Total Digital Visitor Lift", f"{int(total_lift):,}")
-
-            # Cumulative Revenue Area Chart
-            st.write("**Revenue Progression vs. Forecast Range**")
-            df_dash['Cumulative_Revenue'] = df_dash['actual_coin_in'].cumsum()
-            st.area_chart(df_dash.set_index('entry_date')['Cumulative_Revenue'])
-
+            else:
+                st.info("Insufficient data to generate a briefing. Please log more daily entries.")
         else:
-            st.warning("Insufficient actual data to generate dashboard metrics.")
-    else:
-        st.info("No data found in database. Dashboard will populate once daily entries are logged.")
+            st.info("Database is empty. Dashboard will populate once daily entries are logged.")
 
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
