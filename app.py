@@ -463,67 +463,58 @@ with tab4:
 # --- TAB 5: ASK AI ---
 with tab5:
     st.header("💬 Ask the Data Analyst")
+    st.markdown("Ask natural language questions about your property's historical performance, weather impacts, or digital marketing ROI.")
     
-    if "GEMINI_API_KEY" not in st.secrets:
-        st.error("API Key missing! Please add GEMINI_API_KEY to your Streamlit secrets.")
-    else:
-        try:
-            # 1. Ask Google for the EXACT names of all available models
-            available_models = []
-            for m in genai.list_models():
-                if 'generateContent' in m.supported_generation_methods:
-                    available_models.append(m.name)
-            
-            # 2. Create a dropdown so we can visually see what Google sent back
-            st.info("Success! Connected to Google Servers. Please select a model from the dropdown below:")
-            selected_model = st.selectbox("Select AI Model:", available_models)
-            
-            if st.button("Clear Chat History", key="clear_chat"):
-                st.session_state.messages = []
-                st.rerun()
+    # Simple Reset button for the chat
+    if st.button("Clear Chat History", key="clear_chat"):
+        st.session_state.messages = []
+        st.rerun()
 
-            if "messages" not in st.session_state:
-                st.session_state.messages = []
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-            for message in st.session_state.messages:
-                with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
+    # Display chat history
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-            if prompt := st.chat_input("e.g., 'What was our best day for foot traffic last month?'"):
-                
-                st.chat_message("user").markdown(prompt)
-                st.session_state.messages.append({"role": "user", "content": prompt})
+    # Chat Input
+    if prompt := st.chat_input("e.g., 'What was our best day for traffic last month?'"):
+        
+        st.chat_message("user").markdown(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
 
-                with st.chat_message("assistant"):
-                    if not ledger_data:
-                        st.warning("Your database is empty. Add data first so I have something to analyze!")
-                    else:
-                        with st.spinner("Analyzing database..."):
-                            try:
-                                df_ai = pd.DataFrame(ledger_data)
-                                data_context = df_ai.to_csv(index=False)
-                                
-                                system_prompt = f"""
-                                You are an expert Data Analyst for a Casino/Hotel property. 
-                                I am providing you with our raw historical daily database below in CSV format. 
-                                Please answer the user's question accurately based ONLY on this data. 
-                                Keep your answers concise, professional, and highlight key metrics.
-                                
-                                DATABASE:
-                                {data_context}
-                                
-                                USER QUESTION:
-                                {prompt}
-                                """
-                                
-                                # 3. Feed the EXACT string from the dropdown into the AI
-                                model = genai.GenerativeModel(gemini-2.5-flash)
-                                response = model.generate_content(system_prompt)
-                                
-                                st.markdown(response.text)
-                                st.session_state.messages.append({"role": "assistant", "content": response.text})
-                            except Exception as e:
-                                st.error(f"Error communicating with AI: {e}")
-                                
-        except Exception as e:
-            st.error(f"Failed to fetch models from Google. API Key might be invalid or restricted. Error: {e}")
+        with st.chat_message("assistant"):
+            if "GEMINI_API_KEY" not in st.secrets:
+                st.error("API Key missing! Please add GEMINI_API_KEY to your Streamlit secrets.")
+            elif not ledger_data:
+                st.warning("Your database is empty. Add data first so I have something to analyze!")
+            else:
+                with st.spinner("Analyzing database..."):
+                    try:
+                        # Prepare data context
+                        df_ai = pd.DataFrame(ledger_data)
+                        data_context = df_ai.to_csv(index=False)
+                        
+                        system_prompt = f"""
+                        You are an expert Data Analyst for a Casino/Hotel property. 
+                        I am providing you with our raw historical daily database below in CSV format. 
+                        Please answer the user's question accurately based ONLY on this data. 
+                        Keep your answers concise, professional, and highlight key metrics.
+                        
+                        DATABASE:
+                        {data_context}
+                        
+                        USER QUESTION:
+                        {prompt}
+                        """
+                        
+                        # We use the full model path which we confirmed works during the dropdown test
+                        model = genai.GenerativeModel('models/gemini-1.5-flash')
+                        
+                        response = model.generate_content(system_prompt)
+                        
+                        st.markdown(response.text)
+                        st.session_state.messages.append({"role": "assistant", "content": response.text})
+                    except Exception as e:
+                        st.error(f"Error communicating with AI: {e}")
