@@ -2,7 +2,12 @@ import streamlit as st
 import pandas as pd
 import datetime
 from supabase import create_client, Client
-from sklearn.linear_model import LinearRegression # NEW: Machine Learning Engine
+from sklearn.linear_model import LinearRegression
+import google.generativeai as genai # NEW: Google AI Library
+
+# --- CONFIGURE AI ---
+if "GEMINI_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 st.set_page_config(page_title="Casino Traffic Predictor", layout="wide")
 st.title("🎰 Property Traffic & Digital Lift Engine")
@@ -36,7 +41,7 @@ def load_ledger():
 ledger_data = load_ledger()
 
 # --- APP NAVIGATION ---
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Executive Dashboard", "📝 Daily Tracker", "📈 Reporting & ROI", "⚙️ Admin Engine"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Executive Dashboard", "📝 Daily Tracker", "📈 Reporting & ROI", "⚙️ Admin Engine", "💬 Ask AI"])
 
 # --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
@@ -454,3 +459,61 @@ with tab4:
             st.session_state.coeffs['Clicks'] = c_clicks
             
             st.success("Parameters saved! The predictive model is fully updated.")
+
+# --- TAB 5: ASK AI ---
+with tab5:
+    st.header("💬 Ask the Data Analyst")
+    st.markdown("Ask natural language questions about your property's historical performance, weather impacts, or digital marketing ROI.")
+    
+    # Initialize chat history so the conversation stays on screen
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Display previous chat messages
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # The Chat Input Box
+    if prompt := st.chat_input("e.g., 'What was our best day for foot traffic last month?'"):
+        
+        # 1. Display user message in chat message container
+        st.chat_message("user").markdown(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
+        # 2. Call the AI
+        with st.chat_message("assistant"):
+            if "GEMINI_API_KEY" not in st.secrets:
+                st.error("API Key missing! Please add GEMINI_API_KEY to your Streamlit secrets.")
+            elif not ledger_data:
+                st.warning("Your database is empty. Add data first so I have something to analyze!")
+            else:
+                with st.spinner("Analyzing database..."):
+                    try:
+                        # Convert your entire database into a clean string format for the AI to read
+                        df_ai = pd.DataFrame(ledger_data)
+                        data_context = df_ai.to_csv(index=False)
+                        
+                        # Build the master prompt (Giving the AI a persona + the data + the question)
+                        system_prompt = f"""
+                        You are an expert Data Analyst for a Casino/Hotel property. 
+                        I am providing you with our raw historical daily database below in CSV format. 
+                        Please answer the user's question accurately based ONLY on this data. 
+                        Keep your answers concise, professional, and highlight key metrics.
+                        
+                        DATABASE:
+                        {data_context}
+                        
+                        USER QUESTION:
+                        {prompt}
+                        """
+                        
+                        # Initialize the model and generate the response
+                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        response = model.generate_content(system_prompt)
+                        
+                        # Display the answer
+                        st.markdown(response.text)
+                        st.session_state.messages.append({"role": "assistant", "content": response.text})
+                    except Exception as e:
+                        st.error(f"An error occurred: {e}")
