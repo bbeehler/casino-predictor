@@ -465,6 +465,11 @@ with tab5:
     st.header("💬 Ask the Data Analyst")
     st.markdown("Ask natural language questions about your property's historical performance, weather impacts, or digital marketing ROI.")
     
+    # Add a button to clear the chat history in case the error is stuck in memory
+    if st.button("Clear Chat History"):
+        st.session_state.messages = []
+        st.rerun()
+
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -501,9 +506,14 @@ with tab5:
                         {prompt}
                         """
                         
-                        # --- THIS IS THE CRITICAL LINE ---
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        # --- THE DEBUG TRACKER ---
+                        model_name = 'gemini-pro'
+                        st.info(f"🛠️ Debug: Attempting to connect using model name -> {model_name}")
                         
+                        # --- INITIALIZE THE MODEL ---
+                        model = genai.GenerativeModel(model_name)
+                        
+                        # Generate response
                         response = model.generate_content(system_prompt)
                         
                         st.markdown(response.text)
