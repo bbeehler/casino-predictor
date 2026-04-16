@@ -107,7 +107,74 @@ with tab2:
         estimated_digital_rev = digital_lift * c['Avg_Coin_In']
         st.success(f"Estimated Revenue from Digital Marketing today: **${estimated_digital_rev:,.2f}**")
         
-        if st.button("💾 Save Daily
+        if st.button("💾 Save Daily Entry to Database", use_container_width=True):
+            entry = {
+                "entry_date": entry_date.strftime("%Y-%m-%d"),
+                "day_of_week": dow_name,
+                "actual_traffic": actual_traffic,
+                "predicted_traffic": int(total_pred),
+                "variance": int(variance),
+                "digital_lift_visitors": int(digital_lift),
+                "digital_revenue_impact": float(estimated_digital_rev),
+                "actual_coin_in": float(actual_coinin)
+            }
+            # Push to Supabase
+            supabase.table("ledger").insert(entry).execute()
+            st.toast("✅ Saved securely to Database!")
+            st.cache_data.clear() # Forces the table to refresh
+
+    st.divider()
+    st.subheader("🔍 Search & Edit Ledger")
+    
+    if ledger_data:
+        df_ledger = pd.DataFrame(ledger_data)
+        display_df = df_ledger[['entry_date', 'day_of_week', 'actual_traffic', 'predicted_traffic', 'variance', 'actual_coin_in', 'digital_revenue_impact']]
+        
+        search_col, result_col = st.columns([1, 2])
+        
+        with search_col:
+            enable_search = st.toggle("Filter & Edit Specific Date")
+            if enable_search:
+                min_date = pd.to_datetime(df_ledger['entry_date']).min().date()
+                max_date = pd.to_datetime(df_ledger['entry_date']).max().date()
+                search_date = st.date_input("Select Date", min_value=min_date, max_value=max_date, value=max_date)
+        
+        if enable_search:
+            search_date_str = search_date.strftime("%Y-%m-%d")
+            found_record = display_df[display_df['entry_date'] == search_date_str]
+            
+            with result_col:
+                if found_record.empty:
+                    st.warning(f"No records found for {search_date_str}.")
+                else:
+                    st.success(f"Record found for {search_date_str}!")
+                    
+                    # Extract the existing data for this specific day
+                    existing_data = found_record.iloc[0]
+                    
+                    # Create an Edit Form
+                    with st.expander("✏️ Edit this Record", expanded=True):
+                        with st.form("edit_form"):
+                            
+                            # Safe string extraction to prevent quote errors
+                            safe_day_name = existing_data['day_of_week']
+                            st.markdown(f"**Editing Date:** {search_date_str} ({safe_day_name})")
+                            
+                            # Pre-fill inputs with the existing database numbers
+                            new_traffic = st.number_input("Update Actual Traffic", value=int(existing_data['actual_traffic']), step=100)
+                            new_coin_in = st.number_input("Update Actual Coin-In ($)", value=float(existing_data['actual_coin_in']), step=1000)
+                            
+                            submit_update = st.form_submit_button("Save Changes to Database")
+                            
+                            if submit_update:
+                                # Recalculate variance just in case traffic changed
+                                new_variance = new_traffic - int(existing_data['predicted_traffic'])
+                                
+                                # Send the UPDATE command to Supabase
+                                supabase.table("ledger").update({
+                                    "actual_traffic": new_traffic,
+                                    "actual_coin_in": new_coin_in,
+                                    "
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
     st.header("Historical Reporting & Revenue Implications")
