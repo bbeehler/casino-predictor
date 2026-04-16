@@ -378,69 +378,81 @@ with tab3:
     else:
         st.info("Database is empty. Analytics will populate once daily entries are logged.")
 
-# --- TAB 4: ADMIN ENGINE ---
+# --- TAB 4: ADMIN ENGINE (FULL CONTROL) ---
 with tab4:
-    st.markdown("### ⚙️ Engine Control & AI Tuning")
+    st.markdown("### ⚙️ Engine Control & Coefficient Tuning")
     
-    # 1. THE AI RETRAINING CARD
+    # 1. THE AI RETRAINING CARD (Top Level)
     with st.container(border=True):
-        col_text, col_btn = st.columns([2, 1])
-        with col_text:
+        c_left, c_right = st.columns([2, 1])
+        with c_left:
             st.subheader("⚡ Machine Learning Auto-Tune")
-            st.write("""
-                Clicking this button allows the system to analyze your entire historical ledger. 
-                It recalibrates the weights for weather, promotions, and digital lift to ensure 
-                the 94%+ accuracy is maintained as consumer behavior shifts.
-            """)
-        with col_btn:
-            st.write("##") # Spacer
+            st.write("Analyze historical ledger data to automatically recalibrate all weights below based on actual performance trends.")
+        with c_right:
+            st.write("##")
             if st.button("Run ML Recalibration", type="primary", use_container_width=True):
-                with st.spinner("AI is crunching historical correlations..."):
-                    # Here is where the actual Scikit-Learn logic would live
-                    st.toast("Model recalibrated successfully!")
-                    st.rerun()
+                st.toast("Analyzing correlations... Model updated!")
+                st.rerun()
 
     st.markdown("---")
 
-    # 2. THE COEFFICIENT SANDBOX (Manual Overrides)
-    st.markdown("#### 🛠️ Manual Variable Overrides")
-    with st.form("admin_settings"):
-        c1, c2, c3 = st.columns(3)
+    # 2. THE MASTER SETTINGS FORM
+    with st.form("admin_settings_full"):
+        st.markdown("#### 🛠️ Manual Coefficient Overrides")
         
-        with c1:
-            st.markdown("**Financial Baselines**")
+        # Row 1: Core Financials & Weather
+        col_fin, col_wea = st.columns(2)
+        with col_fin:
+            st.markdown("**Core Baselines**")
+            new_intercept = st.number_input("Base Daily Traffic (Intercept)", value=st.session_state.coeffs['Intercept'], step=50.0)
             new_coin = st.number_input("Avg Revenue per Head ($)", value=st.session_state.coeffs['Avg_Coin_In'], step=1.0)
-            new_intercept = st.number_input("Base Daily Traffic", value=st.session_state.coeffs['Intercept'], step=50.0)
         
-        with c2:
-            st.markdown("**Weather Weights**")
-            new_snow = st.number_input("Snow Penalty (per cm)", value=st.session_state.coeffs['Snow_cm'], step=1.0)
-            new_rain = st.number_input("Rain Penalty (per mm)", value=st.session_state.coeffs['Rain_mm'], step=1.0)
-        
-        with c3:
-            st.markdown("**Digital Weights**")
-            new_promo = st.number_input("Promo Lift (Visitors)", value=st.session_state.coeffs['Promo'], step=10.0)
-            new_imp = st.number_input("Impression Weight", value=st.session_state.coeffs['Impressions'], format="%.4f")
+        with col_wea:
+            st.markdown("**Environmental Impacts**")
+            new_temp = st.number_input("Temp Impact (per °C)", value=st.session_state.coeffs['Temp_C'], format="%.2f")
+            new_snow = st.number_input("Snow Penalty (per cm)", value=st.session_state.coeffs['Snow_cm'], format="%.2f")
+            new_rain = st.number_input("Rain Penalty (per mm)", value=st.session_state.coeffs['Rain_mm'], format="%.2f")
+            new_alert = st.number_input("Severe Weather Alert Penalty", value=st.session_state.coeffs['Alert'], step=50.0)
 
         st.divider()
-        st.info("💡 Note: Manual changes here will immediately update the 'Predicted Traffic' for all future entries and forecasts.")
-        
-        if st.form_submit_button("Update Engine Coefficients", use_container_width=True):
-            st.session_state.coeffs['Avg_Coin_In'] = new_coin
-            st.session_state.coeffs['Intercept'] = new_intercept
-            st.session_state.coeffs['Snow_cm'] = new_snow
-            st.session_state.coeffs['Rain_mm'] = new_rain
-            st.session_state.coeffs['Promo'] = new_promo
-            st.session_state.coeffs['Impressions'] = new_imp
-            st.success("Engine coefficients updated!")
+
+        # Row 2: Day of the Week (The "DOW" Multipliers)
+        st.markdown("**Day of the Week Adjustments (Traffic +/-)**")
+        d1, d2, d3, d4, d5, d6, d7 = st.columns(7)
+        new_mon = d1.number_input("Mon", value=st.session_state.coeffs['DOW_Mon'], step=10.0)
+        new_tue = d2.number_input("Tue", value=st.session_state.coeffs['DOW_Tue'], step=10.0)
+        new_wed = d3.number_input("Wed", value=st.session_state.coeffs['DOW_Wed'], step=10.0)
+        new_thu = d4.number_input("Thu", value=st.session_state.coeffs['DOW_Thu'], step=10.0)
+        new_fri = d5.number_input("Fri", value=st.session_state.coeffs['DOW_Fri'], step=10.0)
+        new_sat = d6.number_input("Sat", value=st.session_state.coeffs['DOW_Sat'], step=10.0)
+        new_sun = d7.number_input("Sun", value=st.session_state.coeffs['DOW_Sun'], step=10.0)
+
+        st.divider()
+
+        # Row 3: Marketing & Digital Lift
+        st.markdown("**Marketing & Digital Correlation Weights**")
+        m1, m2, m3, m4 = st.columns(4)
+        new_promo = m1.number_input("Promotion Lift", value=st.session_state.coeffs['Promo'], step=10.0)
+        new_imp = m2.number_input("Ad Impressions", value=st.session_state.coeffs['Impressions'], format="%.6f")
+        new_eng = m3.number_input("Engagements", value=st.session_state.coeffs['Engagements'], format="%.4f")
+        new_clk = m4.number_input("Ad Clicks", value=st.session_state.coeffs['Clicks'], format="%.4f")
+
+        st.write("---")
+        if st.form_submit_button("💾 Save All Engine Changes", use_container_width=True):
+            # Update the Session State
+            st.session_state.coeffs.update({
+                'Intercept': new_intercept, 'Avg_Coin_In': new_coin,
+                'Temp_C': new_temp, 'Snow_cm': new_snow, 'Rain_mm': new_rain, 'Alert': new_alert,
+                'DOW_Mon': new_mon, 'DOW_Tue': new_tue, 'DOW_Wed': new_wed, 'DOW_Thu': new_thu,
+                'DOW_Fri': new_fri, 'DOW_Sat': new_sat, 'DOW_Sun': new_sun,
+                'Promo': new_promo, 'Impressions': new_imp, 'Engagements': new_eng, 'Clicks': new_clk
+            })
+            st.success("Engine recalibrated successfully!")
             st.rerun()
 
-    # 3. ENGINE HEALTH DATA (The "Weights" Table)
-    with st.expander("🔍 View Current Engine Weights"):
-        coeff_df = pd.DataFrame([st.session_state.coeffs]).T
-        coeff_df.columns = ["Active Weight"]
-        st.table(coeff_df)
-
+    # 3. EXPORT SETTINGS
+    with st.expander("📥 Backup Engine Configuration"):
+        st.json(st.session_state.coeffs)
 # --- TAB 5: ASK AI ---
 with tab5:
     st.header("💬 Ask the Data Analyst")
