@@ -5,6 +5,50 @@ from supabase import create_client, Client
 from sklearn.linear_model import LinearRegression
 import google.generativeai as genai # NEW: Google AI Library
 
+# --- MODERN UI STYLING ---
+st.markdown("""
+    <style>
+    /* Main background and font */
+    .stApp {
+        background-color: #f8f9fa;
+        font-family: 'Inter', sans-serif;
+    }
+    /* Card-style containers */
+    div[data-testid="stMetricValue"] {
+        font-size: 1.8rem !important;
+        font-weight: 700 !important;
+        color: #1a1a1a;
+    }
+    div[data-testid="metric-container"] {
+        background-color: #ffffff;
+        border: 1px solid #e0e0e0;
+        padding: 15px 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+    }
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+        background-color: #ffffff;
+        padding: 10px;
+        border-radius: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 40px;
+        white-space: pre-wrap;
+        background-color: #f1f3f5;
+        border-radius: 8px;
+        color: #495057;
+        gap: 0px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #000000 !important;
+        color: #ffffff !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # --- CONFIGURE AI ---
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
