@@ -123,8 +123,8 @@ with tab2:
             st.toast("✅ Saved securely to Database!")
             st.cache_data.clear() # Forces the table to refresh
 
-st.divider()
-st.subheader("🔍 Search Database Ledger")
+    st.divider()
+    st.subheader("🔍 Search Database Ledger")
     
     if ledger_data:
         df_ledger = pd.DataFrame(ledger_data)
