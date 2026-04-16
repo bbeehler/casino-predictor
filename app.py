@@ -3,6 +3,8 @@ import pandas as pd
 import datetime
 from supabase import create_client, Client
 import google.generativeai as genai
+from sklearn.linear_model import LinearRegression
+import numpy as np
 
 # 1. PAGE CONFIG (Must be the very first Streamlit command)
 st.set_page_config(page_title="Hard Rock Strategic Engine", layout="wide")
@@ -382,19 +384,50 @@ with tab3:
 with tab4:
     st.markdown("### ⚙️ Engine Control & Coefficient Tuning")
     
-    # 1. THE AI RETRAINING CARD (Top Level)
+    # 1. THE AI RETRAINING CARD (Now Fully Functional)
     with st.container(border=True):
         c_left, c_right = st.columns([2, 1])
         with c_left:
             st.subheader("⚡ Machine Learning Auto-Tune")
-            st.write("Analyze historical ledger data to automatically recalibrate all weights below based on actual performance trends.")
+            st.write("Analyze historical ledger data to automatically recalibrate all weights based on actual performance.")
         with c_right:
             st.write("##")
             if st.button("Run ML Recalibration", type="primary", use_container_width=True):
-                st.toast("Analyzing correlations... Model updated!")
-                st.rerun()
-
-    st.markdown("---")
+                if len(ledger_data) < 10:
+                    st.error("Need at least 10 days of data to recalibrate accurately.")
+                else:
+                    with st.spinner("Calculating optimal coefficients..."):
+                        # Prepare Data
+                        df_ml = pd.DataFrame(ledger_data)
+                        
+                        # Create DOW dummies (Mon, Tue, etc)
+                        df_ml['date_dt'] = pd.to_datetime(df_ml['entry_date'])
+                        df_ml['dow'] = df_ml['date_dt'].dt.strftime('%a')
+                        dow_dummies = pd.get_dummies(df_ml['dow'], prefix='DOW')
+                        
+                        # Define Features (X) and Target (y)
+                        features = ['temp_c', 'snow_cm', 'active_promo', 'ad_impressions', 'social_engagements', 'ad_clicks']
+                        X = pd.concat([df_ml[features], dow_dummies], axis=1).fillna(0)
+                        y = df_ml['actual_traffic']
+                        
+                        # Run Linear Regression
+                        model = LinearRegression()
+                        model.fit(X, y)
+                        
+                        # Map new weights back to session state
+                        new_weights = dict(zip(X.columns, model.coef_))
+                        
+                        # Update the Session State
+                        st.session_state.coeffs['Intercept'] = float(model.intercept_)
+                        for key in new_weights:
+                            if key in st.session_state.coeffs:
+                                st.session_state.coeffs[key] = float(new_weights[key])
+                        
+                        # Recalculate Average Revenue per Head based on history
+                        st.session_state.coeffs['Avg_Coin_In'] = float(df_ml['actual_coin_in'].sum() / df_ml['actual_traffic'].sum())
+                        
+                        st.success("Model recalibrated! Accuracy is now optimized to your real-world data.")
+                        st.rerun()
 
     # 2. THE MASTER SETTINGS FORM
     with st.form("admin_settings_full"):
