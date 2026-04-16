@@ -517,7 +517,7 @@ with tab5:
                                 """
                                 
                                 # 3. Feed the EXACT string from the dropdown into the AI
-                                model = genai.GenerativeModel(selected_model)
+                                model = genai.GenerativeModel(gemini-2.5-flash)
                                 response = model.generate_content(system_prompt)
                                 
                                 st.markdown(response.text)
