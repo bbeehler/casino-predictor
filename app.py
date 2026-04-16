@@ -49,6 +49,14 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# --- SIDEBAR NAVIGATION & LOGO ---
+with st.sidebar:
+    st.image("https://upload.wikimedia.org/wikipedia/en/thumb/3/38/Hard_Rock_Cafe_logo.svg/1200px-Hard_Rock_Cafe_logo.svg.png", width=150)
+    st.title("Strategic Engine")
+    st.markdown("---")
+    st.info(f"**Property:** Ottawa\n\n**Analyst:** {st.session_state.get('user_name', 'Brian')}")
+    st.success(f"AI Model: Gemini 1.5 Flash")
+
 # --- CONFIGURE AI ---
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
