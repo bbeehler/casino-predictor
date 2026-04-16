@@ -107,7 +107,7 @@ with tab1:
                                 base = c['Intercept'] + c.get(d_key, 0)
                                 f_outlook += f"{d.strftime('%a %d')}: Est. {int(base)} visitors; "
 
-                            model = genai.GenerativeModel('models/gemini-1.5-flash')
+                            model = genai.GenerativeModel('models/gemini-2.5-flash')
                             prompt = f"Senior Strategy Lead for Hard Rock Ottawa. Summarize this data: {recent_30}. Outlook: {f_outlook}. Max 200 words."
                             
                             response = model.generate_content(prompt)
@@ -485,7 +485,7 @@ with tab5:
                     else:
                         df_context = "No data available in the ledger yet."
 
-                    model = genai.GenerativeModel('models/gemini-1.5-flash')
+                    model = genai.GenerativeModel('models/gemini-2.5-flash')
                     
                     full_prompt = f"""
                     You are a world-class Casino Data Analyst for Hard Rock Ottawa. 
