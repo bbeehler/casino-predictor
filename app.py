@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 from supabase import create_client, Client
+from sklearn.linear_model import LinearRegression # NEW: Machine Learning Engine
 
 st.set_page_config(page_title="Casino Traffic Predictor", layout="wide")
 st.title("🎰 Property Traffic & Digital Lift Engine")
