@@ -132,9 +132,14 @@ with tab2:
     if ledger_data:
         df_ledger = pd.DataFrame(ledger_data)
         
-        # Pull columns for the display and edit logic
-        display_cols = ['entry_date', 'day_of_week', 'actual_traffic', 'predicted_traffic', 'variance', 'actual_coin_in', 'digital_lift_visitors', 'digital_revenue_impact']
-        # Only pull columns that actually exist in the dataframe to prevent errors if migration isn't run yet
+        # --- FIX: Added ALL the new columns to the display list so they unhide in the UI ---
+        display_cols = [
+            'entry_date', 'day_of_week', 'actual_traffic', 'predicted_traffic', 'variance', 
+            'actual_coin_in', 'digital_lift_visitors', 'digital_revenue_impact',
+            'temp_c', 'snow_cm', 'rain_mm', 'weather_alert', 'active_promo', 
+            'ad_impressions', 'social_engagements', 'ad_clicks'
+        ]
+        
         available_cols = [col for col in display_cols if col in df_ledger.columns]
         display_df = df_ledger[available_cols]
         
@@ -164,37 +169,59 @@ with tab2:
                             safe_day_name = existing_data['day_of_week']
                             st.markdown(f"**Editing Date:** {search_date_str} ({safe_day_name})")
                             
-                            edit_col1, edit_col2 = st.columns(2)
+                            # --- FIX: Expanded to 3 columns to fit all the new inputs ---
+                            edit_col1, edit_col2, edit_col3 = st.columns(3)
                             
                             with edit_col1:
-                                st.markdown("**Actuals**")
+                                st.markdown("**Core Metrics**")
                                 new_traffic = st.number_input("Actual Traffic", value=int(existing_data.get('actual_traffic', 0)), step=100)
                                 new_coin_in = st.number_input("Actual Coin-In ($)", value=float(existing_data.get('actual_coin_in', 0.0)), step=1000.0)
+                                new_pred = st.number_input("Predicted Traffic", value=int(existing_data.get('predicted_traffic', 0)), step=100)
+                                new_dig_lift = st.number_input("Digital Lift (Visits)", value=int(existing_data.get('digital_lift_visitors', 0)), step=50)
+                                new_dig_rev = st.number_input("Digital Rev ($)", value=float(existing_data.get('digital_revenue_impact', 0.0)), step=500.0)
                             
                             with edit_col2:
-                                st.markdown("**Model Estimates**")
-                                new_pred = st.number_input("Predicted Traffic", value=int(existing_data.get('predicted_traffic', 0)), step=100)
-                                new_dig_lift = st.number_input("Digital Lift (Visitors)", value=int(existing_data.get('digital_lift_visitors', 0)), step=50)
-                                new_dig_rev = st.number_input("Digital Revenue ($)", value=float(existing_data.get('digital_revenue_impact', 0.0)), step=500.0)
-                            
+                                st.markdown("**Weather**")
+                                new_temp = st.number_input("Temp (°C)", value=int(existing_data.get('temp_c', 0)))
+                                new_snow = st.number_input("Snow (cm)", value=float(existing_data.get('snow_cm', 0.0)))
+                                new_rain = st.number_input("Rain (mm)", value=float(existing_data.get('rain_mm', 0.0)))
+                                new_alert = st.checkbox("Weather Alert", value=bool(existing_data.get('weather_alert', False)))
+
+                            with edit_col3:
+                                st.markdown("**Digital Inputs**")
+                                new_promo = st.checkbox("Active Promo", value=bool(existing_data.get('active_promo', False)))
+                                new_imp = st.number_input("Ad Impressions", value=int(existing_data.get('ad_impressions', 0)), step=10000)
+                                new_eng = st.number_input("Social Engagements", value=int(existing_data.get('social_engagements', 0)), step=100)
+                                new_clicks = st.number_input("Ad Clicks", value=int(existing_data.get('ad_clicks', 0)), step=50)
+
                             submit_update = st.form_submit_button("Save All Changes to Database")
                             
                             if submit_update:
                                 new_variance = int(new_traffic) - int(new_pred)
                                 
+                                # --- FIX: Tell Supabase to overwrite ALL fields ---
                                 supabase.table("ledger").update({
                                     "actual_traffic": int(new_traffic),
                                     "predicted_traffic": int(new_pred),
                                     "actual_coin_in": float(new_coin_in),
                                     "digital_lift_visitors": int(new_dig_lift),
                                     "digital_revenue_impact": float(new_dig_rev),
-                                    "variance": int(new_variance)
+                                    "variance": int(new_variance),
+                                    "temp_c": int(new_temp),
+                                    "snow_cm": float(new_snow),
+                                    "rain_mm": float(new_rain),
+                                    "weather_alert": new_alert,
+                                    "active_promo": new_promo,
+                                    "ad_impressions": int(new_imp),
+                                    "social_engagements": int(new_eng),
+                                    "ad_clicks": int(new_clicks)
                                 }).eq("entry_date", search_date_str).execute()
                                 
                                 st.success("All fields updated successfully in the database!")
                                 st.cache_data.clear()
                                 st.rerun()
 
+        # Display the Table (We drop digital lift here just to save horizontal space, but all others will show!)
         if 'digital_lift_visitors' in display_df.columns:
             visual_df = display_df.drop(columns=['digital_lift_visitors'])
         else:
@@ -204,7 +231,6 @@ with tab2:
         
     else:
         st.info("Your database is currently empty. Save an entry to start tracking!")
-
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
     st.header("Historical Reporting & Revenue Implications")
