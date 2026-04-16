@@ -2,71 +2,84 @@ import streamlit as st
 import pandas as pd
 import datetime
 from supabase import create_client, Client
-from sklearn.linear_model import LinearRegression
-import google.generativeai as genai # NEW: Google AI Library
+import google.generativeai as genai
 
-# --- SIDEBAR NAVIGATION & LOGO ---
-with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/en/thumb/3/38/Hard_Rock_Cafe_logo.svg/1200px-Hard_Rock_Cafe_logo.svg.png", width=150)
-    st.title("Strategic Engine")
-    st.markdown("---")
-    st.info(f"**Property:** Ottawa\n\n**Analyst:** {st.session_state.get('user_name', 'Brian')}")
-    st.success(f"AI Model: Gemini 2.5 Flash")
+# 1. PAGE CONFIG (Must be the very first Streamlit command)
+st.set_page_config(page_title="Hard Rock Strategic Engine", layout="wide")
 
-# --- CONFIGURE AI ---
-if "GEMINI_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-
-st.set_page_config(page_title="Casino Traffic Predictor", layout="wide")
-st.title("🎰 Property Traffic Engine - VERSION 2")
-
+# 2. MODERN UI STYLING (The CSS)
 st.markdown("""
     <style>
-    /* Force containers to look like Bento Cards */
+    /* Main Background */
+    .stApp {
+        background-color: #f4f7f9;
+    }
+    
+    /* Bento Box Card Effect */
     div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column;"] > div[data-testid="stVerticalBlock"] {
         border: 1px solid #e6e9ef;
-        border-radius: 15px;
+        border-radius: 12px;
         padding: 20px;
         background-color: #ffffff;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
     }
-    /* Metric styling */
-    [data-testid="stMetricValue"] {
-        font-size: 28px;
+
+    /* Tab Styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: transparent;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #ffffff;
+        border: 1px solid #e6e9ef;
+        border-radius: 8px 8px 0px 0px;
+        padding: 10px 20px;
+        font-weight: 600;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #FFCC00 !important; /* Hard Rock Gold */
+        color: #000000 !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- DATABASE CONNECTION ---
-@st.cache_resource
-def init_connection():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
+# 3. DATABASE & AI SETUP (Using your existing secrets)
+url: str = st.secrets["SUPABASE_URL"]
+key: str = st.secrets["SUPABASE_KEY"]
+supabase: Client = create_client(url, key)
 
-supabase: Client = init_connection()
+if "GEMINI_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# --- INITIALIZE COEFFICIENTS ---
+# 4. INITIALIZE SESSION STATE
 if 'coeffs' not in st.session_state:
     st.session_state.coeffs = {
-        'Intercept': 4606.16, 
-        'DOW_Mon': -1837.23, 'DOW_Tue': -1810.69, 'DOW_Wed': -7.65,
-        'DOW_Thu': -410.40, 'DOW_Fri': 1032.13, 'DOW_Sat': 2912.14, 'DOW_Sun': 121.70,
-        'Temp_C': 0.82, 'Snow_cm': -53.11, 'Rain_mm': -9.55, 'Alert': -49.37,
-        'Promo': 99.74, 'Impressions': 0.000881, 'Engagements': 0.0943, 'Clicks': 0.244,
-        'Avg_Coin_In': 1335.00
+        'Intercept': 3250.0,
+        'DOW_Mon': -450.0, 'DOW_Tue': -380.0, 'DOW_Wed': -210.0, 'DOW_Thu': 150.0,
+        'DOW_Fri': 1200.0, 'DOW_Sat': 2100.0, 'DOW_Sun': 850.0,
+        'Temp_C': 2.5, 'Snow_cm': -45.0, 'Rain_mm': -12.0, 'Alert': -500.0,
+        'Promo': 450.0, 'Impressions': 0.0002, 'Engagements': 0.15, 'Clicks': 0.85,
+        'Avg_Coin_In': 112.50
     }
 
-# Fetch Ledger Data from Supabase
-@st.cache_data(ttl=60)
-def load_ledger():
-    response = supabase.table("ledger").select("*").order("entry_date", desc=True).execute()
-    return response.data
+# 5. FETCH DATA
+def fetch_data():
+    try:
+        response = supabase.table("ledger").select("*").execute()
+        return response.data
+    except:
+        return []
 
-ledger_data = load_ledger()
+ledger_data = fetch_data()
 
-# --- APP NAVIGATION ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Executive Dashboard", "📝 Daily Tracker", "📈 Reporting & ROI", "⚙️ Admin Engine", "💬 Ask AI"])
+# 6. APP TABS
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "📊 Executive Dashboard", 
+    "📝 Daily Tracker & Forecast", 
+    "📈 Reporting & ROI", 
+    "⚙️ Admin Engine", 
+    "💬 Ask AI"
+])
 
 # --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
