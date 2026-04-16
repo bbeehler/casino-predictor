@@ -162,18 +162,26 @@ with tab2:
                             
                             # Pre-fill inputs with the existing database numbers
                             new_traffic = st.number_input("Update Actual Traffic", value=int(existing_data['actual_traffic']), step=100)
-                            new_coin_in = st.number_input("Update Actual Coin-In ($)", value=float(existing_data['actual_coin_in']), step=1000)
+                            
+                            # Added .0 to step so Streamlit knows it's a float
+                            new_coin_in = st.number_input("Update Actual Coin-In ($)", value=float(existing_data['actual_coin_in']), step=1000.0)
                             
                             submit_update = st.form_submit_button("Save Changes to Database")
                             
                             if submit_update:
                                 # Recalculate variance just in case traffic changed
-                                new_variance = new_traffic - int(existing_data['predicted_traffic'])
+                                new_variance = int(new_traffic) - int(existing_data['predicted_traffic'])
                                 
-                                # Send the UPDATE command to Supabase
+                                # Send the UPDATE command to Supabase (Wrapped in strict data types)
                                 supabase.table("ledger").update({
-                                    "actual_traffic": new_traffic,
-                                    "actual_coin_in": new_coin_in,"
+                                    "actual_traffic": int(new_traffic),
+                                    "actual_coin_in": float(new_coin_in),
+                                    "variance": int(new_variance)
+                                }).eq("entry_date", search_date_str).execute()
+                                
+                                st.success("Database updated successfully!")
+                                st.cache_data.clear() # Force app to pull fresh data
+                                st.rerun() # Refresh the screen instantly
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
     st.header("Historical Reporting & Revenue Implications")
