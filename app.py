@@ -5,57 +5,13 @@ from supabase import create_client, Client
 from sklearn.linear_model import LinearRegression
 import google.generativeai as genai # NEW: Google AI Library
 
-# --- MODERN UI STYLING ---
-st.markdown("""
-    <style>
-    /* Main background and font */
-    .stApp {
-        background-color: #f8f9fa;
-        font-family: 'Inter', sans-serif;
-    }
-    /* Card-style containers */
-    div[data-testid="stMetricValue"] {
-        font-size: 1.8rem !important;
-        font-weight: 700 !important;
-        color: #1a1a1a;
-    }
-    div[data-testid="metric-container"] {
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
-        padding: 15px 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
-    }
-    /* Tab styling */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-        background-color: #ffffff;
-        padding: 10px;
-        border-radius: 15px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 40px;
-        white-space: pre-wrap;
-        background-color: #f1f3f5;
-        border-radius: 8px;
-        color: #495057;
-        gap: 0px;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #000000 !important;
-        color: #ffffff !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
 # --- SIDEBAR NAVIGATION & LOGO ---
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/en/thumb/3/38/Hard_Rock_Cafe_logo.svg/1200px-Hard_Rock_Cafe_logo.svg.png", width=150)
     st.title("Strategic Engine")
     st.markdown("---")
     st.info(f"**Property:** Ottawa\n\n**Analyst:** {st.session_state.get('user_name', 'Brian')}")
-    st.success(f"AI Model: Gemini 1.5 Flash")
+    st.success(f"AI Model: Gemini 2.5 Flash")
 
 # --- CONFIGURE AI ---
 if "GEMINI_API_KEY" in st.secrets:
@@ -63,6 +19,23 @@ if "GEMINI_API_KEY" in st.secrets:
 
 st.set_page_config(page_title="Casino Traffic Predictor", layout="wide")
 st.title("🎰 Property Traffic Engine - VERSION 2")
+
+st.markdown("""
+    <style>
+    /* Force containers to look like Bento Cards */
+    div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column;"] > div[data-testid="stVerticalBlock"] {
+        border: 1px solid #e6e9ef;
+        border-radius: 15px;
+        padding: 20px;
+        background-color: #ffffff;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+    }
+    /* Metric styling */
+    [data-testid="stMetricValue"] {
+        font-size: 28px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- DATABASE CONNECTION ---
 @st.cache_resource
