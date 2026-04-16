@@ -509,7 +509,7 @@ with tab5:
                         """
                         
                         # Initialize the model and generate the response
-                        model = genai.GenerativeModel('gemini-1.5flash')
+                        model = genai.GenerativeModel('gemini-pro')
                         response = model.generate_content(system_prompt)
                         
                         # Display the answer
