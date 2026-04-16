@@ -314,107 +314,44 @@ with tab2:
         
     else:
         st.info("Your database is currently empty. Save an entry to start tracking!")
-# --- TAB 3: REPORTING & ROI ---
-with tab3:
-    st.header("📈 Strategic Reporting Center")
-    
-    if ledger_data:
-        df_rep = pd.DataFrame(ledger_data)
-        df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
-        
-        # --- 1. DATE RANGE SELECTOR ---
-        st.subheader("🗓️ Select Report Range")
-        col_d1, col_d2 = st.columns(2)
-        start_date = col_d1.date_input("Start Date", df_rep['entry_date'].min())
-        end_date = col_d2.date_input("End Date", df_rep['entry_date'].max())
-        
-        # Filter data based on selection
-        mask = (df_rep['entry_date'].dt.date >= start_date) & (df_rep['entry_date'].dt.date <= end_date)
-        df_filtered = df_rep.loc[mask].sort_values('entry_date')
-        
-        if not df_filtered.empty:
-            # --- 2. REPORT MODULE: TRAFFIC VARIANCE ---
+# --- 2. REPORT MODULE: TRAFFIC & REVENUE VARIANCE ---
             st.divider()
-            st.subheader("🚗 Traffic Variance & Prediction Accuracy")
+            st.subheader("💰 Traffic & Revenue: AI Prediction vs. Actual")
             
-            # Math for Variance
-            total_act = df_filtered['actual_traffic'].sum()
-            total_pred = df_filtered['predicted_traffic'].sum()
-            variance = total_act - total_pred
-            var_pct = (variance / total_pred) * 100 if total_pred > 0 else 0
+            # Core Math
+            total_act_traf = df_filtered['actual_traffic'].sum()
+            total_pred_traf = df_filtered['predicted_traffic'].sum()
             
-            v1, v2, v3 = st.columns(3)
-            v1.metric("Actual Traffic", f"{total_act:,}")
-            v2.metric("AI Predicted", f"{total_pred:,.0f}")
-            v3.metric("Variance", f"{variance:+.0f}", delta=f"{var_pct:+.1f}%")
+            # Revenue Math
+            # Actual Revenue is from the database; Predicted Revenue = Predicted Traffic * Avg Coin-In
+            total_act_rev = df_filtered['actual_coin_in'].sum()
+            avg_coin = st.session_state.coeffs['Avg_Coin_In']
+            total_pred_rev = total_pred_traf * avg_coin
             
-            st.line_chart(df_filtered.set_index('entry_date')[['actual_traffic', 'predicted_traffic']])
-            
-            with st.expander("📝 View Detailed Traffic Log"):
-                st.dataframe(df_filtered[['entry_date', 'actual_traffic', 'predicted_traffic', 'temp_c', 'active_promo']], use_container_width=True)
+            rev_variance = total_act_rev - total_pred_rev
+            rev_var_pct = (rev_variance / total_pred_rev) * 100 if total_pred_rev > 0 else 0
 
-            # --- 3. REPORT MODULE: DIGITAL ROI ---
-            st.divider()
-            st.subheader("📱 Digital Marketing ROI Deep-Dive")
-            
-            d_rev = df_filtered['digital_revenue_impact'].sum()
-            d_lift = df_filtered['digital_lift_visitors'].sum()
-            # Calculate "Cost Per Visit" if you eventually add spend data, for now we use "Revenue Per Engagement"
-            total_eng = df_filtered['social_engagements'].sum()
-            rev_per_eng = d_rev / total_eng if total_eng > 0 else 0
-            
+            # Traffic Row
+            st.write("**Foot Traffic Performance**")
+            t1, t2, t3 = st.columns(3)
+            t1.metric("Actual Traffic", f"{total_act_traf:,}")
+            t2.metric("AI Predicted", f"{total_pred_traf:,.0f}")
+            t3.metric("Traffic Variance", f"{total_act_traf - total_pred_traf:+.0f}")
+
+            # Revenue Row
+            st.write("**Revenue Performance (Actual vs. AI Baseline)**")
             r1, r2, r3 = st.columns(3)
-            r1.metric("Digital Revenue Impact", f"${d_rev:,.0f}")
-            r2.metric("Total Digital Lift", f"{d_lift:,.0f} Visitors")
-            r3.metric("Rev per Engagement", f"${rev_per_eng:.2f}")
+            r1.metric("Actual Revenue", f"${total_act_rev:,.0f}")
+            r2.metric("AI Predicted Revenue", f"${total_pred_rev:,.0f}")
+            r3.metric("Revenue Variance", f"${rev_variance:+.0f}", delta=f"{rev_var_pct:+.1f}%")
             
-            # Correlation chart: Social Engagements vs. Digital Lift
-            st.bar_chart(df_filtered.set_index('entry_date')[['digital_lift_visitors', 'social_engagements']])
-
-            # --- 4. REPORT MODULE: THE "OUTSIDE FORCES" REPORT ---
-            st.divider()
-            st.subheader("⛈️ Environmental & Promo Impact")
-            
-            # Calculate dynamic impacts based on coefficients
-            c = st.session_state.coeffs
-            df_filtered['weather_loss'] = (
-                (df_filtered['snow_cm'] * c['Snow_cm']) + 
-                (df_filtered['rain_mm'] * c['Rain_mm']) + 
-                (df_filtered['weather_alert'].astype(int) * c['Alert'])
-            ) * c['Avg_Coin_In']
-            
-            df_filtered['promo_gain'] = (df_filtered['active_promo'].astype(int) * c['Promo']) * c['Avg_Coin_In']
-            
-            total_weather_loss = abs(df_filtered['weather_loss'].sum())
-            total_promo_gain = df_filtered['promo_gain'].sum()
-            
-            e1, e2 = st.columns(2)
-            e1.metric("Revenue Lost to Weather", f"-${total_weather_loss:,.0f}", delta_color="inverse")
-            e2.metric("Revenue Gained via Promos", f"+${total_promo_gain:,.0f}")
-            
-            # Comparison of Forces
-            impact_data = pd.DataFrame({
-                'Category': ['Weather Impact', 'Promo Impact'],
-                'Dollar Value': [-total_weather_loss, total_promo_gain]
-            })
-            st.bar_chart(impact_data.set_index('Category'))
-
-            # --- 5. EXPORT OPTIONS ---
-            st.divider()
-            csv = df_filtered.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Download This Report as CSV",
-                data=csv,
-                file_name=f"HardRock_Report_{start_date}_to_{end_date}.csv",
-                mime='text/csv',
-                use_container_width=True
-            )
-
-        else:
-            st.warning("No data found for the selected date range.")
-    else:
-        st.info("Database is empty. Please add data to generate reports.")
-
+            # Dual Axis Style Chart (or simplified comparison)
+            st.write("**Revenue Trend vs. AI Expectation**")
+            # Create a comparison dataframe for the chart
+            df_filtered['Predicted_Revenue'] = df_filtered['predicted_traffic'] * avg_coin
+            chart_data_rev = df_filtered.set_index('entry_date')[['actual_coin_in', 'Predicted_Revenue']]
+            chart_data_rev.columns = ['Actual Revenue', 'AI Predicted Revenue']
+            st.area_chart(chart_data_rev)
 # --- TAB 4: ADMIN ENGINE ---
 with tab4:
     st.header("Coefficient Control Center")
