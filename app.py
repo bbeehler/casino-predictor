@@ -30,7 +30,7 @@ if 'coeffs' not in st.session_state:
 # --- DATA FETCHING ---
 def fetch_data():
     try:
-        response = supabase.table("traffic_ledger").select("*").execute()
+        response = supabase.table("ledger").select("*").execute()
         return response.data
     except Exception as e:
         st.error(f"Database Error: {e}")
