@@ -259,26 +259,20 @@ with tab3:
 with tab4:
     st.header("Coefficient Control Center")
     
-    # --- NEW: MACHINE LEARNING AUTO-TUNER ---
     st.subheader("🤖 AI Auto-Calibration")
     st.markdown("Click below to train a Multiple Linear Regression model on your historical database. This will automatically find the mathematically optimal weights for all variables based on your actual past performance.")
     
     if st.button("⚡ Run Machine Learning Auto-Tune", type="primary", use_container_width=True):
         if ledger_data and len(ledger_data) > 10:
-            # 1. Prepare the Data
             df_ml = pd.DataFrame(ledger_data)
-            
-            # Ensure we only train on rows that have complete data
             ml_cols = ['actual_traffic', 'day_of_week', 'temp_c', 'snow_cm', 'rain_mm', 'weather_alert', 'active_promo', 'ad_impressions', 'social_engagements', 'ad_clicks', 'actual_coin_in']
-            # Only proceed if we have the columns
+            
             if all(c in df_ml.columns for c in ml_cols):
                 df_clean = df_ml.dropna(subset=ml_cols).copy()
                 
-                # Convert booleans to 1s and 0s
                 df_clean['weather_alert'] = df_clean['weather_alert'].astype(int)
                 df_clean['active_promo'] = df_clean['active_promo'].astype(int)
                 
-                # Convert Day of Week into numbers
                 dow_dummies = pd.get_dummies(df_clean['day_of_week'], prefix='DOW')
                 days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
                 for day in days:
@@ -287,16 +281,13 @@ with tab4:
                 
                 df_clean = pd.concat([df_clean, dow_dummies], axis=1)
                 
-                # Define Features (X) and Target (y)
                 features = [f'DOW_{d}' for d in days] + ['temp_c', 'snow_cm', 'rain_mm', 'weather_alert', 'active_promo', 'ad_impressions', 'social_engagements', 'ad_clicks']
                 X = df_clean[features]
                 y = df_clean['actual_traffic']
                 
-                # 2. Train the Model
                 model = LinearRegression()
                 model.fit(X, y)
                 
-                # 3. Apply the new mathematically perfect coefficients to the app
                 st.session_state.coeffs['Intercept'] = float(model.intercept_)
                 st.session_state.coeffs['DOW_Mon'] = float(model.coef_[0])
                 st.session_state.coeffs['DOW_Tue'] = float(model.coef_[1])
@@ -314,13 +305,15 @@ with tab4:
                 st.session_state.coeffs['Engagements'] = float(model.coef_[13])
                 st.session_state.coeffs['Clicks'] = float(model.coef_[14])
                 
-                # Update Average Coin-In dynamically based on history
                 total_traffic = df_clean['actual_traffic'].sum()
                 total_coin = df_clean['actual_coin_in'].sum()
                 if total_traffic > 0:
                     st.session_state.coeffs['Avg_Coin_In'] = float(total_coin / total_traffic)
 
-                st.success("✅ Model successfully retrained! The dials below have been updated to reflect the new optimal weights.")
+                # Send a popup notification and FORCE the screen to refresh instantly
+                st.toast("✅ AI Model retrained! Screen refreshing...")
+                st.rerun() 
+                
             else:
                 st.error("Missing columns. Make sure the database migration was completed.")
         else:
@@ -328,7 +321,6 @@ with tab4:
 
     st.divider()
 
-    # --- MANUAL CONTROL FORM ---
     with st.form("coeff_form"):
         st.subheader("Core Baselines (Manual Override)")
         c1, c2 = st.columns(2)
@@ -359,7 +351,8 @@ with tab4:
         st.subheader("Digital Marketing Lifts")
         d1, d2, d3, d4 = st.columns(4)
         c_promo = d1.number_input("Active Promo Lift", value=float(st.session_state.coeffs['Promo']), format="%.4f")
-        c_imp = d2.number_input("Impressions (per 1)", value=float(st.session_state.coeffs['Impressions']), format="%.6f", step=0.0001)
+        # Expanded Impressions to 8 decimal places so tiny AI weights show up
+        c_imp = d2.number_input("Impressions (per 1)", value=float(st.session_state.coeffs['Impressions']), format="%.8f", step=0.000001)
         c_eng = d3.number_input("Engagements (per 1)", value=float(st.session_state.coeffs['Engagements']), format="%.4f", step=0.01)
         c_clicks = d4.number_input("Clicks (per 1)", value=float(st.session_state.coeffs['Clicks']), format="%.4f", step=0.01)
         
