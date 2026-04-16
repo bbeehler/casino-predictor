@@ -258,31 +258,44 @@ with tab3:
 with tab4:
     st.header("Coefficient Control Center")
     with st.form("coeff_form"):
-        st.subheader("Financial Metrics")
-        c_coin = st.number_input("Average Coin-In per Visitor ($)", value=st.session_state.coeffs['Avg_Coin_In'])
+        st.subheader("Core Baselines")
+        c1, c2 = st.columns(2)
+        c_coin = c1.number_input("Average Coin-In per Visitor ($)", value=float(st.session_state.coeffs['Avg_Coin_In']))
+        c_int = c2.number_input("Base Traffic (Intercept)", value=float(st.session_state.coeffs['Intercept']))
         
-        st.subheader("Day of Week Baselines")
+        st.subheader("Day of Week Modifiers")
         row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
-        c_mon = row1_col1.number_input("Monday", value=st.session_state.coeffs['DOW_Mon'])
-        c_tue = row1_col2.number_input("Tuesday", value=st.session_state.coeffs['DOW_Tue'])
-        c_wed = row1_col3.number_input("Wednesday", value=st.session_state.coeffs['DOW_Wed'])
-        c_thu = row1_col4.number_input("Thursday", value=st.session_state.coeffs['DOW_Thu'])
+        c_mon = row1_col1.number_input("Monday", value=float(st.session_state.coeffs['DOW_Mon']))
+        c_tue = row1_col2.number_input("Tuesday", value=float(st.session_state.coeffs['DOW_Tue']))
+        c_wed = row1_col3.number_input("Wednesday", value=float(st.session_state.coeffs['DOW_Wed']))
+        c_thu = row1_col4.number_input("Thursday", value=float(st.session_state.coeffs['DOW_Thu']))
         
         row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
-        c_fri = row2_col1.number_input("Friday", value=st.session_state.coeffs['DOW_Fri'])
-        c_sat = row2_col2.number_input("Saturday", value=st.session_state.coeffs['DOW_Sat'])
-        c_sun = row2_col3.number_input("Sunday", value=st.session_state.coeffs['DOW_Sun'])
+        c_fri = row2_col1.number_input("Friday", value=float(st.session_state.coeffs['DOW_Fri']))
+        c_sat = row2_col2.number_input("Saturday", value=float(st.session_state.coeffs['DOW_Sat']))
+        c_sun = row2_col3.number_input("Sunday", value=float(st.session_state.coeffs['DOW_Sun']))
         with row2_col4:
             st.empty() 
             
-        st.subheader("Weather Penalties")
-        w1, w2 = st.columns(2)
-        c_snow = w1.number_input("Snow (per cm)", value=st.session_state.coeffs['Snow_cm'])
-        c_alert = w2.number_input("Weather Alert", value=st.session_state.coeffs['Alert'])
+        st.subheader("Weather Modifiers")
+        w1, w2, w3, w4 = st.columns(4)
+        c_temp = w1.number_input("Temp (per °C)", value=float(st.session_state.coeffs['Temp_C']), format="%.4f")
+        c_snow = w2.number_input("Snow (per cm)", value=float(st.session_state.coeffs['Snow_cm']), format="%.4f")
+        c_rain = w3.number_input("Rain (per mm)", value=float(st.session_state.coeffs['Rain_mm']), format="%.4f")
+        c_alert = w4.number_input("Weather Alert Penalty", value=float(st.session_state.coeffs['Alert']), format="%.4f")
+
+        st.subheader("Digital Marketing Lifts")
+        d1, d2, d3, d4 = st.columns(4)
+        c_promo = d1.number_input("Active Promo Lift", value=float(st.session_state.coeffs['Promo']), format="%.4f")
+        c_imp = d2.number_input("Impressions (per 1)", value=float(st.session_state.coeffs['Impressions']), format="%.6f", step=0.0001)
+        c_eng = d3.number_input("Engagements (per 1)", value=float(st.session_state.coeffs['Engagements']), format="%.4f", step=0.01)
+        c_clicks = d4.number_input("Clicks (per 1)", value=float(st.session_state.coeffs['Clicks']), format="%.4f", step=0.01)
         
         submit = st.form_submit_button("Update Engine Parameters")
         if submit:
+            # Update all session variables
             st.session_state.coeffs['Avg_Coin_In'] = c_coin
+            st.session_state.coeffs['Intercept'] = c_int
             st.session_state.coeffs['DOW_Mon'] = c_mon
             st.session_state.coeffs['DOW_Tue'] = c_tue
             st.session_state.coeffs['DOW_Wed'] = c_wed
@@ -290,6 +303,13 @@ with tab4:
             st.session_state.coeffs['DOW_Fri'] = c_fri
             st.session_state.coeffs['DOW_Sat'] = c_sat
             st.session_state.coeffs['DOW_Sun'] = c_sun
+            st.session_state.coeffs['Temp_C'] = c_temp
             st.session_state.coeffs['Snow_cm'] = c_snow
+            st.session_state.coeffs['Rain_mm'] = c_rain
             st.session_state.coeffs['Alert'] = c_alert
-            st.success("Parameters updated! The model has been recalibrated.")
+            st.session_state.coeffs['Promo'] = c_promo
+            st.session_state.coeffs['Impressions'] = c_imp
+            st.session_state.coeffs['Engagements'] = c_eng
+            st.session_state.coeffs['Clicks'] = c_clicks
+            
+            st.success("Parameters updated! The model has been fully recalibrated.")
