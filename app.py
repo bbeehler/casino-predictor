@@ -453,61 +453,63 @@ with tab4:
     # 3. EXPORT SETTINGS
     with st.expander("📥 Backup Engine Configuration"):
         st.json(st.session_state.coeffs)
-# --- TAB 5: ASK AI ---
-with tab5:
-    st.header("💬 Ask the Data Analyst")
-    st.markdown("Ask natural language questions about your property's historical performance, weather impacts, or digital marketing ROI.")
-    
-    # Simple Reset button for the chat
-    if st.button("Clear Chat History", key="clear_chat"):
-        st.session_state.messages = []
-        st.rerun()
 
+# --- TAB 5: ASK AI DATA ANALYST ---
+with tab5:
+    st.markdown("### 💬 AI Data Analyst")
+    st.write("Ask questions about your property's performance, weather impacts, or marketing ROI.")
+
+    # 1. Initialize Chat History
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display chat history
+    # 2. Display Chat History with Modern Styling
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Chat Input
-    if prompt := st.chat_input("e.g., 'What was our best day for traffic last month?'"):
-        
-        st.chat_message("user").markdown(prompt)
+    # 3. The Chat Input
+    if prompt := st.chat_input("Ex: How did rain affect our revenue last week?"):
+        # Add user message to chat
         st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
+        # 4. Generate AI Response
         with st.chat_message("assistant"):
-            if "GEMINI_API_KEY" not in st.secrets:
-                st.error("API Key missing! Please add GEMINI_API_KEY to your Streamlit secrets.")
-            elif not ledger_data:
-                st.warning("Your database is empty. Add data first so I have something to analyze!")
-            else:
-                with st.spinner("Analyzing database..."):
-                    try:
-                        # Prepare data context
-                        df_ai = pd.DataFrame(ledger_data)
-                        data_context = df_ai.to_csv(index=False)
-                        
-                        system_prompt = f"""
-                        You are an expert Data Analyst for a Casino/Hotel property. 
-                        I am providing you with our raw historical daily database below in CSV format. 
-                        Please answer the user's question accurately based ONLY on this data. 
-                        Keep your answers concise, professional, and highlight key metrics.
-                        
-                        DATABASE:
-                        {data_context}
-                        
-                        USER QUESTION:
-                        {prompt}
-                        """
-                        
-                        # We use the full model path which we confirmed works during the dropdown test
-                        model = genai.GenerativeModel('models/gemini-2.5-flash')
-                        
-                        response = model.generate_content(system_prompt)
-                        
-                        st.markdown(response.text)
-                        st.session_state.messages.append({"role": "assistant", "content": response.text})
-                    except Exception as e:
-                        st.error(f"Error communicating with AI: {e}")
+            with st.spinner("Analyzing ledger and generating insights..."):
+                try:
+                    # Provide the AI with the full ledger context (condensed)
+                    if ledger_data:
+                        df_context = pd.DataFrame(ledger_data).tail(60).to_csv(index=False)
+                    else:
+                        df_context = "No data available in the ledger yet."
+
+                    model = genai.GenerativeModel('models/gemini-1.5-flash')
+                    
+                    full_prompt = f"""
+                    You are a world-class Casino Data Analyst for Hard Rock Ottawa. 
+                    You have access to the last 60 days of property data:
+                    {df_context}
+                    
+                    User Question: {prompt}
+                    
+                    Guidelines:
+                    - Be specific. Use dollar amounts and traffic numbers from the data.
+                    - If asked about weather, correlate it to the 'variance' or 'actual_traffic'.
+                    - Maintain a professional, executive-ready tone.
+                    - If the data doesn't contain the answer, say so.
+                    """
+
+                    response = model.generate_content(full_prompt)
+                    st.markdown(response.text)
+                    
+                    # Add assistant response to history
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                except Exception as e:
+                    st.error(f"Assistant Error: {e}")
+
+    # 5. Clear Chat Option
+    if st.button("Clear Conversation", type="secondary"):
+        st.session_state.messages = []
+        st.rerun()
