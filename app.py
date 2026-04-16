@@ -173,8 +173,7 @@ with tab2:
                                 # Send the UPDATE command to Supabase
                                 supabase.table("ledger").update({
                                     "actual_traffic": new_traffic,
-                                    "actual_coin_in": new_coin_in,
-                                    "
+                                    "actual_coin_in": new_coin_in,"
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
     st.header("Historical Reporting & Revenue Implications")
