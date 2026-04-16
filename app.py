@@ -165,6 +165,42 @@ with tab1:
                 acc = (1 - mape) * 100
                 st.metric("AI Accuracy", f"{acc:.1f}%")
 
+st.markdown("---")
+    
+    # We use a 2:1 column ratio to give the chart more room (The Bento look)
+    col_chart, col_side = st.columns([2, 1])
+
+    if ledger_data and not df_dash.empty:
+        # 1. THE REVENUE TREND CARD
+        with col_chart:
+            with st.container(border=True):
+                st.subheader("📈 Revenue Trend vs. Forecast")
+                # Creating a clean chart with Hard Rock Gold
+                chart_data = df_dash.set_index('entry_date')[['actual_coin_in']]
+                st.area_chart(chart_data, color="#FFCC00") 
+                st.caption("Historical actual revenue tracked over time.")
+
+        # 2. THE DIGITAL ROI CARD
+        with col_side:
+            with st.container(border=True):
+                st.subheader("📱 Digital Lift")
+                total_dig_rev = df_dash['digital_revenue_impact'].sum()
+                total_dig_vis = df_dash['digital_lift_visitors'].sum()
+                
+                st.write(f"**Total Revenue Impact:**")
+                st.title(f"${total_dig_rev:,.0f}")
+                
+                st.write(f"**Visitor Contribution:**")
+                st.metric("Total Lift", f"{int(total_dig_vis):,} Visitors")
+                
+                st.divider()
+                st.info("This calculates the dollar value of social engagements and ad clicks.")
+
+    # 3. THE FULL DATA TABLE (Collapsible)
+    st.markdown("---")
+    with st.expander("📂 View Full Performance Ledger (Raw Data)"):
+        st.dataframe(df_dash.sort_values('entry_date', ascending=False), use_container_width=True)
+
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
     st.header("Daily Performance & Predictive Sandbox")
