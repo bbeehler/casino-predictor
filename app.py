@@ -128,7 +128,9 @@ with tab2:
     
     if ledger_data:
         df_ledger = pd.DataFrame(ledger_data)
-        display_df = df_ledger[['entry_date', 'day_of_week', 'actual_traffic', 'predicted_traffic', 'variance', 'actual_coin_in', 'digital_revenue_impact']]
+        
+        # We need to make sure we pull ALL columns from the dataframe so they can be edited
+        display_df = df_ledger[['entry_date', 'day_of_week', 'actual_traffic', 'predicted_traffic', 'variance', 'actual_coin_in', 'digital_lift_visitors', 'digital_revenue_impact']]
         
         search_col, result_col = st.columns([1, 2])
         
@@ -149,39 +151,56 @@ with tab2:
                 else:
                     st.success(f"Record found for {search_date_str}!")
                     
-                    # Extract the existing data for this specific day
+                    # Extract the existing data
                     existing_data = found_record.iloc[0]
                     
-                    # Create an Edit Form
+                    # Create a Full-Scale Edit Form
                     with st.expander("✏️ Edit this Record", expanded=True):
                         with st.form("edit_form"):
                             
-                            # Safe string extraction to prevent quote errors
                             safe_day_name = existing_data['day_of_week']
                             st.markdown(f"**Editing Date:** {search_date_str} ({safe_day_name})")
                             
-                            # Pre-fill inputs with the existing database numbers
-                            new_traffic = st.number_input("Update Actual Traffic", value=int(existing_data['actual_traffic']), step=100)
+                            # Split into two columns so the form isn't too long
+                            edit_col1, edit_col2 = st.columns(2)
                             
-                            # Added .0 to step so Streamlit knows it's a float
-                            new_coin_in = st.number_input("Update Actual Coin-In ($)", value=float(existing_data['actual_coin_in']), step=1000.0)
+                            with edit_col1:
+                                st.markdown("**Actuals**")
+                                new_traffic = st.number_input("Actual Traffic", value=int(existing_data['actual_traffic']), step=100)
+                                new_coin_in = st.number_input("Actual Coin-In ($)", value=float(existing_data['actual_coin_in']), step=1000.0)
                             
-                            submit_update = st.form_submit_button("Save Changes to Database")
+                            with edit_col2:
+                                st.markdown("**Model Estimates**")
+                                new_pred = st.number_input("Predicted Traffic", value=int(existing_data['predicted_traffic']), step=100)
+                                new_dig_lift = st.number_input("Digital Lift (Visitors)", value=int(existing_data['digital_lift_visitors']), step=50)
+                                new_dig_rev = st.number_input("Digital Revenue ($)", value=float(existing_data['digital_revenue_impact']), step=500.0)
+                            
+                            submit_update = st.form_submit_button("Save All Changes to Database")
                             
                             if submit_update:
-                                # Recalculate variance just in case traffic changed
-                                new_variance = int(new_traffic) - int(existing_data['predicted_traffic'])
+                                # Recalculate variance based on the new traffic/prediction numbers
+                                new_variance = int(new_traffic) - int(new_pred)
                                 
-                                # Send the UPDATE command to Supabase (Wrapped in strict data types)
+                                # Send the UPDATE command for ALL fields
                                 supabase.table("ledger").update({
                                     "actual_traffic": int(new_traffic),
+                                    "predicted_traffic": int(new_pred),
                                     "actual_coin_in": float(new_coin_in),
+                                    "digital_lift_visitors": int(new_dig_lift),
+                                    "digital_revenue_impact": float(new_dig_rev),
                                     "variance": int(new_variance)
                                 }).eq("entry_date", search_date_str).execute()
                                 
-                                st.success("Database updated successfully!")
+                                st.success("All fields updated successfully in the database!")
                                 st.cache_data.clear() # Force app to pull fresh data
                                 st.rerun() # Refresh the screen instantly
+
+        # Display the Table (We drop the digital lift here just to keep the visual table clean)
+        visual_df = display_df.drop(columns=['digital_lift_visitors'])
+        st.dataframe(visual_df, use_container_width=True, hide_index=True)
+        
+    else:
+        st.info("Your database is currently empty. Save an entry to start tracking!")
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
     st.header("Historical Reporting & Revenue Implications")
