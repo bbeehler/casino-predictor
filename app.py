@@ -45,59 +45,63 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Executive Dashboard", "📝 Daily 
 
 # --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
-    st.header("Executive Overview & MoM Trends")
+    st.header("Executive Summary & AI Briefing")
     
     if ledger_data:
         df_dash = pd.DataFrame(ledger_data)
         df_dash = df_dash[df_dash['actual_traffic'] > 0].copy()
         
         if not df_dash.empty:
-            # --- 1. DATA PREP & ON-THE-FLY MATH ---
             df_dash['entry_date'] = pd.to_datetime(df_dash['entry_date'])
-            
-            # Calculate Weather Impact dynamically based on current AI coefficients
             c = st.session_state.coeffs
-            df_dash['weather_impact_vis'] = (
-                (df_dash.get('temp_c', 0) * c['Temp_C']) + 
-                (df_dash.get('snow_cm', 0) * c['Snow_cm']) + 
-                (df_dash.get('rain_mm', 0) * c['Rain_mm']) + 
-                (df_dash.get('weather_alert', False).astype(int) * c['Alert'])
-            )
-            df_dash['weather_impact_rev'] = df_dash['weather_impact_vis'] * c['Avg_Coin_In']
             
-            # Determine Current vs Previous Month
-            latest_date = df_dash['entry_date'].max()
-            curr_m, curr_y = latest_date.month, latest_date.year
-            prev_m = curr_m - 1 if curr_m > 1 else 12
-            prev_y = curr_y if curr_m > 1 else curr_y - 1
-            
-            df_curr = df_dash[(df_dash['entry_date'].dt.month == curr_m) & (df_dash['entry_date'].dt.year == curr_y)]
-            df_prev = df_dash[(df_dash['entry_date'].dt.month == prev_m) & (df_dash['entry_date'].dt.year == prev_y)]
-            
-            # Helper function to extract totals
-            def get_metrics(df):
-                rev = df['actual_coin_in'].sum()
-                traf = df['actual_traffic'].sum()
-                rev_pp = rev / traf if traf > 0 else 0
-                dig_vis = df['digital_lift_visitors'].sum()
-                dig_rev = df['digital_revenue_impact'].sum()
-                wea_vis = df['weather_impact_vis'].sum()
-                wea_rev = df['weather_impact_rev'].sum()
-                return rev, traf, rev_pp, dig_vis, dig_rev, wea_vis, wea_rev
+            # --- AI EXECUTIVE BRIEFING GENERATION ---
+            with st.expander("🤖 Generate AI Executive Briefing", expanded=True):
+                if st.button("✨ Refresh Executive Summary"):
+                    with st.spinner("AI is analyzing performance and forecast..."):
+                        try:
+                            # 1. Prepare Historical Context (Last 30 Days)
+                            recent_history = df_dash.sort_values('entry_date', ascending=False).head(30).to_csv(index=False)
+                            
+                            # 2. Prepare 7-Day Forecast Context
+                            f_dates = [datetime.date.today() + datetime.timedelta(days=x) for x in range(1, 8)]
+                            f_context = ""
+                            for d in f_dates:
+                                dow_key = f"DOW_{d.strftime('%a')}"
+                                p = c['Intercept'] + c.get(dow_key, 0) # Baseline forecast
+                                f_context += f"{d.strftime('%a %d')}: Est. {int(p)} visitors; "
 
-            # YTD Totals
-            y_rev, y_traf, y_rev_pp, y_dig_vis, y_dig_rev, y_wea_vis, y_wea_rev = get_metrics(df_dash)
-            # Current Month Totals
-            c_rev, c_traf, c_rev_pp, c_dig_vis, c_dig_rev, c_wea_vis, c_wea_rev = get_metrics(df_curr)
-            # Previous Month Totals
-            p_rev, p_traf, p_rev_pp, p_dig_vis, p_dig_rev, p_wea_vis, p_wea_rev = get_metrics(df_prev)
+                            # 3. Prompt Gemini
+                            model = genai.GenerativeModel('models/gemini-1.5-flash')
+                            briefing_prompt = f"""
+                            You are a Senior Strategic Analyst for Hard Rock Hotel & Casino Ottawa. 
+                            Write a concise, high-level Executive Summary (max 200 words) for the leadership team.
+                            
+                            HISTORICAL PERFORMANCE (Last 30 Days):
+                            {recent_history}
+                            
+                            7-DAY OUTLOOK:
+                            {f_context}
+                            
+                            Identify:
+                            1. Top-line performance trends (Traffic & Revenue).
+                            2. Effectiveness of recent digital marketing/promos.
+                            3. Critical insights for the upcoming week based on the forecast.
+                            
+                            Tone: Professional, urgent where necessary, and data-driven.
+                            """
+                            
+                            response = model.generate_content(briefing_prompt)
+                            st.info(response.text)
+                        except Exception as e:
+                            st.error(f"AI Briefing Error: {e}")
+
+            st.divider()
             
-            # Helper function for safe percentage calculation
-            def calc_mom(curr, prev):
-                if prev == 0 and curr == 0: return "0.0% MoM"
-                if prev == 0: return "N/A (No prior data)"
-                pct = ((curr - prev) / abs(prev)) * 100
-                return f"{pct:+.1f}% MoM"
+            # --- EXISTING METRICS LOGIC ---
+            # (Keep the rest of your dashboard metrics below this)
+            latest_date = df_dash['entry_date'].max()
+            # ... [Rest of your Dashboard code: Core Financials, MoM, etc.] ...
 
             # --- 2. ROW 1: CORE FINANCIALS ---
             st.subheader("💰 Core Financials & Traffic (YTD)")
