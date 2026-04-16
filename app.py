@@ -73,7 +73,7 @@ with tab1:
                                 base = c['Intercept'] + c.get(d_key, 0)
                                 f_outlook += f"{d.strftime('%a %d')}: Est. {int(base)} visitors; "
 
-                            model = genai.GenerativeModel('models/gemini-1.5-flash')
+                            model = genai.GenerativeModel('models/gemini-2.5-flash')
                             prompt = f"""
                             You are the Senior Strategy Lead for Hard Rock Hotel & Casino Ottawa. 
                             Write a highly professional, data-driven Executive Summary for the General Manager.
