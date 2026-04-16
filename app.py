@@ -107,7 +107,7 @@ with tab2:
         estimated_digital_rev = digital_lift * c['Avg_Coin_In']
         st.success(f"Estimated Revenue from Digital Marketing today: **${estimated_digital_rev:,.2f}**")
         
-        if st.button("💾 Save Daily Entry to Database", use_container_width=True):
+if st.button("💾 Save Daily Entry to Database", use_container_width=True):
             entry = {
                 "entry_date": entry_date.strftime("%Y-%m-%d"),
                 "day_of_week": dow_name,
@@ -116,12 +116,19 @@ with tab2:
                 "variance": int(variance),
                 "digital_lift_visitors": int(digital_lift),
                 "digital_revenue_impact": float(estimated_digital_rev),
-                "actual_coin_in": float(actual_coinin)
+                "actual_coin_in": float(actual_coinin),
+                # --- NEW COLUMNS ---
+                "temp_c": int(temp),
+                "snow_cm": float(snow),
+                "rain_mm": float(rain),
+                "weather_alert": alert,
+                "active_promo": promo,
+                "ad_impressions": int(impressions),
+                "social_engagements": int(engagements),
+                "ad_clicks": int(clicks)
             }
             # Push to Supabase
             supabase.table("ledger").insert(entry).execute()
-            st.toast("✅ Saved securely to Database!")
-            st.cache_data.clear() # Forces the table to refresh
 
     st.divider()
     st.subheader("🔍 Search & Edit Ledger")
