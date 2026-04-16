@@ -481,7 +481,7 @@ with tab5:
                 try:
                     # Provide the AI with the full ledger context (condensed)
                     if ledger_data:
-                        df_context = pd.DataFrame(ledger_data).tail(60).to_csv(index=False)
+                        df_context = pd.DataFrame(ledger_data).tail(90).to_csv(index=False)
                     else:
                         df_context = "No data available in the ledger yet."
 
