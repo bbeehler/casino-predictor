@@ -1,11 +1,22 @@
 import streamlit as st
 import pandas as pd
 import datetime
+from supabase import create_client, Client
 
 st.set_page_config(page_title="Casino Traffic Predictor", layout="wide")
 st.title("🎰 Property Traffic & Digital Lift Engine")
 
-# --- DATABASE / STATE INITIALIZATION ---
+# --- DATABASE CONNECTION ---
+# This securely connects to your Supabase project using the secrets you saved
+@st.cache_resource
+def init_connection():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+supabase: Client = init_connection()
+
+# --- INITIALIZE COEFFICIENTS ---
 if 'coeffs' not in st.session_state:
     st.session_state.coeffs = {
         'Intercept': 4606.16, 
@@ -13,14 +24,18 @@ if 'coeffs' not in st.session_state:
         'DOW_Thu': -410.40, 'DOW_Fri': 1032.13, 'DOW_Sat': 2912.14, 'DOW_Sun': 121.70,
         'Temp_C': 0.82, 'Snow_cm': -53.11, 'Rain_mm': -9.55, 'Alert': -49.37,
         'Promo': 99.74, 'Impressions': 0.000881, 'Engagements': 0.0943, 'Clicks': 0.244,
-        'Avg_Coin_In': 1335.00 # Historical V2 Average
+        'Avg_Coin_In': 1335.00
     }
 
-if 'ledger' not in st.session_state:
-    st.session_state.ledger = []
+# Fetch Ledger Data from Supabase
+@st.cache_data(ttl=60) # Refreshes every 60 seconds
+def load_ledger():
+    response = supabase.table("ledger").select("*").order("entry_date", desc=True).execute()
+    return response.data
+
+ledger_data = load_ledger()
 
 # --- APP NAVIGATION ---
-# This line is where tab4 is defined so Python knows what it is!
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Executive Dashboard", "📝 Daily Tracker", "📈 Reporting & ROI", "⚙️ Admin Engine"])
 
 # --- TAB 1: EXECUTIVE DASHBOARD ---
@@ -37,7 +52,6 @@ with tab1:
 # --- TAB 2: DAILY TRACKER (DATA ENTRY) ---
 with tab2:
     st.header("Daily Entry & Validation")
-    
     col_input, col_output = st.columns([1, 1])
     
     with col_input:
@@ -79,38 +93,42 @@ with tab2:
         estimated_digital_rev = digital_lift * c['Avg_Coin_In']
         st.success(f"Estimated Revenue from Digital Marketing today: **${estimated_digital_rev:,.2f}**")
         
-        if st.button("💾 Save Daily Entry to Ledger", use_container_width=True):
+        if st.button("💾 Save Daily Entry to Database", use_container_width=True):
             entry = {
-                "Date": entry_date.strftime("%Y-%m-%d"),
-                "DOW": dow_name,
-                "Actual_Traffic": actual_traffic,
-                "Predicted_Traffic": int(total_pred),
-                "Variance": int(variance),
-                "Digital_Lift_Visitors": int(digital_lift),
-                "Digital_Revenue_Impact": estimated_digital_rev,
-                "Actual_CoinIn": actual_coinin
+                "entry_date": entry_date.strftime("%Y-%m-%d"),
+                "day_of_week": dow_name,
+                "actual_traffic": actual_traffic,
+                "predicted_traffic": int(total_pred),
+                "variance": int(variance),
+                "digital_lift_visitors": int(digital_lift),
+                "digital_revenue_impact": float(estimated_digital_rev),
+                "actual_coin_in": float(actual_coinin)
             }
-            st.session_state.ledger.append(entry)
-            st.toast("Entry saved successfully!")
+            # Push to Supabase
+            supabase.table("ledger").insert(entry).execute()
+            st.toast("✅ Saved securely to Database!")
+            st.cache_data.clear() # Forces the table to refresh
 
     st.divider()
-    st.subheader("Recent Ledger Entries")
-    if len(st.session_state.ledger) > 0:
-        df_ledger = pd.DataFrame(st.session_state.ledger)
-        st.dataframe(df_ledger, use_container_width=True)
+    st.subheader("Database Ledger (Live)")
+    if ledger_data:
+        df_ledger = pd.DataFrame(ledger_data)
+        # Clean up columns for display
+        display_df = df_ledger[['entry_date', 'day_of_week', 'actual_traffic', 'predicted_traffic', 'variance', 'digital_revenue_impact']]
+        st.dataframe(display_df, use_container_width=True)
     else:
-        st.info("No daily entries yet. Save an entry above to start building the ledger.")
+        st.info("Your database is currently empty. Save an entry to start tracking!")
 
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
     st.header("Historical Reporting & Revenue Implications")
     
-    if len(st.session_state.ledger) > 0:
-        df_ledger = pd.DataFrame(st.session_state.ledger)
+    if ledger_data:
+        df_ledger = pd.DataFrame(ledger_data)
         
-        total_actual = df_ledger['Actual_Traffic'].sum()
-        total_pred = df_ledger['Predicted_Traffic'].sum()
-        total_digital_rev = df_ledger['Digital_Revenue_Impact'].sum()
+        total_actual = df_ledger['actual_traffic'].sum()
+        total_pred = df_ledger['predicted_traffic'].sum()
+        total_digital_rev = df_ledger['digital_revenue_impact'].sum()
         
         c1, c2, c3 = st.columns(3)
         c1.metric("Period Actual Traffic", f"{total_actual:,}")
@@ -118,10 +136,10 @@ with tab3:
         c3.metric("Total Digital Revenue ROI", f"${total_digital_rev:,.2f}")
         
         st.subheader("Traffic Trends: Actual vs Model")
-        chart_data = df_ledger[['Date', 'Actual_Traffic', 'Predicted_Traffic']].set_index('Date')
+        chart_data = df_ledger[['entry_date', 'actual_traffic', 'predicted_traffic']].set_index('entry_date')
         st.line_chart(chart_data)
     else:
-        st.warning("Go to the Daily Tracker tab and save some entries to generate reports!")
+        st.warning("Save entries in the Daily Tracker to generate reports!")
 
 # --- TAB 4: ADMIN ENGINE ---
 with tab4:
