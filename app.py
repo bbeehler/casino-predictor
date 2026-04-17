@@ -611,77 +611,66 @@ import google.generativeai as genai
 
 import google.generativeai as genai
 
+import google.generativeai as genai
+
 # --- TAB 5: ASK FLOORCAST ---
 with tab5:
+    # 1. BRANDED HEADER
     st.markdown("""
-        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
+        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 10px;">
             <h2 style="color: #FFCC00; margin: 0;">🤖 Ask FloorCast</h2>
-            <p style="color: #888; margin: 0;">Query property performance and digital ROI using natural language.</p>
+            <p style="color: #888; margin: 0;">Proprietary AI analyst correlating property data with digital ROI.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. API KEY VALIDATION (Updated to match your GEMINI_API_KEY secret)
+    # 2. UI FIX FOR CLIPPING
+    # This prevents the floating input bar from hiding the bottom of the response
+    st.markdown("""
+        <style>
+            .stChatMessage { margin-bottom: 25px !important; }
+            div[data-testid="stVerticalBlock"] > div:last-child { margin-bottom: 50px; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # 3. API CONFIGURATION
     if "GEMINI_API_KEY" not in st.secrets:
         st.error("🛑 **System Offline:** GEMINI_API_KEY missing from Streamlit Secrets.")
         st.stop()
     
-    # 2. INITIALIZE THE BRAIN
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     
+    # 4. MODEL SETTINGS (Optimized for detailed data analysis)
     generation_config = {
-        "temperature": 0.2,
+        "temperature": 0.2,      # Grounded and factual
         "top_p": 0.95,
-        "max_output_tokens": 1024,
+        "max_output_tokens": 2048, # High limit to prevent truncated responses
     }
     
     model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
+        model_name="gemini-1.5-flash",
         generation_config=generation_config
     )
 
-    # 3. CHAT STATE MANAGEMENT
+    # 5. CHAT STATE & HISTORY
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    # Display scrollable chat history
+    chat_container = st.container()
+    with chat_container:
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
-    # 4. DATA CONTEXT
+    # 6. DATA CONTEXT PREPARATION
+    # We provide the AI with the most recent 60 days of ledger data
     if ledger_data:
         context_df = pd.DataFrame(ledger_data).tail(60)
         csv_context = context_df.to_csv(index=False)
     else:
-        csv_context = "No historical data available."
+        csv_context = "No historical data currently exists in the ledger."
 
-    # 5. INTERACTION
-    if prompt := st.chat_input("Ask FloorCast about your property data..."):
+    # 7. INTERACTION LOGIC
+    if prompt := st.chat_input("Query FloorCast (e.g., 'Analyze the ROI of our ad clicks versus snow impact')"):
+        # Store and display user question
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant"):
-            with st.spinner("Analyzing FloorPace Ledger..."):
-                try:
-                    system_prompt = f"""
-                    You are FloorCast, the lead Data Analyst for Hard Rock Hotel & Casino Ottawa.
-                    
-                    DATA (LAST 60 DAYS):
-                    {csv_context}
-                    
-                    COEFFICIENTS:
-                    {st.session_state.coeffs}
-                    
-                    USER QUESTION: {prompt}
-                    
-                    MISSION:
-                    Answer professionally using the provided data. Reference specific stats like 
-                    'ad_clicks', 'actual_coin_in', or 'temp_c' where relevant.
-                    """
-                    
-                    response = model.generate_content(system_prompt)
-                    st.markdown(response.text)
-                    st.session_state.messages.append({"role": "assistant", "content": response.text})
-                    
-                except Exception as e:
-                    st.error(f"FloorCast Error: {str(e)}")
