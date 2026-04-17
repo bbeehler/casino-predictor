@@ -136,7 +136,7 @@ with tab1:
         with col1:
             with st.container(border=True):
                 st.markdown("💰 **YTD Total Revenue**")
-                st.metric("Total Coin-In", f"${df_ytd['actual_coin_in'].sum():,.0f}")
+                st.metric("Total Coin-In and Table Drop", f"${df_ytd['actual_coin_in'].sum():,.0f}")
                 st.caption(f"Jan 1 - {df_ytd['entry_date'].max().strftime('%b %d')}")
         
         with col2:
@@ -147,7 +147,7 @@ with tab1:
 
         with col3:
             with st.container(border=True):
-                st.markdown("🚀 **Digital Lift Contribution**")
+                st.markdown("🚀 **YTD Digital Lift Contribution**")
                 st.metric("Lift Visitors", f"{total_lift:,.0f}", f"{lift_percentage:.1f}% of Total")
                 
                 # Attributed Revenue Impact Section
