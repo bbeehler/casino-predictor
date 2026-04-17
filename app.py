@@ -7,7 +7,7 @@ from sklearn.linear_model import LinearRegression
 import numpy as np
 
 # 1. PAGE CONFIG (Must be the very first Streamlit command)
-st.set_page_config(page_title="Hard Rock Strategic Engine", layout="wide")
+st.set_page_config(page_title="FloorCast", layout="wide")
 
 # 2. MODERN UI STYLING (The CSS)
 st.markdown("""
