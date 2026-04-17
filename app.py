@@ -467,30 +467,7 @@ with tab3:
             st.warning("No data found for the selected date range.")
 
 # --- TAB 4: ADMIN ENGINE (MASTER CONTROL & IMPORTER) ---
-with tab4:
-    # --- MAINTENANCE TOOLS ---
-    st.markdown("### 🛠️ Data Maintenance")
-    with st.container(border=True):
-        st.write("Use this to bulk-update historical records.")
-        
-        if st.button("🚀 Force All Records to 'Promo = True'", use_container_width=True):
-            try:
-                # This targets the 'ledger' table and updates the boolean column
-                # We filter by 'is', False to ensure we only touch what's necessary
-                response = supabase.table("ledger")\
-                    .update({"active_promo": True})\
-                    .neq("active_promo", True)\
-                    .execute()
-                
-                st.success(f"Database Synchronized! All records now reflect active promotion status.")
-                st.info("The Dashboard and FloorCast will now reflect this lift automatically.")
-                
-                # Refresh local data
-                st.rerun()
-                
-            except Exception as e:
-                st.error(f"Database update failed: {e}")
-                
+with tab4:      
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control & Data Management</h2>
