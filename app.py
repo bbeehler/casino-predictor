@@ -2,6 +2,26 @@ import streamlit as st
 import pandas as pd
 import datetime
 from supabase import create_client, Client
+# --- GLOBAL DATA HYDRATION (Place at the Top of app.py) ---
+if 'coeffs' not in st.session_state:
+    try:
+        # 1. Fetch the master record (ID 1) from the database
+        response = supabase.table("coefficients").select("*").eq("id", 1).execute()
+        
+        if response.data and len(response.data) > 0:
+            # 2. Success: Load your saved values into the app's memory
+            st.session_state.coeffs = response.data[0]
+        else:
+            # 3. Fallback: If database is empty, set your Hard Rock defaults
+            st.session_state.coeffs = {
+                "id": 1, "Intercept": 1000, "Temp_C": 0, "Snow_cm": 0, 
+                "Rain_mm": 0, "Promo": 0, "Clicks": 0, 
+                "Impressions": 0, "Avg_Coin_In": 1200
+            }
+    except Exception as e:
+        st.error(f"Engine Load Error: {e}")
+        # Ensure the app doesn't crash if DB is down
+        st.session_state.coeffs = {"Intercept": 0, "Avg_Coin_In": 1200}
 import google.generativeai as genai
 from sklearn.linear_model import LinearRegression
 import numpy as np
