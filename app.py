@@ -176,7 +176,6 @@ with tab2:
                 
                 with st.expander("Detailed Digital Metrics"):
                     imp = st.number_input("Ad Impressions", 0, 1000000, 300000)
-                    eng = st.number_input("Social Engagements", 0, 10000, 500)
                     clks = st.number_input("Ad Clicks", 0, 5000, 200)
 
                 if st.form_submit_button("💾 Save to FloorPace Ledger", use_container_width=True):
@@ -186,31 +185,25 @@ with tab2:
                     # Math for Prediction
                     base_v = float(c['Intercept'] + c.get(dow_key, 0))
                     weather_v = float((temp * c['Temp_C']) + (snow * c['Snow_cm']))
-                    dig_lift_v = float((promo * c['Promo']) + (imp * c['Impressions']) + (eng * c['Engagements']) + (clks * c['Clicks']))
+                    dig_lift_v = float((promo * c['Promo']) + (imp * c['Impressions']) + (clks * c['Clicks']))
                     final_pred = float(base_v + weather_v + dig_lift_v)
                     
+                    # CLEAN PAYLOAD: Removing 'variance' to match SQL Schema
                     data = {
                         "entry_date": str(date_in),
-                        "day_of_week": str(date_in.strftime("%A")),
                         "actual_traffic": int(act_traf),
                         "actual_coin_in": float(act_coin),
                         "predicted_traffic": int(final_pred),
-                        "variance": int(int(act_traf) - int(final_pred)),
                         "temp_c": float(temp),
                         "snow_cm": float(snow),
-                        "rain_mm": 0.0,
                         "active_promo": bool(promo),
                         "ad_impressions": int(imp),
-                        "social_engagements": int(eng),
-                        "ad_clicks": int(clks),
-                        "digital_lift_visitors": int(dig_lift_v),
-                        "digital_revenue_impact": float(float(dig_lift_v) * float(c['Avg_Coin_In'])),
-                        "weather_alert": False
+                        "ad_clicks": int(clks)
                     }
                     
                     try:
                         supabase.table("ledger").upsert(data, on_conflict="entry_date").execute()
-                        st.toast("✅ Record saved to FloorPace Ledger")
+                        st.toast("✅ Record saved successfully!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Database Sync Error: {e}")
@@ -239,6 +232,7 @@ with tab2:
                 st.line_chart(df_f.set_index("Date")["Visitors"], color="#FFCC00")
 
     # --- SECTION 3: AUDIT & FULL-FIELD EDIT ---
+    st.markdown("---")
     st.markdown("### 🔍 3. Historical Ledger Audit & Corrections")
     if ledger_data:
         df_edit = pd.DataFrame(ledger_data)
@@ -267,27 +261,25 @@ with tab2:
                             with ec2:
                                 up_temp = st.number_input("Temp", value=float(record.get('temp_c', 0.0)))
                                 up_snow = st.number_input("Snow", value=float(record.get('snow_cm', 0.0)))
-                                up_alert = st.checkbox("Alert", value=bool(record.get('weather_alert', False)))
                             with ec3:
                                 up_promo = st.checkbox("Promo", value=bool(record.get('active_promo', False)))
                                 up_imp = st.number_input("Impressions", value=int(record.get('ad_impressions', 0)))
                                 up_clk = st.number_input("Clicks", value=int(record.get('ad_clicks', 0)))
 
-                            if st.form_submit_button("💾 Save All Changes"):
+                            if st.form_submit_button("💾 Save All Changes", use_container_width=True):
                                 try:
+                                    # STRICT TYPES: Ints for traffic/impressions, Floats for money/temp
                                     supabase.table("ledger").update({
                                         "actual_traffic": int(up_t), 
                                         "actual_coin_in": float(up_c), 
                                         "predicted_traffic": int(up_p),
                                         "temp_c": float(up_temp), 
                                         "snow_cm": float(up_snow), 
-                                        "weather_alert": bool(up_alert),
                                         "active_promo": bool(up_promo), 
                                         "ad_impressions": int(up_imp), 
-                                        "ad_clicks": int(up_clk),
-                                        "variance": int(int(up_t) - int(up_p))
+                                        "ad_clicks": int(up_clk)
                                     }).eq("entry_date", search_str).execute()
-                                    st.toast("Full record updated!")
+                                    st.toast(f"Record for {search_str} updated!")
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Update Error: {e}")
@@ -296,7 +288,6 @@ with tab2:
 
         st.markdown("**Full Historical Ledger**")
         display_df = df_edit.sort_values('entry_date', ascending=False)
-        # Clean up date display
         display_df['entry_date'] = display_df['entry_date'].dt.strftime('%Y-%m-%d')
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
