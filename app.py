@@ -307,6 +307,7 @@ with tab3:
     if ledger_data:
         df_rep = pd.DataFrame(ledger_data).copy()
         df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
+        c = st.session_state.coeffs
         
         # 1. Date Range Filter
         min_d, max_d = df_rep['entry_date'].min().date(), df_rep['entry_date'].max().date()
@@ -318,27 +319,33 @@ with tab3:
             df_filtered = df_rep.loc[mask].copy().sort_values('entry_date')
             
             if not df_filtered.empty:
-                # --- 2. THE CALCULATIONS (RE-ALIGNED) ---
-                def safe_get_sum(df, col_name):
-                    if col_name in df.columns:
-                        return pd.to_numeric(df[col_name], errors='coerce').fillna(0).sum()
-                    return 0.0
+                # --- 2. THE AUTO-CALCULATION ENGINE ---
+                # This function recreates the AI's logic automatically for every row
+                def calculate_auto_baseline(row):
+                    # If database already has a predicted value, use it
+                    if row.get('predicted_traffic', 0) > 0:
+                        return float(row['predicted_traffic'])
+                    
+                    # Otherwise, calculate it on the fly using the coefficients
+                    dow_key = f"DOW_{pd.to_datetime(row['entry_date']).strftime('%a')}"
+                    base = c['Intercept'] + c.get(dow_key, 0)
+                    weather = (row.get('temp_c', 0) * c['Temp_C']) + (row.get('snow_cm', 0) * c['Snow_cm'])
+                    promo = c['Promo'] if row.get('active_promo', False) else 0
+                    
+                    return float(base + weather + promo)
 
-                actual_coin = safe_get_sum(df_filtered, 'actual_coin_in')
-                pred_traffic = safe_get_sum(df_filtered, 'predicted_traffic')
+                # Apply the auto-calc to every row in the filtered data
+                df_filtered['auto_pred'] = df_filtered.apply(calculate_auto_baseline, axis=1)
                 
-                # Fallback to actual traffic if predicted is 0
-                if pred_traffic == 0:
-                    pred_traffic = safe_get_sum(df_filtered, 'actual_traffic')
+                # Math for the Metric Cards
+                avg_spend = float(c.get('Avg_Coin_In', 112.5))
+                actual_rev = pd.to_numeric(df_filtered['actual_coin_in'], errors='coerce').fillna(0).sum()
+                base_rev = df_filtered['auto_pred'].sum() * avg_spend
                 
-                avg_spend = float(st.session_state.coeffs.get('Avg_Coin_In', 112.5))
-                
-                actual_rev = float(actual_coin)
-                base_rev = float(pred_traffic * avg_spend)
                 variance_val = actual_rev - base_rev
                 pct_var = (variance_val / base_rev * 100) if base_rev != 0 else 0.0
 
-                # --- 3. THE CARD LAYOUT (RESTORED) ---
+                # --- 3. THE CARD LAYOUT ---
                 m1, m2, m3 = st.columns(3)
                 with m1:
                     with st.container(border=True):
@@ -350,14 +357,13 @@ with tab3:
                     with st.container(border=True):
                         st.metric("Revenue Variance", f"${variance_val:,.0f}", delta=f"{pct_var:.1f}%")
 
-                st.caption(f"🔍 System Audit: Logic using Traffic ({pred_traffic:,.0f}) x Spend (${avg_spend})")
                 st.divider()
 
-                # --- 4. THE CHART (RE-STYLING) ---
-                st.markdown("**Revenue vs AI Prediction Baseline**")
+                # --- 4. THE CHART (Using Auto-Calculated Baseline) ---
+                st.markdown("**Revenue vs AI Prediction Baseline (Auto-Calculated)**")
                 chart_df = df_filtered.copy()
                 chart_df['Actual Revenue'] = pd.to_numeric(chart_df['actual_coin_in'], errors='coerce').fillna(0)
-                chart_df['AI Baseline'] = pd.to_numeric(chart_df['predicted_traffic'], errors='coerce').fillna(0) * avg_spend
+                chart_df['AI Baseline'] = chart_df['auto_pred'] * avg_spend
                 
                 st.area_chart(chart_df.set_index('entry_date')[['Actual Revenue', 'AI Baseline']], 
                               color=["#FFCC00", "#555555"])
