@@ -473,71 +473,95 @@ import json
 
 import google.generativeai as genai
 import json
+import google.generativeai as genai
+import json
+import pandas as pd
 
 # --- TAB 4: ADMIN ENGINE & DATA MANAGEMENT ---
 with tab4:
+    # 1. BRANDED HEADER
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control & Data Management</h2>
-            <p style="color: #888; margin: 0;">AI Auto-Calibration and Manual Overrides.</p>
+            <p style="color: #888; margin: 0;">AI Auto-Calibration with Hard-Math Revenue Verification.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. AI CALIBRATION LOGIC
+    # 2. AI AUTO-CALIBRATION (With Raw Math Verification)
     if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
-        with st.spinner("Gemini 3 Flash is analyzing 120+ records for optimal weights..."):
+        with st.spinner("Executing Raw Math & Statistical Calibration..."):
             try:
-                df_calc = pd.DataFrame(ledger_data).tail(120)
+                # A. Prepare the data
+                df_calc = pd.DataFrame(ledger_data).copy()
+                
+                # B. EXECUTE RAW MATH (Objective Reality)
+                # This guarantees your $1,200+ spend isn't "guessed" by the AI
+                total_rev = df_calc['actual_coin_in'].sum()
+                total_vis = df_calc['actual_traffic'].sum()
+                math_avg_spend = total_rev / total_vis if total_vis > 0 else 0
+                
+                # C. RUN AI FOR WEIGHTING (Gemini 3 Flash)
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel('gemini-2.5-flash')
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 
                 prompt = f"""
-                SYSTEM: Act as a high-precision statistical engine for Hard Rock Ottawa.
-                DATA: {df_calc.to_csv(index=False)}
-                TASK: Calculate optimal coefficients to match 'actual_traffic' based on 'temp_c', 'snow_cm', 'rain_mm', 'active_promo', and 'ad_clicks'.
-                RETURN: A single raw JSON object with these keys: 
-                Intercept, Promo, Clicks, Impressions, Temp_C, Snow_cm, Rain_mm, Avg_Coin_In.
-                NO PROSE. NO MARKDOWN.
-                """
-                response = model.generate_content(prompt)
+                SYSTEM: You are a high-precision financial engine for Hard Rock Ottawa. 
+                DATA: {df_calc.tail(120).to_csv(index=False)}
                 
-                # Parse and force into session state
+                TASK:
+                1. Accept this CALCULATED CONSTANT: Avg_Coin_In = {math_avg_spend}
+                2. Analyze the dataset to find optimal weights for: 
+                   Intercept, Promo, Clicks, Impressions, Temp_C, Snow_cm, Rain_mm.
+                
+                RETURN: A single raw JSON object with these exact keys. NO MARKDOWN.
+                """
+                
+                response = model.generate_content(prompt)
                 clean_json = response.text.replace("```json", "").replace("```", "").strip()
                 suggestion = json.loads(clean_json)
                 
-                # UPDATE THE SESSION STATE AUTOMATICALLY
+                # D. FORCE MATH CONSTANTS INTO SESSION STATE
+                suggestion['Avg_Coin_In'] = math_avg_spend
                 for key, value in suggestion.items():
                     st.session_state.coeffs[key] = value
                 
-                st.success("🎯 AI Calibration Successful: Suggested weights applied to the fields below.")
+                st.success(f"🎯 Calibration Successful. Avg Spend verified at ${math_avg_spend:,.2f}")
+                st.rerun()
+                
             except Exception as e:
                 st.error(f"Calibration failed: {e}")
 
-    # 2. BENTO CONTROL CENTER (Now using the updated session state)
+    st.write("##")
     c = st.session_state.coeffs
+
+    # 3. BENTO CONTROL CENTER (Manual Overrides)
     col_fin, col_dig, col_env = st.columns(3)
 
     with col_fin:
         with st.container(border=True):
             st.markdown("💰 **Financial & Baseline**")
-            new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 0)), key="inp_intercept")
-            new_avg_spend = st.number_input("Avg. Spend per Head ($)", value=float(c.get('Avg_Coin_In', 0)), key="inp_spend")
+            new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 0)))
+            new_avg_spend = st.number_input("Avg. Spend per Head ($)", value=float(c.get('Avg_Coin_In', 0)))
+            st.caption("Baseline floor performance.")
 
     with col_dig:
         with st.container(border=True):
             st.markdown("🚀 **Digital Marketing Weights**")
-            new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)), key="inp_promo")
-            new_clicks = st.number_input("Weight / Ad Click", value=float(c.get('Clicks', 0)), key="inp_clicks")
-            new_imps = st.number_input("Weight / 1k Imps", value=float(c.get('Impressions', 0)), format="%.4f", key="inp_imps")
+            new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
+            new_clicks = st.number_input("Weight / Ad Click", value=float(c.get('Clicks', 0)))
+            new_imps = st.number_input("Weight / 1k Imps", value=float(c.get('Impressions', 0)), format="%.4f")
+            st.caption("Weights driving Marketing ROI.")
 
     with col_env:
         with st.container(border=True):
             st.markdown("☁️ **Environmental Impact**")
-            new_temp = st.number_input("Temp Impact (°C)", value=float(c.get('Temp_C', 0)), key="inp_temp")
-            new_snow = st.number_input("Snow Impact (cm)", value=float(c.get('Snow_cm', 0)), key="inp_snow")
-            new_rain = st.number_input("Rain Impact (mm)", value=float(c.get('Rain_mm', 0)), key="inp_rain")
+            new_temp = st.number_input("Temp Impact (°C)", value=float(c.get('Temp_C', 0)))
+            new_snow = st.number_input("Snow Impact (cm)", value=float(c.get('Snow_cm', 0)))
+            new_rain = st.number_input("Rain Impact (mm)", value=float(c.get('Rain_mm', 0)))
+            st.caption("Ottawa weather adjustments.")
 
-    # 3. PERMANENT SAVE
+    # 4. PERMANENT SAVE ACTION
+    st.write("##")
     if st.button("💾 Save All Engine Changes", use_container_width=True):
         try:
             updated_values = {
@@ -545,12 +569,25 @@ with tab4:
                 "Rain_mm": new_rain, "Promo": new_promo, "Clicks": new_clicks, 
                 "Impressions": new_imps, "Avg_Coin_In": new_avg_spend
             }
+            # Permanent Supabase Upsert
             supabase.table("coefficients").upsert(updated_values).execute()
             st.session_state.coeffs.update(updated_values)
-            st.success("✅ Database Synchronized.")
+            st.success("✅ Engine Tuned: All changes are now permanent in the database.")
             st.rerun()
         except Exception as e:
-            st.error(f"Save failed: {e}")
+            st.error(f"Database save failed: {e}")
+
+    # 5. GLOBAL PROMO SYNC
+    st.write("---")
+    st.markdown("### 🧹 Database Maintenance")
+    if st.button("🚀 Force Global Promo: TRUE", use_container_width=True):
+        try:
+            supabase.table("ledger").update({"active_promo": True}).neq("active_promo", True).execute()
+            st.success("Ledger Synchronized: All records now reflect active promotion.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Global sync failed: {e}")
+
 # --- TAB 5: ASK FLOORCAST ---
 with tab5:
     # 1. BRANDED HEADER
