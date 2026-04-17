@@ -489,24 +489,25 @@ with tab4:
 
                 for i, row in df_upload.iterrows():
                     progress_bar.progress((i + 1) / len(df_upload))
+                    
+                    # Log the actual headers found to help you debug
                     payload = {
                         "entry_date": str(row.get('entry_date', row.get('date'))),
                         "actual_traffic": clean(row.get('actual_traffic', 0)),
                         "actual_coin_in": clean(row.get('actual_coin_in', 0.0), is_float=True),
                         "temp_c": clean(row.get('temp_c', 0), is_float=True),
-                        "active_promo": bool(row.get('active_promo', False))
+                        "active_promo": bool(row.get('active_promo', False)),
+                        
+                        # DIGITAL METRICS - Ensure these match your CSV headers exactly
+                        "ad_impressions": clean(row.get('ad_impressions', row.get('impressions', 0))),
+                        "ad_clicks": clean(row.get('ad_clicks', row.get('clicks', 0))),
+                        "social_engagements": clean(row.get('social_engagements', row.get('engagements', 0)))
                     }
                     try:
                         supabase.table("ledger").upsert(payload, on_conflict="entry_date").execute()
                         success_count += 1
                     except Exception as e:
-                        error_logs.append(f"Row {i+1}: {str(e)}")
-
-                if success_count > 0: st.success(f"✅ Synced {success_count} records!")
-                if error_logs:
-                    with st.expander("⚠️ View Errors"):
-                        for log in error_logs: st.write(log)
-                if success_count > 0: st.rerun()
+                        error_logs.append(f"Row {i+1} Fail: {str(e)}")
 # --- TAB 5: ASK AI DATA ANALYST ---
 with tab5:
     st.markdown("### 💬 AI Data Analyst")
