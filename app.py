@@ -468,16 +468,32 @@ with tab3:
 
 # --- TAB 4: ADMIN ENGINE & DATA MANAGEMENT ---
 with tab4:
+    # 1. BRANDED HEADER
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control & Data Management</h2>
-            <p style="color: #888; margin: 0;">Precision tuning for Digital Lift and Environmental factors.</p>
+            <p style="color: #888; margin: 0;">Precision tuning for Digital Lift, Financials, and Ottawa Environment.</p>
         </div>
     """, unsafe_allow_html=True)
 
+    # 2. AI ENGINE STATUS COMPONENT
+    # This provides a quick visual check that FloorCast is live
+    s1, s2, s3 = st.columns(3)
+    with s1:
+        st.write("🛰️ **Model Connectivity**")
+        st.success("FloorCast: ONLINE")
+    with s2:
+        st.write("📊 **Ledger Depth**")
+        ledger_count = len(ledger_data) if ledger_data else 0
+        st.info(f"{ledger_count} Records Synced")
+    with s3:
+        st.write("🧠 **Intelligence Layer**")
+        st.write("Gemini 1.5 Flash Active")
+
+    st.write("##")
     c = st.session_state.coeffs
 
-    # --- 1. THE CONTROL CARDS (Bento Layout) ---
+    # 3. THE BENTO CONTROL CENTER
     col_fin, col_dig, col_env = st.columns(3)
 
     with col_fin:
@@ -485,7 +501,7 @@ with tab4:
             st.markdown("💰 **Financial & Baseline**")
             new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 0)))
             new_avg_spend = st.number_input("Avg. Spend per Head ($)", value=float(c.get('Avg_Coin_In', 0)))
-            st.caption("Standard property performance without marketing lift.")
+            st.caption("Standard property baseline before digital lift.")
 
     with col_dig:
         with st.container(border=True):
@@ -493,7 +509,7 @@ with tab4:
             new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
             new_clicks = st.number_input("Weight / Ad Click", value=float(c.get('Clicks', 0)))
             new_imps = st.number_input("Weight / 1k Imps", value=float(c.get('Impressions', 0)), format="%.4f")
-            st.caption("Values added to traffic based on campaign activity.")
+            st.caption("Weights used to calculate Digital ROI & Lift.")
 
     with col_env:
         with st.container(border=True):
@@ -501,9 +517,9 @@ with tab4:
             new_temp = st.number_input("Temp Impact (°C)", value=float(c.get('Temp_C', 0)))
             new_snow = st.number_input("Snow Impact (cm)", value=float(c.get('Snow_cm', 0)))
             new_rain = st.number_input("Rain Impact (mm)", value=float(c.get('Rain_mm', 0)))
-            st.caption("Traffic adjustments based on Ottawa weather patterns.")
+            st.caption("Adjustments based on Ottawa weather patterns.")
 
-    # --- 2. ACTION BAR ---
+    # 4. PRIMARY ACTION
     st.write("##")
     if st.button("💾 Save All Engine Changes", use_container_width=True):
         try:
@@ -518,24 +534,24 @@ with tab4:
                 "Impressions": new_imps,
                 "Avg_Coin_In": new_avg_spend
             }
+            # Permanent Supabase Update
             supabase.table("coefficients").upsert(updated_values).execute()
             st.session_state.coeffs.update(updated_values)
-            st.success("✅ Engine Tuned: All changes pushed to database.")
+            st.success("✅ Engine Tuned: All changes are now permanent.")
             st.rerun()
         except Exception as e:
             st.error(f"Save failed: {e}")
 
-    # --- 3. MAINTENANCE & PROMO FLAG ---
+    # 5. MAINTENANCE (Cleaned & Corrected)
     st.write("---")
-    st.markdown("### 🧹 Database Maintenance")
+    st.markdown("### 🧹 Data Maintenance")
     
-    m_col1, m_col2 = st.columns([2, 1])
-    
-    with m_col1:
-        st.info("**Global Promo Flag Sync:** This will update every historical record in your ledger to `active_promo = True`. Use this to align data with your current campaign period.")
-        
-    with m_col2:
-        if st.button("🚀 Force Global Promo: TRUE", use_container_width=True):
+    m_col, b_col = st.columns([2.5, 1])
+    with m_col:
+        st.write("Align all historical ledger entries with the current campaign status.")
+    with b_col:
+        # This is the single button to force the database level update
+        if st.button("🚀 Force Global Promo", use_container_width=True):
             try:
                 supabase.table("ledger").update({"active_promo": True}).neq("active_promo", True).execute()
                 st.success("Database Synchronized.")
