@@ -345,15 +345,40 @@ with tab3:
                 
                 st.divider()
                 
-                # 4. The Main Chart: Actual vs Baseline
+                # --- 4. The Main Chart: Actual vs Baseline ---
                 st.markdown("**Revenue vs AI Prediction Baseline**")
-                chart_df = df_filtered.copy()
-                chart_df['AI Baseline'] = chart_df['predicted_traffic'] * st.session_state.coeffs['Avg_Coin_In']
-                chart_df = chart_df.rename(columns={'actual_coin_in': 'Actual Revenue', 'entry_date': 'Date'})
                 
-                # Plotting
-                st.area_chart(chart_df.set_index('Date')[['Actual Revenue', 'AI Baseline']], 
-                              color=["#FFCC00", "#555555"]) 
+                chart_df = df_filtered.copy()
+                
+                # SAFETY CHECK: Ensure we have numbers to multiply by
+                avg_spend = float(st.session_state.coeffs.get('Avg_Coin_In', 0))
+                if avg_spend == 0:
+                    st.error("⚠️ Avg Revenue per Head is set to $0 in the Admin tab. Please set a value to see revenue charts.")
+                
+                # Calculate columns, ensuring we handle NaNs (empty values)
+                chart_df['Actual Revenue'] = chart_df['actual_coin_in'].fillna(0)
+                
+                # If predicted_traffic is missing, we use 0 so the line at least exists
+                if 'predicted_traffic' in chart_df.columns:
+                    chart_df['AI Baseline'] = chart_df['predicted_traffic'].fillna(0) * avg_spend
+                else:
+                    chart_df['AI Baseline'] = 0
+                
+                # Rename Date for display
+                chart_df = chart_df.rename(columns={'entry_date': 'Date'})
+                
+                # Final verification: Are there actually numbers?
+                if chart_df['Actual Revenue'].sum() == 0 and chart_df['AI Baseline'].sum() == 0:
+                    st.warning("📊 Data is loaded, but 'Actual Revenue' and 'Baseline' are both zero. Check your column mapping in the Bulk Uploader.")
+                else:
+                    st.area_chart(chart_df.set_index('Date')[['Actual Revenue', 'AI Baseline']], 
+                                  color=["#FFCC00", "#555555"]) 
+
+                # --- 5. DATA DEBUGGER (Temporary) ---
+                with st.expander("🛠️ Debug: What is the AI seeing?"):
+                    st.write("First 5 rows of data used for this chart:")
+                    st.dataframe(chart_df[['Date', 'actual_coin_in', 'predicted_traffic', 'Actual Revenue', 'AI Baseline']].head())
+                    st.write(f"Current Multiplier (Avg_Coin_In): ${avg_spend}") 
                 
                 # 5. ROI Breakdown
                 st.markdown("**Digital ROI Impact**")
