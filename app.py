@@ -476,22 +476,37 @@ with tab4:
         </div>
     """, unsafe_allow_html=True)
 
-    # 2. AI ENGINE STATUS COMPONENT
-    # This provides a quick visual check that FloorCast is live
+    c = st.session_state.coeffs
+
+    # 2. AI REALITY STATUS (TOP BAR)
+    # This calculates the current model accuracy based on your current coefficients
+    if ledger_data:
+        df_acc = pd.DataFrame(ledger_data).copy()
+        df_acc['entry_date'] = pd.to_datetime(df_acc['entry_date'])
+        
+        # Quick accuracy math for the status bar
+        def quick_pred(row):
+            dow_key = f"DOW_{row['entry_date'].strftime('%a')}"
+            return (c['Intercept'] + c.get(dow_key, 0) + (row.get('temp_c', 0) * c['Temp_C']) + (c['Promo']))
+            
+        df_acc['pred'] = df_acc.apply(quick_pred, axis=1)
+        df_acc['error'] = abs(df_acc['actual_traffic'] - df_acc['pred']) / df_acc['actual_traffic']
+        current_accuracy = max(0, (1 - df_acc['error'].mean()) * 100)
+    else:
+        current_accuracy = 0
+
     s1, s2, s3 = st.columns(3)
     with s1:
         st.write("🛰️ **Model Connectivity**")
         st.success("FloorCast: ONLINE")
     with s2:
-        st.write("📊 **Ledger Depth**")
-        ledger_count = len(ledger_data) if ledger_data else 0
-        st.info(f"{ledger_count} Records Synced")
+        st.write("🎯 **Current Model Accuracy**")
+        st.metric("Live Precision", f"{current_accuracy:.1f}%")
     with s3:
         st.write("🧠 **Intelligence Layer**")
-        st.write("Gemini 2.5 Flash Active")
+        st.info("Gemini 1.5 Flash Active")
 
     st.write("##")
-    c = st.session_state.coeffs
 
     # 3. THE BENTO CONTROL CENTER
     col_fin, col_dig, col_env = st.columns(3)
@@ -534,7 +549,6 @@ with tab4:
                 "Impressions": new_imps,
                 "Avg_Coin_In": new_avg_spend
             }
-            # Permanent Supabase Update
             supabase.table("coefficients").upsert(updated_values).execute()
             st.session_state.coeffs.update(updated_values)
             st.success("✅ Engine Tuned: All changes are now permanent.")
@@ -542,22 +556,27 @@ with tab4:
         except Exception as e:
             st.error(f"Save failed: {e}")
 
-    # 5. MAINTENANCE (Cleaned & Corrected)
+    # 5. AI REALITY CHART (Historical Variance)
     st.write("---")
-    st.markdown("### 🧹 Data Maintenance")
-    
-    m_col, b_col = st.columns([2.5, 1])
-    with m_col:
-        st.write("Align all historical ledger entries with the current campaign status.")
-    with b_col:
-        # This is the single button to force the database level update
-        if st.button("🚀 Force Global Promo", use_container_width=True):
-            try:
-                supabase.table("ledger").update({"active_promo": True}).neq("active_promo", True).execute()
-                st.success("Database Synchronized.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Sync failed: {e}")
+    st.markdown("### 📊 Engine Reality Check")
+    with st.container(border=True):
+        if ledger_data:
+            chart_data = df_acc.sort_values('entry_date', ascending=False).head(20).sort_values('entry_date')
+            chart_data = chart_data.rename(columns={'actual_traffic': 'Floor Reality', 'pred': 'Model Prediction'})
+            st.line_chart(chart_data.set_index('entry_date')[['Floor Reality', 'Model Prediction']], color=["#FFCC00", "#555555"])
+            st.caption("Visualizing the gap between current Admin weights and actual property results (Last 20 Days).")
+        else:
+            st.info("Upload ledger data to see the Reality Check chart.")
+
+    # 6. MAINTENANCE
+    st.write("##")
+    if st.button("🚀 Force Global Promo: TRUE", use_container_width=True):
+        try:
+            supabase.table("ledger").update({"active_promo": True}).neq("active_promo", True).execute()
+            st.success("Database Synchronized.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Sync failed: {e}")
 
 # --- TAB 5: ASK FLOORCAST ---
 with tab5:
