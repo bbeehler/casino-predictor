@@ -481,7 +481,7 @@ with tab4:
         </div>
     """, unsafe_allow_html=True)
 
-    # 2. AI ENGINE STATUS & REALITY CALIBRATION
+# 2. AI ENGINE STATUS & REALITY CALIBRATION
     s1, s2, s3 = st.columns([1, 1, 2])
     with s1:
         st.write("🛰️ **Model Status**")
@@ -493,37 +493,32 @@ with tab4:
     with s3:
         st.write("🧠 **AI Calibration**")
         if st.button("🤖 Let AI Determine Coefficients", use_container_width=True):
-            with st.spinner("Analyzing historical patterns..."):
+            with st.spinner("Analyzing historical patterns... (Est. 10s)"):
                 try:
-                    # Provide last 60 days of context for calibration
-                    df_calc = pd.DataFrame(ledger_data).tail(60)
+                    # Optimized context for Gemini 3 Flash speed
+                    df_calc = pd.DataFrame(ledger_data).tail(100)
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    model = genai.GenerativeModel('gemini-1.5-flash')
                     
+                    # --- PLACE OPTIMIZED PROMPT HERE ---
                     prompt = f"""
-                    Analyze this ledger data for Hard Rock Ottawa: {df_calc.to_csv()}
-                    Suggest the most accurate coefficients for our model:
-                    - Intercept (Base daily traffic)
-                    - Promo (Flat lift for active promos)
-                    - Clicks (Weight per ad click)
-                    - Snow_cm (Traffic penalty per cm of snow)
-                    - Temp_C (Traffic change per degree Celsius)
-                    Return ONLY a raw JSON object. Do not include markdown formatting or backticks.
+                    SYSTEM: Act as a statistical engine. 
+                    DATA: {df_calc.to_csv(index=False)}
+                    TASK: Return only raw JSON coefficients for: Intercept, Promo, Clicks, Snow_cm, Temp_C. 
+                    NO PROSE. NO MARKDOWN.
                     """
+                    
                     response = model.generate_content(prompt)
                     
-                    # Clean the response to ensure it parses correctly
+                    # --- PLACE CLEANUP LOGIC HERE ---
                     clean_json = response.text.replace("```json", "").replace("```", "").strip()
                     suggestion = json.loads(clean_json)
                     
                     st.success("AI Calibration Complete.")
                     st.json(suggestion)
-                    st.caption("Apply these suggested values to the manual boxes below to lock them in.")
+                    st.caption("Review these weights. Update the boxes below and Save to lock them in.")
                 except Exception as e:
-                    st.error(f"AI Calibration failed: {e}")
-
-    st.write("##")
-    c = st.session_state.coeffs
+                    st.error(f"AI Calibration timed out. Refresh and try again. Error: {e}")
 
     # 3. THE BENTO CONTROL CENTER (Manual Management)
     col_fin, col_dig, col_env = st.columns(3)
