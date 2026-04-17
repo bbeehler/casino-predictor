@@ -291,81 +291,79 @@ with tab2:
         display_df['entry_date'] = display_df['entry_date'].dt.strftime('%Y-%m-%d')
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-# --- TAB 3: REPORTING & ROI ---
+# --- TAB 3: STRATEGIC REPORTING & ROI ---
 with tab3:
-    st.markdown("### 📊 Performance Analytics & ROI")
+    st.markdown("### 📊 Strategic Performance & Digital ROI")
     
     if ledger_data:
         df_rep = pd.DataFrame(ledger_data).copy()
         df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
+        df_rep = df_rep.sort_values('entry_date', ascending=False)
+
+        # 1. DATE FILTER
+        col_f1, col_f2 = st.columns(2)
+        start_rep = col_f1.date_input("Report Start", df_rep['entry_date'].min())
+        end_rep = col_f2.date_input("Report End", df_rep['entry_date'].max())
         
-        # Pull master coefficients from your Admin Tab (Excel constants)
-        c = st.session_state.coeffs
-        
-        # 1. Date Range Filter
-        min_d, max_d = df_rep['entry_date'].min().date(), df_rep['entry_date'].max().date()
-        rep_range = st.date_input("Select Reporting Period", [min_d, max_d])
-        
-        if len(rep_range) == 2:
-            start_date, end_date = pd.to_datetime(rep_range[0]), pd.to_datetime(rep_range[1])
-            mask = (df_rep['entry_date'] >= start_date) & (df_rep['entry_date'] <= end_date)
-            df_filtered = df_rep.loc[mask].copy().sort_values('entry_date')
+        mask = (df_rep['entry_date'].dt.date >= start_rep) & (df_rep['entry_date'].dt.date <= end_rep)
+        df_filtered = df_rep.loc[mask].copy()
+
+        if not df_filtered.empty:
+            # 2. DIGITAL PERFORMANCE BENTO
+            st.markdown("#### 📱 Digital Impact Metrics")
+            d1, d2, d3, d4 = st.columns(4)
             
-            if not df_filtered.empty:
-                # --- 2. THE EXCEL FORMULA ENGINE ---
-                # This mirrors your spreadsheet: = (Base + DOW + Weather + Promo) * AvgSpend
-                def get_excel_baseline(row):
-                    # Get Day of Week (Mon, Tue, etc.)
-                    dow_key = f"DOW_{pd.to_datetime(row['entry_date']).strftime('%a')}"
-                    
-                    # 1. Base Traffic + Day of Week Offset
-                    base_traffic = float(c['Intercept'] + c.get(dow_key, 0))
-                    
-                    # 2. Weather Impact (Temp + Snow)
-                    weather_impact = float((row.get('temp_c', 0) * c['Temp_C']) + (row.get('snow_cm', 0) * c['Snow_cm']))
-                    
-                    # 3. Promotion Lift
-                    promo_lift = float(c['Promo'] if row.get('active_promo', False) else 0)
-                    
-                    # Total Predicted Traffic (The 'Excel Forecast' column)
-                    total_traffic_forecast = base_traffic + weather_impact + promo_lift
-                    
-                    # Return Revenue: Forecast * Avg Spend
-                    return total_traffic_forecast * float(c['Avg_Coin_In'])
+            # Summing the Digital metrics
+            total_imps = df_filtered['ad_impressions'].sum()
+            total_clks = df_filtered['ad_clicks'].sum()
+            total_engs = df_filtered['social_engagements'].sum()
+            total_rev = df_filtered['actual_coin_in'].sum()
+            
+            with d1:
+                st.metric("Ad Impressions", f"{total_imps:,.0f}")
+            with d2:
+                st.metric("Ad Clicks", f"{total_clks:,.0f}")
+            with d3:
+                st.metric("Social Engagements", f"{total_engs:,.0f}")
+            with d4:
+                # Calculate Revenue per Click (Direct ROI)
+                rpc = total_rev / total_clks if total_clks > 0 else 0
+                st.metric("Rev per Click", f"${rpc:.2f}")
 
-                # Apply the formula to every row to create the 'AI Baseline' column
-                df_filtered['excel_baseline_rev'] = df_filtered.apply(get_excel_baseline, axis=1)
-                
-                # --- 3. METRIC CALCULATIONS ---
-                actual_revenue = pd.to_numeric(df_filtered['actual_coin_in'], errors='coerce').fillna(0).sum()
-                baseline_revenue = df_filtered['excel_baseline_rev'].sum()
-                
-                variance = actual_revenue - baseline_revenue
-                pct_variance = (variance / baseline_revenue * 100) if baseline_revenue != 0 else 0.0
+            st.divider()
 
-                # --- 4. DISPLAY (EXECUTIVE VIEW) ---
-                m1, m2, m3 = st.columns(3)
-                with m1:
-                    with st.container(border=True):
-                        st.metric("Actual Total Revenue", f"${actual_revenue:,.0f}")
-                with m2:
-                    with st.container(border=True):
-                        st.metric("AI Baseline Revenue", f"${baseline_revenue:,.0f}")
-                with m3:
-                    with st.container(border=True):
-                        st.metric("Revenue Variance", f"${variance:,.0f}", delta=f"{pct_variance:.1f}%")
+            # 3. AI VARIANCE ANALYSIS
+            st.markdown("#### 🎯 AI Prediction vs. Property Reality")
+            
+            # Recalculate AI Baseline live for the report
+            c = st.session_state.coeffs
+            def get_pred(row):
+                dow_key = f"DOW_{pd.to_datetime(row['entry_date']).strftime('%a')}"
+                return c['Intercept'] + c.get(dow_key, 0) + (row.get('temp_c', 0) * c['Temp_C']) + (c['Promo'] if row.get('active_promo', False) else 0)
 
-                st.divider()
+            df_filtered['ai_baseline'] = df_filtered.apply(get_pred, axis=1)
+            df_filtered['variance'] = df_filtered['actual_traffic'] - df_filtered['ai_baseline']
+            
+            v1, v2 = st.columns(2)
+            total_var = df_filtered['variance'].sum()
+            v1.metric("Total Traffic Variance", f"{total_var:,.0f}", delta=f"{total_var:,.0f} vs Baseline")
+            
+            # 4. CHARTING THE LIFT
+            chart_rep = df_filtered.sort_values('entry_date')
+            chart_rep = chart_rep.rename(columns={'actual_traffic': 'Actual Traffic', 'ai_baseline': 'AI Baseline'})
+            st.area_chart(chart_rep.set_index('entry_date')[['Actual Traffic', 'AI Baseline']], color=["#FFCC00", "#555555"])
 
-                # --- 5. THE CHART ---
-                st.markdown("**Revenue vs AI Prediction Baseline (Excel Logic)**")
-                chart_df = df_filtered.copy()
-                chart_df = chart_df.rename(columns={'actual_coin_in': 'Actual Revenue', 'entry_date': 'Date'})
-                
-                st.area_chart(chart_df.set_index('Date')[['Actual Revenue', 'excel_baseline_rev']], 
-                              color=["#FFCC00", "#555555"])
-            else:
-                st.warning("Select a date range that contains data.")
+            # 5. EXPORT
+            st.download_button(
+                label="📥 Export Custom ROI Report (CSV)",
+                data=df_filtered.to_csv(index=False),
+                file_name=f"FloorPace_ROI_{start_rep}_to_{end_rep}.csv",
+                mime="text/csv"
+            )
+        else:
+            st.warning("No data found for the selected date range.")
+    else:
+        st.info("Historical data required to generate ROI reports.")
 
 # --- TAB 4: ADMIN ENGINE (MASTER CONTROL & IMPORTER) ---
 with tab4:
