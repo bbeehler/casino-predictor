@@ -559,29 +559,40 @@ with tab4:
     # Pull coefficients from session state for the input fields
     c = st.session_state.coeffs
 
-    # 2. BENTO CONTROL CENTER
+# 3. BENTO CONTROL CENTER (With Type-Safety Fix)
+    c = st.session_state.coeffs
+    
+    # Helper function to prevent TypeErrors
+    def safe_float(val):
+        try:
+            return float(pd.to_numeric(val, errors='coerce')) if val is not None else 0.0
+        except:
+            return 0.0
+
     col_fin, col_dig, col_env = st.columns(3)
 
     with col_fin:
         with st.container(border=True):
             st.markdown("💰 **Financial & Baseline**")
-            # Using value=c.get(...) ensures the AI-calculated numbers appear here
-            new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 0)))
-            new_avg_spend = st.number_input("Avg. Spend per Head ($)", value=float(c.get('Avg_Coin_In', 0)))
+            new_intercept = st.number_input("Base Daily Traffic", value=safe_float(c.get('Intercept', 0)))
+            new_avg_spend = st.number_input("Avg. Spend per Head ($)", value=safe_float(c.get('Avg_Coin_In', 0)))
+            st.caption("Baseline floor performance.")
 
     with col_dig:
         with st.container(border=True):
             st.markdown("🚀 **Digital Marketing Weights**")
-            new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
-            new_clicks = st.number_input("Weight / Ad Click", value=float(c.get('Clicks', 0)))
-            new_imps = st.number_input("Weight / 1k Imps", value=float(c.get('Impressions', 0)), format="%.4f")
+            new_promo = st.number_input("Promo Flat Lift", value=safe_float(c.get('Promo', 0)))
+            new_clicks = st.number_input("Weight / Ad Click", value=safe_float(c.get('Clicks', 0)))
+            new_imps = st.number_input("Weight / 1k Imps", value=safe_float(c.get('Impressions', 0)), format="%.4f")
+            st.caption("Weights driving Marketing ROI.")
 
     with col_env:
         with st.container(border=True):
             st.markdown("☁️ **Environmental Impact**")
-            new_temp = st.number_input("Temp Impact (°C)", value=float(c.get('Temp_C', 0)))
-            new_snow = st.number_input("Snow Impact (cm)", value=float(c.get('Snow_cm', 0)))
-            new_rain = st.number_input("Rain Impact (mm)", value=float(c.get('Rain_mm', 0)))
+            new_temp = st.number_input("Temp Impact (°C)", value=safe_float(c.get('Temp_C', 0)))
+            new_snow = st.number_input("Snow Impact (cm)", value=safe_float(c.get('Snow_cm', 0)))
+            new_rain = st.number_input("Rain Impact (mm)", value=safe_float(c.get('Rain_mm', 0)))
+            st.caption("Ottawa weather adjustments.")
 
     # 3. PERMANENT DATABASE SYNC
     st.write("##")
