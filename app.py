@@ -488,7 +488,7 @@ with tab4:
         st.info(f"{ledger_count} Records Synced")
     with s3:
         st.write("🧠 **Intelligence Layer**")
-        st.write("Gemini 1.5 Flash Active")
+        st.write("Gemini 2.5 Flash Active")
 
     st.write("##")
     c = st.session_state.coeffs
