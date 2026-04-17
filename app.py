@@ -119,7 +119,7 @@ with tab1:
             total_traffic = df_ytd['actual_traffic'].sum()
             lift_percentage = (total_lift / total_traffic * 100) if total_traffic > 0 else 0
 
-            # --- 2. EXECUTIVE KPI BENTO BOX ---
+            # --- 2. EXECUTIVE KPI BENTO BOX (Cleaned) ---
             col1, col2, col3 = st.columns(3)
             
             with col1:
@@ -138,9 +138,8 @@ with tab1:
                 with st.container(border=True):
                     st.markdown("🚀 **Digital Lift Contribution**")
                     st.metric("Lift Visitors", f"{total_lift:,.0f}", f"{lift_percentage:.1f}% of Total")
-                    st.help("This represents visitors attributed specifically to Digital Marketing and Promotions.")
-
-            st.markdown("---")
+                    # Use a simple caption instead of help to avoid the python doc leak
+                    st.write('<p style="color: #888; font-size: 0.8rem;">Visitors attributed to Digital Marketing & Promotions.</p>', unsafe_allow_html=True)
 
             # --- 3. TRENDS & VISUALS (Fixed NameError) ---
             t1, t2 = st.columns([2, 1])
