@@ -83,42 +83,54 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "💬 Ask AI"
 ])
 
-# --- EXECUTIVE DASHBOARD: AI ACCURACY SECTION ---
-        with col_accuracy:
-            # 1. Pull the optimized coefficients
-            c = st.session_state.coeffs
-            df_acc = pd.DataFrame(ledger_data)
-            
-            if not df_acc.empty:
-                # 2. RE-CALCULATE PREDICTIONS BASED ON CURRENT AI LOGIC
-                def get_live_pred(row):
-                    dow_key = f"DOW_{pd.to_datetime(row['entry_date']).strftime('%a')}"
-                    base = c['Intercept'] + c.get(dow_key, 0)
-                    weather = (row.get('temp_c', 0) * c['Temp_C'])
-                    promo = c['Promo'] if row.get('active_promo', False) else 0
-                    return base + weather + promo
+# --- TAB 1: EXECUTIVE DASHBOARD ---
+with tab1:
+    st.header("🏢 Property Executive Overview")
+    
+    if ledger_data:
+        df_exec = pd.DataFrame(ledger_data)
+        df_exec['entry_date'] = pd.to_datetime(df_exec['entry_date'])
+        df_exec = df_exec.sort_values('entry_date', ascending=False)
+        
+        # 1. TOP ROW: PRIMARY KPI CARDS
+        kpi1, kpi2, kpi3 = st.columns(3)
+        
+        # Calculate Live Accuracy (The Automatic AI Logic)
+        c = st.session_state.coeffs
+        def get_live_val(row):
+            dow_key = f"DOW_{pd.to_datetime(row['entry_date']).strftime('%a')}"
+            return c['Intercept'] + c.get(dow_key, 0) + (row.get('temp_c', 0) * c['Temp_C']) + (c['Promo'] if row.get('active_promo', False) else 0)
 
-                df_acc['live_pred'] = df_acc.apply(get_live_pred, axis=1)
-                df_acc['actual_traffic'] = pd.to_numeric(df_acc['actual_traffic'], errors='coerce').fillna(0)
-                
-                # 3. CALCULATE MEAN ABSOLUTE PERCENTAGE ERROR (MAPE)
-                # Filter out zeros to avoid division by zero errors
-                df_calc = df_acc[df_acc['actual_traffic'] > 0].copy()
-                if not df_calc.empty:
-                    df_calc['error'] = abs(df_calc['actual_traffic'] - df_calc['live_pred']) / df_calc['actual_traffic']
-                    mape = df_calc['error'].mean()
-                    accuracy_pct = max(0, (1 - mape) * 100)
-                else:
-                    accuracy_pct = 0
-                
-                # 4. DISPLAY THE LIVE GAUGE
-                st.metric("Model Prediction Accuracy", f"{accuracy_pct:.1f}%", 
-                          delta="Live Sync Active", delta_color="normal")
-                
-                # Visual Progress Bar for Accuracy
-                st.progress(accuracy_pct / 100)
-            else:
-                st.write("No historical data to calculate accuracy.")
+        df_exec['live_pred'] = df_exec.apply(get_live_val, axis=1)
+        df_exec['actual_traffic'] = pd.to_numeric(df_exec['actual_traffic'], errors='coerce').fillna(0)
+        
+        # Accuracy Math
+        df_calc = df_exec[df_exec['actual_traffic'] > 0].copy()
+        if not df_calc.empty:
+            df_calc['error'] = abs(df_calc['actual_traffic'] - df_calc['live_pred']) / df_calc['actual_traffic']
+            accuracy_pct = max(0, (1 - df_calc['error'].mean()) * 100)
+        else:
+            accuracy_pct = 0.0
+
+        with kpi1:
+            st.metric("AI Model Accuracy", f"{accuracy_pct:.1f}%")
+        with kpi2:
+            latest_rev = pd.to_numeric(df_exec['actual_coin_in'], errors='coerce').fillna(0).iloc[0]
+            st.metric("Latest Daily Revenue", f"${latest_rev:,.0f}")
+        with kpi3:
+            latest_traffic = df_exec['actual_traffic'].iloc[0]
+            st.metric("Latest Floor Traffic", f"{latest_traffic:,.0f}")
+
+        st.divider()
+
+        # 2. MIDDLE ROW: THE PERFORMANCE TREND
+        st.subheader("7-Day Performance Trend")
+        chart_data = df_exec.head(7).copy()
+        chart_data = chart_data.rename(columns={'actual_traffic': 'Actual', 'live_pred': 'AI Prediction', 'entry_date': 'Date'})
+        st.line_chart(chart_data.set_index('Date')[['Actual', 'AI Prediction']], color=["#FFCC00", "#555555"])
+
+    else:
+        st.info("Awaiting data ingestion to populate Executive Dashboard.")
 
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
