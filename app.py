@@ -326,20 +326,20 @@ with tab3:
                         return pd.to_numeric(df[col_name], errors='coerce').fillna(0).sum()
                     return 0.0
 
-                # 2. Key Metric Calculations
+                # --- 2. THE BASELINE AUDIT ---
                 actual_coin = safe_get_sum(df_filtered, 'actual_coin_in')
                 pred_traffic = safe_get_sum(df_filtered, 'predicted_traffic')
                 
-                # FALLBACK: If predicted_traffic is 0, let's use actual_traffic 
-                # as a baseline so the chart at least shows something.
-                if pred_traffic == 0:
-                    pred_traffic = safe_get_sum(df_filtered, 'actual_traffic')
-                
-                # Get multiplier from Admin Tab (Default to 112 if empty)
+                # Retrieve the multiplier - Check if it's accidentally too high/low
                 avg_spend = float(st.session_state.coeffs.get('Avg_Coin_In', 112.0))
                 
+                # Calculate
                 actual_rev = float(actual_coin)
                 base_rev = float(pred_traffic * avg_spend)
+                
+                # DEBUG TOOL: Let's see the raw numbers (You can delete this later)
+                st.info(f"🔍 Audit: Traffic ({pred_traffic:,.0f}) x Spend (${avg_spend}) = Baseline (${base_rev:,.0f})")
+                
                 variance_val = actual_rev - base_rev
                 pct_var = (variance_val / base_rev * 100) if base_rev != 0 else 0.0
                 
