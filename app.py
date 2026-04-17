@@ -119,7 +119,7 @@ with tab1:
             total_traffic = df_ytd['actual_traffic'].sum()
             lift_percentage = (total_lift / total_traffic * 100) if total_traffic > 0 else 0
 
-            # --- 2. EXECUTIVE KPI BENTO BOX (Cleaned) ---
+            # --- 2. EXECUTIVE KPI BENTO BOX (Revenue & Digital Focus) ---
             col1, col2, col3 = st.columns(3)
             
             with col1:
@@ -137,9 +137,36 @@ with tab1:
             with col3:
                 with st.container(border=True):
                     st.markdown("🚀 **Digital Lift Contribution**")
+                    # Headcount Metric
                     st.metric("Lift Visitors", f"{total_lift:,.0f}", f"{lift_percentage:.1f}% of Total")
-                    # Use a simple caption instead of help to avoid the python doc leak
-                    st.write('<p style="color: #888; font-size: 0.8rem;">Visitors attributed to Digital Marketing & Promotions.</p>', unsafe_allow_html=True)
+                    
+                    # Calculate Digital Revenue Impact
+                    # Logic: Lift Visitors * Avg Spend Coefficient
+                    digital_rev_impact = total_lift * c['Avg_Coin_In']
+                    
+                    st.markdown(f"""
+                        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #333;">
+                            <p style="color: #888; font-size: 0.8rem; margin: 0;">Attributed Revenue Impact</p>
+                            <h3 style="color: #FFCC00; margin: 0;">${digital_rev_impact:,.0f}</h3>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+            st.markdown("---")
+            
+            # --- 3. CLEAN ANALYST VIEW (Removing Bar Chart) ---
+            # We'll use this space for a clean summary since the chart is gone
+            sum_col1, sum_col2 = st.columns([1, 1])
+            with sum_col1:
+                with st.container(border=True):
+                    st.markdown("#### 🤖 FloorCast Executive Summary")
+                    st.write(f"Digital strategy is generating an average lift of **{int(total_lift / len(df_ytd))}** visitors per day.")
+                    st.write(f"At an average spend of **${c['Avg_Coin_In']}**, marketing efforts are a significant driver of the YTD variance.")
+            
+            with sum_col2:
+                with st.container(border=True):
+                    st.markdown("#### 🎯 Model Performance")
+                    st.write(f"Current Model Accuracy: **{accuracy_pct:.1f}%**")
+                    st.info("The AI Baseline is currently factoring in weather, calendar cycles, and your digital coefficients.")
 
             # --- 3. TRENDS & VISUALS (Fixed NameError) ---
             t1, t2 = st.columns([2, 1])
