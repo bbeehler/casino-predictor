@@ -88,89 +88,69 @@ with tab1:
     st.markdown("### 🏢 Executive Strategy Command")
     
     if ledger_data:
-        # 1. DATA PREP & SORTING
+        # 1. DATA PREP
         df_exec = pd.DataFrame(ledger_data).copy()
         df_exec['entry_date'] = pd.to_datetime(df_exec['entry_date'])
-        # Sort by date so index 0 is always the absolute latest entry
-        df_exec = df_exec.sort_values('entry_date', ascending=False).reset_index(drop=True)
-        st.write("🛠️ DEBUG: What is the app seeing in the first row?", df_exec.head(1))
         
-        # 2. THE AI ENGINE SYNC (Live Accuracy Calculation)
-        c = st.session_state.coeffs
-        def get_live_val(row):
-            dow_key = f"DOW_{pd.to_datetime(row['entry_date']).strftime('%a')}"
-            base = c['Intercept'] + c.get(dow_key, 0)
-            weather = (row.get('temp_c', 0) * c['Temp_C'])
-            promo = c['Promo'] if row.get('active_promo', False) else 0
-            return base + weather + promo
-
-        df_exec['live_pred'] = df_exec.apply(get_live_val, axis=1)
+        # Ensure we are looking at numbers
         df_exec['actual_traffic'] = pd.to_numeric(df_exec['actual_traffic'], errors='coerce').fillna(0)
+        df_exec['actual_coin_in'] = pd.to_numeric(df_exec['actual_coin_in'], errors='coerce').fillna(0)
         
-        # Calculate Accuracy (MAPE)
-        df_calc = df_exec[df_exec['actual_traffic'] > 0].copy()
-        if not df_calc.empty:
-            df_calc['error'] = abs(df_calc['actual_traffic'] - df_calc['live_pred']) / df_calc['actual_traffic']
-            accuracy_pct = max(0, (1 - df_calc['error'].mean()) * 100)
+        # 2. FIND THE LATEST VALID DATA (The 'Deep Scan')
+        # We look for the most recent row where traffic is GREATER THAN zero
+        df_valid = df_exec[df_exec['actual_traffic'] > 0].sort_values('entry_date', ascending=False)
+        
+        if not df_valid.empty:
+            latest_row = df_valid.iloc[0]
+            
+            # 3. LIVE AI ACCURACY MATH
+            c = st.session_state.coeffs
+            def get_live_val(row):
+                dow_key = f"DOW_{pd.to_datetime(row['entry_date']).strftime('%a')}"
+                base = c['Intercept'] + c.get(dow_key, 0)
+                weather = (row.get('temp_c', 0) * c['Temp_C'])
+                promo = c['Promo'] if row.get('active_promo', False) else 0
+                return base + weather + promo
+
+            # Apply prediction to the whole valid dataset to get average accuracy
+            df_valid['live_pred'] = df_valid.apply(get_live_val, axis=1)
+            df_valid['error'] = abs(df_valid['actual_traffic'] - df_valid['live_pred']) / df_valid['actual_traffic']
+            accuracy_pct = max(0, (1 - df_valid['error'].mean()) * 100)
+
+            # 4. EXECUTIVE KPI BENTO BOX
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                with st.container(border=True):
+                    st.markdown("🎯 **AI Model Accuracy**")
+                    st.metric("System Reliability", f"{accuracy_pct:.1f}%")
+                    st.progress(min(max(accuracy_pct / 100, 0.0), 1.0))
+            with col2:
+                with st.container(border=True):
+                    st.markdown("💰 **Latest Revenue**")
+                    st.metric("Daily Coin-In", f"${latest_row['actual_coin_in']:,.0f}")
+                    st.caption(f"Date: {latest_row['entry_date'].strftime('%Y-%m-%d')}")
+            with col3:
+                with st.container(border=True):
+                    st.markdown("🚶 **Floor Traffic**")
+                    st.metric("Actual Visitors", f"{latest_row['actual_traffic']:,.0f}")
+                    st.caption("Property Foot Traffic")
+
+            st.markdown("---")
+
+            # 5. TREND VISUALIZATION
+            t1, t2 = st.columns([2, 1])
+            with t1:
+                st.markdown("#### 📈 7-Day Performance vs. AI Baseline")
+                chart_data = df_valid.head(7).copy().sort_values('entry_date')
+                chart_data = chart_data.rename(columns={'actual_traffic': 'Actual', 'live_pred': 'AI Prediction', 'entry_date': 'Date'})
+                st.area_chart(chart_data.set_index('Date')[['Actual', 'AI Prediction']], color=["#FFCC00", "#555555"])
+            with t2:
+                st.markdown("#### 🤖 AI Analyst Status")
+                st.info(f"The model is currently syncing with {len(df_valid)} historical records. Accuracy is based on Live Coefficients.")
         else:
-            accuracy_pct = 0.0
-
-        # 3. EXECUTIVE KPI BENTO BOX
-        col1, col2, col3 = st.columns(3)
-        
-        # Select the latest record safely
-        latest_row = df_exec.iloc[0] if not df_exec.empty else None
-
-        with col1:
-            with st.container(border=True):
-                st.markdown("🎯 **AI Model Accuracy**")
-                st.metric("System Reliability", f"{accuracy_pct:.1f}%")
-                st.progress(min(max(accuracy_pct / 100, 0.0), 1.0))
-        
-        with col2:
-            with st.container(border=True):
-                st.markdown("💰 **Latest Revenue**")
-                rev_val = pd.to_numeric(latest_row['actual_coin_in'], errors='coerce') if latest_row is not None else 0
-                st.metric("Daily Coin-In", f"${float(rev_val):,.0f}")
-                date_str = latest_row['entry_date'].strftime('%Y-%m-%d') if latest_row is not None else "N/A"
-                st.caption(f"Data Date: {date_str}")
-        
-        with col3:
-            with st.container(border=True):
-                st.markdown("🚶 **Floor Traffic**")
-                tix_val = pd.to_numeric(latest_row['actual_traffic'], errors='coerce') if latest_row is not None else 0
-                st.metric("Actual Visitors", f"{float(tix_val):,.0f}")
-                st.caption("Property Foot Traffic")
-
-        st.markdown("---")
-
-        # 4. TREND VISUALIZATION & INSIGHTS
-        t1, t2 = st.columns([2, 1])
-        
-        with t1:
-            st.markdown("#### 📈 7-Day Performance vs. AI Baseline")
-            # Show the last 7 entries
-            chart_data = df_exec.head(7).copy().sort_values('entry_date')
-            chart_data = chart_data.rename(columns={
-                'actual_traffic': 'Actual Traffic', 
-                'live_pred': 'AI Prediction', 
-                'entry_date': 'Date'
-            })
-            st.area_chart(chart_data.set_index('Date')[['Actual Traffic', 'AI Prediction']], 
-                          color=["#FFCC00", "#555555"])
-
-        with t2:
-            st.markdown("#### 🤖 AI Analyst Status")
-            if accuracy_pct > 85:
-                st.success(f"Model Integrity: High. The AI has successfully correlated your DOW and Weather patterns to real traffic.")
-            elif accuracy_pct > 60:
-                st.warning("Model Integrity: Fair. Consider a 'Sync AI to Reality' in the Admin tab to tighten the prediction gap.")
-            else:
-                st.error("Model Integrity: Low. Current coefficients do not match property reality. Recalibration required.")
-                
+            st.warning("⚠️ Database connected, but no rows with Traffic > 0 were found. Please check your data in the Admin Tab.")
     else:
-        st.info("No data found. Please log an entry or upload a CSV to activate the Executive Dashboard.")
-
+        st.info("No data found in the Ledger.")
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
     st.markdown("### 🕹️ FloorPace Control Panel")
