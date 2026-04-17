@@ -305,35 +305,37 @@ with tab3:
     st.markdown("### 📊 Performance Analytics & ROI")
     
     if ledger_data:
-        df_rep = pd.DataFrame(ledger_data)
+        # Create a fresh copy to avoid Pandas data-type warnings
+        df_rep = pd.DataFrame(ledger_data).copy()
         df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
         
         # 1. Date Range Filter
-        min_date = df_rep['entry_date'].min().date()
-        max_date = df_rep['entry_date'].max().date()
-        rep_range = st.date_input("Select Reporting Period", [min_date, max_date])
+        min_d, max_d = df_rep['entry_date'].min().date(), df_rep['entry_date'].max().date()
+        rep_range = st.date_input("Select Reporting Period", [min_d, max_d])
         
         if len(rep_range) == 2:
             start_date, end_date = pd.to_datetime(rep_range[0]), pd.to_datetime(rep_range[1])
             mask = (df_rep['entry_date'] >= start_date) & (df_rep['entry_date'] <= end_date)
-            df_filtered = df_rep.loc[mask].sort_values('entry_date')
+            df_filtered = df_rep.loc[mask].copy().sort_values('entry_date')
             
             if not df_filtered.empty:
-                # --- 2. Key Metric Calculations (Aggressive Mapping) ---
-                # This handles cases where the column might be named differently in the CSV
-                actual_col = 'actual_coin_in' if 'actual_coin_in' in df_filtered.columns else df_filtered.columns[1]
-                pred_col = 'predicted_traffic' if 'predicted_traffic' in df_filtered.columns else df_filtered.columns[2]
+                # Helper to handle "dirty" data or missing columns
+                def safe_get_sum(df, col_name):
+                    if col_name in df.columns:
+                        return pd.to_numeric(df[col_name], errors='coerce').fillna(0).sum()
+                    return 0.0
 
-                # Force to numeric and handle NaN
-                df_filtered['actual_coin_in'] = pd.to_numeric(df_filtered[actual_col], errors='coerce').fillna(0)
-                df_filtered['predicted_traffic'] = pd.to_numeric(df_filtered[pred_col], errors='coerce').fillna(0)
-
-                actual_rev = float(df_filtered['actual_coin_in'].sum())
+                # 2. Key Metric Calculations
+                actual_coin = safe_get_sum(df_filtered, 'actual_coin_in')
+                pred_traffic = safe_get_sum(df_filtered, 'predicted_traffic')
                 
-                # Get Avg Spend from Session State or use a hard-coded fallback for the demo
+                # Get multiplier from Admin Tab (Default to 112 if empty)
                 avg_spend = float(st.session_state.coeffs.get('Avg_Coin_In', 112.0))
                 
-                base_rev = float(df_filtered['predicted_traffic'].sum() * avg_spend)
+                actual_rev = float(actual_coin)
+                base_rev = float(pred_traffic * avg_spend)
+                variance_val = actual_rev - base_rev
+                pct_var = (variance_val / base_rev * 100) if base_rev != 0 else 0.0
                 
                 # 3. Top-Level Metrics
                 m1, m2, m3 = st.columns(3)
@@ -343,52 +345,27 @@ with tab3:
                 
                 st.divider()
                 
-                # --- 4. The Main Chart: Actual vs Baseline ---
+                # 4. The Revenue Chart
                 st.markdown("**Revenue vs AI Prediction Baseline**")
-                
                 chart_df = df_filtered.copy()
+                chart_df['Actual Revenue'] = pd.to_numeric(chart_df['actual_coin_in'], errors='coerce').fillna(0)
+                chart_df['AI Baseline'] = pd.to_numeric(chart_df['predicted_traffic'], errors='coerce').fillna(0) * avg_spend
                 
-                # SAFETY CHECK: Ensure we have numbers to multiply by
-                avg_spend = float(st.session_state.coeffs.get('Avg_Coin_In', 0))
-                if avg_spend == 0:
-                    st.error("⚠️ Avg Revenue per Head is set to $0 in the Admin tab. Please set a value to see revenue charts.")
+                # Plotting Actuals (Gold) and Baseline (Gray)
+                st.area_chart(chart_df.set_index('entry_date')[['Actual Revenue', 'AI Baseline']], 
+                              color=["#FFCC00", "#555555"])
                 
-                # Calculate columns, ensuring we handle NaNs (empty values)
-                chart_df['Actual Revenue'] = chart_df['actual_coin_in'].fillna(0)
-                
-                # If predicted_traffic is missing, we use 0 so the line at least exists
-                if 'predicted_traffic' in chart_df.columns:
-                    chart_df['AI Baseline'] = chart_df['predicted_traffic'].fillna(0) * avg_spend
-                else:
-                    chart_df['AI Baseline'] = 0
-                
-                # Rename Date for display
-                chart_df = chart_df.rename(columns={'entry_date': 'Date'})
-                
-                # Final verification: Are there actually numbers?
-                if chart_df['Actual Revenue'].sum() == 0 and chart_df['AI Baseline'].sum() == 0:
-                    st.warning("📊 Data is loaded, but 'Actual Revenue' and 'Baseline' are both zero. Check your column mapping in the Bulk Uploader.")
-                else:
-                    st.area_chart(chart_df.set_index('Date')[['Actual Revenue', 'AI Baseline']], 
-                                  color=["#FFCC00", "#555555"]) 
-
-                # --- 5. DATA DEBUGGER (Temporary) ---
-                with st.expander("🛠️ Debug: What is the AI seeing?"):
-                    st.write("First 5 rows of data used for this chart:")
-                    st.dataframe(chart_df[['Date', 'actual_coin_in', 'predicted_traffic', 'Actual Revenue', 'AI Baseline']].head())
-                    st.write(f"Current Multiplier (Avg_Coin_In): ${avg_spend}") 
-                
-                # 5. ROI Breakdown
-                st.markdown("**Digital ROI Impact**")
+                # 5. Digital ROI Impact
+                st.markdown("**Digital Marketing Impact**")
                 ri1, ri2 = st.columns(2)
                 with ri1:
-                    lift_v = df_filtered['digital_lift_visitors'].sum() if 'digital_lift_visitors' in df_filtered.columns else 0
-                    st.metric("Estimated Digital Lift (Visitors)", f"{lift_v:,.0f}")
+                    lift_v = safe_get_sum(df_filtered, 'digital_lift_visitors')
+                    st.metric("Est. Digital Lift (Visitors)", f"{lift_v:,.0f}")
                 with ri2:
-                    lift_cash = float(lift_v * st.session_state.coeffs['Avg_Coin_In'])
-                    st.metric("Estimated Digital ROI ($)", f"${lift_cash:,.0f}")
+                    lift_cash = float(lift_v * avg_spend)
+                    st.metric("Est. Digital ROI ($)", f"${lift_cash:,.0f}")
             else:
-                st.warning("No data found for the selected date range.")
+                st.warning("No data found for this range.")
     else:
         st.info("Log data in the Tracker to view reporting.")
 
