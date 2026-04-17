@@ -495,6 +495,43 @@ with tab4:
     with st.expander("📥 Backup Engine Configuration"):
         st.json(st.session_state.coeffs)
 
+st.markdown("---")
+    # 3. THE BULK DATA IMPORTER
+    with st.expander("📥 Bulk Data Importer (CSV Upload)"):
+        st.write("Upload a CSV file to backfill historical digital metrics or traffic data.")
+        uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+        
+        if uploaded_file is not None:
+            df_upload = pd.read_csv(uploaded_file)
+            st.write("Preview of Uploaded Data:")
+            st.dataframe(df_upload.head(5))
+            
+            if st.button("🚀 Process & Sync to FloorPace"):
+                with st.spinner("Syncing records..."):
+                    success_count = 0
+                    for _, row in df_upload.iterrows():
+                        # Standardize the row data for Supabase
+                        upload_data = {
+                            "entry_date": str(row['entry_date']),
+                            "actual_traffic": int(row.get('actual_traffic', 0)),
+                            "actual_coin_in": float(row.get('actual_coin_in', 0.0)),
+                            "predicted_traffic": int(row.get('predicted_traffic', 0)),
+                            "temp_c": int(row.get('temp_c', 0)),
+                            "ad_impressions": int(row.get('ad_impressions', 0)),
+                            "social_engagements": int(row.get('social_engagements', 0)),
+                            "ad_clicks": int(row.get('ad_clicks', 0)),
+                            "active_promo": bool(row.get('active_promo', False))
+                        }
+                        
+                        try:
+                            supabase.table("ledger").upsert(upload_data, on_conflict="entry_date").execute()
+                            success_count += 1
+                        except:
+                            pass
+                    
+                    st.success(f"Successfully synced {success_count} records!")
+                    st.rerun()
+
 # --- TAB 5: ASK AI DATA ANALYST ---
 with tab5:
     st.markdown("### 💬 AI Data Analyst")
