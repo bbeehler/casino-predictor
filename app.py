@@ -163,9 +163,9 @@ with tab1:
 
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
-    st.markdown("### 🕹️ Property Control Panel")
+    st.markdown("### 🕹️ FloorPace Control Panel")
     
-    # We create a 2-column layout for the "Bento Box" feel
+    # Create the two-column "Bento" layout
     col_input, col_sandbox = st.columns([1, 1.2])
     
     with col_input:
@@ -189,29 +189,16 @@ with tab2:
                     eng = st.number_input("Social Engagements", 0, 10000, 500)
                     clks = st.number_input("Ad Clicks", 0, 5000, 200)
 
-                if st.form_submit_button("💾 Save Daily Records", use_container_width=True):
+                if st.form_submit_button("💾 Save to FloorPace Ledger", use_container_width=True):
                     c = st.session_state.coeffs
                     dow_key = f"DOW_{date_in.strftime('%a')}"
                     
                     # Math for Prediction
-                    base = c['Intercept'] + c.get(dow_key, 0)
-                    weather = (temp * c['Temp_C']) + (snow * c['Snow_cm'])
-                    dig_lift = (promo * c['Promo']) + (imp * c['Impressions']) + (eng * c['Engagements']) + (clks * c['Clicks'])
-                    final_pred = base + weather + dig_lift
+                    base_v = float(c['Intercept'] + c.get(dow_key, 0))
+                    weather_v = float((temp * c['Temp_C']) + (snow * c['Snow_cm']))
+                    dig_lift_v = float((promo * c['Promo']) + (imp * c['Impressions']) + (eng * c['Engagements']) + (clks * c['Clicks']))
+                    final_pred = float(base_v + weather_v + dig_lift_v)
                     
-                    if st.form_submit_button("💾 Save Daily Records", use_container_width=True):
-                    c = st.session_state.coeffs
-                    dow_key = f"DOW_{date_in.strftime('%a')}"
-                    
-                    # 1. Calculate Values using standard Python floats/ints
-                    base_val = float(c['Intercept'] + c.get(dow_key, 0))
-                    weather_val = float((temp * c['Temp_C']) + (snow * c['Snow_cm']))
-                    dig_lift_val = float((promo * c['Promo']) + (imp * c['Impressions']) + (eng * c['Engagements']) + (clks * c['Clicks']))
-                    
-                    # Final prediction
-                    final_pred = float(base_val + weather_val + dig_lift_val)
-                    
-                    # 2. THE DATA SCRUB: Force everything to standard Python types
                     data = {
                         "entry_date": str(date_in),
                         "day_of_week": str(date_in.strftime("%A")),
@@ -221,31 +208,28 @@ with tab2:
                         "variance": int(int(act_traf) - int(final_pred)),
                         "temp_c": int(temp),
                         "snow_cm": float(snow),
-                        "rain_mm": 0.0, 
+                        "rain_mm": 0.0,
                         "active_promo": bool(promo),
                         "ad_impressions": int(imp),
                         "social_engagements": int(eng),
                         "ad_clicks": int(clks),
-                        "digital_lift_visitors": int(dig_lift_val),
-                        "digital_revenue_impact": float(float(dig_lift_val) * float(c['Avg_Coin_In'])),
-                        "weather_alert": False 
+                        "digital_lift_visitors": int(dig_lift_v),
+                        "digital_revenue_impact": float(float(dig_lift_v) * float(c['Avg_Coin_In'])),
+                        "weather_alert": False
                     }
                     
-                    # 3. Execution
                     try:
                         supabase.table("ledger").upsert(data, on_conflict="entry_date").execute()
                         st.toast("✅ Record saved to FloorPace Ledger")
                         st.rerun()
                     except Exception as e:
-                        st.error("🚨 Database Sync Failed")
-                        st.write(f"Details: {e}")
+                        st.error(f"Database Sync Error: {e}")
 
     with col_sandbox:
         with st.container(border=True):
             st.subheader("🔮 2. Forecast Sandbox")
             st.write("Simulate future dates to see projected revenue.")
-            
-            f_range = st.date_input("Forecast Range", [datetime.date.today() + datetime.timedelta(days=1), datetime.date.today() + datetime.timedelta(days=7)])
+            f_range = st.date_input("Forecast Range", [datetime.date.today(), datetime.date.today() + datetime.timedelta(days=7)])
             
             s1, s2 = st.columns(2)
             sim_temp = s1.slider("Simulated Temp", -30, 40, 15)
@@ -261,21 +245,15 @@ with tab2:
                     f_list.append({"Date": d.strftime("%a %d"), "Visitors": int(p), "Revenue": p * c['Avg_Coin_In']})
                 
                 df_f = pd.DataFrame(f_list)
-                
-                v1, v2 = st.columns(2)
-                v1.metric("Est. Total Visitors", f"{df_f['Visitors'].sum():,}")
-                v2.metric("Est. Total Revenue", f"${df_f['Revenue'].sum():,.0f}")
-                
+                st.metric("Est. Total Revenue", f"${df_f['Revenue'].sum():,.0f}")
                 st.line_chart(df_f.set_index("Date")["Visitors"], color="#FFCC00")
 
-# --- SECTION 3: HISTORICAL LEDGER AUDIT & FULL-FIELD EDIT ---
+    # --- SECTION 3: AUDIT & FULL-FIELD EDIT ---
     st.markdown("### 🔍 3. Historical Ledger Audit & Corrections")
-    
     if ledger_data:
         df_edit = pd.DataFrame(ledger_data)
         df_edit['entry_date'] = pd.to_datetime(df_edit['entry_date'])
         
-        # --- PART A: THE FULL-FIELD EDITOR ---
         with st.container(border=True):
             st.markdown("**Find & Fix a Specific Entry**")
             edit_col1, edit_col2 = st.columns([1, 2])
@@ -289,69 +267,38 @@ with tab2:
             with edit_col2:
                 if not found.empty:
                     record = found.iloc[0]
-                    edit_mode = st.toggle(f"🔓 Unlock ALL FIELDS for {search_str}")
-                    
-                    if edit_mode:
+                    if st.toggle(f"🔓 Unlock ALL FIELDS for {search_str}"):
                         with st.form(f"full_edit_{search_str}"):
-                            # 3-Column Layout to fit everything
                             ec1, ec2, ec3 = st.columns(3)
-                            
                             with ec1:
-                                st.markdown("**Core Results**")
-                                up_t = st.number_input("Actual Traffic", value=int(record.get('actual_traffic', 0)))
+                                up_t = st.number_input("Traffic", value=int(record.get('actual_traffic', 0)))
                                 up_c = st.number_input("Coin-In ($)", value=float(record.get('actual_coin_in', 0.0)))
-                                up_p = st.number_input("Predicted Traffic", value=int(record.get('predicted_traffic', 0)))
-                            
+                                up_p = st.number_input("Pred. Traffic", value=int(record.get('predicted_traffic', 0)))
                             with ec2:
-                                st.markdown("**Weather Context**")
-                                up_temp = st.number_input("Temp (°C)", value=int(record.get('temp_c', 0)))
-                                up_snow = st.number_input("Snow (cm)", value=float(record.get('snow_cm', 0.0)))
-                                up_rain = st.number_input("Rain (mm)", value=float(record.get('rain_mm', 0.0)))
-                                up_alert = st.checkbox("Weather Alert", value=bool(record.get('weather_alert', False)))
-                            
+                                up_temp = st.number_input("Temp", value=int(record.get('temp_c', 0)))
+                                up_snow = st.number_input("Snow", value=float(record.get('snow_cm', 0.0)))
+                                up_alert = st.checkbox("Alert", value=bool(record.get('weather_alert', False)))
                             with ec3:
-                                st.markdown("**Digital/Promo**")
-                                up_promo = st.checkbox("Active Promo", value=bool(record.get('active_promo', False)))
+                                up_promo = st.checkbox("Promo", value=bool(record.get('active_promo', False)))
                                 up_imp = st.number_input("Impressions", value=int(record.get('ad_impressions', 0)))
-                                up_eng = st.number_input("Engagements", value=int(record.get('social_engagements', 0)))
                                 up_clk = st.number_input("Clicks", value=int(record.get('ad_clicks', 0)))
 
-                            if st.form_submit_button("💾 Save All Changes to Database", use_container_width=True):
-                                # Recalculate variance for data integrity
-                                new_var = up_t - up_p
-                                
-                                # Comprehensive Update
+                            if st.form_submit_button("💾 Save All Changes"):
                                 supabase.table("ledger").update({
-                                    "actual_traffic": up_t,
-                                    "actual_coin_in": up_c,
-                                    "predicted_traffic": up_p,
-                                    "variance": int(new_var),
-                                    "temp_c": up_temp,
-                                    "snow_cm": up_snow,
-                                    "rain_mm": up_rain,
-                                    "weather_alert": up_alert,
-                                    "active_promo": up_promo,
-                                    "ad_impressions": up_imp,
-                                    "social_engagements": up_eng,
-                                    "ad_clicks": up_clk
+                                    "actual_traffic": up_t, "actual_coin_in": up_c, "predicted_traffic": up_p,
+                                    "temp_c": up_temp, "snow_cm": up_snow, "weather_alert": up_alert,
+                                    "active_promo": up_promo, "ad_impressions": up_imp, "ad_clicks": up_clk,
+                                    "variance": int(up_t - up_p)
                                 }).eq("entry_date", search_str).execute()
-                                
-                                st.toast(f"Full record for {search_str} updated!")
+                                st.toast("Full record updated!")
                                 st.rerun()
                 else:
                     st.info("No record found for this date.")
 
-        st.markdown("---")
-        
-        # --- PART B: THE MULTI-DAY VIEW ---
         st.markdown("**Full Historical Ledger**")
         display_df = df_edit.sort_values('entry_date', ascending=False)
         display_df['entry_date'] = display_df['entry_date'].dt.strftime('%Y-%m-%d')
-        
         st.dataframe(display_df, use_container_width=True, hide_index=True)
-        
-    else:
-        st.info("Database is empty.")
 
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
