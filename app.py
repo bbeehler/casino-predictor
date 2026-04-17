@@ -471,115 +471,86 @@ import google.generativeai as genai
 import google.generativeai as genai
 import json
 
+import google.generativeai as genai
+import json
+
 # --- TAB 4: ADMIN ENGINE & DATA MANAGEMENT ---
 with tab4:
-    # 1. BRANDED HEADER
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control & Data Management</h2>
-            <p style="color: #888; margin: 0;">Calibrate Digital Lift, tune Ottawa environmental weights, and sync database records.</p>
+            <p style="color: #888; margin: 0;">AI Auto-Calibration and Manual Overrides.</p>
         </div>
     """, unsafe_allow_html=True)
 
-# 2. AI ENGINE STATUS & REALITY CALIBRATION
-    s1, s2, s3 = st.columns([1, 1, 2])
-    with s1:
-        st.write("🛰️ **Model Status**")
-        st.success("FloorCast: ONLINE")
-    with s2:
-        st.write("📊 **Ledger Depth**")
-        ledger_count = len(ledger_data) if ledger_data else 0
-        st.info(f"{ledger_count} Records")
-    with s3:
-        st.write("🧠 **AI Calibration**")
-        if st.button("🤖 Let AI Determine Coefficients", use_container_width=True):
-            with st.spinner("Analyzing historical patterns... (Est. 10s)"):
-                try:
-                    # Optimized context for Gemini 3 Flash speed
-                    df_calc = pd.DataFrame(ledger_data).tail(100)
-                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    model = genai.GenerativeModel('gemini-2.5-flash')
-                    
-                    # --- PLACE OPTIMIZED PROMPT HERE ---
-                    prompt = f"""
-                    SYSTEM: Act as a statistical engine. 
-                    DATA: {df_calc.to_csv(index=False)}
-                    TASK: Return only raw JSON coefficients for: Intercept, Promo, Clicks, Snow_cm, Temp_C. 
-                    NO PROSE. NO MARKDOWN.
-                    """
-                    
-                    response = model.generate_content(prompt)
-                    
-                    # --- PLACE CLEANUP LOGIC HERE ---
-                    clean_json = response.text.replace("```json", "").replace("```", "").strip()
-                    suggestion = json.loads(clean_json)
-                    
-                    st.success("AI Calibration Complete.")
-                    st.json(suggestion)
-                    st.caption("Review these weights. Update the boxes below and Save to lock them in.")
-                except Exception as e:
-                    st.error(f"AI Calibration timed out. Refresh and try again. Error: {e}")
+    # 1. AI CALIBRATION LOGIC
+    if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
+        with st.spinner("Gemini 3 Flash is analyzing 120+ records for optimal weights..."):
+            try:
+                df_calc = pd.DataFrame(ledger_data).tail(120)
+                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                
+                prompt = f"""
+                SYSTEM: Act as a high-precision statistical engine for Hard Rock Ottawa.
+                DATA: {df_calc.to_csv(index=False)}
+                TASK: Calculate optimal coefficients to match 'actual_traffic' based on 'temp_c', 'snow_cm', 'rain_mm', 'active_promo', and 'ad_clicks'.
+                RETURN: A single raw JSON object with these keys: 
+                Intercept, Promo, Clicks, Impressions, Temp_C, Snow_cm, Rain_mm, Avg_Coin_In.
+                NO PROSE. NO MARKDOWN.
+                """
+                response = model.generate_content(prompt)
+                
+                # Parse and force into session state
+                clean_json = response.text.replace("```json", "").replace("```", "").strip()
+                suggestion = json.loads(clean_json)
+                
+                # UPDATE THE SESSION STATE AUTOMATICALLY
+                for key, value in suggestion.items():
+                    st.session_state.coeffs[key] = value
+                
+                st.success("🎯 AI Calibration Successful: Suggested weights applied to the fields below.")
+            except Exception as e:
+                st.error(f"Calibration failed: {e}")
 
-    # 3. THE BENTO CONTROL CENTER (Manual Management)
+    # 2. BENTO CONTROL CENTER (Now using the updated session state)
+    c = st.session_state.coeffs
     col_fin, col_dig, col_env = st.columns(3)
 
     with col_fin:
         with st.container(border=True):
             st.markdown("💰 **Financial & Baseline**")
-            new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 0)))
-            new_avg_spend = st.number_input("Avg. Spend per Head ($)", value=float(c.get('Avg_Coin_In', 0)))
-            st.caption("Baseline floor performance.")
+            new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 0)), key="inp_intercept")
+            new_avg_spend = st.number_input("Avg. Spend per Head ($)", value=float(c.get('Avg_Coin_In', 0)), key="inp_spend")
 
     with col_dig:
         with st.container(border=True):
             st.markdown("🚀 **Digital Marketing Weights**")
-            new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
-            new_clicks = st.number_input("Weight / Ad Click", value=float(c.get('Clicks', 0)))
-            new_imps = st.number_input("Weight / 1k Imps", value=float(c.get('Impressions', 0)), format="%.4f")
-            st.caption("Weights driving Marketing ROI.")
+            new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)), key="inp_promo")
+            new_clicks = st.number_input("Weight / Ad Click", value=float(c.get('Clicks', 0)), key="inp_clicks")
+            new_imps = st.number_input("Weight / 1k Imps", value=float(c.get('Impressions', 0)), format="%.4f", key="inp_imps")
 
     with col_env:
         with st.container(border=True):
             st.markdown("☁️ **Environmental Impact**")
-            new_temp = st.number_input("Temp Impact (°C)", value=float(c.get('Temp_C', 0)))
-            new_snow = st.number_input("Snow Impact (cm)", value=float(c.get('Snow_cm', 0)))
-            new_rain = st.number_input("Rain Impact (mm)", value=float(c.get('Rain_mm', 0)))
-            st.caption("Ottawa weather adjustments.")
+            new_temp = st.number_input("Temp Impact (°C)", value=float(c.get('Temp_C', 0)), key="inp_temp")
+            new_snow = st.number_input("Snow Impact (cm)", value=float(c.get('Snow_cm', 0)), key="inp_snow")
+            new_rain = st.number_input("Rain Impact (mm)", value=float(c.get('Rain_mm', 0)), key="inp_rain")
 
-    # 4. SAVE ACTION
-    st.write("##")
+    # 3. PERMANENT SAVE
     if st.button("💾 Save All Engine Changes", use_container_width=True):
         try:
-            # Sync the database and the session state
             updated_values = {
-                "id": 1,
-                "Intercept": new_intercept,
-                "Temp_C": new_temp,
-                "Snow_cm": new_snow,
-                "Rain_mm": new_rain,
-                "Promo": new_promo,
-                "Clicks": new_clicks,
-                "Impressions": new_imps,
-                "Avg_Coin_In": new_avg_spend
+                "id": 1, "Intercept": new_intercept, "Temp_C": new_temp, "Snow_cm": new_snow, 
+                "Rain_mm": new_rain, "Promo": new_promo, "Clicks": new_clicks, 
+                "Impressions": new_imps, "Avg_Coin_In": new_avg_spend
             }
             supabase.table("coefficients").upsert(updated_values).execute()
             st.session_state.coeffs.update(updated_values)
-            st.success("✅ Engine Tuned: All changes pushed to database.")
+            st.success("✅ Database Synchronized.")
             st.rerun()
         except Exception as e:
             st.error(f"Save failed: {e}")
-
-    # 5. DATA MAINTENANCE (Force Global Promo)
-    st.write("---")
-    st.markdown("### 🧹 Data Maintenance")
-    if st.button("🚀 Force Global Promo: TRUE", use_container_width=True):
-        try:
-            supabase.table("ledger").update({"active_promo": True}).neq("active_promo", True).execute()
-            st.success("Database Synchronized. All records now reflect active promotion.")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Global sync failed: {e}")
-
 # --- TAB 5: ASK FLOORCAST ---
 with tab5:
     # 1. BRANDED HEADER
