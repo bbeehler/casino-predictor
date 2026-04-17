@@ -471,80 +471,77 @@ with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control & Data Management</h2>
-            <p style="color: #888; margin: 0;">Tune AI coefficients, manage overrides, and sync database records.</p>
+            <p style="color: #888; margin: 0;">Precision tuning for Digital Lift and Environmental factors.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # --- SECTION 1: COEFFICIENT TUNING ---
-    st.subheader("🛠️ AI Model Tuning (Overrides)")
-    with st.container(border=True):
-        st.write("Adjust the weights the AI uses to calculate the 'Digital Lift' and 'Baseline'.")
-        
-        c = st.session_state.coeffs
-        
-        col_a, col_b = st.columns(2)
-        
-        with col_a:
-            new_intercept = st.number_input("Base Traffic (Intercept)", value=float(c.get('Intercept', 0)))
+    c = st.session_state.coeffs
+
+    # --- 1. THE CONTROL CARDS (Bento Layout) ---
+    col_fin, col_dig, col_env = st.columns(3)
+
+    with col_fin:
+        with st.container(border=True):
+            st.markdown("💰 **Financial & Baseline**")
+            new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 0)))
+            new_avg_spend = st.number_input("Avg. Spend per Head ($)", value=float(c.get('Avg_Coin_In', 0)))
+            st.caption("Standard property performance without marketing lift.")
+
+    with col_dig:
+        with st.container(border=True):
+            st.markdown("🚀 **Digital Marketing Weights**")
+            new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
+            new_clicks = st.number_input("Weight / Ad Click", value=float(c.get('Clicks', 0)))
+            new_imps = st.number_input("Weight / 1k Imps", value=float(c.get('Impressions', 0)), format="%.4f")
+            st.caption("Values added to traffic based on campaign activity.")
+
+    with col_env:
+        with st.container(border=True):
+            st.markdown("☁️ **Environmental Impact**")
             new_temp = st.number_input("Temp Impact (°C)", value=float(c.get('Temp_C', 0)))
             new_snow = st.number_input("Snow Impact (cm)", value=float(c.get('Snow_cm', 0)))
             new_rain = st.number_input("Rain Impact (mm)", value=float(c.get('Rain_mm', 0)))
-            
-        with col_b:
-            new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
-            new_clicks = st.number_input("Weight per Ad Click", value=float(c.get('Clicks', 0)))
-            new_imps = st.number_input("Weight per 1k Impressions", value=float(c.get('Impressions', 0)), format="%.4f")
-            new_avg_spend = st.number_input("Avg. Coin-In per Visitor ($)", value=float(c.get('Avg_Coin_In', 0)))
+            st.caption("Traffic adjustments based on Ottawa weather patterns.")
 
-        if st.button("💾 Save All Engine Changes", use_container_width=True):
-            try:
-                # Payload for Supabase - Ensure ID 1 is your master record
-                updated_values = {
-                    "id": 1,
-                    "Intercept": new_intercept,
-                    "Temp_C": new_temp,
-                    "Snow_cm": new_snow,
-                    "Rain_mm": new_rain,
-                    "Promo": new_promo,
-                    "Clicks": new_clicks,
-                    "Impressions": new_imps,
-                    "Avg_Coin_In": new_avg_spend
-                }
-                
-                # Permanent Database Update
-                supabase.table("coefficients").upsert(updated_values).execute()
-                
-                # Local Session Update
-                st.session_state.coeffs.update(updated_values)
-                
-                st.success("✅ Database Synchronized: Model coefficients are now permanent.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error saving to database: {e}")
-
-    # --- SECTION 2: GLOBAL MAINTENANCE ---
+    # --- 2. ACTION BAR ---
     st.write("##")
-    st.subheader("🧹 Global Data Maintenance")
-    with st.container(border=True):
-        st.write("Bulk actions to align historical data with current marketing status.")
+    if st.button("💾 Save All Engine Changes", use_container_width=True):
+        try:
+            updated_values = {
+                "id": 1,
+                "Intercept": new_intercept,
+                "Temp_C": new_temp,
+                "Snow_cm": new_snow,
+                "Rain_mm": new_rain,
+                "Promo": new_promo,
+                "Clicks": new_clicks,
+                "Impressions": new_imps,
+                "Avg_Coin_In": new_avg_spend
+            }
+            supabase.table("coefficients").upsert(updated_values).execute()
+            st.session_state.coeffs.update(updated_values)
+            st.success("✅ Engine Tuned: All changes pushed to database.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Save failed: {e}")
+
+    # --- 3. MAINTENANCE & PROMO FLAG ---
+    st.write("---")
+    st.markdown("### 🧹 Database Maintenance")
+    
+    m_col1, m_col2 = st.columns([2, 1])
+    
+    with m_col1:
+        st.info("**Global Promo Flag Sync:** This will update every historical record in your ledger to `active_promo = True`. Use this to align data with your current campaign period.")
         
-        if st.button("🚀 Force All Historical Records to 'Promo = True'", use_container_width=True):
+    with m_col2:
+        if st.button("🚀 Force Global Promo: TRUE", use_container_width=True):
             try:
-                # Update Supabase ledger table directly
-                supabase.table("ledger")\
-                    .update({"active_promo": True})\
-                    .neq("active_promo", True)\
-                    .execute()
-                
-                st.success("✅ Ledger Updated: All historical entries now reflect active promotion status.")
+                supabase.table("ledger").update({"active_promo": True}).neq("active_promo", True).execute()
+                st.success("Database Synchronized.")
                 st.rerun()
             except Exception as e:
-                st.error(f"Maintenance task failed: {e}")
-
-    # --- SECTION 3: SYSTEM LOGS ---
-    st.write("##")
-    with st.expander("📝 View Raw Engine Coefficients"):
-        st.json(st.session_state.coeffs)
+                st.error(f"Sync failed: {e}")
 
 # --- TAB 5: ASK FLOORCAST ---
 with tab5:
