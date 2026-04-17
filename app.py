@@ -459,39 +459,62 @@ with tab4:
 
     st.markdown("---")
 
-    # 3. THE BULK DATA IMPORTER
+# 3. THE BULK DATA IMPORTER (UPGRADED)
     with st.expander("📥 Bulk Data Importer (CSV Upload)"):
         st.write("Upload a CSV to backfill historical digital metrics.")
         uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
         
         if uploaded_file is not None:
             df_upload = pd.read_csv(uploaded_file)
-            st.write("Preview:")
+            
+            # --- SMART CLEANING ---
+            # Remove hidden spaces from headers and force lowercase
+            df_upload.columns = df_upload.columns.str.strip().str.lower()
+            
+            # Map common variations to our database fields
+            column_map = {
+                'date': 'entry_date',
+                'entry date': 'entry_date',
+                'traffic': 'actual_traffic',
+                'coin in': 'actual_coin_in',
+                'revenue': 'actual_coin_in',
+                'impressions': 'ad_impressions',
+                'engagements': 'social_engagements',
+                'clicks': 'ad_clicks'
+            }
+            df_upload = df_upload.rename(columns=column_map)
+            
+            st.write("Preview of Processed Data:")
             st.dataframe(df_upload.head(5))
             
-            if st.button("🚀 Process & Sync to FloorPace", use_container_width=True):
-                with st.spinner("Syncing records..."):
-                    success_count = 0
-                    for _, row in df_upload.iterrows():
-                        upload_data = {
-                            "entry_date": str(row['entry_date']),
-                            "actual_traffic": int(row.get('actual_traffic', 0)),
-                            "actual_coin_in": float(row.get('actual_coin_in', 0.0)),
-                            "predicted_traffic": int(row.get('predicted_traffic', 0)),
-                            "temp_c": int(row.get('temp_c', 0)),
-                            "ad_impressions": int(row.get('ad_impressions', 0)),
-                            "social_engagements": int(row.get('social_engagements', 0)),
-                            "ad_clicks": int(row.get('ad_clicks', 0)),
-                            "active_promo": bool(row.get('active_promo', False))
-                        }
-                        try:
-                            supabase.table("ledger").upsert(upload_data, on_conflict="entry_date").execute()
-                            success_count += 1
-                        except:
-                            continue
-                    
-                    st.success(f"Successfully synced {success_count} records!")
-                    st.rerun()
+            # Check if entry_date actually exists now
+            if 'entry_date' not in df_upload.columns:
+                st.error("🚨 Could not find a 'date' or 'entry_date' column in your CSV.")
+            else:
+                if st.button("🚀 Process & Sync to FloorPace", use_container_width=True):
+                    with st.spinner("Syncing records..."):
+                        success_count = 0
+                        for _, row in df_upload.iterrows():
+                            # Scrub data for Supabase
+                            upload_data = {
+                                "entry_date": str(row['entry_date']),
+                                "actual_traffic": int(row.get('actual_traffic', 0)),
+                                "actual_coin_in": float(row.get('actual_coin_in', 0.0)),
+                                "predicted_traffic": int(row.get('predicted_traffic', 0)),
+                                "temp_c": int(row.get('temp_c', 0)),
+                                "ad_impressions": int(row.get('ad_impressions', 0)),
+                                "social_engagements": int(row.get('social_engagements', 0)),
+                                "ad_clicks": int(row.get('ad_clicks', 0)),
+                                "active_promo": bool(row.get('active_promo', False))
+                            }
+                            try:
+                                supabase.table("ledger").upsert(upload_data, on_conflict="entry_date").execute()
+                                success_count += 1
+                            except:
+                                continue
+                        
+                        st.success(f"Successfully synced {success_count} records!")
+                        st.rerun()
 
 # --- TAB 5: ASK AI DATA ANALYST ---
 with tab5:
