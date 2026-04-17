@@ -85,17 +85,14 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
 # --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
-    st.header("🏢 Property Executive Overview")
+    st.markdown("### 🏢 Executive Strategy Command")
     
     if ledger_data:
-        df_exec = pd.DataFrame(ledger_data)
+        df_exec = pd.DataFrame(ledger_data).copy()
         df_exec['entry_date'] = pd.to_datetime(df_exec['entry_date'])
         df_exec = df_exec.sort_values('entry_date', ascending=False)
         
-        # 1. TOP ROW: PRIMARY KPI CARDS
-        kpi1, kpi2, kpi3 = st.columns(3)
-        
-        # Calculate Live Accuracy (The Automatic AI Logic)
+        # --- 1. THE AI ENGINE SYNC (Hidden Logic) ---
         c = st.session_state.coeffs
         def get_live_val(row):
             dow_key = f"DOW_{pd.to_datetime(row['entry_date']).strftime('%a')}"
@@ -104,7 +101,7 @@ with tab1:
         df_exec['live_pred'] = df_exec.apply(get_live_val, axis=1)
         df_exec['actual_traffic'] = pd.to_numeric(df_exec['actual_traffic'], errors='coerce').fillna(0)
         
-        # Accuracy Math
+        # Accuracy Calculation (MAPE)
         df_calc = df_exec[df_exec['actual_traffic'] > 0].copy()
         if not df_calc.empty:
             df_calc['error'] = abs(df_calc['actual_traffic'] - df_calc['live_pred']) / df_calc['actual_traffic']
@@ -112,25 +109,56 @@ with tab1:
         else:
             accuracy_pct = 0.0
 
-        with kpi1:
-            st.metric("AI Model Accuracy", f"{accuracy_pct:.1f}%")
-        with kpi2:
-            latest_rev = pd.to_numeric(df_exec['actual_coin_in'], errors='coerce').fillna(0).iloc[0]
-            st.metric("Latest Daily Revenue", f"${latest_rev:,.0f}")
-        with kpi3:
-            latest_traffic = df_exec['actual_traffic'].iloc[0]
-            st.metric("Latest Floor Traffic", f"{latest_traffic:,.0f}")
+        # --- 2. EXECUTIVE KPI BENTO BOX ---
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            with st.container(border=True):
+                st.markdown("🎯 **AI Model Accuracy**")
+                st.metric("System Reliability", f"{accuracy_pct:.1f}%")
+                st.progress(accuracy_pct / 100)
+        
+        with col2:
+            with st.container(border=True):
+                st.markdown("💰 **Latest Revenue**")
+                latest_rev = pd.to_numeric(df_exec['actual_coin_in'], errors='coerce').fillna(0).iloc[0]
+                st.metric("Daily Coin-In", f"${latest_rev:,.0f}")
+                st.caption("Last 24 Hours")
+        
+        with col3:
+            with st.container(border=True):
+                st.markdown("🚶 **Floor Traffic**")
+                latest_traffic = df_exec['actual_traffic'].iloc[0]
+                st.metric("Actual Visitors", f"{latest_traffic:,.0f}")
+                st.caption("Physical Property Foot traffic")
 
-        st.divider()
+        st.markdown("---")
 
-        # 2. MIDDLE ROW: THE PERFORMANCE TREND
-        st.subheader("7-Day Performance Trend")
-        chart_data = df_exec.head(7).copy()
-        chart_data = chart_data.rename(columns={'actual_traffic': 'Actual', 'live_pred': 'AI Prediction', 'entry_date': 'Date'})
-        st.line_chart(chart_data.set_index('Date')[['Actual', 'AI Prediction']], color=["#FFCC00", "#555555"])
+        # --- 3. TREND VISUALIZATION ---
+        t1, t2 = st.columns([2, 1])
+        
+        with t1:
+            st.markdown("#### 📈 7-Day Performance vs. AI Baseline")
+            chart_data = df_exec.head(7).copy()
+            chart_data = chart_data.rename(columns={
+                'actual_traffic': 'Actual Floor Traffic', 
+                'live_pred': 'AI Predicted Baseline', 
+                'entry_date': 'Date'
+            })
+            st.area_chart(chart_data.set_index('Date')[['Actual Floor Traffic', 'AI Predicted Baseline']], 
+                          color=["#FFCC00", "#555555"]) # Hard Rock Gold & Gray
+
+        with t2:
+            st.markdown("#### 🤖 AI Analyst Insights")
+            if accuracy_pct > 90:
+                st.success("The model is highly tuned. Current marketing and weather variables are explaining almost all traffic variance.")
+            elif accuracy_pct > 75:
+                st.warning("Moderate accuracy. Consider running a new ML Recalibration in the Admin tab to account for recent shifts.")
+            else:
+                st.error("Accuracy Low. The property's 'Actuals' have shifted significantly from the baseline. Optimization required.")
 
     else:
-        st.info("Awaiting data ingestion to populate Executive Dashboard.")
+        st.info("Log your first entry or upload a CSV to activate the Executive Dashboard.")
 
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
