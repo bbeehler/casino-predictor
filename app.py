@@ -319,23 +319,21 @@ with tab3:
             df_filtered = df_rep.loc[mask].sort_values('entry_date')
             
             if not df_filtered.empty:
-                # 2. Key Metric Calculations
+                # --- 2. Key Metric Calculations (Aggressive Mapping) ---
+                # This handles cases where the column might be named differently in the CSV
+                actual_col = 'actual_coin_in' if 'actual_coin_in' in df_filtered.columns else df_filtered.columns[1]
+                pred_col = 'predicted_traffic' if 'predicted_traffic' in df_filtered.columns else df_filtered.columns[2]
+
+                # Force to numeric and handle NaN
+                df_filtered['actual_coin_in'] = pd.to_numeric(df_filtered[actual_col], errors='coerce').fillna(0)
+                df_filtered['predicted_traffic'] = pd.to_numeric(df_filtered[pred_col], errors='coerce').fillna(0)
+
                 actual_rev = float(df_filtered['actual_coin_in'].sum())
                 
-                # Check if predicted_traffic column exists to avoid errors
-                if 'predicted_traffic' in df_filtered.columns:
-                    total_pred_traffic = df_filtered['predicted_traffic'].sum()
-                else:
-                    total_pred_traffic = 0
+                # Get Avg Spend from Session State or use a hard-coded fallback for the demo
+                avg_spend = float(st.session_state.coeffs.get('Avg_Coin_In', 112.0))
                 
-                base_rev = float(total_pred_traffic * st.session_state.coeffs['Avg_Coin_In'])
-                variance_val = actual_rev - base_rev
-                
-                # Calculate % Variance safely
-                if base_rev != 0:
-                    pct_var = (variance_val / base_rev) * 100
-                else:
-                    pct_var = 0.0
+                base_rev = float(df_filtered['predicted_traffic'].sum() * avg_spend)
                 
                 # 3. Top-Level Metrics
                 m1, m2, m3 = st.columns(3)
