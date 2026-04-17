@@ -83,7 +83,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "💬 Ask AI"
 ])
 
-# --- TAB 1: EXECUTIVE DASHBOARD ---
+# --- TAB 1: EXECUTIVE DASHBOARD (YTD FOCUS) ---
 with tab1:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
@@ -93,69 +93,81 @@ with tab1:
     """, unsafe_allow_html=True)
     
     if ledger_data:
-        # 1. DATA PREP
         df_exec = pd.DataFrame(ledger_data).copy()
         df_exec['entry_date'] = pd.to_datetime(df_exec['entry_date'])
         
-        # Ensure we are looking at numbers
-        df_exec['actual_traffic'] = pd.to_numeric(df_exec['actual_traffic'], errors='coerce').fillna(0)
-        df_exec['actual_coin_in'] = pd.to_numeric(df_exec['actual_coin_in'], errors='coerce').fillna(0)
+        # Filter for Year-to-Date
+        current_year = 2026 
+        df_ytd = df_exec[df_exec['entry_date'].dt.year == current_year].copy()
         
-        # 2. FIND THE LATEST VALID DATA (The 'Deep Scan')
-        # We look for the most recent row where traffic is GREATER THAN zero
-        df_valid = df_exec[df_exec['actual_traffic'] > 0].sort_values('entry_date', ascending=False)
+        # Numeric Safety
+        cols_to_fix = ['actual_traffic', 'actual_coin_in', 'ad_clicks', 'ad_impressions']
+        for col in cols_to_fix:
+            df_ytd[col] = pd.to_numeric(df_ytd[col], errors='coerce').fillna(0)
         
-        if not df_valid.empty:
-            latest_row = df_valid.iloc[0]
-            
-            # 3. LIVE AI ACCURACY MATH
+        if not df_ytd.empty:
             c = st.session_state.coeffs
-            def get_live_val(row):
-                dow_key = f"DOW_{pd.to_datetime(row['entry_date']).strftime('%a')}"
-                base = c['Intercept'] + c.get(dow_key, 0)
-                weather = (row.get('temp_c', 0) * c['Temp_C'])
-                promo = c['Promo'] if row.get('active_promo', False) else 0
-                return base + weather + promo
+            
+            # --- 1. CALCULATE DIGITAL LIFT ---
+            # Logic: Lift = (Promo Weight) + (Clicks * Click Weight) + (Imps * Imp Weight)
+            df_ytd['digital_lift'] = df_ytd.apply(lambda row: 
+                (c['Promo'] if row.get('active_promo', False) else 0) + 
+                (row.get('ad_clicks', 0) * c['Clicks']) + 
+                (row.get('ad_impressions', 0) * c['Impressions']), axis=1)
 
-            # Apply prediction to the whole valid dataset to get average accuracy
-            df_valid['live_pred'] = df_valid.apply(get_live_val, axis=1)
-            df_valid['error'] = abs(df_valid['actual_traffic'] - df_valid['live_pred']) / df_valid['actual_traffic']
-            accuracy_pct = max(0, (1 - df_valid['error'].mean()) * 100)
+            total_lift = df_ytd['digital_lift'].sum()
+            total_traffic = df_ytd['actual_traffic'].sum()
+            lift_percentage = (total_lift / total_traffic * 100) if total_traffic > 0 else 0
 
-            # 4. EXECUTIVE KPI BENTO BOX
+            # --- 2. EXECUTIVE KPI BENTO BOX ---
             col1, col2, col3 = st.columns(3)
+            
             with col1:
                 with st.container(border=True):
-                    st.markdown("🎯 **AI Model Accuracy**")
-                    st.metric("System Reliability", f"{accuracy_pct:.1f}%")
-                    st.progress(min(max(accuracy_pct / 100, 0.0), 1.0))
+                    st.markdown("💰 **YTD Total Revenue**")
+                    st.metric("Total Coin-In", f"${df_ytd['actual_coin_in'].sum():,.0f}")
+                    st.caption(f"Jan 1 - {df_ytd['entry_date'].max().strftime('%b %d')}")
+            
             with col2:
                 with st.container(border=True):
-                    st.markdown("💰 **Latest Revenue**")
-                    st.metric("Daily Revenue", f"${latest_row['actual_coin_in']:,.0f}")
-                    st.caption(f"Date: {latest_row['entry_date'].strftime('%Y-%m-%d')}")
+                    st.markdown("🚶 **YTD Floor Traffic**")
+                    st.metric("Total Visitors", f"{total_traffic:,.0f}")
+                    st.caption(f"Actual Property Attendance")
+
             with col3:
                 with st.container(border=True):
-                    st.markdown("🚶 **Floor Traffic**")
-                    st.metric("Actual Visitors", f"{latest_row['actual_traffic']:,.0f}")
-                    st.caption("Property Foot Traffic")
+                    st.markdown("🚀 **Digital Lift Contribution**")
+                    st.metric("Lift Visitors", f"{total_lift:,.0f}", f"{lift_percentage:.1f}% of Total")
+                    st.help("This represents visitors attributed specifically to Digital Marketing and Promotions.")
 
             st.markdown("---")
 
-            # 5. TREND VISUALIZATION
+            # --- 3. TRENDS & VISUALS ---
             t1, t2 = st.columns([2, 1])
             with t1:
-                st.markdown("#### 📈 7-Day Performance vs. AI Baseline")
-                chart_data = df_valid.head(7).copy().sort_values('entry_date')
-                chart_data = chart_data.rename(columns={'actual_traffic': 'Actual', 'live_pred': 'AI Prediction', 'entry_date': 'Date'})
-                st.area_chart(chart_data.set_index('Date')[['Actual', 'AI Prediction']], color=["#FFCC00", "#555555"])
+                st.markdown("#### 📈 Traffic Composition (Baseline vs. Digital Lift)")
+                # Show the 'Natural' traffic vs the 'Total' (which includes lift)
+                df_ytd['natural_baseline'] = df_ytd['actual_traffic'] - df_ytd['digital_lift']
+                
+                chart_data = df_ytd.sort_values('entry_date', ascending=False).head(14).copy().sort_values('entry_date')
+                chart_data = chart_data.rename(columns={
+                    'natural_baseline': 'Natural Baseline', 
+                    'digital_lift': 'Digital Lift',
+                    'entry_date': 'Date'
+                })
+                # Stacked chart shows exactly how much "extra" digital is adding
+                st.bar_chart(chart_rep.set_index('Date')[['Natural Baseline', 'Digital Lift']], color=["#555555", "#FFCC00"])
+            
             with t2:
-                st.markdown("#### 🤖 AI Analyst Status")
-                st.info(f"The model is currently syncing with {len(df_valid)} historical records. Accuracy is based on Live Coefficients.")
+                with st.container(border=True):
+                    st.markdown("#### 🤖 FloorCast Insights")
+                    avg_lift_per_day = total_lift / len(df_ytd)
+                    st.write(f"Digital campaigns are currently contributing an average of **{int(avg_lift_per_day)}** visitors per day.")
+                    st.info("The gold segments in the chart represent visitors that would likely not have visited without digital touchpoints.")
         else:
-            st.warning("⚠️ Database connected, but no rows with Traffic > 0 were found. Please check your data in the Admin Tab.")
+            st.warning(f"No data found for {current_year}.")
     else:
-        st.info("No data found in the Ledger.")
+        st.info("No ledger data detected.")
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
     st.markdown("""
