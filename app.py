@@ -239,14 +239,14 @@ with tab2:
                 
                 st.line_chart(df_f.set_index("Date")["Visitors"], color="#FFCC00")
 
-# --- SECTION 3: HISTORICAL LEDGER AUDIT & EDIT ---
+# --- SECTION 3: HISTORICAL LEDGER AUDIT & FULL-FIELD EDIT ---
     st.markdown("### 🔍 3. Historical Ledger Audit & Corrections")
     
     if ledger_data:
         df_edit = pd.DataFrame(ledger_data)
         df_edit['entry_date'] = pd.to_datetime(df_edit['entry_date'])
         
-        # --- PART A: THE SINGLE RECORD EDITOR ---
+        # --- PART A: THE FULL-FIELD EDITOR ---
         with st.container(border=True):
             st.markdown("**Find & Fix a Specific Entry**")
             edit_col1, edit_col2 = st.columns([1, 2])
@@ -255,59 +255,74 @@ with tab2:
                 search_date = st.date_input("Select Date to Edit", value=df_edit['entry_date'].max().date())
                 search_str = search_date.strftime("%Y-%m-%d")
             
-            # Filter for that specific day
             found = df_edit[df_edit['entry_date'].dt.strftime('%Y-%m-%d') == search_str]
             
             with edit_col2:
                 if not found.empty:
                     record = found.iloc[0]
-                    edit_mode = st.toggle(f"🔓 Unlock {search_str} for Editing")
+                    edit_mode = st.toggle(f"🔓 Unlock ALL FIELDS for {search_str}")
                     
                     if edit_mode:
-                        with st.form(f"edit_form_{search_str}"):
-                            c1, c2, c3 = st.columns(3)
-                            new_t = c1.number_input("Traffic", value=int(record['actual_traffic']))
-                            new_c = c2.number_input("Coin-In ($)", value=float(record['actual_coin_in']))
-                            new_p = c3.checkbox("Promo", value=bool(record.get('active_promo', False)))
+                        with st.form(f"full_edit_{search_str}"):
+                            # 3-Column Layout to fit everything
+                            ec1, ec2, ec3 = st.columns(3)
                             
-                            if st.form_submit_button("💾 Save Changes"):
-                                # Keep the original prediction to maintain variance accuracy
-                                new_var = new_t - record['predicted_traffic']
+                            with ec1:
+                                st.markdown("**Core Results**")
+                                up_t = st.number_input("Actual Traffic", value=int(record.get('actual_traffic', 0)))
+                                up_c = st.number_input("Coin-In ($)", value=float(record.get('actual_coin_in', 0.0)))
+                                up_p = st.number_input("Predicted Traffic", value=int(record.get('predicted_traffic', 0)))
+                            
+                            with ec2:
+                                st.markdown("**Weather Context**")
+                                up_temp = st.number_input("Temp (°C)", value=int(record.get('temp_c', 0)))
+                                up_snow = st.number_input("Snow (cm)", value=float(record.get('snow_cm', 0.0)))
+                                up_rain = st.number_input("Rain (mm)", value=float(record.get('rain_mm', 0.0)))
+                                up_alert = st.checkbox("Weather Alert", value=bool(record.get('weather_alert', False)))
+                            
+                            with ec3:
+                                st.markdown("**Digital/Promo**")
+                                up_promo = st.checkbox("Active Promo", value=bool(record.get('active_promo', False)))
+                                up_imp = st.number_input("Impressions", value=int(record.get('ad_impressions', 0)))
+                                up_eng = st.number_input("Engagements", value=int(record.get('social_engagements', 0)))
+                                up_clk = st.number_input("Clicks", value=int(record.get('ad_clicks', 0)))
+
+                            if st.form_submit_button("💾 Save All Changes to Database", use_container_width=True):
+                                # Recalculate variance for data integrity
+                                new_var = up_t - up_p
                                 
+                                # Comprehensive Update
                                 supabase.table("ledger").update({
-                                    "actual_traffic": new_t,
-                                    "actual_coin_in": new_c,
-                                    "active_promo": new_p,
-                                    "variance": int(new_var)
+                                    "actual_traffic": up_t,
+                                    "actual_coin_in": up_c,
+                                    "predicted_traffic": up_p,
+                                    "variance": int(new_var),
+                                    "temp_c": up_temp,
+                                    "snow_cm": up_snow,
+                                    "rain_mm": up_rain,
+                                    "weather_alert": up_alert,
+                                    "active_promo": up_promo,
+                                    "ad_impressions": up_imp,
+                                    "social_engagements": up_eng,
+                                    "ad_clicks": up_clk
                                 }).eq("entry_date", search_str).execute()
                                 
-                                st.toast(f"Updated {search_str}")
+                                st.toast(f"Full record for {search_str} updated!")
                                 st.rerun()
                 else:
-                    st.info("No record exists for the selected date yet.")
+                    st.info("No record found for this date.")
 
         st.markdown("---")
         
-        # --- PART B: THE MULTI-DAY VIEW (THE TABLE) ---
+        # --- PART B: THE MULTI-DAY VIEW ---
         st.markdown("**Full Historical Ledger**")
-        # Display the full table so you can see multiple days again
         display_df = df_edit.sort_values('entry_date', ascending=False)
-        # Format date for the table view
         display_df['entry_date'] = display_df['entry_date'].dt.strftime('%Y-%m-%d')
         
-        st.dataframe(
-            display_df, 
-            use_container_width=True, 
-            hide_index=True,
-            column_order=["entry_date", "day_of_week", "actual_traffic", "actual_coin_in", "variance", "active_promo"]
-        )
-        
-        # Download button for the full set
-        csv = display_df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Full Ledger as CSV", data=csv, file_name="HardRock_Full_Ledger.csv")
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
         
     else:
-        st.info("Database is empty. Log your first entry above.")
+        st.info("Database is empty.")
 
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
