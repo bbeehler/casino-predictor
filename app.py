@@ -142,32 +142,35 @@ with tab1:
 
             st.markdown("---")
 
-            # --- 3. TRENDS & VISUALS ---
+            # --- 3. TRENDS & VISUALS (Fixed NameError) ---
             t1, t2 = st.columns([2, 1])
             with t1:
                 st.markdown("#### 📈 Traffic Composition (Baseline vs. Digital Lift)")
-                # Show the 'Natural' traffic vs the 'Total' (which includes lift)
+                
+                # Calculate the 'Natural' baseline by subtracting the digital lift from actuals
                 df_ytd['natural_baseline'] = df_ytd['actual_traffic'] - df_ytd['digital_lift']
                 
-                chart_data = df_ytd.sort_values('entry_date', ascending=False).head(14).copy().sort_values('entry_date')
+                # Prepare the 14-day trend data
+                chart_data = df_ytd.sort_values('entry_date', ascending=False).head(14).copy()
                 chart_data = chart_data.rename(columns={
                     'natural_baseline': 'Natural Baseline', 
                     'digital_lift': 'Digital Lift',
                     'entry_date': 'Date'
                 })
-                # Stacked chart shows exactly how much "extra" digital is adding
-                st.bar_chart(chart_rep.set_index('Date')[['Natural Baseline', 'Digital Lift']], color=["#555555", "#FFCC00"])
+                
+                # The chart now correctly references chart_data
+                st.bar_chart(
+                    chart_data.set_index('Date')[['Natural Baseline', 'Digital Lift']], 
+                    color=["#555555", "#FFCC00"],
+                    stack=True
+                )
             
             with t2:
                 with st.container(border=True):
                     st.markdown("#### 🤖 FloorCast Insights")
                     avg_lift_per_day = total_lift / len(df_ytd)
                     st.write(f"Digital campaigns are currently contributing an average of **{int(avg_lift_per_day)}** visitors per day.")
-                    st.info("The gold segments in the chart represent visitors that would likely not have visited without digital touchpoints.")
-        else:
-            st.warning(f"No data found for {current_year}.")
-    else:
-        st.info("No ledger data detected.")
+                    st.info("The gold segments represent the 'Digital Lift'—visitors driven by your marketing efforts rather than just weather or the calendar.")
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
     st.markdown("""
