@@ -489,7 +489,7 @@ with tab4:
             try:
                 df_calc = pd.DataFrame(ledger_data).tail(120)
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-2.5-flash')
                 
                 prompt = f"""
                 SYSTEM: Act as a high-precision statistical engine for Hard Rock Ottawa.
