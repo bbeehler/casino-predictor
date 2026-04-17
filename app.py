@@ -607,66 +607,96 @@ with tab4:
 
 import google.generativeai as genai
 
-# --- TAB 5: ASK FLOORCAST (LIVE INTELLIGENCE) ---
+import google.generativeai as genai
+
+# --- TAB 5: ASK FLOORCAST (Proprietary Analyst) ---
 with tab5:
+    # 1. BRANDED HEADER
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🤖 Ask FloorCast</h2>
-            <p style="color: #888; margin: 0;">Your proprietary analyst for Hard Rock Ottawa performance data.</p>
+            <p style="color: #888; margin: 0;">Query property performance and digital ROI using natural language.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. SETUP THE BRAIN (Ensure your API Key is in st.secrets)
-    if "GOOGLE_API_KEY" in st.secrets:
-        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-        model = genai.GenerativeModel('gemini-2.5-flash')
-    else:
-        st.warning("⚠️ Google API Key missing in secrets. Add GOOGLE_API_KEY to continue.")
+    # 2. API KEY VALIDATION
+    if "GOOGLE_API_KEY" not in st.secrets:
+        st.error("🛑 **System Offline:** GOOGLE_API_KEY missing from Streamlit Secrets.")
         st.stop()
+    
+    # 3. INITIALIZE THE BRAIN
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    
+    # Precise settings for data analysis
+    generation_config = {
+        "temperature": 0.2, # Low temperature for factual consistency
+        "top_p": 0.95,
+        "max_output_tokens": 1024,
+    }
+    
+    model = genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        generation_config=generation_config
+    )
 
-    # 2. CHAT HISTORY
+    # 4. CHAT STATE MANAGEMENT
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
+    # Display Conversation History
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # 3. CONTEXT PREPARATION
-    # We provide the AI with the last 30 days of data so it has "memory"
+    # 5. DATA CONTEXT PREPARATION
+    # We grab the last 60 days to give the AI enough "Memory"
     if ledger_data:
-        context_df = pd.DataFrame(ledger_data).tail(30)
+        context_df = pd.DataFrame(ledger_data).tail(60)
+        # Simplify the data slightly to save on token costs
         csv_context = context_df.to_csv(index=False)
     else:
-        csv_context = "No data currently available in ledger."
+        csv_context = "No historical data available in the ledger yet."
 
-    # 4. THE INTERACTION
-    if prompt := st.chat_input("Ask about traffic, weather impact, or digital ROI..."):
+    # 6. CHAT INPUT & RESPONSE LOGIC
+    if prompt := st.chat_input("Ask about weather impact, digital lift, or revenue trends..."):
+        # Show User Message
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
+        # Generate FloorCast Analysis
         with st.chat_message("assistant"):
-            with st.spinner("Analyzing Ledger & Environment..."):
+            with st.spinner("Analyzing FloorPace Ledger..."):
                 try:
-                    # SYSTEM INSTRUCTIONS for the AI
+                    # The System Prompt grounds the AI in your specific property and logic
                     system_prompt = f"""
-                    You are FloorCast, a specialized data analyst for Hard Rock Hotel & Casino Ottawa.
-                    You have access to the following 30-day performance ledger:
+                    You are FloorCast, the lead Data Analyst for Hard Rock Hotel & Casino Ottawa.
+                    You are an expert in correlating weather, digital marketing, and property traffic.
+                    
+                    AVAILABLE DATA (LAST 60 DAYS):
                     {csv_context}
                     
-                    User Coefficients: {st.session_state.coeffs}
+                    CURRENT AI COEFFICIENTS:
+                    {st.session_state.coeffs}
                     
-                    Instructions:
-                    1. Use the data to answer specifically about Ottawa property performance.
-                    2. If asked about ROI, reference the 'actual_coin_in' and 'ad_clicks'.
-                    3. Be professional, concise, and executive-focused.
+                    USER QUESTION: {prompt}
+                    
+                    MISSION:
+                    - Analyze the provided CSV data to answer accurately.
+                    - If the user asks about ROI, reference 'ad_clicks' and 'actual_coin_in'.
+                    - If they ask about the model, reference the coefficients.
+                    - Keep answers professional, executive, and concise.
                     """
                     
-                    full_prompt = f"{system_prompt}\n\nUser Question: {prompt}"
-                    response = model.generate_content(full_prompt)
+                    response = model.generate_content(system_prompt)
                     
+                    # Output & Store Response
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
+                    
                 except Exception as e:
-                    st.error(f"FloorCast is offline: {e}")
+                    st.error(f"FloorCast encountered an error: {str(e)}")
+
+    # Floating Info Tip
+    st.write("---")
+    st.caption("💡 **FloorCast Analyst Tip:** I can see your current Admin settings and 60 days of history. Try asking: 'How did our ROI change on days with active promotions?'")
