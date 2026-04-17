@@ -498,7 +498,7 @@ with tab4:
                     # Optimized context for Gemini 3 Flash speed
                     df_calc = pd.DataFrame(ledger_data).tail(100)
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-2.5-flash')
                     
                     # --- PLACE OPTIMIZED PROMPT HERE ---
                     prompt = f"""
