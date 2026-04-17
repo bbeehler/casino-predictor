@@ -293,25 +293,25 @@ with tab2:
 
 # --- TAB 3: STRATEGIC REPORTING & ROI ---
 with tab3:
-    # 1. HEADER WITH ACCENT
+    # 1. HEADER WITH ACCENT (Fixed the parameter name here)
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">📊 Strategic Performance & Digital ROI</h2>
             <p style="color: #888; margin: 0;">Correlating Digital Matters Now metrics with Property Floor Reality.</p>
         </div>
-    """, unsafe_admin_html=True)
+    """, unsafe_allow_html=True)
     
     if ledger_data:
         df_rep = pd.DataFrame(ledger_data).copy()
         df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
         df_rep = df_rep.sort_values('entry_date', ascending=False)
 
-        # 2. DATE FILTER (CLEAN ROW)
+        # 2. DATE FILTER
         with st.container(border=True):
             f1, f2, f3 = st.columns([1, 1, 1])
-            start_rep = f1.date_input("📅 Report Start", df_rep['entry_date'].min())
-            end_rep = f2.date_input("📅 Report End", df_rep['entry_date'].max())
-            f3.write("##") # Spacer
+            start_rep = f1.date_input("📅 Report Start", df_rep['entry_date'].min().date())
+            end_rep = f2.date_input("📅 Report End", df_rep['entry_date'].max().date())
+            f3.write("##") 
             if f3.button("🔄 Refresh Data", use_container_width=True):
                 st.rerun()
         
@@ -321,10 +321,16 @@ with tab3:
         if not df_filtered.empty:
             st.write("##")
             
-            # 3. DIGITAL PERFORMANCE BENTO (THE "GOLD" METRICS)
+            # 3. DIGITAL PERFORMANCE BENTO
             st.markdown("#### 📱 Digital Impact Metrics")
             d1, d2, d3, d4 = st.columns(4)
             
+            # Ensure numeric conversion for sums
+            df_filtered['ad_impressions'] = pd.to_numeric(df_filtered['ad_impressions'], errors='coerce').fillna(0)
+            df_filtered['ad_clicks'] = pd.to_numeric(df_filtered['ad_clicks'], errors='coerce').fillna(0)
+            df_filtered['social_engagements'] = pd.to_numeric(df_filtered['social_engagements'], errors='coerce').fillna(0)
+            df_filtered['actual_coin_in'] = pd.to_numeric(df_filtered['actual_coin_in'], errors='coerce').fillna(0)
+
             total_imps = df_filtered['ad_impressions'].sum()
             total_clks = df_filtered['ad_clicks'].sum()
             total_engs = df_filtered['social_engagements'].sum()
@@ -342,16 +348,15 @@ with tab3:
             with d4:
                 with st.container(border=True):
                     rpc = total_rev / total_clks if total_clks > 0 else 0
-                    st.metric("Rev per Click", f"${rpc:.2f}", delta_color="normal")
+                    st.metric("Rev per Click", f"${rpc:.2f}")
 
             st.write("##")
 
-            # 4. CHARTING AREA
+            # 4. CHARTING & SUMMARY
             t_col, c_col = st.columns([2.5, 1])
             with t_col:
                 with st.container(border=True):
                     st.markdown("#### 📈 Actual Traffic vs. AI Predicted Baseline")
-                    # Logic to generate prediction line
                     c = st.session_state.coeffs
                     df_filtered['ai_baseline'] = df_filtered.apply(lambda row: 
                         c['Intercept'] + c.get(f"DOW_{row['entry_date'].strftime('%a')}", 0) + 
@@ -359,7 +364,31 @@ with tab3:
                     
                     chart_rep = df_filtered.sort_values('entry_date')
                     chart_rep = chart_rep.rename(columns={'actual_traffic': 'Floor Reality', 'ai_baseline': 'AI Baseline'})
-                    st.area_chart(chart_rep.set_index('entry_date')[['Floor Reality', 'AI Baseline']], color)
+                    st.area_chart(chart_rep.set_index('entry_date')[['Floor Reality', 'AI Baseline']], color=["#FFCC00", "#555555"])
+            
+            with c_col:
+                with st.container(border=True):
+                    st.markdown("#### 📝 Executive Summary")
+                    total_var = df_filtered['actual_traffic'].sum() - df_filtered['ai_baseline'].sum()
+                    perf_color = "#28a745" if total_var > 0 else "#dc3545"
+                    st.markdown(f"""
+                        <div style="text-align: center; padding: 10px;">
+                            <h1 style="color: {perf_color}; margin: 0;">{total_var:+,.0f}</h1>
+                            <p style="color: #888;">Net Traffic Variance</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    st.info(f"During this period, digital efforts influenced {total_clks:,.0f} clicks to the property.")
+
+            st.write("##")
+            st.download_button(
+                label="📥 Export Hard Rock ROI Report (CSV)",
+                data=df_filtered.to_csv(index=False),
+                file_name=f"FloorPace_ROI_{start_rep}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        else:
+            st.warning("No data found for the selected date range.")
 
 # --- TAB 4: ADMIN ENGINE (MASTER CONTROL & IMPORTER) ---
 with tab4:
