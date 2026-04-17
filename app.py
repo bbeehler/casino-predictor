@@ -466,156 +466,58 @@ with tab3:
         else:
             st.warning("No data found for the selected date range.")
 
-# --- TAB 4: ADMIN ENGINE (MASTER CONTROL & IMPORTER) ---
-with tab4:      
+# --- TAB 4: ADMIN ENGINE & DATA MANAGEMENT ---
+with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control & Data Management</h2>
-            <p style="color: #888; margin: 0;">Tune AI Coefficients, Sync Models, and Manage Bulk CSV Integrations.</p>
+            <p style="color: #888; margin: 0;">Tune AI coefficients, manage overrides, and sync database records.</p>
         </div>
     """, unsafe_allow_html=True)
-    # ... rest of your Tab 4 code ...
-    
-    # 1. THE ADVANCED AI OPTIMIZER
+
+    # --- SECTION 1: COEFFICIENT TUNING ---
+    st.subheader("🛠️ AI Model Tuning (Overrides)")
     with st.container(border=True):
-        c_left, c_right = st.columns([2, 1])
-        with c_left:
-            st.subheader("🤖 Multivariate AI Sync")
-            st.write("Recalibrate coefficients based on Weather, Promotions, and Digital Performance.")
-        with c_right:
-            st.write("##")
-            if st.button("🚀 Sync AI to Reality", type="primary", use_container_width=True):
-                if len(ledger_data) > 7:
-                    df_ml = pd.DataFrame(ledger_data)
-                    # Clean and Force Types
-                    df_ml['actual_traffic'] = pd.to_numeric(df_ml['actual_traffic'], errors='coerce').fillna(0)
-                    df_ml['temp_c'] = pd.to_numeric(df_ml['temp_c'], errors='coerce').fillna(0)
-                    df_ml['promo_val'] = df_ml['active_promo'].astype(int)
-                    df_ml['ad_clicks'] = pd.to_numeric(df_ml['ad_clicks'], errors='coerce').fillna(0)
-                    
-                    # Only train on valid history
-                    df_train = df_ml[df_ml['actual_traffic'] > 0].copy()
-                    
-                    if len(df_train) > 5:
-                        from sklearn.linear_model import LinearRegression
-                        # We include Click-weight in the AI Sync now
-                        X = df_train[['temp_c', 'promo_val', 'ad_clicks']].values
-                        y = df_train['actual_traffic'].values
-                        
-                        model = LinearRegression().fit(X, y)
-                        
-                        # Update State
-                        st.session_state.coeffs['Intercept'] = round(float(model.intercept_), 2)
-                        st.session_state.coeffs['Temp_C'] = round(float(model.coef_[0]), 2)
-                        st.session_state.coeffs['Promo'] = round(float(model.coef_[1]), 2)
-                        st.session_state.coeffs['Clicks'] = round(float(model.coef_[2]), 4)
-                        
-                        # Sync Avg Revenue per Head
-                        df_train['actual_coin_in'] = pd.to_numeric(df_train['actual_coin_in'], errors='coerce').fillna(0)
-                        if df_train['actual_traffic'].sum() > 0:
-                            st.session_state.coeffs['Avg_Coin_In'] = round(df_train['actual_coin_in'].sum() / df_train['actual_traffic'].sum(), 2)
-
-                        st.success("🎯 AI recalibrated successfully!")
-                        st.rerun()
-                else:
-                    st.error("Need more historical data (8+ days) to Sync.")
-
-    st.divider()
-
-    # 2. MASTER MANUAL OVERRIDES
-    with st.form("admin_settings_final"):
-        st.markdown("#### 🛠️ Manual Coefficient Overrides")
+        st.write("Adjust the weights the AI uses to calculate the 'Digital Lift' and 'Baseline'.")
         
-        f1, f2, f3, f4 = st.columns(4)
-        with f1:
-            new_intercept = st.number_input("Base Traffic", value=float(st.session_state.coeffs['Intercept']))
-        with f2:
-            new_coin = st.number_input("Avg Spend ($)", value=float(st.session_state.coeffs['Avg_Coin_In']))
-        with f3:
-            new_temp = st.number_input("Temp Impact", value=float(st.session_state.coeffs['Temp_C']))
-        with f4:
-            new_snow = st.number_input("Snow Penalty", value=float(st.session_state.coeffs['Snow_cm']))
-
-        st.markdown("**Day of the Week Adjustments**")
-        d1, d2, d3, d4, d5, d6, d7 = st.columns(7)
-        new_mon = d1.number_input("Mon", value=float(st.session_state.coeffs['DOW_Mon']))
-        new_tue = d2.number_input("Tue", value=float(st.session_state.coeffs['DOW_Tue']))
-        new_wed = d3.number_input("Wed", value=float(st.session_state.coeffs['DOW_Wed']))
-        new_thu = d4.number_input("Thu", value=float(st.session_state.coeffs['DOW_Thu']))
-        new_fri = d5.number_input("Fri", value=float(st.session_state.coeffs['DOW_Fri']))
-        new_sat = d6.number_input("Sat", value=float(st.session_state.coeffs['DOW_Sat']))
-        new_sun = d7.number_input("Sun", value=float(st.session_state.coeffs['DOW_Sun']))
-
-        st.markdown("**Digital & Promo Weights**")
-        m1, m2, m3 = st.columns(3)
-        new_promo = m1.number_input("Promotion Lift", value=float(st.session_state.coeffs['Promo']))
-        new_imp = m2.number_input("Impression Weight", value=float(st.session_state.coeffs['Impressions']), format="%.6f")
-        new_clk = m3.number_input("Click Weight", value=float(st.session_state.coeffs['Clicks']), format="%.4f")
-
-        if st.form_submit_button("💾 Save All Engine Changes", use_container_width=True):
-            st.session_state.coeffs.update({
-                'Intercept': new_intercept, 'Avg_Coin_In': new_coin, 'Temp_C': new_temp, 'Snow_cm': new_snow,
-                'DOW_Mon': new_mon, 'DOW_Tue': new_tue, 'DOW_Wed': new_wed, 'DOW_Thu': new_thu,
-                'DOW_Fri': new_fri, 'DOW_Sat': new_sat, 'DOW_Sun': new_sun,
-                'Promo': new_promo, 'Impressions': new_imp, 'Clicks': new_clk
-            })
-            st.success("Coefficients locked in.")
-            st.rerun()
-
-    st.divider()
-
-    # 3. THE HIGH-CAPACITY IMPORTER
-    st.subheader("📥 Bulk Data Importer")
-    with st.container(border=True):
-        st.write("Headers: `entry_date`, `actual_traffic`, `actual_coin_in`, `temp_c`, `ad_impressions`, `ad_clicks`, `social_engagements`")
-        uploaded_file = st.file_uploader("Upload Historical CSV", type="csv")
+        c = st.session_state.coeffs
         
-        if uploaded_file is not None:
-            df_upload = pd.read_csv(uploaded_file)
-            if st.button("🚀 Process & Sync to Ledger", use_container_width=True):
-                progress_bar = st.progress(0)
-                success_count = 0
+        col_a, col_b = st.columns(2)
+        
+        with col_a:
+            new_intercept = st.number_input("Base Traffic (Intercept)", value=float(c.get('Intercept', 0)))
+            new_temp = st.number_input("Temp Impact (°C)", value=float(c.get('Temp_C', 0)))
+            new_snow = st.number_input("Snow Impact (cm)", value=float(c.get('Snow_cm', 0)))
+            new_rain = st.number_input("Rain Impact (mm)", value=float(c.get('Rain_mm', 0)))
+            
+        with col_b:
+            new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
+            new_clicks = st.number_input("Weight per Ad Click", value=float(c.get('Clicks', 0)))
+            new_imps = st.number_input("Weight per 1k Impressions", value=float(c.get('Impressions', 0)), format="%.4f")
+            new_avg_spend = st.number_input("Avg. Coin-In per Visitor ($)", value=float(c.get('Avg_Coin_In', 0)))
+
+        if st.button("💾 Save All Engine Changes", use_container_width=True):
+            try:
+                # Payload for Supabase - Ensure ID 1 is your master record
+                updated_values = {
+                    "id": 1,
+                    "Intercept": new_intercept,
+                    "Temp_C": new_temp,
+                    "Snow_cm": new_snow,
+                    "Rain_mm": new_rain,
+                    "Promo": new_promo,
+                    "Clicks": new_clicks,
+                    "Impressions": new_imps,
+                    "Avg_Coin_In": new_avg_spend
+                }
                 
-                def clean(val, is_float=False):
-                    try:
-                        if pd.isna(val) or str(val).strip() == "": return 0.0 if is_float else 0
-                        c = str(val).replace(',', '').replace('$', '').strip()
-                        return float(c) if is_float else int(float(c))
-                    except: return 0.0 if is_float else 0
-
-                for i, row in df_upload.iterrows():
-                    progress_bar.progress((i + 1) / len(df_upload))
-                    payload = {
-                        "entry_date": str(row.get('entry_date', row.get('date'))),
-                        "actual_traffic": clean(row.get('actual_traffic', 0)),
-                        "actual_coin_in": clean(row.get('actual_coin_in', 0.0), is_float=True),
-                        "temp_c": clean(row.get('temp_c', 0), is_float=True),
-                        "active_promo": bool(row.get('active_promo', False)),
-                        "ad_impressions": clean(row.get('ad_impressions', row.get('impressions', 0))),
-                        "ad_clicks": clean(row.get('ad_clicks', row.get('clicks', 0))),
-                        "social_engagements": clean(row.get('social_engagements', row.get('engagements', 0)))
-                    }
-                    try:
-                        supabase.table("ledger").upsert(payload, on_conflict="entry_date").execute()
-                        success_count += 1
-                    except Exception as e:
-                        st.error(f"Row {i+1} failed: {e}")
-
-                if success_count > 0:
-                    st.success(f"✅ Successfully integrated {success_count} records!")
-                    st.rerun()
-
-import google.generativeai as genai
-
-import google.generativeai as genai
-
-import google.generativeai as genai
-
-import google.generativeai as genai
-
-import google.generativeai as genai
-
-import google.generativeai as genai
+                # Permanent Database Update
+                supabase.table("coefficients").upsert(updated_values).execute()
+                
+                # Local Session Update
+                st.session_state.coeffs.update(updated_values)
+                
+                st.success("✅ Database Synchronized: Model
 
 # --- TAB 5: ASK FLOORCAST ---
 with tab5:
