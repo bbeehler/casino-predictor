@@ -489,13 +489,12 @@ with tab4:
     with s3:
         st.write("🧠 **AI Calibration**")
         # --- THE RESTORED AI BUTTON ---
-        if st.button("🤖 Let AI Determine Coefficients", use_container_width=True):
+if st.button("🤖 Let AI Determine Coefficients", use_container_width=True):
             with st.spinner("Analyzing historical patterns..."):
                 try:
-                    # Feed recent ledger data to Gemini to suggest best weights
                     df_calc = pd.DataFrame(ledger_data).tail(60)
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    model = genai.GenerativeModel('gemini-1.5-flash')
                     
                     prompt = f"""
                     Analyze this ledger data for Hard Rock Ottawa: {df_calc.to_csv()}
@@ -505,17 +504,21 @@ with tab4:
                     - Clicks (Weight per ad click)
                     - Snow_cm (Traffic penalty per cm of snow)
                     - Temp_C (Traffic change per degree Celsius)
-                    Return ONLY a JSON object with these keys.
+                    Return ONLY a raw JSON object. Do not include markdown formatting or backticks.
                     """
                     response = model.generate_content(prompt)
-                    # Note: You would typically parse this JSON to auto-fill the boxes below
-                    st.write("AI Suggestion Received. Review weights in the boxes below before saving.")
-                    st.json(response.text)
+                    
+                    # --- THE CLEANUP LOGIC ---
+                    raw_text = response.text.replace("```json", "").replace("```", "").strip()
+                    import json
+                    suggestion = json.loads(raw_text)
+                    
+                    st.success("AI Calibration Complete.")
+                    st.write("Review the suggested values below:")
+                    st.json(suggestion)
+                    
                 except Exception as e:
                     st.error(f"AI Calibration failed: {e}")
-
-    st.write("##")
-    c = st.session_state.coeffs
 
     # 3. THE BENTO CONTROL CENTER (Manual Management)
     col_fin, col_dig, col_env = st.columns(3)
