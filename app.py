@@ -609,9 +609,10 @@ import google.generativeai as genai
 
 import google.generativeai as genai
 
-# --- TAB 5: ASK FLOORCAST (Proprietary Analyst) ---
+import google.generativeai as genai
+
+# --- TAB 5: ASK FLOORCAST ---
 with tab5:
-    # 1. BRANDED HEADER
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🤖 Ask FloorCast</h2>
@@ -619,17 +620,16 @@ with tab5:
         </div>
     """, unsafe_allow_html=True)
 
-    # 2. API KEY VALIDATION
-    if "GOOGLE_API_KEY" not in st.secrets:
-        st.error("🛑 **System Offline:** GOOGLE_API_KEY missing from Streamlit Secrets.")
+    # 1. API KEY VALIDATION (Updated to match your GEMINI_API_KEY secret)
+    if "GEMINI_API_KEY" not in st.secrets:
+        st.error("🛑 **System Offline:** GEMINI_API_KEY missing from Streamlit Secrets.")
         st.stop()
     
-    # 3. INITIALIZE THE BRAIN
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    # 2. INITIALIZE THE BRAIN
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     
-    # Precise settings for data analysis
     generation_config = {
-        "temperature": 0.2, # Low temperature for factual consistency
+        "temperature": 0.2,
         "top_p": 0.95,
         "max_output_tokens": 1024,
     }
@@ -639,64 +639,49 @@ with tab5:
         generation_config=generation_config
     )
 
-    # 4. CHAT STATE MANAGEMENT
+    # 3. CHAT STATE MANAGEMENT
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display Conversation History
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # 5. DATA CONTEXT PREPARATION
-    # We grab the last 60 days to give the AI enough "Memory"
+    # 4. DATA CONTEXT
     if ledger_data:
         context_df = pd.DataFrame(ledger_data).tail(60)
-        # Simplify the data slightly to save on token costs
         csv_context = context_df.to_csv(index=False)
     else:
-        csv_context = "No historical data available in the ledger yet."
+        csv_context = "No historical data available."
 
-    # 6. CHAT INPUT & RESPONSE LOGIC
-    if prompt := st.chat_input("Ask about weather impact, digital lift, or revenue trends..."):
-        # Show User Message
+    # 5. INTERACTION
+    if prompt := st.chat_input("Ask FloorCast about your property data..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Generate FloorCast Analysis
         with st.chat_message("assistant"):
             with st.spinner("Analyzing FloorPace Ledger..."):
                 try:
-                    # The System Prompt grounds the AI in your specific property and logic
                     system_prompt = f"""
                     You are FloorCast, the lead Data Analyst for Hard Rock Hotel & Casino Ottawa.
-                    You are an expert in correlating weather, digital marketing, and property traffic.
                     
-                    AVAILABLE DATA (LAST 60 DAYS):
+                    DATA (LAST 60 DAYS):
                     {csv_context}
                     
-                    CURRENT AI COEFFICIENTS:
+                    COEFFICIENTS:
                     {st.session_state.coeffs}
                     
                     USER QUESTION: {prompt}
                     
                     MISSION:
-                    - Analyze the provided CSV data to answer accurately.
-                    - If the user asks about ROI, reference 'ad_clicks' and 'actual_coin_in'.
-                    - If they ask about the model, reference the coefficients.
-                    - Keep answers professional, executive, and concise.
+                    Answer professionally using the provided data. Reference specific stats like 
+                    'ad_clicks', 'actual_coin_in', or 'temp_c' where relevant.
                     """
                     
                     response = model.generate_content(system_prompt)
-                    
-                    # Output & Store Response
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
                     
                 except Exception as e:
-                    st.error(f"FloorCast encountered an error: {str(e)}")
-
-    # Floating Info Tip
-    st.write("---")
-    st.caption("💡 **FloorCast Analyst Tip:** I can see your current Admin settings and 60 days of history. Try asking: 'How did our ROI change on days with active promotions?'")
+                    st.error(f"FloorCast Error: {str(e)}")
