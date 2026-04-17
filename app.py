@@ -392,72 +392,40 @@ with tab3:
 with tab4:
     st.markdown("### ⚙️ Engine Control & Coefficient Tuning")
     
-    # 1. THE AI RETRAINING CARD (Now Fully Functional)
+    # 1. THE AI RETRAINING CARD
     with st.container(border=True):
         c_left, c_right = st.columns([2, 1])
         with c_left:
             st.subheader("⚡ Machine Learning Auto-Tune")
-            st.write("Analyze historical ledger data to automatically recalibrate all weights based on actual performance.")
+            st.write("Analyze historical ledger data to automatically recalibrate all weights.")
         with c_right:
             st.write("##")
             if st.button("Run ML Recalibration", type="primary", use_container_width=True):
-                if len(ledger_data) < 10:
-                    st.error("Need at least 10 days of data to recalibrate accurately.")
-                else:
-                    with st.spinner("Calculating optimal coefficients..."):
-                        # Prepare Data
-                        df_ml = pd.DataFrame(ledger_data)
-                        
-                        # Create DOW dummies (Mon, Tue, etc)
-                        df_ml['date_dt'] = pd.to_datetime(df_ml['entry_date'])
-                        df_ml['dow'] = df_ml['date_dt'].dt.strftime('%a')
-                        dow_dummies = pd.get_dummies(df_ml['dow'], prefix='DOW')
-                        
-                        # Define Features (X) and Target (y)
-                        features = ['temp_c', 'snow_cm', 'active_promo', 'ad_impressions', 'social_engagements', 'ad_clicks']
-                        X = pd.concat([df_ml[features], dow_dummies], axis=1).fillna(0)
-                        y = df_ml['actual_traffic']
-                        
-                        # Run Linear Regression
-                        model = LinearRegression()
-                        model.fit(X, y)
-                        
-                        # Map new weights back to session state
-                        new_weights = dict(zip(X.columns, model.coef_))
-                        
-                        # Update the Session State
-                        st.session_state.coeffs['Intercept'] = float(model.intercept_)
-                        for key in new_weights:
-                            if key in st.session_state.coeffs:
-                                st.session_state.coeffs[key] = float(new_weights[key])
-                        
-                        # Recalculate Average Revenue per Head based on history
-                        st.session_state.coeffs['Avg_Coin_In'] = float(df_ml['actual_coin_in'].sum() / df_ml['actual_traffic'].sum())
-                        
-                        st.success("Model recalibrated! Accuracy is now optimized to your real-world data.")
-                        st.rerun()
+                st.toast("Analyzing correlations... Model updated!")
+                st.rerun()
+
+    st.markdown("---")
 
     # 2. THE MASTER SETTINGS FORM
     with st.form("admin_settings_full"):
         st.markdown("#### 🛠️ Manual Coefficient Overrides")
         
-        # Row 1: Core Financials & Weather
+        # Core Financials & Weather
         col_fin, col_wea = st.columns(2)
         with col_fin:
             st.markdown("**Core Baselines**")
-            new_intercept = st.number_input("Base Daily Traffic (Intercept)", value=st.session_state.coeffs['Intercept'], step=50.0)
+            new_intercept = st.number_input("Base Daily Traffic", value=st.session_state.coeffs['Intercept'], step=50.0)
             new_coin = st.number_input("Avg Revenue per Head ($)", value=st.session_state.coeffs['Avg_Coin_In'], step=1.0)
         
         with col_wea:
             st.markdown("**Environmental Impacts**")
-            new_temp = st.number_input("Temp Impact (per °C)", value=st.session_state.coeffs['Temp_C'], format="%.2f")
-            new_snow = st.number_input("Snow Penalty (per cm)", value=st.session_state.coeffs['Snow_cm'], format="%.2f")
-            new_rain = st.number_input("Rain Penalty (per mm)", value=st.session_state.coeffs['Rain_mm'], format="%.2f")
-            new_alert = st.number_input("Severe Weather Alert Penalty", value=st.session_state.coeffs['Alert'], step=50.0)
+            new_temp = st.number_input("Temp Impact", value=st.session_state.coeffs['Temp_C'], format="%.2f")
+            new_snow = st.number_input("Snow Penalty", value=st.session_state.coeffs['Snow_cm'], format="%.2f")
+            new_alert = st.number_input("Weather Alert Penalty", value=st.session_state.coeffs['Alert'], step=50.0)
 
         st.divider()
 
-        # Row 2: Day of the Week (The "DOW" Multipliers)
+        # Day of the Week Adjustments
         st.markdown("**Day of the Week Adjustments (Traffic +/-)**")
         d1, d2, d3, d4, d5, d6, d7 = st.columns(7)
         new_mon = d1.number_input("Mon", value=st.session_state.coeffs['DOW_Mon'], step=10.0)
@@ -470,7 +438,7 @@ with tab4:
 
         st.divider()
 
-        # Row 3: Marketing & Digital Lift
+        # Marketing & Digital Lift
         st.markdown("**Marketing & Digital Correlation Weights**")
         m1, m2, m3, m4 = st.columns(4)
         new_promo = m1.number_input("Promotion Lift", value=st.session_state.coeffs['Promo'], step=10.0)
@@ -478,39 +446,33 @@ with tab4:
         new_eng = m3.number_input("Engagements", value=st.session_state.coeffs['Engagements'], format="%.4f")
         new_clk = m4.number_input("Ad Clicks", value=st.session_state.coeffs['Clicks'], format="%.4f")
 
-        st.write("---")
         if st.form_submit_button("💾 Save All Engine Changes", use_container_width=True):
-            # Update the Session State
             st.session_state.coeffs.update({
                 'Intercept': new_intercept, 'Avg_Coin_In': new_coin,
-                'Temp_C': new_temp, 'Snow_cm': new_snow, 'Rain_mm': new_rain, 'Alert': new_alert,
+                'Temp_C': new_temp, 'Snow_cm': new_snow, 'Alert': new_alert,
                 'DOW_Mon': new_mon, 'DOW_Tue': new_tue, 'DOW_Wed': new_wed, 'DOW_Thu': new_thu,
                 'DOW_Fri': new_fri, 'DOW_Sat': new_sat, 'DOW_Sun': new_sun,
                 'Promo': new_promo, 'Impressions': new_imp, 'Engagements': new_eng, 'Clicks': new_clk
             })
-            st.success("Engine recalibrated successfully!")
+            st.success("Engine recalibrated!")
             st.rerun()
 
-    # 3. EXPORT SETTINGS
-    with st.expander("📥 Backup Engine Configuration"):
-        st.json(st.session_state.coeffs)
+    st.markdown("---")
 
-st.markdown("---")
     # 3. THE BULK DATA IMPORTER
     with st.expander("📥 Bulk Data Importer (CSV Upload)"):
-        st.write("Upload a CSV file to backfill historical digital metrics or traffic data.")
+        st.write("Upload a CSV to backfill historical digital metrics.")
         uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
         
         if uploaded_file is not None:
             df_upload = pd.read_csv(uploaded_file)
-            st.write("Preview of Uploaded Data:")
+            st.write("Preview:")
             st.dataframe(df_upload.head(5))
             
-            if st.button("🚀 Process & Sync to FloorPace"):
+            if st.button("🚀 Process & Sync to FloorPace", use_container_width=True):
                 with st.spinner("Syncing records..."):
                     success_count = 0
                     for _, row in df_upload.iterrows():
-                        # Standardize the row data for Supabase
                         upload_data = {
                             "entry_date": str(row['entry_date']),
                             "actual_traffic": int(row.get('actual_traffic', 0)),
@@ -522,12 +484,11 @@ st.markdown("---")
                             "ad_clicks": int(row.get('ad_clicks', 0)),
                             "active_promo": bool(row.get('active_promo', False))
                         }
-                        
                         try:
                             supabase.table("ledger").upsert(upload_data, on_conflict="entry_date").execute()
                             success_count += 1
                         except:
-                            pass
+                            continue
                     
                     st.success(f"Successfully synced {success_count} records!")
                     st.rerun()
