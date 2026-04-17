@@ -439,43 +439,67 @@ with tab4:
 
     st.divider()
 
-    # 3. THE MISSING IMPORTER (RESTORING THIS NOW)
+   # 3. THE HIGH-FEEDBACK IMPORTER
     st.subheader("📥 Bulk Data Importer")
     with st.container(border=True):
-        st.write("Upload your CSV to backfill the ledger. Ensure headers match: `entry_date`, `actual_traffic`, `actual_coin_in`, `temp_c`")
+        st.write("Upload CSV. Required Headers: `entry_date`, `actual_traffic`, `actual_coin_in`, `temp_c`")
         uploaded_file = st.file_uploader("Choose CSV File", type="csv")
         
         if uploaded_file is not None:
             df_upload = pd.read_csv(uploaded_file)
-            st.dataframe(df_upload.head(3))
+            st.write(f"📂 Found {len(df_upload)} rows in file.")
             
             if st.button("🚀 Process & Sync to Supabase", use_container_width=True):
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                success_count = 0
+                error_logs = []
+
                 # Helper to strip characters and handle types
                 def clean(val, is_float=False):
                     try:
-                        if pd.isna(val): return 0.0 if is_float else 0
-                        c = str(val).replace(',', '').replace('$', '').strip()
+                        if pd.isna(val) or str(val).strip() == "": return 0.0 if is_float else 0
+                        c = str(val).replace(',', '').replace('$', '').replace('%', '').strip()
                         return float(c) if is_float else int(float(c))
                     except: return 0.0 if is_float else 0
 
-                success_count = 0
-                for _, row in df_upload.iterrows():
-                    payload = {
-                        "entry_date": str(row.get('entry_date', row.get('date'))),
-                        "actual_traffic": clean(row.get('actual_traffic', 0)),
-                        "actual_coin_in": clean(row.get('actual_coin_in', 0.0), is_float=True),
-                        "temp_c": clean(row.get('temp_c', 0), is_float=True),
-                        "active_promo": bool(row.get('active_promo', False))
-                    }
-                    try:
-                        supabase.table("ledger").upsert(payload, on_conflict="entry_date").execute()
-                        success_count += 1
-                    except Exception as e:
-                        st.error(f"Error on row: {e}")
-                
-                st.success(f"Successfully synced {success_count} records to the Ledger!")
-                st.rerun()
+                # Start the Sync Process
+                with st.spinner("Writing to Database..."):
+                    for i, row in df_upload.iterrows():
+                        # Update progress UI
+                        percent_complete = (i + 1) / len(df_upload)
+                        progress_bar.progress(percent_complete)
+                        
+                        payload = {
+                            "entry_date": str(row.get('entry_date', row.get('date'))),
+                            "actual_traffic": clean(row.get('actual_traffic', 0)),
+                            "actual_coin_in": clean(row.get('actual_coin_in', 0.0), is_float=True),
+                            "temp_c": clean(row.get('temp_c', 0), is_float=True),
+                            "active_promo": bool(row.get('active_promo', False))
+                        }
 
+                        try:
+                            # Attempt the push
+                            supabase.table("ledger").upsert(payload, on_conflict="entry_date").execute()
+                            success_count += 1
+                        except Exception as e:
+                            error_logs.append(f"Row {i+1} ({payload['entry_date']}): {str(e)}")
+
+                # Final Feedback Loop
+                if success_count > 0:
+                    st.success(f"✅ Successfully synced {success_count} records!")
+                
+                if error_logs:
+                    with st.expander("⚠️ View Sync Errors"):
+                        for log in error_logs:
+                            st.write(log)
+                
+                if success_count > 0:
+                    st.balloons()
+                    # Small delay before rerun to let you see the success
+                    import time
+                    time.sleep(2)
+                    st.rerun()
 # --- TAB 5: ASK AI DATA ANALYST ---
 with tab5:
     st.markdown("### 💬 AI Data Analyst")
