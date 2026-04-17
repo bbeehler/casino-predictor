@@ -302,91 +302,59 @@ with tab2:
 
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
-    st.markdown("### 📈 Strategic Reporting & ROI")
+    st.markdown("### 📊 Performance Analytics & ROI")
     
     if ledger_data:
         df_rep = pd.DataFrame(ledger_data)
         df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
         
-        # 1. THE CONTROL CARD (Range Selector)
-        with st.container(border=True):
-            r_col1, r_col2 = st.columns(2)
-            # Default to the full range of data available
-            rep_start = r_col1.date_input("Report Start", df_rep['entry_date'].min().date())
-            rep_end = r_col2.date_input("Report End", df_rep['entry_date'].max().date())
+        # 1. Date Range Filter
+        rep_range = st.date_input("Select Reporting Period", 
+                                  [df_rep['entry_date'].min(), df_rep['entry_date'].max()])
+        
+        if len(rep_range) == 2:
+            start, end = pd.to_datetime(rep_range[0]), pd.to_datetime(rep_range[1])
+            mask = (df_rep['entry_date'] >= start) & (df_rep['entry_date'] <= end)
+            df_filtered = df_rep.loc[mask].sort_values('entry_date')
             
-            mask = (df_rep['entry_date'].dt.date >= rep_start) & (df_rep['entry_date'].dt.date <= rep_end)
-            df_f = df_rep.loc[mask].sort_values('entry_date')
-
-        if not df_f.empty:
-            # 2. THE PERFORMANCE CARD (Actual vs AI Baseline)
-            st.markdown("#### AI Prediction vs. Actual Revenue")
-            with st.container(border=True):
-                avg_coin = st.session_state.coeffs['Avg_Coin_In']
-                df_f['AI_Pred_Rev'] = df_f['predicted_traffic'] * avg_coin
+            if not df_filtered.empty:
+                # 2. Key Metric Calculations
+                actual_rev = df_filtered['actual_coin_in'].sum()
+                # Use actual traffic * avg coin-in if predicted column is missing
+                base_rev = (df_filtered['predicted_traffic'].sum() if 'predicted_traffic' in df_filtered.columns else 0) * st.session_state.coeffs['Avg_Coin_In']
+                variance = actual_rev - base_rev
                 
-                t_act_rev = df_f['actual_coin_in'].sum()
-                t_pre_rev = df_f['AI_Pred_Rev'].sum()
-                rev_var = t_act_rev - t_pre_rev
-                rev_pct = (rev_var / t_pre_rev) * 100 if t_pre_rev != 0 else 0
+                # 3. Top-Level Metrics
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Actual Total Revenue", f"${actual_rev:,.0f}")
+                m2.metric("AI Baseline Revenue", f"${base_rev:,.0f}")
+                m3.metric("Variance", f"${variance:,.0f}", delta=f"{(variance/base_rev)*100:.1f}%" if base_rev != 0 else "0%")
                 
-                v1, v2, v3 = st.columns(3)
-                v1.metric("Actual Revenue", f"${t_act_rev:,.0f}")
-                v2.metric("AI Baseline", f"${t_pre_rev:,.0f}")
-                v3.metric("Revenue Variance", f"${rev_var:+.0f}", delta=f"{rev_pct:+.1f}%")
-                
-                # Big Chart Comparison
-                st.area_chart(df_f.set_index('entry_date')[['actual_coin_in', 'AI_Pred_Rev']], color=["#FFCC00", "#333333"])
-
-            # 3. THE TUG-OF-WAR (Weather vs. Digital)
-            st.markdown("#### Impact Analysis")
-            c_left, c_right = st.columns(2)
-            
-            with c_left:
-                with st.container(border=True):
-                    st.subheader("⛈️ Weather Penalty")
-                    c = st.session_state.coeffs
-                    # Calculate loss based on variables in the ledger
-                    w_loss = ((df_f['snow_cm']*c['Snow_cm']) + (df_f['rain_mm']*c['Rain_mm']) + (df_f['weather_alert'].astype(int)*c['Alert'])) * avg_coin
-                    st.title(f"${abs(w_loss.sum()):,.0f}")
-                    st.caption("Estimated revenue lost to environmental factors.")
-            
-            with c_right:
-                with st.container(border=True):
-                    st.subheader("📱 Digital Marketing Gain")
-                    # Use the pre-calculated digital revenue impact from the DB
-                    p_gain = df_f['digital_revenue_impact'].sum()
-                    st.title(f"${p_gain:,.0f}")
-                    st.caption("Total revenue contribution from digital marketing lift.")
-
-            # 4. DIGITAL ROI & DATA AUDIT
-            st.markdown("#### Digital Channel Efficiency & Raw Ledger")
-            with st.container(border=True):
-                total_eng = df_f['social_engagements'].sum()
-                rev_per_eng = p_gain / total_eng if total_eng > 0 else 0
-                
-                d1, d2, d3 = st.columns(3)
-                d1.metric("Total Impressions", f"{int(df_f['ad_impressions'].sum()):,}")
-                d2.metric("Total Engagements", f"{int(total_eng):,}")
-                d3.metric("Rev Per Engagement", f"${rev_per_eng:.2f}")
-
                 st.divider()
-                # Full data view for this range
-                st.write("**Range Audit Ledger**")
-                st.dataframe(df_f, use_container_width=True, hide_index=True)
                 
-                # Range CSV Download
-                csv_data = df_f.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Download Report as CSV",
-                    data=csv_data,
-                    file_name=f"HardRock_Report_{rep_start}_to_{rep_end}.csv",
-                    mime='text/csv'
-                )
-        else:
-            st.warning("No data found for this range.")
+                # 4. The Main Chart: Actual vs Baseline
+                st.markdown("**Revenue vs AI Prediction Baseline**")
+                # Create a clean chart dataframe
+                chart_df = df_filtered.copy()
+                chart_df['AI Baseline'] = chart_df['predicted_traffic'] * st.session_state.coeffs['Avg_Coin_In']
+                chart_df = chart_df.rename(columns={'actual_coin_in': 'Actual Revenue', 'entry_date': 'Date'})
+                
+                st.area_chart(chart_df.set_index('Date')[['Actual Revenue', 'AI Baseline']], 
+                              color=["#FFCC00", "#555555"]) # Gold vs Dark Gray
+                
+                # 5. ROI Breakdown
+                st.markdown("**Digital ROI Impact**")
+                ri1, ri2 = st.columns(2)
+                with ri1:
+                    lift_v = df_filtered['digital_lift_visitors'].sum() if 'digital_lift_visitors' in df_filtered.columns else 0
+                    st.metric("Estimated Digital Lift (Visitors)", f"{lift_v:,.0f}")
+                with ri2:
+                    lift_$ = lift_v * st.session_state.coeffs['Avg_Coin_In']
+                    st.metric("Estimated Digital ROI ($)", f"${lift_$:,.0f}")
+            else:
+                st.warning("No data found for the selected date range.")
     else:
-        st.info("Database is empty. Analytics will populate once daily entries are logged.")
+        st.info("Log data in the Tracker to view reporting.")
 
 # --- TAB 4: ADMIN ENGINE (FULL CONTROL) ---
 with tab4:
