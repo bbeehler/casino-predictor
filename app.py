@@ -468,10 +468,7 @@ with tab4:
             df_upload = pd.read_csv(uploaded_file)
             
             # --- SMART CLEANING ---
-            # Remove hidden spaces from headers and force lowercase
             df_upload.columns = df_upload.columns.str.strip().str.lower()
-            
-            # Map common variations to our database fields
             column_map = {
                 'date': 'entry_date',
                 'entry date': 'entry_date',
@@ -487,43 +484,41 @@ with tab4:
             st.write("Preview of Processed Data:")
             st.dataframe(df_upload.head(5))
             
-            # Check if entry_date actually exists now
             if 'entry_date' not in df_upload.columns:
-                st.error("🚨 Could not find a 'date' or 'entry_date' column in your CSV.")
+                st.error("🚨 Could not find a 'date' or 'entry_date' column.")
             else:
                 if st.button("🚀 Process & Sync to FloorPace", use_container_width=True):
-                with st.spinner("Sanitizing and syncing records..."):
-                    # Helper function to strip commas/symbols and handle NaNs
-                    def clean_val(val, dtype=int):
-                        try:
-                            if pd.isna(val) or val == "": return 0
-                            # Remove commas, dollar signs, and spaces
-                            cleaned = str(val).replace(',', '').replace('$', '').strip()
-                            return dtype(float(cleaned)) # Convert to float first to handle '1.0' strings
-                        except:
-                            return 0
+                    with st.spinner("Sanitizing and syncing records..."):
+                        # Define helper inside the button logic
+                        def clean_num(val, is_float=False):
+                            try:
+                                if pd.isna(val) or val == "": return 0.0 if is_float else 0
+                                cleaned = str(val).replace(',', '').replace('$', '').strip()
+                                return float(cleaned) if is_float else int(float(cleaned))
+                            except:
+                                return 0.0 if is_float else 0
 
-                    success_count = 0
-                    for _, row in df_upload.iterrows():
-                        upload_data = {
-                            "entry_date": str(row['entry_date']),
-                            "actual_traffic": int(clean_val(row.get('actual_traffic', 0))),
-                            "actual_coin_in": float(clean_val(row.get('actual_coin_in', 0.0), dtype=float)),
-                            "predicted_traffic": int(clean_val(row.get('predicted_traffic', 0))),
-                            "temp_c": int(clean_val(row.get('temp_c', 0))),
-                            "ad_impressions": int(clean_val(row.get('ad_impressions', 0))),
-                            "social_engagements": int(clean_val(row.get('social_engagements', 0))),
-                            "ad_clicks": int(clean_val(row.get('ad_clicks', 0))),
-                            "active_promo": bool(row.get('active_promo', False))
-                        }
-                        try:
-                            supabase.table("ledger").upsert(upload_data, on_conflict="entry_date").execute()
-                            success_count += 1
-                        except Exception as e:
-                            st.error(f"Error on row {row['entry_date']}: {e}")
-                            continue
-                    
-                    st.success(f"Successfully synced {success_count} records!")
+                        success_count = 0
+                        for _, row in df_upload.iterrows():
+                            upload_data = {
+                                "entry_date": str(row['entry_date']),
+                                "actual_traffic": clean_num(row.get('actual_traffic', 0)),
+                                "actual_coin_in": clean_num(row.get('actual_coin_in', 0.0), is_float=True),
+                                "predicted_traffic": clean_num(row.get('predicted_traffic', 0)),
+                                "temp_c": clean_num(row.get('temp_c', 0)),
+                                "ad_impressions": clean_num(row.get('ad_impressions', 0)),
+                                "social_engagements": clean_num(row.get('social_engagements', 0)),
+                                "ad_clicks": clean_num(row.get('ad_clicks', 0)),
+                                "active_promo": bool(row.get('active_promo', False))
+                            }
+                            try:
+                                supabase.table("ledger").upsert(upload_data, on_conflict="entry_date").execute()
+                                success_count += 1
+                            except:
+                                continue
+                        
+                        st.success(f"Successfully synced {success_count} records!")
+                        st.rerun()
                     st.rerun()
 
 # --- TAB 5: ASK AI DATA ANALYST ---
