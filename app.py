@@ -239,59 +239,59 @@ with tab2:
                 
                 st.line_chart(df_f.set_index("Date")["Visitors"], color="#FFCC00")
 
-   # --- SECTION B: LEDGER RANGE SEARCH ---
-    st.markdown("### 🔍 3. Historical Ledger Audit")
+# --- SECTION 3: HISTORICAL LEDGER AUDIT & EDIT ---
+    st.markdown("### 🔍 3. Historical Ledger Audit & Corrections")
     with st.container(border=True):
         if ledger_data:
             df_edit = pd.DataFrame(ledger_data)
             df_edit['entry_date'] = pd.to_datetime(df_edit['entry_date'])
             
-            # 1. Date Range Picker
-            search_range = st.date_input(
-                "Select Date Range to Audit",
-                value=[df_edit['entry_date'].max().date() - datetime.timedelta(days=7), 
-                       df_edit['entry_date'].max().date()],
-                help="Select the start and end date to view all logged data for that period."
-            )
+            search_date = st.date_input("Select Date to Audit/Edit", value=df_edit['entry_date'].max().date())
+            search_str = search_date.strftime("%Y-%m-%d")
             
-            # Ensure we have both a start and end date before filtering
-            if isinstance(search_range, list) or isinstance(search_range, tuple):
-                if len(search_range) == 2:
-                    start_search, end_search = search_range
-                    
-                    # Filter the dataframe
-                    mask = (df_edit['entry_date'].dt.date >= start_search) & (df_edit['entry_date'].dt.date <= end_search)
-                    found_range = df_edit.loc[mask].sort_values('entry_date', ascending=False)
-                    
-                    if not found_range.empty:
-                        st.success(f"Displaying {len(found_range)} records from {start_search} to {end_search}")
+            # Find the specific row
+            found = df_edit[df_edit['entry_date'].dt.strftime('%Y-%m-%d') == search_str]
+            
+            if not found.empty:
+                record = found.iloc[0]
+                st.success(f"Record found for {search_str}")
+                
+                # Toggle for Edit Mode to keep the UI clean
+                edit_mode = st.toggle("🔓 Enable Edit Mode for this record")
+                
+                if edit_mode:
+                    with st.form(f"edit_form_{search_str}"):
+                        st.markdown(f"**Editing Data for:** {search_str}")
+                        col_e1, col_e2 = st.columns(2)
                         
-                        # 2. Summary Metrics for the Selected Range
-                        r1, r2, r3 = st.columns(3)
-                        avg_acc = (1 - (abs(found_range['actual_traffic'] - found_range['predicted_traffic']) / found_range['actual_traffic']).mean()) * 100
+                        with col_e1:
+                            new_t = st.number_input("Actual Traffic", value=int(record['actual_traffic']))
+                            new_c = st.number_input("Actual Coin-In ($)", value=float(record['actual_coin_in']))
                         
-                        r1.metric("Range Total Revenue", f"${found_range['actual_coin_in'].sum():,.0f}")
-                        r2.metric("Range Total Traffic", f"{int(found_range['actual_traffic'].sum()):,}")
-                        r3.metric("Avg. Model Accuracy", f"{avg_acc:.1f}%")
+                        with col_e2:
+                            new_temp = st.number_input("Temp (°C)", value=int(record.get('temp_c', 0)))
+                            new_promo = st.checkbox("Active Promotion", value=bool(record.get('active_promo', False)))
                         
-                        # 3. The Full Data Table
-                        st.write("---")
-                        # We format the date column back to a clean string for the table
-                        found_range['entry_date'] = found_range['entry_date'].dt.strftime('%Y-%m-%d')
-                        st.dataframe(found_range, use_container_width=True, hide_index=True)
-                        
-                        # 4. CSV Download for the range
-                        csv = found_range.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label="📥 Download Selected Range as CSV",
-                            data=csv,
-                            file_name=f"HardRock_Audit_{start_search}_to_{end_search}.csv",
-                            mime='text/csv',
-                        )
-                    else:
-                        st.warning("No records found for this specific date range.")
-        else:
-            st.info("Database is empty. Log entries above to see them here.")
+                        if st.form_submit_button("💾 Overwrite & Update Ledger"):
+                            # Recalculate variance based on new input
+                            new_var = new_t - record['predicted_traffic']
+                            
+                            update_data = {
+                                "actual_traffic": new_t,
+                                "actual_coin_in": new_c,
+                                "temp_c": new_temp,
+                                "active_promo": new_promo,
+                                "variance": int(new_var)
+                            }
+                            
+                            supabase.table("ledger").update(update_data).eq("entry_date", search_str).execute()
+                            st.toast("✅ Database updated successfully!")
+                            st.rerun()
+                else:
+                    # Just show the data if not in edit mode
+                    st.json(record.to_dict())
+            else:
+                st.warning(f"No entry found for {search_str}. You can log a new one in the form above.")
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
     st.markdown("### 📈 Strategic Reporting & ROI")
