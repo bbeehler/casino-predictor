@@ -517,7 +517,34 @@ with tab4:
                 # Local Session Update
                 st.session_state.coeffs.update(updated_values)
                 
-                st.success("✅ Database Synchronized: Model
+                st.success("✅ Database Synchronized: Model coefficients are now permanent.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error saving to database: {e}")
+
+    # --- SECTION 2: GLOBAL MAINTENANCE ---
+    st.write("##")
+    st.subheader("🧹 Global Data Maintenance")
+    with st.container(border=True):
+        st.write("Bulk actions to align historical data with current marketing status.")
+        
+        if st.button("🚀 Force All Historical Records to 'Promo = True'", use_container_width=True):
+            try:
+                # Update Supabase ledger table directly
+                supabase.table("ledger")\
+                    .update({"active_promo": True})\
+                    .neq("active_promo", True)\
+                    .execute()
+                
+                st.success("✅ Ledger Updated: All historical entries now reflect active promotion status.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Maintenance task failed: {e}")
+
+    # --- SECTION 3: SYSTEM LOGS ---
+    st.write("##")
+    with st.expander("📝 View Raw Engine Coefficients"):
+        st.json(st.session_state.coeffs)
 
 # --- TAB 5: ASK FLOORCAST ---
 with tab5:
