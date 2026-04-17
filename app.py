@@ -466,49 +466,58 @@ with tab3:
         else:
             st.warning("No data found for the selected date range.")
 
+import google.generativeai as genai
+
 # --- TAB 4: ADMIN ENGINE & DATA MANAGEMENT ---
 with tab4:
     # 1. BRANDED HEADER
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control & Data Management</h2>
-            <p style="color: #888; margin: 0;">Precision tuning for Digital Lift, Financials, and Ottawa Environment.</p>
+            <p style="color: #888; margin: 0;">Precision tuning for Digital Lift and Environmental factors.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    c = st.session_state.coeffs
-
-    # 2. AI REALITY STATUS (TOP BAR)
-    # This calculates the current model accuracy based on your current coefficients
-    if ledger_data:
-        df_acc = pd.DataFrame(ledger_data).copy()
-        df_acc['entry_date'] = pd.to_datetime(df_acc['entry_date'])
-        
-        # Quick accuracy math for the status bar
-        def quick_pred(row):
-            dow_key = f"DOW_{row['entry_date'].strftime('%a')}"
-            return (c['Intercept'] + c.get(dow_key, 0) + (row.get('temp_c', 0) * c['Temp_C']) + (c['Promo']))
-            
-        df_acc['pred'] = df_acc.apply(quick_pred, axis=1)
-        df_acc['error'] = abs(df_acc['actual_traffic'] - df_acc['pred']) / df_acc['actual_traffic']
-        current_accuracy = max(0, (1 - df_acc['error'].mean()) * 100)
-    else:
-        current_accuracy = 0
-
-    s1, s2, s3 = st.columns(3)
+    # 2. AI ENGINE STATUS & AUTO-TUNE
+    s1, s2, s3 = st.columns([1, 1, 2])
     with s1:
-        st.write("🛰️ **Model Connectivity**")
-        st.success("FloorCast: ONLINE")
+        st.write("🛰️ **Status**")
+        st.success("FloorCast: LIVE")
     with s2:
-        st.write("🎯 **Current Model Accuracy**")
-        st.metric("Live Precision", f"{current_accuracy:.1f}%")
+        st.write("📊 **Records**")
+        st.info(f"{len(ledger_data)} Synced")
     with s3:
-        st.write("🧠 **Intelligence Layer**")
-        st.info("Gemini 1.5 Flash Active")
+        st.write("🧠 **AI Calibration**")
+        # --- THE RESTORED AI BUTTON ---
+        if st.button("🤖 Let AI Determine Coefficients", use_container_width=True):
+            with st.spinner("Analyzing historical patterns..."):
+                try:
+                    # Feed recent ledger data to Gemini to suggest best weights
+                    df_calc = pd.DataFrame(ledger_data).tail(60)
+                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    
+                    prompt = f"""
+                    Analyze this ledger data for Hard Rock Ottawa: {df_calc.to_csv()}
+                    Suggest the most accurate coefficients for our model:
+                    - Intercept (Base daily traffic)
+                    - Promo (Flat lift for active promos)
+                    - Clicks (Weight per ad click)
+                    - Snow_cm (Traffic penalty per cm of snow)
+                    - Temp_C (Traffic change per degree Celsius)
+                    Return ONLY a JSON object with these keys.
+                    """
+                    response = model.generate_content(prompt)
+                    # Note: You would typically parse this JSON to auto-fill the boxes below
+                    st.write("AI Suggestion Received. Review weights in the boxes below before saving.")
+                    st.json(response.text)
+                except Exception as e:
+                    st.error(f"AI Calibration failed: {e}")
 
     st.write("##")
+    c = st.session_state.coeffs
 
-    # 3. THE BENTO CONTROL CENTER
+    # 3. THE BENTO CONTROL CENTER (Manual Management)
     col_fin, col_dig, col_env = st.columns(3)
 
     with col_fin:
@@ -516,7 +525,6 @@ with tab4:
             st.markdown("💰 **Financial & Baseline**")
             new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 0)))
             new_avg_spend = st.number_input("Avg. Spend per Head ($)", value=float(c.get('Avg_Coin_In', 0)))
-            st.caption("Standard property baseline before digital lift.")
 
     with col_dig:
         with st.container(border=True):
@@ -524,7 +532,6 @@ with tab4:
             new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
             new_clicks = st.number_input("Weight / Ad Click", value=float(c.get('Clicks', 0)))
             new_imps = st.number_input("Weight / 1k Imps", value=float(c.get('Impressions', 0)), format="%.4f")
-            st.caption("Weights used to calculate Digital ROI & Lift.")
 
     with col_env:
         with st.container(border=True):
@@ -532,51 +539,28 @@ with tab4:
             new_temp = st.number_input("Temp Impact (°C)", value=float(c.get('Temp_C', 0)))
             new_snow = st.number_input("Snow Impact (cm)", value=float(c.get('Snow_cm', 0)))
             new_rain = st.number_input("Rain Impact (mm)", value=float(c.get('Rain_mm', 0)))
-            st.caption("Adjustments based on Ottawa weather patterns.")
 
-    # 4. PRIMARY ACTION
-    st.write("##")
+    # 4. SAVE ACTION
     if st.button("💾 Save All Engine Changes", use_container_width=True):
         try:
             updated_values = {
-                "id": 1,
-                "Intercept": new_intercept,
-                "Temp_C": new_temp,
-                "Snow_cm": new_snow,
-                "Rain_mm": new_rain,
-                "Promo": new_promo,
-                "Clicks": new_clicks,
-                "Impressions": new_imps,
-                "Avg_Coin_In": new_avg_spend
+                "id": 1, "Intercept": new_intercept, "Temp_C": new_temp, "Snow_cm": new_snow, 
+                "Rain_mm": new_rain, "Promo": new_promo, "Clicks": new_clicks, 
+                "Impressions": new_imps, "Avg_Coin_In": new_avg_spend
             }
             supabase.table("coefficients").upsert(updated_values).execute()
             st.session_state.coeffs.update(updated_values)
-            st.success("✅ Engine Tuned: All changes are now permanent.")
+            st.success("✅ Engine Tuned & Saved to Database.")
             st.rerun()
         except Exception as e:
             st.error(f"Save failed: {e}")
 
-    # 5. AI REALITY CHART (Historical Variance)
+    # 5. DATA MAINTENANCE (Force Promo)
     st.write("---")
-    st.markdown("### 📊 Engine Reality Check")
-    with st.container(border=True):
-        if ledger_data:
-            chart_data = df_acc.sort_values('entry_date', ascending=False).head(20).sort_values('entry_date')
-            chart_data = chart_data.rename(columns={'actual_traffic': 'Floor Reality', 'pred': 'Model Prediction'})
-            st.line_chart(chart_data.set_index('entry_date')[['Floor Reality', 'Model Prediction']], color=["#FFCC00", "#555555"])
-            st.caption("Visualizing the gap between current Admin weights and actual property results (Last 20 Days).")
-        else:
-            st.info("Upload ledger data to see the Reality Check chart.")
-
-    # 6. MAINTENANCE
-    st.write("##")
     if st.button("🚀 Force Global Promo: TRUE", use_container_width=True):
-        try:
-            supabase.table("ledger").update({"active_promo": True}).neq("active_promo", True).execute()
-            st.success("Database Synchronized.")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Sync failed: {e}")
+        supabase.table("ledger").update({"active_promo": True}).neq("active_promo", True).execute()
+        st.success("Database Synchronized.")
+        st.rerun()
 
 # --- TAB 5: ASK FLOORCAST ---
 with tab5:
