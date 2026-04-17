@@ -86,13 +86,14 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
     st.markdown("### 🏢 Executive Strategy Command")
-    st.write("DEBUG: Latest Row Found:", df_exec.head(1))
+    
     if ledger_data:
         # 1. DATA PREP & SORTING
         df_exec = pd.DataFrame(ledger_data).copy()
         df_exec['entry_date'] = pd.to_datetime(df_exec['entry_date'])
         # Sort by date so index 0 is always the absolute latest entry
         df_exec = df_exec.sort_values('entry_date', ascending=False).reset_index(drop=True)
+        st.write("🛠️ DEBUG: What is the app seeing in the first row?", df_exec.head(1))
         
         # 2. THE AI ENGINE SYNC (Live Accuracy Calculation)
         c = st.session_state.coeffs
