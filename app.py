@@ -86,7 +86,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
     st.markdown("### 🏢 Executive Strategy Command")
-    
+    st.write("DEBUG: Latest Row Found:", df_exec.head(1))
     if ledger_data:
         # 1. DATA PREP & SORTING
         df_exec = pd.DataFrame(ledger_data).copy()
