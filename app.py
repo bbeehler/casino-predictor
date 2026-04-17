@@ -83,7 +83,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "💬 Ask AI"
 ])
 
-# --- TAB 1: EXECUTIVE DASHBOARD (YTD FOCUS) ---
+# --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
@@ -96,107 +96,87 @@ with tab1:
         df_exec = pd.DataFrame(ledger_data).copy()
         df_exec['entry_date'] = pd.to_datetime(df_exec['entry_date'])
         
-        # Filter for Year-to-Date
+        # 1. PREP DATA & CALCULATE ACCURACY
+        c = st.session_state.coeffs
         current_year = 2026 
         df_ytd = df_exec[df_exec['entry_date'].dt.year == current_year].copy()
         
         # Numeric Safety
-        cols_to_fix = ['actual_traffic', 'actual_coin_in', 'ad_clicks', 'ad_impressions']
-        for col in cols_to_fix:
+        for col in ['actual_traffic', 'actual_coin_in', 'ad_clicks', 'ad_impressions']:
             df_ytd[col] = pd.to_numeric(df_ytd[col], errors='coerce').fillna(0)
+
+        # Baseline & Accuracy Math
+        def get_pred(row):
+            dow_key = f"DOW_{pd.to_datetime(row['entry_date']).strftime('%a')}"
+            return c['Intercept'] + c.get(dow_key, 0) + (row.get('temp_c', 0) * c['Temp_C']) + (c['Promo'] if row.get('active_promo', False) else 0)
+
+        df_ytd['ai_baseline'] = df_ytd.apply(get_pred, axis=1)
         
-        if not df_ytd.empty:
-            c = st.session_state.coeffs
-            
-            # --- 1. CALCULATE DIGITAL LIFT ---
-            # Logic: Lift = (Promo Weight) + (Clicks * Click Weight) + (Imps * Imp Weight)
-            df_ytd['digital_lift'] = df_ytd.apply(lambda row: 
-                (c['Promo'] if row.get('active_promo', False) else 0) + 
-                (row.get('ad_clicks', 0) * c['Clicks']) + 
-                (row.get('ad_impressions', 0) * c['Impressions']), axis=1)
+        # Accuracy Calculation (Available for all cards now)
+        df_calc = df_ytd[df_ytd['actual_traffic'] > 0].copy()
+        accuracy_pct = 0.0
+        if not df_calc.empty:
+            df_calc['error'] = abs(df_calc['actual_traffic'] - df_calc['ai_baseline']) / df_calc['actual_traffic']
+            accuracy_pct = max(0, (1 - df_calc['error'].mean()) * 100)
 
-            total_lift = df_ytd['digital_lift'].sum()
-            total_traffic = df_ytd['actual_traffic'].sum()
-            lift_percentage = (total_lift / total_traffic * 100) if total_traffic > 0 else 0
+        # 2. DIGITAL LIFT MATH
+        df_ytd['digital_lift'] = df_ytd.apply(lambda row: 
+            (c['Promo'] if row.get('active_promo', False) else 0) + 
+            (row.get('ad_clicks', 0) * c['Clicks']) + 
+            (row.get('ad_impressions', 0) * c['Impressions']), axis=1)
 
-            # --- 2. EXECUTIVE KPI BENTO BOX (Revenue & Digital Focus) ---
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                with st.container(border=True):
-                    st.markdown("💰 **YTD Total Revenue**")
-                    st.metric("Total Coin-In", f"${df_ytd['actual_coin_in'].sum():,.0f}")
-                    st.caption(f"Jan 1 - {df_ytd['entry_date'].max().strftime('%b %d')}")
-            
-            with col2:
-                with st.container(border=True):
-                    st.markdown("🚶 **YTD Floor Traffic**")
-                    st.metric("Total Visitors", f"{total_traffic:,.0f}")
-                    st.caption(f"Actual Property Attendance")
+        total_lift = df_ytd['digital_lift'].sum()
+        total_traffic = df_ytd['actual_traffic'].sum()
+        lift_percentage = (total_lift / total_traffic * 100) if total_traffic > 0 else 0
+        digital_rev_impact = total_lift * c['Avg_Coin_In']
 
-            with col3:
-                with st.container(border=True):
-                    st.markdown("🚀 **Digital Lift Contribution**")
-                    # Headcount Metric
-                    st.metric("Lift Visitors", f"{total_lift:,.0f}", f"{lift_percentage:.1f}% of Total")
-                    
-                    # Calculate Digital Revenue Impact
-                    # Logic: Lift Visitors * Avg Spend Coefficient
-                    digital_rev_impact = total_lift * c['Avg_Coin_In']
-                    
-                    st.markdown(f"""
-                        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #333;">
-                            <p style="color: #888; font-size: 0.8rem; margin: 0;">Attributed Revenue Impact</p>
-                            <h3 style="color: #FFCC00; margin: 0;">${digital_rev_impact:,.0f}</h3>
-                        </div>
-                    """, unsafe_allow_html=True)
+        # 3. EXECUTIVE KPI BENTO BOX
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            with st.container(border=True):
+                st.markdown("💰 **YTD Total Revenue**")
+                st.metric("Total Coin-In", f"${df_ytd['actual_coin_in'].sum():,.0f}")
+                st.caption(f"Jan 1 - {df_ytd['entry_date'].max().strftime('%b %d')}")
+        
+        with col2:
+            with st.container(border=True):
+                st.markdown("🚶 **YTD Floor Traffic**")
+                st.metric("Total Visitors", f"{total_traffic:,.0f}")
+                st.caption(f"Actual Property Attendance")
 
-            st.markdown("---")
-            
-            # --- 3. CLEAN ANALYST VIEW (Removing Bar Chart) ---
-            # We'll use this space for a clean summary since the chart is gone
-            sum_col1, sum_col2 = st.columns([1, 1])
-            with sum_col1:
-                with st.container(border=True):
-                    st.markdown("#### 🤖 FloorCast Executive Summary")
-                    st.write(f"Digital strategy is generating an average lift of **{int(total_lift / len(df_ytd))}** visitors per day.")
-                    st.write(f"At an average spend of **${c['Avg_Coin_In']}**, marketing efforts are a significant driver of the YTD variance.")
-            
-            with sum_col2:
-                with st.container(border=True):
-                    st.markdown("#### 🎯 Model Performance")
-                    st.write(f"Current Model Accuracy: **{accuracy_pct:.1f}%**")
-                    st.info("The AI Baseline is currently factoring in weather, calendar cycles, and your digital coefficients.")
-
-            # --- 3. TRENDS & VISUALS (Fixed NameError) ---
-            t1, t2 = st.columns([2, 1])
-            with t1:
-                st.markdown("#### 📈 Traffic Composition (Baseline vs. Digital Lift)")
+        with col3:
+            with st.container(border=True):
+                st.markdown("🚀 **Digital Lift Contribution**")
+                st.metric("Lift Visitors", f"{total_lift:,.0f}", f"{lift_percentage:.1f}% of Total")
                 
-                # Calculate the 'Natural' baseline by subtracting the digital lift from actuals
-                df_ytd['natural_baseline'] = df_ytd['actual_traffic'] - df_ytd['digital_lift']
-                
-                # Prepare the 14-day trend data
-                chart_data = df_ytd.sort_values('entry_date', ascending=False).head(14).copy()
-                chart_data = chart_data.rename(columns={
-                    'natural_baseline': 'Natural Baseline', 
-                    'digital_lift': 'Digital Lift',
-                    'entry_date': 'Date'
-                })
-                
-                # The chart now correctly references chart_data
-                st.bar_chart(
-                    chart_data.set_index('Date')[['Natural Baseline', 'Digital Lift']], 
-                    color=["#555555", "#FFCC00"],
-                    stack=True
-                )
-            
-            with t2:
-                with st.container(border=True):
-                    st.markdown("#### 🤖 FloorCast Insights")
-                    avg_lift_per_day = total_lift / len(df_ytd)
-                    st.write(f"Digital campaigns are currently contributing an average of **{int(avg_lift_per_day)}** visitors per day.")
-                    st.info("The gold segments represent the 'Digital Lift'—visitors driven by your marketing efforts rather than just weather or the calendar.")
+                # Attributed Revenue Impact Section
+                st.markdown(f"""
+                    <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #333;">
+                        <p style="color: #888; font-size: 0.8rem; margin: 0;">Attributed Revenue Impact</p>
+                        <h3 style="color: #FFCC00; margin: 0;">${digital_rev_impact:,.0f}</h3>
+                    </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown("---")
+        
+        # 4. SUMMARY ROW
+        sum_col1, sum_col2 = st.columns(2)
+        with sum_col1:
+            with st.container(border=True):
+                st.markdown("#### 🤖 FloorCast Executive Summary")
+                days_tracked = len(df_ytd) if len(df_ytd) > 0 else 1
+                st.write(f"Digital strategy contributes an average lift of **{int(total_lift / days_tracked)}** visitors daily.")
+                st.write(f"At an average spend of **${c['Avg_Coin_In']}**, marketing is a key revenue driver.")
+        
+        with sum_col2:
+            with st.container(border=True):
+                st.markdown("#### 🎯 Model Performance")
+                st.write(f"Current Model Accuracy: **{accuracy_pct:.1f}%**")
+                st.info("The AI Baseline factors in weather, calendar cycles, and your digital weights.")
+    else:
+        st.info("No ledger data detected. Please upload data in the Admin tab.")
+
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
     st.markdown("""
