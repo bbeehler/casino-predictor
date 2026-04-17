@@ -242,24 +242,58 @@ with tab2:
     with col_sandbox:
         with st.container(border=True):
             st.subheader("🔮 2. Forecast Sandbox")
-            st.write("Simulate future dates to see projected revenue.")
+            st.write("Simulate future dates to see projected revenue and traffic.")
+            
+            # 1. DATE & ENVIRONMENT
             f_range = st.date_input("Forecast Range", [datetime.date.today(), datetime.date.today() + datetime.timedelta(days=7)])
             
             s1, s2 = st.columns(2)
-            sim_temp = s1.slider("Simulated Temp", -30, 40, 15)
-            sim_promo = s2.checkbox("Apply Promo to all dates?")
+            sim_temp = s1.slider("Simulated Temp (°C)", -30, 40, 15)
+            sim_promo = s2.checkbox("Apply Promotion to all dates?")
+            
+            # 2. DIGITAL CAMPAIGN SIMULATOR (New Fields)
+            st.markdown("**Digital Campaign Simulation**")
+            sd1, sd2, sd3 = st.columns(3)
+            sim_imp = sd1.number_input("Est. Impressions", value=300000, step=10000)
+            sim_clk = sd2.number_input("Est. Ad Clicks", value=500, step=50)
+            sim_eng = sd3.number_input("Est. Engagements", value=200, step=25)
             
             if len(f_range) == 2:
                 dates = pd.date_range(f_range[0], f_range[1])
                 c = st.session_state.coeffs
                 f_list = []
+                
                 for d in dates:
                     dk = f"DOW_{d.strftime('%a')}"
-                    p = c['Intercept'] + c.get(dk, 0) + (sim_temp * c['Temp_C']) + (c['Promo'] if sim_promo else 0)
-                    f_list.append({"Date": d.strftime("%a %d"), "Visitors": int(p), "Revenue": p * c['Avg_Coin_In']})
+                    
+                    # FULL MULTIVARIATE MATH
+                    # Baseline + Weather + Digital Lift
+                    p_traffic = (
+                        c['Intercept'] + 
+                        c.get(dk, 0) + 
+                        (sim_temp * c['Temp_C']) + 
+                        (c['Promo'] if sim_promo else 0) +
+                        (sim_imp * c['Impressions']) + 
+                        (sim_clk * c['Clicks'])
+                    )
+                    
+                    p_revenue = p_traffic * c['Avg_Coin_In']
+                    
+                    f_list.append({
+                        "Date": d.strftime("%a %d"), 
+                        "Visitors": int(p_traffic), 
+                        "Revenue": float(p_revenue)
+                    })
                 
                 df_f = pd.DataFrame(f_list)
-                st.metric("Est. Total Revenue", f"${df_f['Revenue'].sum():,.0f}")
+                
+                # 3. DUAL METRIC DISPLAY
+                m_col1, m_col2 = st.columns(2)
+                m_col1.metric("Est. Total Visitors", f"{df_f['Visitors'].sum():,.0f}")
+                m_col2.metric("Est. Total Revenue", f"${df_f['Revenue'].sum():,.0f}")
+                
+                # 4. VISUAL COMPARISON
+                st.markdown("#### Projected Traffic Trend")
                 st.line_chart(df_f.set_index("Date")["Visitors"], color="#FFCC00")
 
     # --- SECTION 3: AUDIT & FULL-FIELD EDIT ---
