@@ -83,83 +83,42 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "💬 Ask AI"
 ])
 
-# --- TAB 1: EXECUTIVE DASHBOARD ---
-with tab1:
-    # 1. THE HERO CARD (AI Strategy)
-    st.markdown("### 🤖 Strategic Intelligence")
-    
-    if ledger_data:
-        df_dash = pd.DataFrame(ledger_data)
-        df_dash = df_dash[df_dash['actual_traffic'] > 0].copy()
-        
-        with st.container(border=True):
-            if not df_dash.empty:
-                st.write("Click below to have Gemini synthesize your data into a strategic narrative.")
-                if st.button("✨ Generate AI Executive Briefing", use_container_width=True):
-                    with st.spinner("AI is analyzing performance..."):
-                        try:
-                            df_dash['entry_date'] = pd.to_datetime(df_dash['entry_date'])
-                            recent_30 = df_dash.sort_values('entry_date', ascending=False).head(30).to_csv(index=False)
-                            
-                            c = st.session_state.coeffs
-                            f_outlook = ""
-                            for i in range(1, 8):
-                                d = datetime.date.today() + datetime.timedelta(days=i)
-                                d_key = f"DOW_{d.strftime('%a')}"
-                                base = c['Intercept'] + c.get(d_key, 0)
-                                f_outlook += f"{d.strftime('%a %d')}: Est. {int(base)} visitors; "
+# --- EXECUTIVE DASHBOARD: AI ACCURACY SECTION ---
+        with col_accuracy:
+            # 1. Pull the optimized coefficients
+            c = st.session_state.coeffs
+            df_acc = pd.DataFrame(ledger_data)
+            
+            if not df_acc.empty:
+                # 2. RE-CALCULATE PREDICTIONS BASED ON CURRENT AI LOGIC
+                def get_live_pred(row):
+                    dow_key = f"DOW_{pd.to_datetime(row['entry_date']).strftime('%a')}"
+                    base = c['Intercept'] + c.get(dow_key, 0)
+                    weather = (row.get('temp_c', 0) * c['Temp_C'])
+                    promo = c['Promo'] if row.get('active_promo', False) else 0
+                    return base + weather + promo
 
-                            model = genai.GenerativeModel('models/gemini-2.5-flash')
-                            prompt = f"Senior Strategy Lead for Hard Rock Ottawa. Summarize this data: {recent_30}. Outlook: {f_outlook}. Max 200 words."
-                            
-                            response = model.generate_content(prompt)
-                            st.markdown("---")
-                            st.markdown(response.text)
-                        except Exception as e:
-                            st.error(f"AI Error: {e}")
+                df_acc['live_pred'] = df_acc.apply(get_live_pred, axis=1)
+                df_acc['actual_traffic'] = pd.to_numeric(df_acc['actual_traffic'], errors='coerce').fillna(0)
+                
+                # 3. CALCULATE MEAN ABSOLUTE PERCENTAGE ERROR (MAPE)
+                # Filter out zeros to avoid division by zero errors
+                df_calc = df_acc[df_acc['actual_traffic'] > 0].copy()
+                if not df_calc.empty:
+                    df_calc['error'] = abs(df_calc['actual_traffic'] - df_calc['live_pred']) / df_calc['actual_traffic']
+                    mape = df_calc['error'].mean()
+                    accuracy_pct = max(0, (1 - mape) * 100)
+                else:
+                    accuracy_pct = 0
+                
+                # 4. DISPLAY THE LIVE GAUGE
+                st.metric("Model Prediction Accuracy", f"{accuracy_pct:.1f}%", 
+                          delta="Live Sync Active", delta_color="normal")
+                
+                # Visual Progress Bar for Accuracy
+                st.progress(accuracy_pct / 100)
             else:
-                st.info("Log daily entries to see AI insights.")
-
-        # 2. THE METRIC GRID (Small Cards)
-        st.markdown("---")
-        st.markdown("### 📊 Performance Pulse")
-        m1, m2, m3 = st.columns(3)
-
-        with m1:
-            with st.container(border=True):
-                st.metric("Total Revenue (YTD)", f"${df_dash['actual_coin_in'].sum():,.0f}")
-        with m2:
-            with st.container(border=True):
-                st.metric("Total Traffic", f"{int(df_dash['actual_traffic'].sum()):,}")
-        with m3:
-            with st.container(border=True):
-                df_dash['error'] = abs(df_dash['actual_traffic'] - df_dash['predicted_traffic'])
-                mape = (df_dash['error'] / df_dash['actual_traffic']).mean()
-                st.metric("AI Accuracy", f"{(1 - mape) * 100:.1f}%")
-
-        # 3. ANALYTICS CARDS (Mixed Sizes)
-        st.markdown("---")
-        col_chart, col_side = st.columns([2, 1])
-
-        with col_chart:
-            with st.container(border=True):
-                st.subheader("📈 Revenue Trend")
-                chart_data = df_dash.set_index('entry_date')[['actual_coin_in']]
-                st.area_chart(chart_data, color="#FFCC00")
-
-        with col_side:
-            with st.container(border=True):
-                st.subheader("📱 Digital Lift")
-                st.write(f"**Impact:**")
-                st.title(f"${df_dash['digital_revenue_impact'].sum():,.0f}")
-                st.metric("Visitor Lift", f"{int(df_dash['digital_lift_visitors'].sum()):,}")
-
-        # 4. RAW DATA
-        st.markdown("---")
-        with st.expander("📂 View Full Ledger"):
-            st.dataframe(df_dash.sort_values('entry_date', ascending=False), use_container_width=True)
-    else:
-        st.info("Database is empty. Log entries in Tab 2 to populate dashboard.")
+                st.write("No historical data to calculate accuracy.")
 
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
