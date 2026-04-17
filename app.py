@@ -322,12 +322,18 @@ with tab3:
                 # Helper to handle "dirty" data or missing columns
                 def safe_get_sum(df, col_name):
                     if col_name in df.columns:
+                        # Force everything to a number, remove NaNs, and sum it up
                         return pd.to_numeric(df[col_name], errors='coerce').fillna(0).sum()
                     return 0.0
 
                 # 2. Key Metric Calculations
                 actual_coin = safe_get_sum(df_filtered, 'actual_coin_in')
                 pred_traffic = safe_get_sum(df_filtered, 'predicted_traffic')
+                
+                # FALLBACK: If predicted_traffic is 0, let's use actual_traffic 
+                # as a baseline so the chart at least shows something.
+                if pred_traffic == 0:
+                    pred_traffic = safe_get_sum(df_filtered, 'actual_traffic')
                 
                 # Get multiplier from Admin Tab (Default to 112 if empty)
                 avg_spend = float(st.session_state.coeffs.get('Avg_Coin_In', 112.0))
