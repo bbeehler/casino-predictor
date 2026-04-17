@@ -367,78 +367,71 @@ with tab3:
             else:
                 st.warning("Select a date range that contains data.")
 
-# --- TAB 4: ADMIN ENGINE (MASTER CONTROL) ---
+# --- TAB 4: ADMIN ENGINE (MASTER CONTROL & IMPORTER) ---
 with tab4:
-    st.markdown("### ⚙️ Engine Control & Coefficient Tuning")
+    st.markdown("### ⚙️ Engine Control & Data Management")
     
-    # 1. THE AI OPTIMIZER
+    # 1. THE ADVANCED AI OPTIMIZER
     with st.container(border=True):
         c_left, c_right = st.columns([2, 1])
         with c_left:
             st.subheader("🤖 Multivariate AI Sync")
-            st.write("Recalibrate all coefficients based on historical data patterns.")
+            st.write("Recalibrate coefficients based on Weather, Promotions, and Digital Performance.")
         with c_right:
             st.write("##")
             if st.button("🚀 Sync AI to Reality", type="primary", use_container_width=True):
-                # 1. Ensure we have enough data to actually find a pattern
                 if len(ledger_data) > 7:
                     df_ml = pd.DataFrame(ledger_data)
-                    
-                    # 2. FORCE NUMERIC: This is the most common fail point
+                    # Clean and Force Types
                     df_ml['actual_traffic'] = pd.to_numeric(df_ml['actual_traffic'], errors='coerce').fillna(0)
                     df_ml['temp_c'] = pd.to_numeric(df_ml['temp_c'], errors='coerce').fillna(0)
                     df_ml['promo_val'] = df_ml['active_promo'].astype(int)
+                    df_ml['ad_clicks'] = pd.to_numeric(df_ml['ad_clicks'], errors='coerce').fillna(0)
                     
-                    # 3. FILTER OUT JUNK: Only train on days where traffic > 0
+                    # Only train on valid history
                     df_train = df_ml[df_ml['actual_traffic'] > 0].copy()
                     
                     if len(df_train) > 5:
                         from sklearn.linear_model import LinearRegression
-                        import numpy as np
-                        
-                        # Features: Temperature and Promotions
-                        X = df_train[['temp_c', 'promo_val']].values
+                        # We include Click-weight in the AI Sync now
+                        X = df_train[['temp_c', 'promo_val', 'ad_clicks']].values
                         y = df_train['actual_traffic'].values
                         
                         model = LinearRegression().fit(X, y)
                         
-                        # 4. UPDATE SESSION STATE (The 'Brain' of the app)
+                        # Update State
                         st.session_state.coeffs['Intercept'] = round(float(model.intercept_), 2)
                         st.session_state.coeffs['Temp_C'] = round(float(model.coef_[0]), 2)
                         st.session_state.coeffs['Promo'] = round(float(model.coef_[1]), 2)
+                        st.session_state.coeffs['Clicks'] = round(float(model.coef_[2]), 4)
                         
-                        # 5. AUTO-CALC AVG COIN-IN (Revenue per Head)
+                        # Sync Avg Revenue per Head
                         df_train['actual_coin_in'] = pd.to_numeric(df_train['actual_coin_in'], errors='coerce').fillna(0)
-                        total_rev = df_train['actual_coin_in'].sum()
-                        total_traf = df_train['actual_traffic'].sum()
-                        
-                        if total_traf > 0:
-                            st.session_state.coeffs['Avg_Coin_In'] = round(total_rev / total_traf, 2)
+                        if df_train['actual_traffic'].sum() > 0:
+                            st.session_state.coeffs['Avg_Coin_In'] = round(df_train['actual_coin_in'].sum() / df_train['actual_traffic'].sum(), 2)
 
-                        st.success(f"🎯 AI Optimized using {len(df_train)} historical days!")
-                        st.balloons()
+                        st.success("🎯 AI recalibrated successfully!")
                         st.rerun()
-                    else:
-                        st.error("The records found have 0 traffic. The AI can't learn from empty floors.")
                 else:
-                    st.error("Not enough historical data. Need at least 8 days of history to sync.")
+                    st.error("Need more historical data (8+ days) to Sync.")
 
-    # 2. THE RESTORED MANUAL OVERRIDES
-    with st.form("admin_settings_comprehensive"):
+    st.divider()
+
+    # 2. MASTER MANUAL OVERRIDES
+    with st.form("admin_settings_final"):
         st.markdown("#### 🛠️ Manual Coefficient Overrides")
         
-        # Financials & Environment
         f1, f2, f3, f4 = st.columns(4)
         with f1:
             new_intercept = st.number_input("Base Traffic", value=float(st.session_state.coeffs['Intercept']))
         with f2:
             new_coin = st.number_input("Avg Spend ($)", value=float(st.session_state.coeffs['Avg_Coin_In']))
         with f3:
-            new_temp = st.number_input("Temp Impact", value=float(st.session_state.coeffs['Temp_C']), format="%.2f")
+            new_temp = st.number_input("Temp Impact", value=float(st.session_state.coeffs['Temp_C']))
         with f4:
-            new_snow = st.number_input("Snow Penalty", value=float(st.session_state.coeffs['Snow_cm']), format="%.2f")
+            new_snow = st.number_input("Snow Penalty", value=float(st.session_state.coeffs['Snow_cm']))
 
-        st.markdown("**Day of the Week Adjustments (Traffic +/-)**")
+        st.markdown("**Day of the Week Adjustments**")
         d1, d2, d3, d4, d5, d6, d7 = st.columns(7)
         new_mon = d1.number_input("Mon", value=float(st.session_state.coeffs['DOW_Mon']))
         new_tue = d2.number_input("Tue", value=float(st.session_state.coeffs['DOW_Tue']))
@@ -448,38 +441,36 @@ with tab4:
         new_sat = d6.number_input("Sat", value=float(st.session_state.coeffs['DOW_Sat']))
         new_sun = d7.number_input("Sun", value=float(st.session_state.coeffs['DOW_Sun']))
 
-        st.markdown("**Marketing Correlation Weights**")
+        st.markdown("**Digital & Promo Weights**")
         m1, m2, m3 = st.columns(3)
         new_promo = m1.number_input("Promotion Lift", value=float(st.session_state.coeffs['Promo']))
-        new_imp = m2.number_input("Ad Impressions Weight", value=float(st.session_state.coeffs['Impressions']), format="%.6f")
-        new_clk = m3.number_input("Ad Clicks Weight", value=float(st.session_state.coeffs['Clicks']), format="%.4f")
+        new_imp = m2.number_input("Impression Weight", value=float(st.session_state.coeffs['Impressions']), format="%.6f")
+        new_clk = m3.number_input("Click Weight", value=float(st.session_state.coeffs['Clicks']), format="%.4f")
 
         if st.form_submit_button("💾 Save All Engine Changes", use_container_width=True):
             st.session_state.coeffs.update({
-                'Intercept': new_intercept, 'Avg_Coin_In': new_coin,
-                'Temp_C': new_temp, 'Snow_cm': new_snow,
+                'Intercept': new_intercept, 'Avg_Coin_In': new_coin, 'Temp_C': new_temp, 'Snow_cm': new_snow,
                 'DOW_Mon': new_mon, 'DOW_Tue': new_tue, 'DOW_Wed': new_wed, 'DOW_Thu': new_thu,
                 'DOW_Fri': new_fri, 'DOW_Sat': new_sat, 'DOW_Sun': new_sun,
                 'Promo': new_promo, 'Impressions': new_imp, 'Clicks': new_clk
             })
-            st.success("Manual overrides applied!")
+            st.success("Coefficients locked in.")
             st.rerun()
 
     st.divider()
 
-    # 3. THE HIGH-FEEDBACK IMPORTER
+    # 3. THE HIGH-CAPACITY IMPORTER
     st.subheader("📥 Bulk Data Importer")
     with st.container(border=True):
-        st.write("Required Headers: `entry_date`, `actual_traffic`, `actual_coin_in`, `temp_c`")
-        uploaded_file = st.file_uploader("Choose CSV File", type="csv")
+        st.write("Headers: `entry_date`, `actual_traffic`, `actual_coin_in`, `temp_c`, `ad_impressions`, `ad_clicks`, `social_engagements`")
+        uploaded_file = st.file_uploader("Upload Historical CSV", type="csv")
         
         if uploaded_file is not None:
             df_upload = pd.read_csv(uploaded_file)
-            if st.button("🚀 Process & Sync to Supabase", use_container_width=True):
+            if st.button("🚀 Process & Sync to Ledger", use_container_width=True):
                 progress_bar = st.progress(0)
                 success_count = 0
-                error_logs = []
-
+                
                 def clean(val, is_float=False):
                     try:
                         if pd.isna(val) or str(val).strip() == "": return 0.0 if is_float else 0
@@ -489,16 +480,12 @@ with tab4:
 
                 for i, row in df_upload.iterrows():
                     progress_bar.progress((i + 1) / len(df_upload))
-                    
-                    # Log the actual headers found to help you debug
                     payload = {
                         "entry_date": str(row.get('entry_date', row.get('date'))),
                         "actual_traffic": clean(row.get('actual_traffic', 0)),
                         "actual_coin_in": clean(row.get('actual_coin_in', 0.0), is_float=True),
                         "temp_c": clean(row.get('temp_c', 0), is_float=True),
                         "active_promo": bool(row.get('active_promo', False)),
-                        
-                        # DIGITAL METRICS - Ensure these match your CSV headers exactly
                         "ad_impressions": clean(row.get('ad_impressions', row.get('impressions', 0))),
                         "ad_clicks": clean(row.get('ad_clicks', row.get('clicks', 0))),
                         "social_engagements": clean(row.get('social_engagements', row.get('engagements', 0)))
@@ -507,7 +494,11 @@ with tab4:
                         supabase.table("ledger").upsert(payload, on_conflict="entry_date").execute()
                         success_count += 1
                     except Exception as e:
-                        error_logs.append(f"Row {i+1} Fail: {str(e)}")
+                        st.error(f"Row {i+1} failed: {e}")
+
+                if success_count > 0:
+                    st.success(f"✅ Successfully integrated {success_count} records!")
+                    st.rerun()
 # --- TAB 5: ASK AI DATA ANALYST ---
 with tab5:
     st.markdown("### 💬 AI Data Analyst")
