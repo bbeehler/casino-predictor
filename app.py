@@ -83,6 +83,25 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "💬 Ask AI"
 ])
 
+# --- 1. INITIAL DATA HYDRATION (Run at Startup) ---
+if 'coeffs' not in st.session_state:
+    try:
+        # Pull the master record (ID 1) from Supabase
+        response = supabase.table("coefficients").select("*").eq("id", 1).execute()
+        
+        if response.data:
+            # Load saved weights into session state
+            st.session_state.coeffs = response.data[0]
+        else:
+            # Fallback if the table is empty
+            st.session_state.coeffs = {
+                "id": 1, "Intercept": 1000, "Temp_C": 0, "Snow_cm": 0, 
+                "Rain_mm": 0, "Promo": 0, "Clicks": 0, 
+                "Impressions": 0, "Avg_Coin_In": 1200
+            }
+    except Exception as e:
+        st.error(f"Failed to load Engine Weights: {e}")
+
 # --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
     st.markdown("""
