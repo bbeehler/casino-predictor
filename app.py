@@ -613,64 +613,91 @@ import google.generativeai as genai
 
 import google.generativeai as genai
 
+import google.generativeai as genai
+
 # --- TAB 5: ASK FLOORCAST ---
 with tab5:
-    # 1. BRANDED HEADER
     st.markdown("""
-        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 10px;">
+        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🤖 Ask FloorCast</h2>
-            <p style="color: #888; margin: 0;">Proprietary AI analyst correlating property data with digital ROI.</p>
+            <p style="color: #888; margin: 0;">Proprietary analyst for Hard Rock Ottawa performance data.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 2. UI FIX FOR CLIPPING
-    # This prevents the floating input bar from hiding the bottom of the response
-    st.markdown("""
-        <style>
-            .stChatMessage { margin-bottom: 25px !important; }
-            div[data-testid="stVerticalBlock"] > div:last-child { margin-bottom: 50px; }
-        </style>
-    """, unsafe_allow_html=True)
-
-    # 3. API CONFIGURATION
+    # 1. API KEY & MODEL CONFIG
     if "GEMINI_API_KEY" not in st.secrets:
-        st.error("🛑 **System Offline:** GEMINI_API_KEY missing from Streamlit Secrets.")
+        st.error("🛑 GEMINI_API_KEY missing from Secrets.")
         st.stop()
     
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     
-    # 4. MODEL SETTINGS (Optimized for detailed data analysis)
-    generation_config = {
-        "temperature": 0.2,      # Grounded and factual
-        "top_p": 0.95,
-        "max_output_tokens": 2048, # High limit to prevent truncated responses
-    }
-    
+    # SAFETY SETTINGS: Prevent the AI from blocking financial/casino data
+    safety_settings = [
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+    ]
+
     model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
-        generation_config=generation_config
+        model_name="gemini-1.5-flash",
+        safety_settings=safety_settings,
+        generation_config={"temperature": 0.2, "max_output_tokens": 2048}
     )
 
-    # 5. CHAT STATE & HISTORY
+    # 2. CHAT SESSION STATE
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display scrollable chat history
-    chat_container = st.container()
-    with chat_container:
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+    # Display History
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-    # 6. DATA CONTEXT PREPARATION
-    # We provide the AI with the most recent 60 days of ledger data
+    # 3. CONTEXT PREP (Limit to last 30 days to avoid prompt bloat)
     if ledger_data:
-        context_df = pd.DataFrame(ledger_data).tail(60)
-        csv_context = context_df.to_csv(index=False)
+        # We only send the last 30 entries to keep the AI focused and fast
+        df_context = pd.DataFrame(ledger_data).tail(30)
+        csv_context = df_context.to_csv(index=False)
     else:
-        csv_context = "No historical data currently exists in the ledger."
+        csv_context = "No data available."
 
-    # 7. INTERACTION LOGIC
-    if prompt := st.chat_input("Query FloorCast (e.g., 'Analyze the ROI of our ad clicks versus snow impact')"):
-        # Store and display user question
+    # 4. CHAT INPUT
+    if prompt := st.chat_input("Query FloorCast..."):
+        # Add user message to state
         st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Generate Response
+        with st.chat_message("assistant"):
+            with st.spinner("Consulting FloorPace Ledger..."):
+                try:
+                    # System Prompt
+                    full_query = f"""
+                    You are FloorCast, Lead Data Analyst for Hard Rock Hotel & Casino Ottawa.
+                    
+                    LEDGER DATA (LAST 30 DAYS):
+                    {csv_context}
+                    
+                    USER SETTINGS:
+                    {st.session_state.coeffs}
+                    
+                    QUESTION: {prompt}
+                    
+                    RULES:
+                    - Be quantitative. Reference specific 'actual_traffic' or 'ad_clicks' numbers.
+                    - If data is missing, say so.
+                    - provide an executive summary first, then details.
+                    """
+                    
+                    response = model.generate_content(full_query)
+                    
+                    if response.text:
+                        st.markdown(response.text)
+                        st.session_state.messages.append({"role": "assistant", "content": response.text})
+                    else:
+                        st.warning("FloorCast analyzed the data but the response was empty. Try a simpler question.")
+                
+                except Exception as e:
+                    st.error(f"Analysis failed. Error: {str(e)}")
