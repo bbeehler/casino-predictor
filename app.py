@@ -604,39 +604,69 @@ with tab4:
                 if success_count > 0:
                     st.success(f"✅ Successfully integrated {success_count} records!")
                     st.rerun()
-# --- TAB 5: ASK FLOORCAST ---
+
+import google.generativeai as genai
+
+# --- TAB 5: ASK FLOORCAST (LIVE INTELLIGENCE) ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🤖 Ask FloorCast</h2>
-            <p style="color: #888; margin: 0;">Query your property data using natural language for instant insights.</p>
+            <p style="color: #888; margin: 0;">Your proprietary analyst for Hard Rock Ottawa performance data.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    st.info("💡 **Try asking:** 'How did the snow last Tuesday impact our coin-in?' or 'What is the correlation between ad clicks and Friday traffic?'")
+    # 1. SETUP THE BRAIN (Ensure your API Key is in st.secrets)
+    if "GOOGLE_API_KEY" in st.secrets:
+        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+        model = genai.GenerativeModel('gemini-2.5-flash')
+    else:
+        st.warning("⚠️ Google API Key missing in secrets. Add GOOGLE_API_KEY to continue.")
+        st.stop()
 
-    # Chat Interface
+    # 2. CHAT HISTORY
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display chat history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Chat Input
-    if prompt := st.chat_input("Ask FloorCast anything about your property performance..."):
-        # Display user message
+    # 3. CONTEXT PREPARATION
+    # We provide the AI with the last 30 days of data so it has "memory"
+    if ledger_data:
+        context_df = pd.DataFrame(ledger_data).tail(30)
+        csv_context = context_df.to_csv(index=False)
+    else:
+        csv_context = "No data currently available in ledger."
+
+    # 4. THE INTERACTION
+    if prompt := st.chat_input("Ask about traffic, weather impact, or digital ROI..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
-        st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # Generate FloorCast Response
         with st.chat_message("assistant"):
-            with st.spinner("Analyzing Ledger..."):
-                # Here we pass the ledger context to the AI
-                # For now, a placeholder logic; in your full build, this connects to your LLM
-                response = f"FloorCast Analysis: I'm currently reviewing the ledger for '{prompt}'. (AI connection active)"
-                st.markdown(response)
-        
-        st.session_state.messages.append({"role": "assistant", "content": response})
+            with st.spinner("Analyzing Ledger & Environment..."):
+                try:
+                    # SYSTEM INSTRUCTIONS for the AI
+                    system_prompt = f"""
+                    You are FloorCast, a specialized data analyst for Hard Rock Hotel & Casino Ottawa.
+                    You have access to the following 30-day performance ledger:
+                    {csv_context}
+                    
+                    User Coefficients: {st.session_state.coeffs}
+                    
+                    Instructions:
+                    1. Use the data to answer specifically about Ottawa property performance.
+                    2. If asked about ROI, reference the 'actual_coin_in' and 'ad_clicks'.
+                    3. Be professional, concise, and executive-focused.
+                    """
+                    
+                    full_prompt = f"{system_prompt}\n\nUser Question: {prompt}"
+                    response = model.generate_content(full_prompt)
+                    
+                    st.markdown(response.text)
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                except Exception as e:
+                    st.error(f"FloorCast is offline: {e}")
