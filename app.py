@@ -127,7 +127,7 @@ with tab1:
             with col2:
                 with st.container(border=True):
                     st.markdown("💰 **Latest Revenue**")
-                    st.metric("Daily Coin-In", f"${latest_row['actual_coin_in']:,.0f}")
+                    st.metric("Daily Revenue", f"${latest_row['actual_coin_in']:,.0f}")
                     st.caption(f"Date: {latest_row['entry_date'].strftime('%Y-%m-%d')}")
             with col3:
                 with st.container(border=True):
