@@ -293,77 +293,73 @@ with tab2:
 
 # --- TAB 3: STRATEGIC REPORTING & ROI ---
 with tab3:
-    st.markdown("### 📊 Strategic Performance & Digital ROI")
+    # 1. HEADER WITH ACCENT
+    st.markdown("""
+        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
+            <h2 style="color: #FFCC00; margin: 0;">📊 Strategic Performance & Digital ROI</h2>
+            <p style="color: #888; margin: 0;">Correlating Digital Matters Now metrics with Property Floor Reality.</p>
+        </div>
+    """, unsafe_admin_html=True)
     
     if ledger_data:
         df_rep = pd.DataFrame(ledger_data).copy()
         df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
         df_rep = df_rep.sort_values('entry_date', ascending=False)
 
-        # 1. DATE FILTER
-        col_f1, col_f2 = st.columns(2)
-        start_rep = col_f1.date_input("Report Start", df_rep['entry_date'].min())
-        end_rep = col_f2.date_input("Report End", df_rep['entry_date'].max())
+        # 2. DATE FILTER (CLEAN ROW)
+        with st.container(border=True):
+            f1, f2, f3 = st.columns([1, 1, 1])
+            start_rep = f1.date_input("📅 Report Start", df_rep['entry_date'].min())
+            end_rep = f2.date_input("📅 Report End", df_rep['entry_date'].max())
+            f3.write("##") # Spacer
+            if f3.button("🔄 Refresh Data", use_container_width=True):
+                st.rerun()
         
         mask = (df_rep['entry_date'].dt.date >= start_rep) & (df_rep['entry_date'].dt.date <= end_rep)
         df_filtered = df_rep.loc[mask].copy()
 
         if not df_filtered.empty:
-            # 2. DIGITAL PERFORMANCE BENTO
+            st.write("##")
+            
+            # 3. DIGITAL PERFORMANCE BENTO (THE "GOLD" METRICS)
             st.markdown("#### 📱 Digital Impact Metrics")
             d1, d2, d3, d4 = st.columns(4)
             
-            # Summing the Digital metrics
             total_imps = df_filtered['ad_impressions'].sum()
             total_clks = df_filtered['ad_clicks'].sum()
             total_engs = df_filtered['social_engagements'].sum()
             total_rev = df_filtered['actual_coin_in'].sum()
             
             with d1:
-                st.metric("Ad Impressions", f"{total_imps:,.0f}")
+                with st.container(border=True):
+                    st.metric("Ad Impressions", f"{total_imps:,.0f}")
             with d2:
-                st.metric("Ad Clicks", f"{total_clks:,.0f}")
+                with st.container(border=True):
+                    st.metric("Ad Clicks", f"{total_clks:,.0f}")
             with d3:
-                st.metric("Social Engagements", f"{total_engs:,.0f}")
+                with st.container(border=True):
+                    st.metric("Engagements", f"{total_engs:,.0f}")
             with d4:
-                # Calculate Revenue per Click (Direct ROI)
-                rpc = total_rev / total_clks if total_clks > 0 else 0
-                st.metric("Rev per Click", f"${rpc:.2f}")
+                with st.container(border=True):
+                    rpc = total_rev / total_clks if total_clks > 0 else 0
+                    st.metric("Rev per Click", f"${rpc:.2f}", delta_color="normal")
 
-            st.divider()
+            st.write("##")
 
-            # 3. AI VARIANCE ANALYSIS
-            st.markdown("#### 🎯 AI Prediction vs. Property Reality")
-            
-            # Recalculate AI Baseline live for the report
-            c = st.session_state.coeffs
-            def get_pred(row):
-                dow_key = f"DOW_{pd.to_datetime(row['entry_date']).strftime('%a')}"
-                return c['Intercept'] + c.get(dow_key, 0) + (row.get('temp_c', 0) * c['Temp_C']) + (c['Promo'] if row.get('active_promo', False) else 0)
-
-            df_filtered['ai_baseline'] = df_filtered.apply(get_pred, axis=1)
-            df_filtered['variance'] = df_filtered['actual_traffic'] - df_filtered['ai_baseline']
-            
-            v1, v2 = st.columns(2)
-            total_var = df_filtered['variance'].sum()
-            v1.metric("Total Traffic Variance", f"{total_var:,.0f}", delta=f"{total_var:,.0f} vs Baseline")
-            
-            # 4. CHARTING THE LIFT
-            chart_rep = df_filtered.sort_values('entry_date')
-            chart_rep = chart_rep.rename(columns={'actual_traffic': 'Actual Traffic', 'ai_baseline': 'AI Baseline'})
-            st.area_chart(chart_rep.set_index('entry_date')[['Actual Traffic', 'AI Baseline']], color=["#FFCC00", "#555555"])
-
-            # 5. EXPORT
-            st.download_button(
-                label="📥 Export Custom ROI Report (CSV)",
-                data=df_filtered.to_csv(index=False),
-                file_name=f"FloorPace_ROI_{start_rep}_to_{end_rep}.csv",
-                mime="text/csv"
-            )
-        else:
-            st.warning("No data found for the selected date range.")
-    else:
-        st.info("Historical data required to generate ROI reports.")
+            # 4. CHARTING AREA
+            t_col, c_col = st.columns([2.5, 1])
+            with t_col:
+                with st.container(border=True):
+                    st.markdown("#### 📈 Actual Traffic vs. AI Predicted Baseline")
+                    # Logic to generate prediction line
+                    c = st.session_state.coeffs
+                    df_filtered['ai_baseline'] = df_filtered.apply(lambda row: 
+                        c['Intercept'] + c.get(f"DOW_{row['entry_date'].strftime('%a')}", 0) + 
+                        (row.get('temp_c', 0) * c['Temp_C']) + (c['Promo'] if row.get('active_promo', False) else 0), axis=1)
+                    
+                    chart_rep = df_filtered.sort_values('entry_date')
+                    chart_rep = chart_rep.rename(columns={'actual_traffic': 'Floor Reality', 'ai_baseline': 'AI Baseline'})
+                    st.area_chart(chart_rep.set_index('entry_date')[['Floor Reality', 'AI Baseline']], color
 
 # --- TAB 4: ADMIN ENGINE (MASTER CONTROL & IMPORTER) ---
 with tab4:
