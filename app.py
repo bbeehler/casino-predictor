@@ -196,7 +196,7 @@ with tab2:
                         "actual_coin_in": float(act_coin),
                         "predicted_traffic": int(final_pred),
                         "variance": int(int(act_traf) - int(final_pred)),
-                        "temp_c": int(temp),
+                        "temp_c": float(temp),
                         "snow_cm": float(snow),
                         "rain_mm": 0.0,
                         "active_promo": bool(promo),
@@ -265,7 +265,7 @@ with tab2:
                                 up_c = st.number_input("Coin-In ($)", value=float(record.get('actual_coin_in', 0.0)))
                                 up_p = st.number_input("Pred. Traffic", value=int(record.get('predicted_traffic', 0)))
                             with ec2:
-                                up_temp = st.number_input("Temp", value=int(record.get('temp_c', 0)))
+                                up_temp = st.number_input("Temp", value=float(record.get('temp_c', 0.0)))
                                 up_snow = st.number_input("Snow", value=float(record.get('snow_cm', 0.0)))
                                 up_alert = st.checkbox("Alert", value=bool(record.get('weather_alert', False)))
                             with ec3:
@@ -274,19 +274,29 @@ with tab2:
                                 up_clk = st.number_input("Clicks", value=int(record.get('ad_clicks', 0)))
 
                             if st.form_submit_button("💾 Save All Changes"):
-                                supabase.table("ledger").update({
-                                    "actual_traffic": up_t, "actual_coin_in": up_c, "predicted_traffic": up_p,
-                                    "temp_c": up_temp, "snow_cm": up_snow, "weather_alert": up_alert,
-                                    "active_promo": up_promo, "ad_impressions": up_imp, "ad_clicks": up_clk,
-                                    "variance": int(up_t - up_p)
-                                }).eq("entry_date", search_str).execute()
-                                st.toast("Full record updated!")
-                                st.rerun()
+                                try:
+                                    supabase.table("ledger").update({
+                                        "actual_traffic": int(up_t), 
+                                        "actual_coin_in": float(up_c), 
+                                        "predicted_traffic": int(up_p),
+                                        "temp_c": float(up_temp), 
+                                        "snow_cm": float(up_snow), 
+                                        "weather_alert": bool(up_alert),
+                                        "active_promo": bool(up_promo), 
+                                        "ad_impressions": int(up_imp), 
+                                        "ad_clicks": int(up_clk),
+                                        "variance": int(int(up_t) - int(up_p))
+                                    }).eq("entry_date", search_str).execute()
+                                    st.toast("Full record updated!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Update Error: {e}")
                 else:
                     st.info("No record found for this date.")
 
         st.markdown("**Full Historical Ledger**")
         display_df = df_edit.sort_values('entry_date', ascending=False)
+        # Clean up date display
         display_df['entry_date'] = display_df['entry_date'].dt.strftime('%Y-%m-%d')
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
