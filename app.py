@@ -386,16 +386,16 @@ with tab3:
             else:
                 st.warning("Select a date range that contains data.")
 
-# --- TAB 4: ADMIN ENGINE (THE BRAIN + IMPORTER) ---
+# --- TAB 4: ADMIN ENGINE (MASTER CONTROL) ---
 with tab4:
-    st.markdown("### ⚙️ Engine Control & Data Management")
+    st.markdown("### ⚙️ Engine Control & Coefficient Tuning")
     
     # 1. THE AI OPTIMIZER
     with st.container(border=True):
         c_left, c_right = st.columns([2, 1])
         with c_left:
             st.subheader("🤖 Multivariate AI Sync")
-            st.write("Automatically recalibrate all coefficients based on historical patterns.")
+            st.write("Recalibrate all coefficients based on historical data patterns.")
         with c_right:
             st.write("##")
             if st.button("🚀 Sync AI to Reality", type="primary", use_container_width=True):
@@ -405,7 +405,6 @@ with tab4:
                     df_ml['temp_c'] = pd.to_numeric(df_ml['temp_c'], errors='coerce').fillna(0)
                     df_ml['promo_val'] = df_ml['active_promo'].astype(int)
                     
-                    # Regression Logic
                     from sklearn.linear_model import LinearRegression
                     X = df_ml[['temp_c', 'promo_val']]
                     y = df_ml['actual_traffic']
@@ -414,92 +413,97 @@ with tab4:
                     st.session_state.coeffs['Intercept'] = round(model.intercept_, 2)
                     st.session_state.coeffs['Temp_C'] = round(model.coef_[0], 2)
                     st.session_state.coeffs['Promo'] = round(model.coef_[1], 2)
-                    
-                    st.success("🎯 Global Optimization Complete!")
+                    st.success("🎯 AI Sync Complete!")
                     st.rerun()
                 else:
                     st.error("Need more data for AI Sync.")
 
     st.divider()
 
-    # 2. THE SETTINGS FORM
-    with st.form("admin_settings_v3"):
+    # 2. THE RESTORED MANUAL OVERRIDES
+    with st.form("admin_settings_comprehensive"):
         st.markdown("#### 🛠️ Manual Coefficient Overrides")
-        col_fin, col_wea = st.columns(2)
-        with col_fin:
-            new_intercept = st.number_input("Base Daily Traffic", value=float(st.session_state.coeffs['Intercept']))
-            new_coin = st.number_input("Avg Revenue per Head ($)", value=float(st.session_state.coeffs['Avg_Coin_In']))
-        with col_wea:
-            new_temp = st.number_input("Temp Impact", value=float(st.session_state.coeffs['Temp_C']))
-            new_promo = st.number_input("Promotion Lift", value=float(st.session_state.coeffs['Promo']))
+        
+        # Financials & Environment
+        f1, f2, f3, f4 = st.columns(4)
+        with f1:
+            new_intercept = st.number_input("Base Traffic", value=float(st.session_state.coeffs['Intercept']))
+        with f2:
+            new_coin = st.number_input("Avg Spend ($)", value=float(st.session_state.coeffs['Avg_Coin_In']))
+        with f3:
+            new_temp = st.number_input("Temp Impact", value=float(st.session_state.coeffs['Temp_C']), format="%.2f")
+        with f4:
+            new_snow = st.number_input("Snow Penalty", value=float(st.session_state.coeffs['Snow_cm']), format="%.2f")
 
-        if st.form_submit_button("💾 Save Changes"):
-            st.session_state.coeffs.update({'Intercept': new_intercept, 'Avg_Coin_In': new_coin, 'Temp_C': new_temp, 'Promo': new_promo})
+        st.markdown("**Day of the Week Adjustments (Traffic +/-)**")
+        d1, d2, d3, d4, d5, d6, d7 = st.columns(7)
+        new_mon = d1.number_input("Mon", value=float(st.session_state.coeffs['DOW_Mon']))
+        new_tue = d2.number_input("Tue", value=float(st.session_state.coeffs['DOW_Tue']))
+        new_wed = d3.number_input("Wed", value=float(st.session_state.coeffs['DOW_Wed']))
+        new_thu = d4.number_input("Thu", value=float(st.session_state.coeffs['DOW_Thu']))
+        new_fri = d5.number_input("Fri", value=float(st.session_state.coeffs['DOW_Fri']))
+        new_sat = d6.number_input("Sat", value=float(st.session_state.coeffs['DOW_Sat']))
+        new_sun = d7.number_input("Sun", value=float(st.session_state.coeffs['DOW_Sun']))
+
+        st.markdown("**Marketing Correlation Weights**")
+        m1, m2, m3 = st.columns(3)
+        new_promo = m1.number_input("Promotion Lift", value=float(st.session_state.coeffs['Promo']))
+        new_imp = m2.number_input("Ad Impressions Weight", value=float(st.session_state.coeffs['Impressions']), format="%.6f")
+        new_clk = m3.number_input("Ad Clicks Weight", value=float(st.session_state.coeffs['Clicks']), format="%.4f")
+
+        if st.form_submit_button("💾 Save All Engine Changes", use_container_width=True):
+            st.session_state.coeffs.update({
+                'Intercept': new_intercept, 'Avg_Coin_In': new_coin,
+                'Temp_C': new_temp, 'Snow_cm': new_snow,
+                'DOW_Mon': new_mon, 'DOW_Tue': new_tue, 'DOW_Wed': new_wed, 'DOW_Thu': new_thu,
+                'DOW_Fri': new_fri, 'DOW_Sat': new_sat, 'DOW_Sun': new_sun,
+                'Promo': new_promo, 'Impressions': new_imp, 'Clicks': new_clk
+            })
+            st.success("Manual overrides applied!")
             st.rerun()
 
     st.divider()
 
-   # 3. THE HIGH-FEEDBACK IMPORTER
+    # 3. THE HIGH-FEEDBACK IMPORTER
     st.subheader("📥 Bulk Data Importer")
     with st.container(border=True):
-        st.write("Upload CSV. Required Headers: `entry_date`, `actual_traffic`, `actual_coin_in`, `temp_c`")
+        st.write("Required Headers: `entry_date`, `actual_traffic`, `actual_coin_in`, `temp_c`")
         uploaded_file = st.file_uploader("Choose CSV File", type="csv")
         
         if uploaded_file is not None:
             df_upload = pd.read_csv(uploaded_file)
-            st.write(f"📂 Found {len(df_upload)} rows in file.")
-            
             if st.button("🚀 Process & Sync to Supabase", use_container_width=True):
                 progress_bar = st.progress(0)
-                status_text = st.empty()
                 success_count = 0
                 error_logs = []
 
-                # Helper to strip characters and handle types
                 def clean(val, is_float=False):
                     try:
                         if pd.isna(val) or str(val).strip() == "": return 0.0 if is_float else 0
-                        c = str(val).replace(',', '').replace('$', '').replace('%', '').strip()
+                        c = str(val).replace(',', '').replace('$', '').strip()
                         return float(c) if is_float else int(float(c))
                     except: return 0.0 if is_float else 0
 
-                # Start the Sync Process
-                with st.spinner("Writing to Database..."):
-                    for i, row in df_upload.iterrows():
-                        # Update progress UI
-                        percent_complete = (i + 1) / len(df_upload)
-                        progress_bar.progress(percent_complete)
-                        
-                        payload = {
-                            "entry_date": str(row.get('entry_date', row.get('date'))),
-                            "actual_traffic": clean(row.get('actual_traffic', 0)),
-                            "actual_coin_in": clean(row.get('actual_coin_in', 0.0), is_float=True),
-                            "temp_c": clean(row.get('temp_c', 0), is_float=True),
-                            "active_promo": bool(row.get('active_promo', False))
-                        }
+                for i, row in df_upload.iterrows():
+                    progress_bar.progress((i + 1) / len(df_upload))
+                    payload = {
+                        "entry_date": str(row.get('entry_date', row.get('date'))),
+                        "actual_traffic": clean(row.get('actual_traffic', 0)),
+                        "actual_coin_in": clean(row.get('actual_coin_in', 0.0), is_float=True),
+                        "temp_c": clean(row.get('temp_c', 0), is_float=True),
+                        "active_promo": bool(row.get('active_promo', False))
+                    }
+                    try:
+                        supabase.table("ledger").upsert(payload, on_conflict="entry_date").execute()
+                        success_count += 1
+                    except Exception as e:
+                        error_logs.append(f"Row {i+1}: {str(e)}")
 
-                        try:
-                            # Attempt the push
-                            supabase.table("ledger").upsert(payload, on_conflict="entry_date").execute()
-                            success_count += 1
-                        except Exception as e:
-                            error_logs.append(f"Row {i+1} ({payload['entry_date']}): {str(e)}")
-
-                # Final Feedback Loop
-                if success_count > 0:
-                    st.success(f"✅ Successfully synced {success_count} records!")
-                
+                if success_count > 0: st.success(f"✅ Synced {success_count} records!")
                 if error_logs:
-                    with st.expander("⚠️ View Sync Errors"):
-                        for log in error_logs:
-                            st.write(log)
-                
-                if success_count > 0:
-                    st.balloons()
-                    # Small delay before rerun to let you see the success
-                    import time
-                    time.sleep(2)
-                    st.rerun()
+                    with st.expander("⚠️ View Errors"):
+                        for log in error_logs: st.write(log)
+                if success_count > 0: st.rerun()
 # --- TAB 5: ASK AI DATA ANALYST ---
 with tab5:
     st.markdown("### 💬 AI Data Analyst")
