@@ -2,30 +2,39 @@ import streamlit as st
 import pandas as pd
 import datetime
 from supabase import create_client, Client
-# --- GLOBAL DATA HYDRATION (Place at the Top of app.py) ---
-if 'coeffs' not in st.session_state:
-    try:
-        # 1. Fetch the master record (ID 1) from the database
-        response = supabase.table("coefficients").select("*").eq("id", 1).execute()
-        
-        if response.data and len(response.data) > 0:
-            # 2. Success: Load your saved values into the app's memory
-            st.session_state.coeffs = response.data[0]
-        else:
-            # 3. Fallback: If database is empty, set your Hard Rock defaults
-            st.session_state.coeffs = {
-                "id": 1, "Intercept": 1000, "Temp_C": 0, "Snow_cm": 0, 
-                "Rain_mm": 0, "Promo": 0, "Clicks": 0, 
-                "Impressions": 0, "Avg_Coin_In": 1200
-            }
-    except Exception as e:
-        st.error(f"Engine Load Error: {e}")
-        # Ensure the app doesn't crash if DB is down
-        st.session_state.coeffs = {"Intercept": 0, "Avg_Coin_In": 1200}
 import google.generativeai as genai
 from sklearn.linear_model import LinearRegression
 import numpy as np
 
+# 1. INITIALIZE SUPABASE
+url = st.secrets["SUPABASE_URL"]
+key = st.secrets["SUPABASE_KEY"]
+supabase: Client = create_client(url, key)
+
+# 2. THE HYDRATION BLOCK (Add this now)
+# This checks the "Vault" (Supabase) as soon as the app wakes up
+if 'coeffs' not in st.session_state:
+    try:
+        # We look for the master record (ID 1)
+        response = supabase.table("coefficients").select("*").eq("id", 1).execute()
+        
+        if response.data and len(response.data) > 0:
+            # Data found! This locks in your saved $1,200+ spend and weights
+            st.session_state.coeffs = response.data[0]
+        else:
+            # First-time setup: Use your Hard Rock Ground Truth
+            st.session_state.coeffs = {
+                "id": 1, "Intercept": 1000, "Avg_Coin_In": 1200,
+                "Temp_C": 0, "Snow_cm": 0, "Rain_mm": 0,
+                "Promo": 0, "Clicks": 0, "Impressions": 0
+            }
+    except Exception as e:
+        st.error(f"⚠️ Engine Load Failure: {e}")
+        # Emergency fallback so the math doesn't break
+        st.session_state.coeffs = {"Intercept": 0, "Avg_Coin_In": 1200}
+
+# 3. GLOBAL DATA LOADING (Your ledger)
+# Ensure your ledger data is also loaded into session state here...
 # 1. PAGE CONFIG (Must be the very first Streamlit command)
 st.set_page_config(page_title="FloorCast", layout="wide")
 
