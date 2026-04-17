@@ -498,7 +498,7 @@ with tab4:
                     # Provide last 60 days of context for calibration
                     df_calc = pd.DataFrame(ledger_data).tail(60)
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-2.5-flash')
                     
                     prompt = f"""
                     Analyze this ledger data for Hard Rock Ottawa: {df_calc.to_csv()}
