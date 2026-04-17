@@ -241,57 +241,74 @@ with tab2:
 
 # --- SECTION 3: HISTORICAL LEDGER AUDIT & EDIT ---
     st.markdown("### 🔍 3. Historical Ledger Audit & Corrections")
-    with st.container(border=True):
-        if ledger_data:
-            df_edit = pd.DataFrame(ledger_data)
-            df_edit['entry_date'] = pd.to_datetime(df_edit['entry_date'])
+    
+    if ledger_data:
+        df_edit = pd.DataFrame(ledger_data)
+        df_edit['entry_date'] = pd.to_datetime(df_edit['entry_date'])
+        
+        # --- PART A: THE SINGLE RECORD EDITOR ---
+        with st.container(border=True):
+            st.markdown("**Find & Fix a Specific Entry**")
+            edit_col1, edit_col2 = st.columns([1, 2])
             
-            search_date = st.date_input("Select Date to Audit/Edit", value=df_edit['entry_date'].max().date())
-            search_str = search_date.strftime("%Y-%m-%d")
+            with edit_col1:
+                search_date = st.date_input("Select Date to Edit", value=df_edit['entry_date'].max().date())
+                search_str = search_date.strftime("%Y-%m-%d")
             
-            # Find the specific row
+            # Filter for that specific day
             found = df_edit[df_edit['entry_date'].dt.strftime('%Y-%m-%d') == search_str]
             
-            if not found.empty:
-                record = found.iloc[0]
-                st.success(f"Record found for {search_str}")
-                
-                # Toggle for Edit Mode to keep the UI clean
-                edit_mode = st.toggle("🔓 Enable Edit Mode for this record")
-                
-                if edit_mode:
-                    with st.form(f"edit_form_{search_str}"):
-                        st.markdown(f"**Editing Data for:** {search_str}")
-                        col_e1, col_e2 = st.columns(2)
-                        
-                        with col_e1:
-                            new_t = st.number_input("Actual Traffic", value=int(record['actual_traffic']))
-                            new_c = st.number_input("Actual Coin-In ($)", value=float(record['actual_coin_in']))
-                        
-                        with col_e2:
-                            new_temp = st.number_input("Temp (°C)", value=int(record.get('temp_c', 0)))
-                            new_promo = st.checkbox("Active Promotion", value=bool(record.get('active_promo', False)))
-                        
-                        if st.form_submit_button("💾 Overwrite & Update Ledger"):
-                            # Recalculate variance based on new input
-                            new_var = new_t - record['predicted_traffic']
+            with edit_col2:
+                if not found.empty:
+                    record = found.iloc[0]
+                    edit_mode = st.toggle(f"🔓 Unlock {search_str} for Editing")
+                    
+                    if edit_mode:
+                        with st.form(f"edit_form_{search_str}"):
+                            c1, c2, c3 = st.columns(3)
+                            new_t = c1.number_input("Traffic", value=int(record['actual_traffic']))
+                            new_c = c2.number_input("Coin-In ($)", value=float(record['actual_coin_in']))
+                            new_p = c3.checkbox("Promo", value=bool(record.get('active_promo', False)))
                             
-                            update_data = {
-                                "actual_traffic": new_t,
-                                "actual_coin_in": new_c,
-                                "temp_c": new_temp,
-                                "active_promo": new_promo,
-                                "variance": int(new_var)
-                            }
-                            
-                            supabase.table("ledger").update(update_data).eq("entry_date", search_str).execute()
-                            st.toast("✅ Database updated successfully!")
-                            st.rerun()
+                            if st.form_submit_button("💾 Save Changes"):
+                                # Keep the original prediction to maintain variance accuracy
+                                new_var = new_t - record['predicted_traffic']
+                                
+                                supabase.table("ledger").update({
+                                    "actual_traffic": new_t,
+                                    "actual_coin_in": new_c,
+                                    "active_promo": new_p,
+                                    "variance": int(new_var)
+                                }).eq("entry_date", search_str).execute()
+                                
+                                st.toast(f"Updated {search_str}")
+                                st.rerun()
                 else:
-                    # Just show the data if not in edit mode
-                    st.json(record.to_dict())
-            else:
-                st.warning(f"No entry found for {search_str}. You can log a new one in the form above.")
+                    st.info("No record exists for the selected date yet.")
+
+        st.markdown("---")
+        
+        # --- PART B: THE MULTI-DAY VIEW (THE TABLE) ---
+        st.markdown("**Full Historical Ledger**")
+        # Display the full table so you can see multiple days again
+        display_df = df_edit.sort_values('entry_date', ascending=False)
+        # Format date for the table view
+        display_df['entry_date'] = display_df['entry_date'].dt.strftime('%Y-%m-%d')
+        
+        st.dataframe(
+            display_df, 
+            use_container_width=True, 
+            hide_index=True,
+            column_order=["entry_date", "day_of_week", "actual_traffic", "actual_coin_in", "variance", "active_promo"]
+        )
+        
+        # Download button for the full set
+        csv = display_df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download Full Ledger as CSV", data=csv, file_name="HardRock_Full_Ledger.csv")
+        
+    else:
+        st.info("Database is empty. Log your first entry above.")
+
 # --- TAB 3: REPORTING & ROI ---
 with tab3:
     st.markdown("### 📈 Strategic Reporting & ROI")
