@@ -376,137 +376,83 @@ with tab3:
             else:
                 st.warning("Select a date range that contains data.")
 
-# --- TAB 4: ADMIN ENGINE (FULL CONTROL) ---
+# --- TAB 4: ADMIN ENGINE (THE BRAIN) ---
 with tab4:
-    st.markdown("### ⚙️ Engine Control & Coefficient Tuning")
+    st.markdown("### ⚙️ Engine Control & AI Optimization")
     
-    # 1. THE AI RETRAINING CARD
+    # 1. THE ADVANCED ML OPTIMIZER
     with st.container(border=True):
         c_left, c_right = st.columns([2, 1])
         with c_left:
-            st.subheader("⚡ Machine Learning Auto-Tune")
-            st.write("Analyze historical ledger data to automatically recalibrate 'Base Traffic' and 'Temp Impact'.")
+            st.subheader("🤖 Multivariate ML Optimization")
+            st.write("Automatically synchronizes all coefficients by analyzing correlations between Weather, DOW, and Promotions.")
         with c_right:
             st.write("##")
-            if st.button("Run ML Recalibration", type="primary", use_container_width=True):
-                if len(ledger_data) > 5:
+            if st.button("🚀 Sync AI to Reality", type="primary", use_container_width=True):
+                if len(ledger_data) > 10:
                     df_ml = pd.DataFrame(ledger_data)
-                    # Clean data for math
+                    # Prepare the math features
                     df_ml['actual_traffic'] = pd.to_numeric(df_ml['actual_traffic'], errors='coerce').fillna(0)
                     df_ml['temp_c'] = pd.to_numeric(df_ml['temp_c'], errors='coerce').fillna(0)
-                    df_ml['actual_coin_in'] = pd.to_numeric(df_ml['actual_coin_in'], errors='coerce').fillna(0)
+                    df_ml['promo_val'] = df_ml['active_promo'].astype(int)
                     
-                    # Perform Linear Regression (Excel Trendline logic)
+                    # Create Day of Week "Dummy" variables (just like Excel regression)
+                    df_ml['dt'] = pd.to_datetime(df_ml['entry_date'])
+                    df_ml['dow'] = df_ml['dt'].dt.day_name()
+                    df_dummies = pd.get_dummies(df_ml['dow'])
+                    
+                    # Combine all features
+                    X = pd.concat([df_ml[['temp_c', 'promo_val']], df_dummies], axis=1)
+                    y = df_ml['actual_traffic']
+                    
                     from sklearn.linear_model import LinearRegression
-                    X = df_ml[['temp_c']].values
-                    y = df_ml['actual_traffic'].values
                     model = LinearRegression().fit(X, y)
                     
-                    # Update Session State
-                    st.session_state.coeffs['Intercept'] = round(float(model.intercept_), 2)
-                    st.session_state.coeffs['Temp_C'] = round(float(model.coef_[0]), 2)
+                    # UPDATE ALL COEFFICIENTS AUTOMATICALLY
+                    st.session_state.coeffs['Intercept'] = round(model.intercept_, 2)
+                    st.session_state.coeffs['Temp_C'] = round(model.coef_[0], 2)
+                    st.session_state.coeffs['Promo'] = round(model.coef_[1], 2)
                     
-                    # Update Avg Revenue per Head based on history
-                    total_rev = df_ml['actual_coin_in'].sum()
-                    total_tix = df_ml['actual_traffic'].sum()
-                    if total_tix > 0:
-                        st.session_state.coeffs['Avg_Coin_In'] = round(total_rev / total_tix, 2)
+                    # Update DOW Offsets
+                    dow_map = {'Monday': 'DOW_Mon', 'Tuesday': 'DOW_Tue', 'Wednesday': 'DOW_Wed', 
+                               'Thursday': 'DOW_Thu', 'Friday': 'DOW_Fri', 'Saturday': 'DOW_Sat', 'Sunday': 'DOW_Sun'}
                     
-                    st.success("🎯 Model updated from historical trends!")
+                    for i, col_name in enumerate(df_dummies.columns):
+                        if col_name in dow_map:
+                            st.session_state.coeffs[dow_map[col_name]] = round(model.coef_[i+2], 2)
+
+                    st.success("🎯 Global Optimization Complete! Accuracy recalculated.")
                     st.rerun()
                 else:
-                    st.error("Need more than 5 days of data to recalibrate.")
+                    st.error("Need at least 10 days of historical data for a Multivariate Sync.")
 
     st.markdown("---")
 
-    # 2. THE MASTER SETTINGS FORM
+    # 2. THE SETTINGS FORM (Now serves as a 'Review' of what the AI learned)
     with st.form("admin_settings_full"):
-        st.markdown("#### 🛠️ Manual Coefficient Overrides")
-        
-        # Core Financials & Weather
+        st.markdown("#### 🛠️ Current Learned Coefficients")
         col_fin, col_wea = st.columns(2)
         with col_fin:
-            st.markdown("**Core Baselines**")
-            new_intercept = st.number_input("Base Daily Traffic (Intercept)", value=float(st.session_state.coeffs['Intercept']), step=50.0)
-            new_coin = st.number_input("Avg Revenue per Head ($)", value=float(st.session_state.coeffs['Avg_Coin_In']), step=1.0)
-        
+            new_intercept = st.number_input("Base Daily Traffic", value=float(st.session_state.coeffs['Intercept']))
+            new_coin = st.number_input("Avg Revenue per Head ($)", value=float(st.session_state.coeffs['Avg_Coin_In']))
         with col_wea:
-            st.markdown("**Environmental Impacts**")
-            new_temp = st.number_input("Temp Impact (per 1°C)", value=float(st.session_state.coeffs['Temp_C']), format="%.2f")
-            new_snow = st.number_input("Snow Penalty (per 1cm)", value=float(st.session_state.coeffs['Snow_cm']), format="%.2f")
+            new_temp = st.number_input("Temp Impact", value=float(st.session_state.coeffs['Temp_C']))
+            new_promo = st.number_input("Promotion Lift", value=float(st.session_state.coeffs['Promo']))
 
         st.divider()
-
-        # Day of the Week Adjustments
-        st.markdown("**Day of the Week Adjustments (Traffic +/-)**")
         d1, d2, d3, d4, d5, d6, d7 = st.columns(7)
-        new_mon = d1.number_input("Mon", value=float(st.session_state.coeffs['DOW_Mon']), step=10.0)
-        new_tue = d2.number_input("Tue", value=float(st.session_state.coeffs['DOW_Tue']), step=10.0)
-        new_wed = d3.number_input("Wed", value=float(st.session_state.coeffs['DOW_Wed']), step=10.0)
-        new_thu = d4.number_input("Thu", value=float(st.session_state.coeffs['DOW_Thu']), step=10.0)
-        new_fri = d5.number_input("Fri", value=float(st.session_state.coeffs['DOW_Fri']), step=10.0)
-        new_sat = d6.number_input("Sat", value=float(st.session_state.coeffs['DOW_Sat']), step=10.0)
-        new_sun = d7.number_input("Sun", value=float(st.session_state.coeffs['DOW_Sun']), step=10.0)
+        new_mon = d1.number_input("Mon", value=float(st.session_state.coeffs['DOW_Mon']))
+        new_tue = d2.number_input("Tue", value=float(st.session_state.coeffs['DOW_Tue']))
+        new_wed = d3.number_input("Wed", value=float(st.session_state.coeffs['DOW_Wed']))
+        new_thu = d4.number_input("Thu", value=float(st.session_state.coeffs['DOW_Thu']))
+        new_fri = d5.number_input("Fri", value=float(st.session_state.coeffs['DOW_Fri']))
+        new_sat = d6.number_input("Sat", value=float(st.session_state.coeffs['DOW_Sat']))
+        new_sun = d7.number_input("Sun", value=float(st.session_state.coeffs['DOW_Sun']))
 
-        st.divider()
-
-        # Marketing Weights
-        st.markdown("**Marketing Correlation Weights**")
-        m1, m2, m3 = st.columns(3)
-        new_promo = m1.number_input("Promotion Lift", value=float(st.session_state.coeffs['Promo']), step=10.0)
-        new_imp = m2.number_input("Ad Impressions Weight", value=float(st.session_state.coeffs['Impressions']), format="%.6f")
-        new_clk = m3.number_input("Ad Clicks Weight", value=float(st.session_state.coeffs['Clicks']), format="%.4f")
-
-        if st.form_submit_button("💾 Save All Engine Changes", use_container_width=True):
-            st.session_state.coeffs.update({
-                'Intercept': new_intercept, 'Avg_Coin_In': new_coin,
-                'Temp_C': new_temp, 'Snow_cm': new_snow,
-                'DOW_Mon': new_mon, 'DOW_Tue': new_tue, 'DOW_Wed': new_wed, 'DOW_Thu': new_thu,
-                'DOW_Fri': new_fri, 'DOW_Sat': new_sat, 'DOW_Sun': new_sun,
-                'Promo': new_promo, 'Impressions': new_imp, 'Clicks': new_clk
-            })
-            st.success("Engine recalibrated!")
+        if st.form_submit_button("💾 Finalize Manual Tweaks"):
+            st.session_state.coeffs.update({'Intercept': new_intercept, 'Avg_Coin_In': new_coin, 'Temp_C': new_temp, 'Promo': new_promo,
+                'DOW_Mon': new_mon, 'DOW_Tue': new_tue, 'DOW_Wed': new_wed, 'DOW_Thu': new_thu, 'DOW_Fri': new_fri, 'DOW_Sat': new_sat, 'DOW_Sun': new_sun})
             st.rerun()
-
-    st.markdown("---")
-
-    # 3. THE BULK DATA IMPORTER
-    with st.expander("📥 Bulk Data Importer (CSV Upload)"):
-        st.write("Upload a CSV to backfill historical digital metrics.")
-        uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
-        
-        if uploaded_file is not None:
-            df_upload = pd.read_csv(uploaded_file)
-            st.write("Preview:")
-            st.dataframe(df_upload.head(5))
-            
-            if st.button("🚀 Process & Sync to FloorPace", use_container_width=True):
-                # Helper to clean numbers
-                def clean_num(val, is_float=False):
-                    try:
-                        if pd.isna(val) or val == "": return 0.0 if is_float else 0
-                        cleaned = str(val).replace(',', '').replace('$', '').strip()
-                        return float(cleaned) if is_float else int(float(cleaned))
-                    except: return 0.0 if is_float else 0
-
-                success_count = 0
-                for _, row in df_upload.iterrows():
-                    upload_data = {
-                        "entry_date": str(row.get('entry_date', row.get('date'))),
-                        "actual_traffic": clean_num(row.get('actual_traffic', 0)),
-                        "actual_coin_in": clean_num(row.get('actual_coin_in', 0.0), is_float=True),
-                        "temp_c": clean_num(row.get('temp_c', 0)),
-                        "ad_impressions": clean_num(row.get('ad_impressions', 0)),
-                        "ad_clicks": clean_num(row.get('ad_clicks', 0)),
-                        "active_promo": bool(row.get('active_promo', False))
-                    }
-                    try:
-                        supabase.table("ledger").upsert(upload_data, on_conflict="entry_date").execute()
-                        success_count += 1
-                    except: continue
-                
-                st.success(f"Successfully synced {success_count} records!")
-                st.rerun()
 
 # --- TAB 5: ASK AI DATA ANALYST ---
 with tab5:
