@@ -477,55 +477,70 @@ import google.generativeai as genai
 import json
 import pandas as pd
 
+import google.generativeai as genai
+import json
+import pandas as pd
+
 # --- TAB 4: ADMIN ENGINE & DATA MANAGEMENT ---
 with tab4:
     # 1. BRANDED HEADER
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control & Data Management</h2>
-            <p style="color: #888; margin: 0;">AI Auto-Calibration with Hard-Math Revenue Verification.</p>
+            <p style="color: #888; margin: 0;">Accounting-Verified Baseline with AI Variance Calibration.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 2. AI AUTO-CALIBRATION (With Raw Math Verification)
+    # 2. THE "HARD MATH" AUTO-CALIBRATION
     if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
-        with st.spinner("Executing Raw Math & Statistical Calibration..."):
+        with st.spinner("Calculating Baseline & Revenue Reality..."):
             try:
-                # A. Prepare the data
+                # A. Load the full ledger context
                 df_calc = pd.DataFrame(ledger_data).copy()
                 
-                # B. EXECUTE RAW MATH (Objective Reality)
-                # This guarantees your $1,200+ spend isn't "guessed" by the AI
-                total_rev = df_calc['actual_coin_in'].sum()
+                # B. PURE ARITHMETIC (The Pillars)
+                # Base Daily Traffic = Total Traffic / Number of Days
                 total_vis = df_calc['actual_traffic'].sum()
-                math_avg_spend = total_rev / total_vis if total_vis > 0 else 0
+                num_days = len(df_calc)
+                math_intercept = total_vis / num_days if num_days > 0 else 0
                 
-                # C. RUN AI FOR WEIGHTING (Gemini 3 Flash)
+                # Avg Spend = Total Revenue / Total Traffic
+                total_rev = df_calc['actual_coin_in'].sum()
+                math_avg_spend = total_rev / total_vis if total_vis > 0 else 0
+
+                # C. AI VARIANCE MODELING (The Variables)
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel('gemini-2.5-flash')
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 
                 prompt = f"""
-                SYSTEM: You are a high-precision financial engine for Hard Rock Ottawa. 
-                DATA: {df_calc.tail(120).to_csv(index=False)}
+                SYSTEM: Act as a high-precision statistical auditor for Hard Rock Ottawa. 
+                
+                FIXED ACCOUNTING CONSTANTS:
+                - Intercept (Base Daily Traffic): {math_intercept:.2f}
+                - Avg_Coin_In (Revenue per Head): {math_avg_spend:.2f}
+                
+                DATASET: {df_calc.tail(120).to_csv(index=False)}
                 
                 TASK:
-                1. Accept this CALCULATED CONSTANT: Avg_Coin_In = {math_avg_spend}
-                2. Analyze the dataset to find optimal weights for: 
-                   Intercept, Promo, Clicks, Impressions, Temp_C, Snow_cm, Rain_mm.
+                Given these hard constants, find the optimal coefficients for the remaining variables to 
+                minimize error against 'actual_traffic':
+                - Promo, Clicks, Impressions, Temp_C, Snow_cm, Rain_mm.
                 
-                RETURN: A single raw JSON object with these exact keys. NO MARKDOWN.
+                RETURN: A single raw JSON object with ALL keys. NO MARKDOWN.
                 """
                 
                 response = model.generate_content(prompt)
                 clean_json = response.text.replace("```json", "").replace("```", "").strip()
                 suggestion = json.loads(clean_json)
                 
-                # D. FORCE MATH CONSTANTS INTO SESSION STATE
+                # D. ENFORCE ACCOUNTING OVERRIDES
+                suggestion['Intercept'] = math_intercept
                 suggestion['Avg_Coin_In'] = math_avg_spend
+                
                 for key, value in suggestion.items():
                     st.session_state.coeffs[key] = value
                 
-                st.success(f"🎯 Calibration Successful. Avg Spend verified at ${math_avg_spend:,.2f}")
+                st.success(f"🎯 Math Verified: Base Traffic ({math_intercept:,.0f}) & Spend (${math_avg_spend:,.2f}) Locked.")
                 st.rerun()
                 
             except Exception as e:
@@ -534,7 +549,7 @@ with tab4:
     st.write("##")
     c = st.session_state.coeffs
 
-    # 3. BENTO CONTROL CENTER (Manual Overrides)
+    # 3. BENTO CONTROL CENTER (Review & Manual Adjustments)
     col_fin, col_dig, col_env = st.columns(3)
 
     with col_fin:
@@ -542,7 +557,7 @@ with tab4:
             st.markdown("💰 **Financial & Baseline**")
             new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 0)))
             new_avg_spend = st.number_input("Avg. Spend per Head ($)", value=float(c.get('Avg_Coin_In', 0)))
-            st.caption("Baseline floor performance.")
+            st.caption("Calculated: Total Traffic / Total Days.")
 
     with col_dig:
         with st.container(border=True):
@@ -560,7 +575,7 @@ with tab4:
             new_rain = st.number_input("Rain Impact (mm)", value=float(c.get('Rain_mm', 0)))
             st.caption("Ottawa weather adjustments.")
 
-    # 4. PERMANENT SAVE ACTION
+    # 4. PERMANENT DATABASE SYNC
     st.write("##")
     if st.button("💾 Save All Engine Changes", use_container_width=True):
         try:
@@ -569,21 +584,20 @@ with tab4:
                 "Rain_mm": new_rain, "Promo": new_promo, "Clicks": new_clicks, 
                 "Impressions": new_imps, "Avg_Coin_In": new_avg_spend
             }
-            # Permanent Supabase Upsert
             supabase.table("coefficients").upsert(updated_values).execute()
             st.session_state.coeffs.update(updated_values)
-            st.success("✅ Engine Tuned: All changes are now permanent in the database.")
+            st.success("✅ Database Synchronized. All engine weights are now permanent.")
             st.rerun()
         except Exception as e:
-            st.error(f"Database save failed: {e}")
+            st.error(f"Save failed: {e}")
 
-    # 5. GLOBAL PROMO SYNC
+    # 5. MAINTENANCE
     st.write("---")
     st.markdown("### 🧹 Database Maintenance")
     if st.button("🚀 Force Global Promo: TRUE", use_container_width=True):
         try:
             supabase.table("ledger").update({"active_promo": True}).neq("active_promo", True).execute()
-            st.success("Ledger Synchronized: All records now reflect active promotion.")
+            st.success("Ledger Synchronized: All records set to Promo=True.")
             st.rerun()
         except Exception as e:
             st.error(f"Global sync failed: {e}")
