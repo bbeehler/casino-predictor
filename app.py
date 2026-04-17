@@ -309,38 +309,51 @@ with tab3:
         df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
         
         # 1. Date Range Filter
-        rep_range = st.date_input("Select Reporting Period", 
-                                  [df_rep['entry_date'].min(), df_rep['entry_date'].max()])
+        min_date = df_rep['entry_date'].min().date()
+        max_date = df_rep['entry_date'].max().date()
+        rep_range = st.date_input("Select Reporting Period", [min_date, max_date])
         
         if len(rep_range) == 2:
-            start, end = pd.to_datetime(rep_range[0]), pd.to_datetime(rep_range[1])
-            mask = (df_rep['entry_date'] >= start) & (df_rep['entry_date'] <= end)
+            start_date, end_date = pd.to_datetime(rep_range[0]), pd.to_datetime(rep_range[1])
+            mask = (df_rep['entry_date'] >= start_date) & (df_rep['entry_date'] <= end_date)
             df_filtered = df_rep.loc[mask].sort_values('entry_date')
             
             if not df_filtered.empty:
                 # 2. Key Metric Calculations
-                actual_rev = df_filtered['actual_coin_in'].sum()
-                # Use actual traffic * avg coin-in if predicted column is missing
-                base_rev = (df_filtered['predicted_traffic'].sum() if 'predicted_traffic' in df_filtered.columns else 0) * st.session_state.coeffs['Avg_Coin_In']
-                variance = actual_rev - base_rev
+                actual_rev = float(df_filtered['actual_coin_in'].sum())
+                
+                # Check if predicted_traffic column exists to avoid errors
+                if 'predicted_traffic' in df_filtered.columns:
+                    total_pred_traffic = df_filtered['predicted_traffic'].sum()
+                else:
+                    total_pred_traffic = 0
+                
+                base_rev = float(total_pred_traffic * st.session_state.coeffs['Avg_Coin_In'])
+                variance_val = actual_rev - base_rev
+                
+                # Calculate % Variance safely
+                if base_rev != 0:
+                    pct_var = (variance_val / base_rev) * 100
+                else:
+                    pct_var = 0.0
                 
                 # 3. Top-Level Metrics
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Actual Total Revenue", f"${actual_rev:,.0f}")
                 m2.metric("AI Baseline Revenue", f"${base_rev:,.0f}")
-                m3.metric("Variance", f"${variance:,.0f}", delta=f"{(variance/base_rev)*100:.1f}%" if base_rev != 0 else "0%")
+                m3.metric("Variance", f"${variance_val:,.0f}", delta=f"{pct_var:.1f}%")
                 
                 st.divider()
                 
                 # 4. The Main Chart: Actual vs Baseline
                 st.markdown("**Revenue vs AI Prediction Baseline**")
-                # Create a clean chart dataframe
                 chart_df = df_filtered.copy()
                 chart_df['AI Baseline'] = chart_df['predicted_traffic'] * st.session_state.coeffs['Avg_Coin_In']
                 chart_df = chart_df.rename(columns={'actual_coin_in': 'Actual Revenue', 'entry_date': 'Date'})
                 
+                # Plotting
                 st.area_chart(chart_df.set_index('Date')[['Actual Revenue', 'AI Baseline']], 
-                              color=["#FFCC00", "#555555"]) # Gold vs Dark Gray
+                              color=["#FFCC00", "#555555"]) 
                 
                 # 5. ROI Breakdown
                 st.markdown("**Digital ROI Impact**")
@@ -349,8 +362,8 @@ with tab3:
                     lift_v = df_filtered['digital_lift_visitors'].sum() if 'digital_lift_visitors' in df_filtered.columns else 0
                     st.metric("Estimated Digital Lift (Visitors)", f"{lift_v:,.0f}")
                 with ri2:
-                    lift_$ = lift_v * st.session_state.coeffs['Avg_Coin_In']
-                    st.metric("Estimated Digital ROI ($)", f"${lift_$:,.0f}")
+                    lift_cash = float(lift_v * st.session_state.coeffs['Avg_Coin_In'])
+                    st.metric("Estimated Digital ROI ($)", f"${lift_cash:,.0f}")
             else:
                 st.warning("No data found for the selected date range.")
     else:
