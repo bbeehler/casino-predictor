@@ -359,7 +359,7 @@ with tab3:
                     
                     chart_rep = df_filtered.sort_values('entry_date')
                     chart_rep = chart_rep.rename(columns={'actual_traffic': 'Floor Reality', 'ai_baseline': 'AI Baseline'})
-                    st.area_chart(chart_rep.set_index('entry_date')[['Floor Reality', 'AI Baseline']], color
+                    st.area_chart(chart_rep.set_index('entry_date')[['Floor Reality', 'AI Baseline']], color)
 
 # --- TAB 4: ADMIN ENGINE (MASTER CONTROL & IMPORTER) ---
 with tab4:
