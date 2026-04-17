@@ -203,16 +203,15 @@ with tab2:
                     c = st.session_state.coeffs
                     dow_key = f"DOW_{date_in.strftime('%a')}"
                     
-                    # 1. Calculate Values
-                    base = float(c['Intercept'] + c.get(dow_key, 0))
-                    weather_impact = float((temp * c['Temp_C']) + (snow * c['Snow_cm']))
+                    # 1. Calculate Values using standard Python floats/ints
+                    base_val = float(c['Intercept'] + c.get(dow_key, 0))
+                    weather_val = float((temp * c['Temp_C']) + (snow * c['Snow_cm']))
+                    dig_lift_val = float((promo * c['Promo']) + (imp * c['Impressions']) + (eng * c['Engagements']) + (clks * c['Clicks']))
                     
-                    # Ensure digital metrics are floats/ints
-                    dig_lift = float((promo * c['Promo']) + (imp * c['Impressions']) + (eng * c['Engagements']) + (clks * c['Clicks']))
-                    final_pred = float(base + weather_impact + dig_lift)
+                    # Final prediction
+                    final_pred = float(base_val + weather_val + dig_lift_val)
                     
                     # 2. THE DATA SCRUB: Force everything to standard Python types
-                    # This prevents NumPy objects from breaking the API
                     data = {
                         "entry_date": str(date_in),
                         "day_of_week": str(date_in.strftime("%A")),
@@ -227,26 +226,19 @@ with tab2:
                         "ad_impressions": int(imp),
                         "social_engagements": int(eng),
                         "ad_clicks": int(clks),
-                        "digital_lift_visitors": int(dig_lift),
-                        "digital_revenue_impact": float(float(dig_lift) * float(c['Avg_Coin_In'])),
+                        "digital_lift_visitors": int(dig_lift_val),
+                        "digital_revenue_impact": float(float(dig_lift_val) * float(c['Avg_Coin_In'])),
                         "weather_alert": False 
                     }
                     
-                    # 3. The Execution with a "Deep Error" catch
+                    # 3. Execution
                     try:
-                        # Clear any potential hidden column conflicts by only sending what we KNOW exists
-                        response = supabase.table("ledger").upsert(data, on_conflict="entry_date").execute()
-                        st.toast(f"✅ Record saved to FloorPace Ledger")
+                        supabase.table("ledger").upsert(data, on_conflict="entry_date").execute()
+                        st.toast("✅ Record saved to FloorPace Ledger")
                         st.rerun()
                     except Exception as e:
                         st.error("🚨 Database Sync Failed")
-                        st.write("Specific Error for Brian:")
-                        st.write(e)
-                        # This will show us the EXACT column that is causing the problem
-                    }
-                    supabase.table("ledger").upsert(data, on_conflict="entry_date").execute()
-                    st.toast("✅ Record saved to Ledger")
-                    st.rerun()
+                        st.write(f"Details: {e}")
 
     with col_sandbox:
         with st.container(border=True):
