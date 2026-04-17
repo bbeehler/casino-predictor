@@ -380,26 +380,48 @@ with tab4:
         with c_right:
             st.write("##")
             if st.button("🚀 Sync AI to Reality", type="primary", use_container_width=True):
-                if len(ledger_data) > 5:
+                # 1. Ensure we have enough data to actually find a pattern
+                if len(ledger_data) > 7:
                     df_ml = pd.DataFrame(ledger_data)
+                    
+                    # 2. FORCE NUMERIC: This is the most common fail point
                     df_ml['actual_traffic'] = pd.to_numeric(df_ml['actual_traffic'], errors='coerce').fillna(0)
                     df_ml['temp_c'] = pd.to_numeric(df_ml['temp_c'], errors='coerce').fillna(0)
                     df_ml['promo_val'] = df_ml['active_promo'].astype(int)
                     
-                    from sklearn.linear_model import LinearRegression
-                    X = df_ml[['temp_c', 'promo_val']]
-                    y = df_ml['actual_traffic']
-                    model = LinearRegression().fit(X, y)
+                    # 3. FILTER OUT JUNK: Only train on days where traffic > 0
+                    df_train = df_ml[df_ml['actual_traffic'] > 0].copy()
                     
-                    st.session_state.coeffs['Intercept'] = round(model.intercept_, 2)
-                    st.session_state.coeffs['Temp_C'] = round(model.coef_[0], 2)
-                    st.session_state.coeffs['Promo'] = round(model.coef_[1], 2)
-                    st.success("🎯 AI Sync Complete!")
-                    st.rerun()
-                else:
-                    st.error("Need more data for AI Sync.")
+                    if len(df_train) > 5:
+                        from sklearn.linear_model import LinearRegression
+                        import numpy as np
+                        
+                        # Features: Temperature and Promotions
+                        X = df_train[['temp_c', 'promo_val']].values
+                        y = df_train['actual_traffic'].values
+                        
+                        model = LinearRegression().fit(X, y)
+                        
+                        # 4. UPDATE SESSION STATE (The 'Brain' of the app)
+                        st.session_state.coeffs['Intercept'] = round(float(model.intercept_), 2)
+                        st.session_state.coeffs['Temp_C'] = round(float(model.coef_[0]), 2)
+                        st.session_state.coeffs['Promo'] = round(float(model.coef_[1]), 2)
+                        
+                        # 5. AUTO-CALC AVG COIN-IN (Revenue per Head)
+                        df_train['actual_coin_in'] = pd.to_numeric(df_train['actual_coin_in'], errors='coerce').fillna(0)
+                        total_rev = df_train['actual_coin_in'].sum()
+                        total_traf = df_train['actual_traffic'].sum()
+                        
+                        if total_traf > 0:
+                            st.session_state.coeffs['Avg_Coin_In'] = round(total_rev / total_traf, 2)
 
-    st.divider()
+                        st.success(f"🎯 AI Optimized using {len(df_train)} historical days!")
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        st.error("The records found have 0 traffic. The AI can't learn from empty floors.")
+                else:
+                    st.error("Not enough historical data. Need at least 8 days of history to sync.")
 
     # 2. THE RESTORED MANUAL OVERRIDES
     with st.form("admin_settings_comprehensive"):
