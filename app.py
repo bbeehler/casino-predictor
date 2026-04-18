@@ -611,3 +611,118 @@ with tab5:
 
             except Exception as e:
                 st.error(f"Analyst Error: {e}")
+
+# --- TAB 6: MASTER ANALYTICS & FORENSIC REPORT ---
+with tab6:
+    st.markdown("""
+        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
+            <h2 style="color: #FFCC00; margin: 0;">📊 Master Forensic Report</h2>
+            <p style="color: #888; margin: 0;">Accounting-grade analysis of property performance and marketing ROI.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # 1. PULL ENGINE CONSTANTS
+    c = st.session_state.coeffs
+    avg_spend = c.get('Avg_Coin_In', 1200)
+    click_weight = c.get('Clicks', 0)
+    promo_lift = c.get('Promo', 0)
+    intercept = c.get('Intercept', 0)
+
+    df_rep = pd.DataFrame(ledger_data).copy()
+    
+    if not df_rep.empty:
+        df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
+        
+        # --- THE CALCULATION ENGINE (Hard Math Only) ---
+        # A. Marketing Attribution
+        df_rep['attr_traffic'] = (df_rep['ad_clicks'] * click_weight) + (df_rep['active_promo'].astype(int) * promo_lift)
+        df_rep['attr_revenue'] = df_rep['attr_traffic'] * avg_spend
+        
+        # B. Efficiency & Variance Metrics
+        df_rep['actual_spend_avg'] = df_rep['actual_coin_in'] / df_rep['actual_traffic']
+        df_rep['rev_variance'] = df_rep['actual_coin_in'] - (df_rep['actual_traffic'] * avg_spend)
+        
+        # C. Global Aggregates
+        total_rev = df_rep['actual_coin_in'].sum()
+        total_vis = df_rep['actual_traffic'].sum()
+        total_attr_rev = df_rep['attr_revenue'].sum()
+        total_days = len(df_rep)
+
+        # 2. TOP-LEVEL PERFORMANCE TILES
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total YTD Coin-In", f"${total_rev:,.0f}")
+        with col2:
+            st.metric("Marketing ROI (Est)", f"${total_attr_rev:,.0f}")
+        with col3:
+            st.metric("Base Traffic Avg", f"{total_vis / total_days:,.0f}")
+        with col4:
+            st.metric("Ledger Spend Avg", f"${total_rev / total_vis:,.2f}")
+
+        st.write("---")
+
+        # 3. THE MASTER FORENSIC DATA TABLE
+        st.write("### 🔍 Daily Performance Breakdown")
+        
+        # Build the final exportable dataframe
+        master_df = df_rep[[
+            'entry_date', 'actual_traffic', 'actual_coin_in', 'ad_clicks'
+        ]].copy()
+        
+        master_df['Digital Traffic'] = df_rep['attr_traffic']
+        master_df['Digital Revenue'] = df_rep['attr_revenue']
+        master_df['Actual $/Head'] = df_rep['actual_spend_avg']
+        master_df['vs. Engine Target'] = df_rep['rev_variance']
+        
+        st.dataframe(
+            master_df.sort_values('entry_date', ascending=False),
+            column_config={
+                "entry_date": "Date",
+                "actual_traffic": st.column_config.NumberColumn("Total Traffic", format="%d"),
+                "actual_coin_in": st.column_config.NumberColumn("Total Revenue", format="$%d"),
+                "Digital Revenue": st.column_config.NumberColumn("Digital Lift", format="$%d"),
+                "Actual $/Head": st.column_config.NumberColumn("Avg Spend", format="$%.2f"),
+                "vs. Engine Target": st.column_config.NumberColumn("Variance", format="$%d")
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # 4. RATIO & VOLATILITY ANALYSIS
+        st.write("### 📉 Operational Efficiency")
+        c1, c2, c3 = st.columns(3)
+        
+        with c1:
+            with st.container(border=True):
+                st.write("**Marketing Contribution**")
+                ratio = (total_attr_rev / total_rev) * 100 if total_rev > 0 else 0
+                st.title(f"{ratio:.1f}%")
+                st.caption("Percentage of YTD Revenue driven by Digital weights.")
+
+        with c2:
+            with st.container(border=True):
+                st.write("**Revenue Volatility**")
+                std_dev = df_rep['actual_coin_in'].std()
+                st.title(f"${std_dev:,.0f}")
+                st.caption("Standard deviation (Daily Revenue Risk).")
+
+        with c3:
+            with st.container(border=True):
+                st.write("**Ad Click Efficiency**")
+                # Revenue per individual click based on current weights
+                rev_per_click = click_weight * avg_spend
+                st.title(f"${rev_per_click:.2f}")
+                st.caption("Revenue value of a single Ad Click.")
+
+        # 5. DATA EXPORT
+        st.write("---")
+        st.download_button(
+            label="📥 Export Forensic Report to CSV",
+            data=master_df.to_csv(index=False),
+            file_name=f"HR_Ottawa_Forensic_Report_{datetime.date.today()}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
+    else:
+        st.warning("No data found in ledger. Add entries in the Input tab to generate reports.")
