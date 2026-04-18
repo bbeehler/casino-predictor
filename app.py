@@ -122,7 +122,7 @@ if 'coeffs' not in st.session_state:
     except Exception as e:
         st.error(f"Failed to load Engine Weights: {e}")
 
-# --- TAB 1: EXECUTIVE DASHBOARD (BRAND LIFT EDITION) ---
+# --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
@@ -131,6 +131,7 @@ with tab1:
         </div>
     """, unsafe_allow_html=True)
 
+    # 1. Pull Engine Constants
     c = st.session_state.coeffs
     avg_spend = c.get('Avg_Coin_In', 1200)
     click_weight = c.get('Clicks', 0)
@@ -138,23 +139,58 @@ with tab1:
     promo_lift = c.get('Promo', 0)
     intercept = c.get('Intercept', 0)
 
+    # 2. Safety Prep
     df_exec = pd.DataFrame(ledger_data)
     
     if not df_exec.empty:
-        # SAFETY CHECK
+        # Safety Column Injection
         for col in ['temp_c', 'snow_cm', 'rain_mm', 'ad_clicks', 'impressions', 'active_promo']:
             if col not in df_exec.columns: df_exec[col] = 0.0
         
         df_exec['entry_date'] = pd.to_datetime(df_exec['entry_date'])
         
-        # Logic
+        # Calculations
         df_exec['direct_lift'] = df_exec['ad_clicks'] * click_weight
         df_exec['brand_lift'] = (df_exec['impressions'] / 1000) * imps_weight
         df_exec['total_digital_lift'] = df_exec['direct_lift'] + df_exec['brand_lift'] + (df_exec['active_promo'].astype(int) * promo_lift)
         df_exec['brand_rev_ytd'] = df_exec['brand_lift'] * avg_spend
         df_exec['total_digital_rev'] = df_exec['total_digital_lift'] * avg_spend
 
-        # Bento Cards... (Keep your existing card code here)
+        # AI Predictability
+        df_exec['expected_traffic'] = intercept + df_exec['total_digital_lift'] + (df_exec['temp_c'] * c.get('Temp_C', 0))
+        df_exec['error'] = abs(df_exec['actual_traffic'] - df_exec['expected_traffic']) / df_exec['actual_traffic']
+        accuracy_score = max(0, (1 - df_exec['error'].mean()) * 100)
+
+        # 3. UI BENTO CARDS
+        k1, k2 = st.columns(2)
+        with k1:
+            st.markdown(f"""<div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
+                <p style="color: #888; font-size: 12px; text-transform: uppercase;">Total YTD Revenue</p>
+                <h1 style="color: #FFF; margin: 0;">${df_exec['actual_coin_in'].sum():,.0f}</h1>
+            </div>""", unsafe_allow_html=True)
+        with k2:
+            st.markdown(f"""<div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
+                <p style="color: #888; font-size: 12px; text-transform: uppercase;">Total Digital ROI</p>
+                <h1 style="color: #FFF; margin: 0;">${df_exec['total_digital_rev'].sum():,.0f}</h1>
+            </div>""", unsafe_allow_html=True)
+
+        st.write("##")
+        k3, k4 = st.columns(2)
+        with k3:
+            st.markdown(f"""<div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-left: 10px solid #FFCC00; text-align: center;">
+                <p style="color: #888; font-size: 12px; text-transform: uppercase;">Brand Equity Value</p>
+                <h1 style="color: #FFCC00; margin: 0;">${df_exec['brand_rev_ytd'].sum():,.0f}</h1>
+                <p style="color: #888; font-size: 11px; margin-top:5px;">Revenue from Impression Lift</p>
+            </div>""", unsafe_allow_html=True)
+        with k4:
+            score_color = "#00FF00" if accuracy_score > 85 else "#FFCC00"
+            st.markdown(f"""<div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-left: 10px solid {score_color}; text-align: center;">
+                <p style="color: #888; font-size: 12px; text-transform: uppercase;">Predictability</p>
+                <h1 style="color: {score_color}; margin: 0;">{accuracy_score:.1f}%</h1>
+                <p style="color: #888; font-size: 11px; margin-top:5px;">Model Confidence</p>
+            </div>""", unsafe_allow_html=True)
+    else:
+        st.info("Awaiting ledger data to populate executive overview.")
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
     st.markdown("""
@@ -601,15 +637,45 @@ with tab6:
     df_rep = pd.DataFrame(ledger_data).copy()
     
     if not df_rep.empty:
-        # SAFETY CHECK
+        # Safety Column Injection
         for col in ['temp_c', 'snow_cm', 'rain_mm', 'ad_clicks', 'impressions', 'active_promo']:
             if col not in df_rep.columns: df_rep[col] = 0.0
 
         df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
+        
+        # Attribution Calculations
         df_rep['direct_lift'] = df_rep['ad_clicks'] * click_weight
         df_rep['brand_lift'] = (df_rep['impressions'] / 1000) * imps_weight
         df_rep['total_lift'] = df_rep['direct_lift'] + df_rep['brand_lift'] + (df_rep['active_promo'].astype(int) * promo_lift)
         df_rep['lift_rev'] = df_rep['total_lift'] * avg_spend
         df_rep['actual_avg'] = df_rep['actual_coin_in'] / df_rep['actual_traffic']
 
-        # Table and Metrics... (Keep your existing reporting code here)
+        # Table Display
+        st.dataframe(
+            df_rep.sort_values('entry_date', ascending=False),
+            column_config={
+                "entry_date": "Date",
+                "actual_traffic": "Total Traffic",
+                "actual_coin_in": st.column_config.NumberColumn("Actual Revenue", format="$%d"),
+                "direct_lift": st.column_config.NumberColumn("Click Lift", format="%.1f"),
+                "brand_lift": st.column_config.NumberColumn("Brand Lift", format="%.1f"),
+                "lift_rev": st.column_config.NumberColumn("Digital ROI", format="$%d"),
+                "actual_avg": st.column_config.NumberColumn("Actual $/Head", format="$%.2f")
+            },
+            use_container_width=True, hide_index=True
+        )
+
+        # Efficiency Metrics
+        c1, c2, c3 = st.columns(3)
+        with c1: st.metric("YTD Rev", f"${df_rep['actual_coin_in'].sum():,.0f}")
+        with c2: 
+            brand_pct = (df_rep['brand_lift'].sum() / df_rep['total_lift'].sum()) * 100 if df_rep['total_lift'].sum() > 0 else 0
+            st.metric("Brand Equity Share", f"{brand_pct:.1f}%")
+        with c3: 
+            ytd_avg = df_rep['actual_coin_in'].sum() / df_rep['actual_traffic'].sum() if df_rep['actual_traffic'].sum() > 0 else 0
+            st.metric("YTD Ledger Avg", f"${ytd_avg:,.2f}")
+
+        # Download
+        st.download_button("📥 Export Forensic Data", df_rep.to_csv(index=False), "HR_Ottawa_Forensic.csv", "text/csv", use_container_width=True)
+    else:
+        st.info("No ledger records found to analyze.")
