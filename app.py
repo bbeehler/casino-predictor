@@ -652,7 +652,7 @@ with tab5:
 
     # 2. CHAT INTERFACE CONTAINER
     with st.container(border=True):
-        st.write("### Property Intelligence")
+        st.write("### FloorCast AI")
         
         # FIX: The User Input box
         user_query = st.text_input("Ask about traffic trends, high-revenue days, or ROI:", 
@@ -660,7 +660,7 @@ with tab5:
         
         col_btn, col_spacer = st.columns([1, 2])
         with col_btn:
-            analyze_button = st.button("🚀 Run Analysis", use_container_width=True)
+            analyze_button = st.button("🚀 Ask FloorCast", use_container_width=True)
 
     # 3. ANALYSIS LOGIC
     if analyze_button and user_query:
