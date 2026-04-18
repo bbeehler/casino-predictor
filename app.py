@@ -126,69 +126,87 @@ if 'coeffs' not in st.session_state:
     except Exception as e:
         st.error(f"Failed to load Engine Weights: {e}")
 
-# --- TAB 1: EXECUTIVE DASHBOARD (YTD RESTORED) ---
+# --- TAB 1: EXECUTIVE DASHBOARD (YTD & DIGITAL LIFT RESTORED) ---
 with tab1:
     # 1. BRANDED HEADER
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🏛️ Executive Property Overview</h2>
-            <p style="color: #888; margin: 0;">YTD Performance vs. Engine Baseline.</p>
+            <p style="color: #888; margin: 0;">YTD Performance, Digital Lift ROI, and Revenue Metrics.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # Pull latest coefficients for calculation
+    # Pull latest coefficients for live math
     c = st.session_state.coeffs
     avg_spend = c.get('Avg_Coin_In', 1200)
+    click_weight = c.get('Clicks', 0)
+    promo_lift = c.get('Promo', 0)
 
-    # 2. PREPARE YTD DATA
     df_exec = pd.DataFrame(ledger_data)
+    
     if not df_exec.empty:
-        # Ensure date format and sort
+        # DATA PREP: Calculate Daily Digital Lift and Revenue
         df_exec['entry_date'] = pd.to_datetime(df_exec['entry_date'])
         df_exec = df_exec.sort_values('entry_date')
+        
+        # Calculate Digital Lift (Traffic) and Digital Revenue (Dollars)
+        df_exec['daily_digital_lift'] = (df_exec['ad_clicks'] * click_weight) + (df_exec['active_promo'].astype(int) * promo_lift)
+        df_exec['daily_digital_revenue'] = df_exec['daily_digital_lift'] * avg_spend
         
         # Calculate YTD Running Totals
         df_exec['ytd_traffic'] = df_exec['actual_traffic'].cumsum()
         df_exec['ytd_revenue'] = df_exec['actual_coin_in'].cumsum()
-        
-        # Calculate Current Performance vs Engine Baseline
-        latest = df_exec.iloc[-1]
-        ytd_total_traffic = df_exec['actual_traffic'].sum()
-        ytd_total_revenue = df_exec['actual_coin_in'].sum()
-        
-        # 3. YTD KPI CARDS (The High-Level View)
-        k1, k2, k3 = st.columns(3)
+        df_exec['ytd_digital_lift'] = df_exec['daily_digital_lift'].cumsum()
+        df_exec['ytd_digital_revenue'] = df_exec['daily_digital_revenue'].cumsum()
+
+        # 2. TOP LEVEL KPI CARDS (Styled)
+        st.markdown("### 📈 YTD Cumulative Performance")
+        k1, k2, k3, k4 = st.columns(4)
         with k1:
-            st.metric("YTD Total Traffic", f"{ytd_total_traffic:,}")
+            st.metric("YTD Traffic", f"{df_exec['actual_traffic'].sum():,}")
         with k2:
-            st.metric("YTD Total Revenue", f"${ytd_total_revenue:,.0f}")
+            st.metric("YTD Revenue", f"${df_exec['actual_coin_in'].sum():,.0f}")
         with k3:
-            ytd_avg_spend = ytd_total_revenue / ytd_total_traffic if ytd_total_traffic > 0 else 0
-            st.metric("YTD Avg Spend/Head", f"${ytd_avg_spend:,.2f}", 
-                      delta=f"{ytd_avg_spend - avg_spend:,.2f} vs Engine")
+            # RESTORED: Digital Lift YTD
+            st.metric("Digital Lift YTD", f"{df_exec['ytd_digital_lift'].iloc[-1]:,.0f}", help="Guests driven by Clicks/Promos")
+        with k4:
+            # RESTORED: Digital Lift Revenue YTD
+            st.metric("Digital ROI YTD", f"${df_exec['ytd_digital_revenue'].iloc[-1]:,.0f}", help="Revenue attributed to Digital Lift")
 
         st.write("---")
 
-        # 4. YTD PERFORMANCE VISUALS
-        col_chart1, col_chart2 = st.columns(2)
+        # 3. VISUAL ANALYSIS (Styled Charts)
+        col_main, col_side = st.columns([2, 1])
         
-        with col_chart1:
-            st.write("#### Cumulative YTD Traffic")
-            st.area_chart(df_exec.set_index('entry_date')['ytd_traffic'], color="#FFCC00")
+        with col_main:
+            st.markdown("#### 💰 Revenue vs. Engine Baseline")
+            # Actual vs Expected based on current Admin coefficients
+            df_exec['engine_expected_ytd'] = df_exec['ytd_traffic'] * avg_spend
+            st.line_chart(df_exec.set_index('entry_date')[['ytd_revenue', 'engine_expected_ytd']])
             
-        with col_chart2:
-            st.write("#### Cumulative YTD Revenue")
-            # Compare Actual vs Expected Revenue (using Admin Spend coefficient)
-            df_exec['expected_ytd_rev'] = df_exec['ytd_traffic'] * avg_spend
-            st.line_chart(df_exec.set_index('entry_date')[['ytd_revenue', 'expected_ytd_rev']])
+            st.markdown("#### 🚀 Digital Contribution Trend")
+            st.area_chart(df_exec.set_index('entry_date')['ytd_digital_revenue'], color="#FFCC00")
 
-        # 5. RECENT TRENDS (The last 30 days)
-        st.write("#### Recent 30-Day Activity")
-        df_recent = df_exec.tail(30)
-        st.bar_chart(df_recent.set_index('entry_date')['actual_traffic'])
+        with col_side:
+            st.markdown("#### 🎯 Quick Insights")
+            with st.container(border=True):
+                lift_pct = (df_exec['ytd_digital_lift'].iloc[-1] / df_exec['ytd_traffic'].iloc[-1]) * 100
+                st.write(f"**Digital Impact:**")
+                st.write(f"Marketing is responsible for **{lift_pct:.1f}%** of total property traffic YTD.")
+                
+                st.write("---")
+                
+                avg_actual = df_exec['actual_coin_in'].sum() / df_exec['actual_traffic'].sum()
+                st.write(f"**True Avg Spend:**")
+                st.write(f"The ledger reflects **${avg_actual:,.2f}** per head vs your Engine setting of **${avg_spend:,.2f}**.")
+
+        # 4. RECENT ACTIVITY TABLE
+        st.write("#### Recent 10 Days")
+        st.dataframe(df_exec[['entry_date', 'actual_traffic', 'actual_coin_in', 'daily_digital_lift', 'daily_digital_revenue']].tail(10), 
+                     use_container_width=True, hide_index=True)
 
     else:
-        st.warning("No ledger data found. Please check your Supabase connection.")
+        st.warning("Ledger is empty. Please check Supabase or add entries in the Input tab.")
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
     st.markdown("""
