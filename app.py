@@ -151,6 +151,47 @@ with tab1:
         total_lift_rev_ytd = df_exec['daily_digital_revenue'].sum()
         lift_contribution = (total_lift_ytd / total_traffic * 100) if total_traffic > 0 else 0
 
+        # --- NEW: AI PREDICTABILITY LOGIC ---
+        # 1. Calculate Expected Traffic for every day based on weights
+        df_exec['expected_traffic'] = (
+            intercept + 
+            (df_exec['ad_clicks'] * click_weight) + 
+            (df_exec['active_promo'].astype(int) * promo_lift) + 
+            (df_exec['temp_c'] * c.get('Temp_C', 0)) + 
+            (df_exec['snow_cm'] * c.get('Snow_cm', 0)) + 
+            (df_exec['rain_mm'] * c.get('Rain_mm', 0))
+        )
+        
+        # 2. Calculate MAPE (Mean Absolute Percentage Error)
+        # We subtract the error from 100% to get an "Accuracy" or "Predictability" score
+        df_exec['error'] = abs(df_exec['actual_traffic'] - df_exec['expected_traffic']) / df_exec['actual_traffic']
+        accuracy_score = (1 - df_exec['error'].mean()) * 100
+        
+        # 3. THE KPI DISPLAY (Card Style)
+        st.write("##")
+        p_col1, p_col2 = st.columns([1, 1])
+        
+        with p_col1:
+            # Color code based on performance
+            score_color = "#00FF00" if accuracy_score > 85 else "#FFCC00" if accuracy_score > 70 else "#FF0000"
+            
+            st.markdown(f"""
+                <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-left: 10px solid {score_color};">
+                    <p style="color: #888; font-size: 14px; text-transform: uppercase; margin: 0;">AI Predictability Score</p>
+                    <h1 style="color: {score_color}; margin: 5px 0;">{accuracy_score:.1f}%</h1>
+                    <p style="color: #eee; font-size: 12px;">The model is currently tracking within <b>{100-accuracy_score:.1f}%</b> of actual property traffic.</p>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        with p_col2:
+            st.markdown(f"""
+                <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #444;">
+                    <p style="color: #888; font-size: 14px; text-transform: uppercase; margin: 0;">Model Status</p>
+                    <h3 style="color: #FFF; margin: 15px 0;">{"✅ OPTIMIZED" if accuracy_score > 85 else "⚠️ CALIBRATION SUGGESTED"}</h3>
+                    <p style="color: #888; font-size: 12px;">Based on a {len(df_exec)} day lookback period.</p>
+                </div>
+            """, unsafe_allow_html=True)
+
         # 2. THE BIG CARDS (Bento Style)
         row1_col1, row1_col2 = st.columns(2)
         
