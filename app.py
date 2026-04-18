@@ -122,105 +122,73 @@ if 'coeffs' not in st.session_state:
     except Exception as e:
         st.error(f"Failed to load Engine Weights: {e}")
 
-# --- TAB 1: EXECUTIVE DASHBOARD ---
+# --- TAB 1: EXECUTIVE DASHBOARD (BRAND LIFT EDITION) ---
 with tab1:
-    # 1. BRANDED HEADER
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🏛️ Executive Property Overview</h2>
-            <p style="color: #888; margin: 0;">YTD Performance & AI Model Confidence</p>
+            <p style="color: #888; margin: 0;">YTD Performance & Brand Equity Value.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # Pull latest coefficients
     c = st.session_state.coeffs
     avg_spend = c.get('Avg_Coin_In', 1200)
     click_weight = c.get('Clicks', 0)
+    imps_weight = c.get('Impressions', 0) # Based on 1k units
     promo_lift = c.get('Promo', 0)
     intercept = c.get('Intercept', 0)
 
     df_exec = pd.DataFrame(ledger_data)
     
     if not df_exec.empty:
-        # --- 2. SAFETY GUARD: ENSURE COLUMNS EXIST ---
-        for col in ['temp_c', 'snow_cm', 'rain_mm', 'ad_clicks', 'active_promo']:
-            if col not in df_exec.columns:
-                df_exec[col] = 0.0
+        # --- 1. SAFETY & CALCULATIONS ---
+        for col in ['temp_c', 'snow_cm', 'rain_mm', 'ad_clicks', 'impressions', 'active_promo']:
+            if col not in df_exec.columns: df_exec[col] = 0.0
         
         df_exec['entry_date'] = pd.to_datetime(df_exec['entry_date'])
         
-        # --- 3. CALCULATE LIFT & PREDICTABILITY ---
-        # Calculate Digital Lift
-        df_exec['daily_digital_lift'] = (df_exec['ad_clicks'] * click_weight) + (df_exec['active_promo'].astype(int) * promo_lift)
-        df_exec['daily_digital_revenue'] = df_exec['daily_digital_lift'] * avg_spend
+        # Calculate Separate Lifts
+        df_exec['direct_lift'] = df_exec['ad_clicks'] * click_weight
+        df_exec['brand_lift'] = (df_exec['impressions'] / 1000) * imps_weight
+        df_exec['total_digital_lift'] = df_exec['direct_lift'] + df_exec['brand_lift'] + (df_exec['active_promo'].astype(int) * promo_lift)
         
-        # Calculate AI Expected Traffic (The Model's "Guess")
-        df_exec['expected_traffic'] = (
-            intercept + 
-            df_exec['daily_digital_lift'] + 
-            (df_exec['temp_c'] * c.get('Temp_C', 0)) + 
-            (df_exec['snow_cm'] * c.get('Snow_cm', 0)) + 
-            (df_exec['rain_mm'] * c.get('Rain_mm', 0))
-        )
-        
-        # Aggregate Totals
-        total_traffic = df_exec['actual_traffic'].sum()
-        total_revenue = df_exec['actual_coin_in'].sum()
-        total_lift_rev_ytd = df_exec['daily_digital_revenue'].sum()
-        
-        # Accuracy Calculation (MAPE)
+        # Revenue Logic
+        df_exec['brand_rev_ytd'] = df_exec['brand_lift'] * avg_spend
+        df_exec['total_digital_rev'] = df_exec['total_digital_lift'] * avg_spend
+
+        # AI Predictability
+        df_exec['expected_traffic'] = intercept + df_exec['total_digital_lift'] + (df_exec['temp_c'] * c.get('Temp_C', 0))
         df_exec['error'] = abs(df_exec['actual_traffic'] - df_exec['expected_traffic']) / df_exec['actual_traffic']
         accuracy_score = max(0, (1 - df_exec['error'].mean()) * 100)
-        score_color = "#00FF00" if accuracy_score > 85 else "#FFCC00" if accuracy_score > 70 else "#FF0000"
 
-        # --- 4. BENTO KPI CARDS ---
-        row1_col1, row1_col2 = st.columns(2)
-        with row1_col1:
-            st.markdown(f"""
-                <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
-                    <p style="color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 5px;">Total YTD Traffic</p>
-                    <h1 style="color: #FFF; margin: 0;">{total_traffic:,}</h1>
-                    <p style="color: #FFCC00; font-size: 11px; margin-top: 10px;">Property Volume</p>
-                </div>
-            """, unsafe_allow_html=True)
-        with row1_col2:
-            st.markdown(f"""
-                <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
-                    <p style="color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 5px;">Total YTD Revenue</p>
-                    <h1 style="color: #FFF; margin: 0;">${total_revenue:,.0f}</h1>
-                    <p style="color: #FFCC00; font-size: 11px; margin-top: 10px;">Actual Coin-In</p>
-                </div>
-            """, unsafe_allow_html=True)
+        # --- 2. THE TOP BENTO CARDS ---
+        k1, k2 = st.columns(2)
+        with k1:
+            st.markdown(f"""<div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
+                <p style="color: #888; font-size: 12px; text-transform: uppercase;">Total YTD Revenue</p>
+                <h1 style="color: #FFF; margin: 0;">${df_exec['actual_coin_in'].sum():,.0f}</h1>
+            </div>""", unsafe_allow_html=True)
+        with k2:
+            st.markdown(f"""<div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
+                <p style="color: #888; font-size: 12px; text-transform: uppercase;">Total Digital ROI</p>
+                <h1 style="color: #FFF; margin: 0;">${df_exec['total_digital_rev'].sum():,.0f}</h1>
+            </div>""", unsafe_allow_html=True)
 
         st.write("##")
-        row2_col1, row2_col2 = st.columns(2)
-        with row2_col1:
-            st.markdown(f"""
-                <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
-                    <p style="color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 5px;">Digital Lift Revenue</p>
-                    <h1 style="color: #FFF; margin: 0;">${total_lift_rev_ytd:,.0f}</h1>
-                    <p style="color: #FFCC00; font-size: 11px; margin-top: 10px;">Value of Marketing Weights</p>
-                </div>
-            """, unsafe_allow_html=True)
-        with row2_col2:
-            st.markdown(f"""
-                <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-left: 10px solid {score_color}; text-align: center;">
-                    <p style="color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 5px;">AI Predictability</p>
-                    <h1 style="color: {score_color}; margin: 0;">{accuracy_score:.1f}%</h1>
-                    <p style="color: #FFF; font-size: 11px; margin-top: 10px;">Model Confidence</p>
-                </div>
-            """, unsafe_allow_html=True)
-
-        # --- 5. DATA TABLE ---
-        st.write("---")
-        st.write("#### 🗓️ Recent Ledger Activity")
-        st.dataframe(
-            df_exec[['entry_date', 'actual_traffic', 'actual_coin_in', 'daily_digital_lift', 'daily_digital_revenue']].tail(5), 
-            use_container_width=True, hide_index=True
-        )
-
-    else:
-        st.warning("Ledger is empty. Please add data in the Input tab.")
+        k3, k4 = st.columns(2)
+        with k3:
+            st.markdown(f"""<div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-left: 10px solid #FFCC00; text-align: center;">
+                <p style="color: #888; font-size: 12px; text-transform: uppercase;">Brand Equity Value</p>
+                <h1 style="color: #FFCC00; margin: 0;">${df_exec['brand_rev_ytd'].sum():,.0f}</h1>
+                <p style="color: #888; font-size: 11px; margin-top:5px;">Revenue from Impression Lift</p>
+            </div>""", unsafe_allow_html=True)
+        with k4:
+            score_color = "#00FF00" if accuracy_score > 85 else "#FFCC00"
+            st.markdown(f"""<div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-left: 10px solid {score_color}; text-align: center;">
+                <p style="color: #888; font-size: 12px; text-transform: uppercase;">Predictability</p>
+                <h1 style="color: {score_color}; margin: 0;">{accuracy_score:.1f}%</h1>
+                <p style="color: #888; font-size: 11px; margin-top:5px;">Model Confidence</p>
+            </div>""", unsafe_allow_html=True)
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
     st.markdown("""
@@ -655,117 +623,51 @@ with tab5:
             except Exception as e:
                 st.error(f"Analyst Error: {e}")
 
-# --- TAB 6: MASTER ANALYTICS & FORENSIC REPORT ---
+# --- TAB 6: MASTER FORENSIC REPORT ---
 with tab6:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">📊 Master Forensic Report</h2>
-            <p style="color: #888; margin: 0;">Accounting-grade analysis of property performance and marketing ROI.</p>
+            <p style="color: #888; margin: 0;">Detailed attribution including Direct vs. Brand Lift.</p>
         </div>
     """, unsafe_allow_html=True)
-
-    # 1. PULL ENGINE CONSTANTS
-    c = st.session_state.coeffs
-    avg_spend = c.get('Avg_Coin_In', 1200)
-    click_weight = c.get('Clicks', 0)
-    promo_lift = c.get('Promo', 0)
-    intercept = c.get('Intercept', 0)
 
     df_rep = pd.DataFrame(ledger_data).copy()
     
     if not df_rep.empty:
-        df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
-        
-        # --- THE CALCULATION ENGINE (Hard Math Only) ---
-        # A. Marketing Attribution
-        df_rep['attr_traffic'] = (df_rep['ad_clicks'] * click_weight) + (df_rep['active_promo'].astype(int) * promo_lift)
-        df_rep['attr_revenue'] = df_rep['attr_traffic'] * avg_spend
-        
-        # B. Efficiency & Variance Metrics
-        df_rep['actual_spend_avg'] = df_rep['actual_coin_in'] / df_rep['actual_traffic']
-        df_rep['rev_variance'] = df_rep['actual_coin_in'] - (df_rep['actual_traffic'] * avg_spend)
-        
-        # C. Global Aggregates
-        total_rev = df_rep['actual_coin_in'].sum()
-        total_vis = df_rep['actual_traffic'].sum()
-        total_attr_rev = df_rep['attr_revenue'].sum()
-        total_days = len(df_rep)
+        # Re-run same calculations for reporting table
+        df_rep['direct_lift'] = df_rep['ad_clicks'] * click_weight
+        df_rep['brand_lift'] = (df_rep['impressions'] / 1000) * imps_weight
+        df_rep['total_lift'] = df_rep['direct_lift'] + df_rep['brand_lift'] + (df_rep['active_promo'].astype(int) * promo_lift)
+        df_rep['lift_rev'] = df_rep['total_lift'] * avg_spend
+        df_rep['actual_avg'] = df_rep['actual_coin_in'] / df_rep['actual_traffic']
 
-        # 2. TOP-LEVEL PERFORMANCE TILES
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Total YTD Coin-In", f"${total_rev:,.0f}")
-        with col2:
-            st.metric("Marketing ROI (Est)", f"${total_attr_rev:,.0f}")
-        with col3:
-            st.metric("Base Traffic Avg", f"{total_vis / total_days:,.0f}")
-        with col4:
-            st.metric("Ledger Spend Avg", f"${total_rev / total_vis:,.2f}")
-
-        st.write("---")
-
-        # 3. THE MASTER FORENSIC DATA TABLE
-        st.write("### 🔍 Daily Performance Breakdown")
-        
-        # Build the final exportable dataframe
-        master_df = df_rep[[
-            'entry_date', 'actual_traffic', 'actual_coin_in', 'ad_clicks'
-        ]].copy()
-        
-        master_df['Digital Traffic'] = df_rep['attr_traffic']
-        master_df['Digital Revenue'] = df_rep['attr_revenue']
-        master_df['Actual $/Head'] = df_rep['actual_spend_avg']
-        master_df['vs. Engine Target'] = df_rep['rev_variance']
-        
+        # 1. FORENSIC GRID
         st.dataframe(
-            master_df.sort_values('entry_date', ascending=False),
+            df_rep.sort_values('entry_date', ascending=False),
             column_config={
                 "entry_date": "Date",
-                "actual_traffic": st.column_config.NumberColumn("Total Traffic", format="%d"),
-                "actual_coin_in": st.column_config.NumberColumn("Total Revenue", format="$%d"),
-                "Digital Revenue": st.column_config.NumberColumn("Digital Lift", format="$%d"),
-                "Actual $/Head": st.column_config.NumberColumn("Avg Spend", format="$%.2f"),
-                "vs. Engine Target": st.column_config.NumberColumn("Variance", format="$%d")
+                "actual_traffic": "Total Traffic",
+                "actual_coin_in": st.column_config.NumberColumn("Actual Revenue", format="$%d"),
+                "direct_lift": st.column_config.NumberColumn("Click Lift", format="%.1f"),
+                "brand_lift": st.column_config.NumberColumn("Brand Lift", format="%.1f"),
+                "lift_rev": st.column_config.NumberColumn("Digital ROI", format="$%d"),
+                "actual_avg": st.column_config.NumberColumn("Actual $/Head", format="$%.2f")
             },
-            use_container_width=True,
-            hide_index=True
+            use_container_width=True, hide_index=True
         )
 
-        # 4. RATIO & VOLATILITY ANALYSIS
-        st.write("### 📉 Operational Efficiency")
+        # 2. EFFICIENCY ANALYSIS
+        st.write("### 📈 Marketing Efficiency")
         c1, c2, c3 = st.columns(3)
-        
         with c1:
-            with st.container(border=True):
-                st.write("**Marketing Contribution**")
-                ratio = (total_attr_rev / total_rev) * 100 if total_rev > 0 else 0
-                st.title(f"{ratio:.1f}%")
-                st.caption("Percentage of YTD Revenue driven by Digital weights.")
-
+            st.metric("Total YTD Rev", f"${df_rep['actual_coin_in'].sum():,.0f}")
         with c2:
-            with st.container(border=True):
-                st.write("**Revenue Volatility**")
-                std_dev = df_rep['actual_coin_in'].std()
-                st.title(f"${std_dev:,.0f}")
-                st.caption("Standard deviation (Daily Revenue Risk).")
-
+            brand_pct = (df_rep['brand_lift'].sum() / df_rep['total_lift'].sum()) * 100
+            st.metric("Brand Equity Share", f"{brand_pct:.1f}%", help="Percentage of marketing revenue coming from brand impressions vs clicks.")
         with c3:
-            with st.container(border=True):
-                st.write("**Ad Click Efficiency**")
-                # Revenue per individual click based on current weights
-                rev_per_click = click_weight * avg_spend
-                st.title(f"${rev_per_click:.2f}")
-                st.caption("Revenue value of a single Ad Click.")
+            ytd_avg = df_rep['actual_coin_in'].sum() / df_rep['actual_traffic'].sum()
+            st.metric("YTD Ledger Avg", f"${ytd_avg:,.2f}")
 
-        # 5. DATA EXPORT
-        st.write("---")
-        st.download_button(
-            label="📥 Export Forensic Report to CSV",
-            data=master_df.to_csv(index=False),
-            file_name=f"HR_Ottawa_Forensic_Report_{datetime.date.today()}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-
-    else:
-        st.warning("No data found in ledger. Add entries in the Input tab to generate reports.")
+        # 3. EXPORT
+        st.download_button("📥 Export Forensic Data", df_rep.to_csv(index=False), "HR_Ottawa_Forensic.csv", "text/csv", use_container_width=True)
