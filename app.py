@@ -5,6 +5,7 @@ from supabase import create_client, Client
 import google.generativeai as genai
 from sklearn.linear_model import LinearRegression
 import numpy as np
+import json
 
 # 1. INITIALIZE SUPABASE
 url = st.secrets["SUPABASE_URL"]
