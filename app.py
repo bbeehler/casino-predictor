@@ -126,40 +126,69 @@ if 'coeffs' not in st.session_state:
     except Exception as e:
         st.error(f"Failed to load Engine Weights: {e}")
 
-# --- TAB 1: EXECUTIVE DASHBOARD ---
+# --- TAB 1: EXECUTIVE DASHBOARD (YTD RESTORED) ---
 with tab1:
+    # 1. BRANDED HEADER
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🏛️ Executive Property Overview</h2>
-            <p style="color: #888; margin: 0;">Live property performance synced with Admin Engine coefficients.</p>
+            <p style="color: #888; margin: 0;">YTD Performance vs. Engine Baseline.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # Pull latest coefficients
+    # Pull latest coefficients for calculation
     c = st.session_state.coeffs
     avg_spend = c.get('Avg_Coin_In', 1200)
-    base_traffic = c.get('Intercept', 0)
 
-    # 1. TOP LEVEL KPI CARDS
+    # 2. PREPARE YTD DATA
     df_exec = pd.DataFrame(ledger_data)
     if not df_exec.empty:
-        latest = df_exec.iloc[-1]
+        # Ensure date format and sort
+        df_exec['entry_date'] = pd.to_datetime(df_exec['entry_date'])
+        df_exec = df_exec.sort_values('entry_date')
         
-        kpi1, kpi2, kpi3 = st.columns(3)
-        with kpi1:
-            st.metric("Latest Traffic", f"{latest['actual_traffic']:,}")
-        with kpi2:
-            st.metric("Latest Revenue", f"${latest['actual_coin_in']:,.2f}")
-        with kpi3:
-            actual_avg = latest['actual_coin_in'] / latest['actual_traffic'] if latest['actual_traffic'] > 0 else 0
-            st.metric("Actual Spend/Head", f"${actual_avg:,.2f}", delta=f"{actual_avg - avg_spend:,.2f} vs Engine")
+        # Calculate YTD Running Totals
+        df_exec['ytd_traffic'] = df_exec['actual_traffic'].cumsum()
+        df_exec['ytd_revenue'] = df_exec['actual_coin_in'].cumsum()
+        
+        # Calculate Current Performance vs Engine Baseline
+        latest = df_exec.iloc[-1]
+        ytd_total_traffic = df_exec['actual_traffic'].sum()
+        ytd_total_revenue = df_exec['actual_coin_in'].sum()
+        
+        # 3. YTD KPI CARDS (The High-Level View)
+        k1, k2, k3 = st.columns(3)
+        with k1:
+            st.metric("YTD Total Traffic", f"{ytd_total_traffic:,}")
+        with k2:
+            st.metric("YTD Total Revenue", f"${ytd_total_revenue:,.0f}")
+        with k3:
+            ytd_avg_spend = ytd_total_revenue / ytd_total_traffic if ytd_total_traffic > 0 else 0
+            st.metric("YTD Avg Spend/Head", f"${ytd_avg_spend:,.2f}", 
+                      delta=f"{ytd_avg_spend - avg_spend:,.2f} vs Engine")
 
-    # 2. REVENUE REALITY CHART
-    st.write("### Revenue Performance vs. Engine Baseline")
-    df_exec['Engine_Expected_Rev'] = df_exec['actual_traffic'] * avg_spend
-    
-    st.line_chart(df_exec.set_index('entry_date')[['actual_coin_in', 'Engine_Expected_Rev']])
-    st.caption(f"Engine Baseline currently set to ${avg_spend:,.2f} per head.")
+        st.write("---")
+
+        # 4. YTD PERFORMANCE VISUALS
+        col_chart1, col_chart2 = st.columns(2)
+        
+        with col_chart1:
+            st.write("#### Cumulative YTD Traffic")
+            st.area_chart(df_exec.set_index('entry_date')['ytd_traffic'], color="#FFCC00")
+            
+        with col_chart2:
+            st.write("#### Cumulative YTD Revenue")
+            # Compare Actual vs Expected Revenue (using Admin Spend coefficient)
+            df_exec['expected_ytd_rev'] = df_exec['ytd_traffic'] * avg_spend
+            st.line_chart(df_exec.set_index('entry_date')[['ytd_revenue', 'expected_ytd_rev']])
+
+        # 5. RECENT TRENDS (The last 30 days)
+        st.write("#### Recent 30-Day Activity")
+        df_recent = df_exec.tail(30)
+        st.bar_chart(df_recent.set_index('entry_date')['actual_traffic'])
+
+    else:
+        st.warning("No ledger data found. Please check your Supabase connection.")
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
     st.markdown("""
