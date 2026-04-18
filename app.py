@@ -640,38 +640,70 @@ with tab4:
         except Exception as e:
             st.error(f"Save failed: {e}")
 
-# --- TAB 5: FloorCast Analyst Logic ---
-if st.button("🔍 Ask Analyst", use_container_width=True):
-    with st.spinner("Consulting the property ledger..."):
-        try:
-            # 1. PREPARE THE DATA (The Context)
-            df_full = pd.DataFrame(ledger_data)
-            
-            # --- CRITICAL FIX: Give it the Full YTD Context, not just the tail ---
-            # We sort by traffic so the AI definitely sees the "Highest" days
-            df_highlights = df_full.sort_values('actual_traffic', ascending=False).head(20)
-            df_recent = df_full.tail(30)
-            
-            # Combine them so it sees the "best" days and the "most recent" days
-            context_df = pd.concat([df_highlights, df_recent]).drop_duplicates()
-            
-            # 2. THE PROMPT
-            prompt = f"""
-            SYSTEM: You are the Lead Analyst for Hard Rock Ottawa. 
-            COEFFICIENTS: {st.session_state.coeffs}
-            
-            LEDGER DATA (YTD Highlights):
-            {context_df.to_csv(index=False)}
-            
-            USER QUESTION: {user_input}
-            
-            TASK: Use the LEDGER DATA provided above to answer. If the user asks for the 
-            highest traffic day, look at the 'actual_traffic' column.
-            """
-            
-            # 3. RUN AI
-            response = model.generate_content(prompt)
-            st.markdown(response.text)
-            
-        except Exception as e:
-            st.error(f"Analyst Error: {e}")
+# --- TAB 5: FloorCast Analyst ---
+with tab5:
+    # 1. BRANDED HEADER
+    st.markdown("""
+        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
+            <h2 style="color: #FFCC00; margin: 0;">🔍 FloorCast Analyst</h2>
+            <p style="color: #888; margin: 0;">Natural language insights based on your property ledger and digital weights.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # 2. CHAT INTERFACE CONTAINER
+    with st.container(border=True):
+        st.write("### Property Intelligence")
+        
+        # FIX: The User Input box
+        user_query = st.text_input("Ask about traffic trends, high-revenue days, or ROI:", 
+                                  placeholder="e.g., 'What was our highest traffic day in the last 6 months?'")
+        
+        col_btn, col_spacer = st.columns([1, 2])
+        with col_btn:
+            analyze_button = st.button("🚀 Run Analysis", use_container_width=True)
+
+    # 3. ANALYSIS LOGIC
+    if analyze_button and user_query:
+        with st.spinner("Consulting the ledger and calculating variances..."):
+            try:
+                # A. PREPARE THE DATA (The "Hard Math" Context)
+                df_full = pd.DataFrame(ledger_data)
+                
+                # We give the AI the top 20 "Best" days and the 30 "Latest" days
+                df_highlights = df_full.sort_values('actual_traffic', ascending=False).head(20)
+                df_recent = df_full.tail(30)
+                context_df = pd.concat([df_highlights, df_recent]).drop_duplicates()
+                
+                # B. CALL GEMINI
+                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                
+                prompt = f"""
+                SYSTEM: You are the Lead Data Analyst for Hard Rock Hotel & Casino Ottawa.
+                PROPERTY COEFFICIENTS: {st.session_state.coeffs}
+                
+                LEDGER CONTEXT (Top Performers & Recent Records):
+                {context_df.to_csv(index=False)}
+                
+                QUESTION: {user_query}
+                
+                INSTRUCTION: Use the actual_traffic and actual_coin_in columns to provide 
+                specific, data-backed answers. If a user asks for the 'highest' or 'best' day, 
+                scan the provided LEDGER CONTEXT for the maximum value.
+                """
+                
+                response = model.generate_content(prompt)
+                
+                # C. DISPLAY STYLED RESPONSE
+                st.write("---")
+                st.markdown(f"""
+                    <div style="background-color: #1a1a1a; padding: 20px; border-radius: 10px; border-top: 3px solid #FFCC00;">
+                        <p style="color: #FFCC00; font-weight: bold; margin-bottom: 10px;">ANALYSIS RESULT:</p>
+                        <div style="color: #eee; line-height: 1.6;">
+                            {response.text}
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+
+            except Exception as e:
+                st.error(f"Analyst Error: {e}")
