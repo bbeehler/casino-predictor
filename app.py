@@ -15,23 +15,18 @@ supabase: Client = create_client(url, key)
 # This checks the "Vault" (Supabase) as soon as the app wakes up
 if 'coeffs' not in st.session_state:
     try:
-        # We look for the master record (ID 1)
         response = supabase.table("coefficients").select("*").eq("id", 1).execute()
-        
-        if response.data and len(response.data) > 0:
-            # Data found! This locks in your saved $1,200+ spend and weights
+        if response.data:
             st.session_state.coeffs = response.data[0]
         else:
-            # First-time setup: Use your Hard Rock Ground Truth
+            # Fallback if DB is empty
             st.session_state.coeffs = {
                 "id": 1, "Intercept": 1000, "Avg_Coin_In": 1200,
                 "Temp_C": 0, "Snow_cm": 0, "Rain_mm": 0,
                 "Promo": 0, "Clicks": 0, "Impressions": 0
             }
     except Exception as e:
-        st.error(f"⚠️ Engine Load Failure: {e}")
-        # Emergency fallback so the math doesn't break
-        st.session_state.coeffs = {"Intercept": 0, "Avg_Coin_In": 1200}
+        st.session_state.coeffs = {"Intercept": 1000, "Avg_Coin_In": 1200}
 
 # 3. GLOBAL DATA LOADING (Your ledger)
 # Ensure your ledger data is also loaded into session state here...
@@ -135,96 +130,36 @@ if 'coeffs' not in st.session_state:
 with tab1:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">🏢 Executive Strategy Command</h2>
-            <p style="color: #888; margin: 0;">Real-time Property Performance vs. AI Baselines (YTD 2026).</p>
+            <h2 style="color: #FFCC00; margin: 0;">🏛️ Executive Property Overview</h2>
+            <p style="color: #888; margin: 0;">Live property performance synced with Admin Engine coefficients.</p>
         </div>
     """, unsafe_allow_html=True)
+
+    # Pull latest coefficients
+    c = st.session_state.coeffs
+    avg_spend = c.get('Avg_Coin_In', 1200)
+    base_traffic = c.get('Intercept', 0)
+
+    # 1. TOP LEVEL KPI CARDS
+    df_exec = pd.DataFrame(ledger_data)
+    if not df_exec.empty:
+        latest = df_exec.iloc[-1]
+        
+        kpi1, kpi2, kpi3 = st.columns(3)
+        with kpi1:
+            st.metric("Latest Traffic", f"{latest['actual_traffic']:,}")
+        with kpi2:
+            st.metric("Latest Revenue", f"${latest['actual_coin_in']:,.2f}")
+        with kpi3:
+            actual_avg = latest['actual_coin_in'] / latest['actual_traffic'] if latest['actual_traffic'] > 0 else 0
+            st.metric("Actual Spend/Head", f"${actual_avg:,.2f}", delta=f"{actual_avg - avg_spend:,.2f} vs Engine")
+
+    # 2. REVENUE REALITY CHART
+    st.write("### Revenue Performance vs. Engine Baseline")
+    df_exec['Engine_Expected_Rev'] = df_exec['actual_traffic'] * avg_spend
     
-    if ledger_data:
-        df_exec = pd.DataFrame(ledger_data).copy()
-        df_exec['entry_date'] = pd.to_datetime(df_exec['entry_date'])
-        
-        # 1. PREP DATA & CALCULATE ACCURACY
-        c = st.session_state.coeffs
-        current_year = 2026 
-        df_ytd = df_exec[df_exec['entry_date'].dt.year == current_year].copy()
-        
-        # Numeric Safety
-        for col in ['actual_traffic', 'actual_coin_in', 'ad_clicks', 'ad_impressions']:
-            df_ytd[col] = pd.to_numeric(df_ytd[col], errors='coerce').fillna(0)
-
-        # Baseline & Accuracy Math
-        def get_pred(row):
-            dow_key = f"DOW_{pd.to_datetime(row['entry_date']).strftime('%a')}"
-            return c['Intercept'] + c.get(dow_key, 0) + (row.get('temp_c', 0) * c['Temp_C']) + (c['Promo'] if row.get('active_promo', False) else 0)
-
-        df_ytd['ai_baseline'] = df_ytd.apply(get_pred, axis=1)
-        
-        # Accuracy Calculation (Available for all cards now)
-        df_calc = df_ytd[df_ytd['actual_traffic'] > 0].copy()
-        accuracy_pct = 0.0
-        if not df_calc.empty:
-            df_calc['error'] = abs(df_calc['actual_traffic'] - df_calc['ai_baseline']) / df_calc['actual_traffic']
-            accuracy_pct = max(0, (1 - df_calc['error'].mean()) * 100)
-
-        # 2. DIGITAL LIFT MATH
-        df_ytd['digital_lift'] = df_ytd.apply(lambda row: 
-            (c['Promo'] if row.get('active_promo', False) else 0) + 
-            (row.get('ad_clicks', 0) * c['Clicks']) + 
-            (row.get('ad_impressions', 0) * c['Impressions']), axis=1)
-
-        total_lift = df_ytd['digital_lift'].sum()
-        total_traffic = df_ytd['actual_traffic'].sum()
-        lift_percentage = (total_lift / total_traffic * 100) if total_traffic > 0 else 0
-        digital_rev_impact = total_lift * c['Avg_Coin_In']
-
-        # 3. EXECUTIVE KPI BENTO BOX
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            with st.container(border=True):
-                st.markdown("💰 **YTD Total Revenue**")
-                st.metric("Total Coin-In and Table Drop", f"${df_ytd['actual_coin_in'].sum():,.0f}")
-                st.caption(f"Jan 1 - {df_ytd['entry_date'].max().strftime('%b %d')}")
-        
-        with col2:
-            with st.container(border=True):
-                st.markdown("🚶 **YTD Floor Traffic**")
-                st.metric("Total Visitors", f"{total_traffic:,.0f}")
-                st.caption(f"Actual Property Attendance")
-
-        with col3:
-            with st.container(border=True):
-                st.markdown("🚀 **YTD Digital Lift Contribution**")
-                st.metric("Lift Visitors", f"{total_lift:,.0f}", f"{lift_percentage:.1f}% of Total")
-                
-                # Attributed Revenue Impact Section
-                st.markdown(f"""
-                    <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #333;">
-                        <p style="color: #888; font-size: 0.8rem; margin: 0;">Attributed Revenue Impact</p>
-                        <h3 style="color: #FFCC00; margin: 0;">${digital_rev_impact:,.0f}</h3>
-                    </div>
-                """, unsafe_allow_html=True)
-
-        st.markdown("---")
-        
-        # 4. SUMMARY ROW
-        sum_col1, sum_col2 = st.columns(2)
-        with sum_col1:
-            with st.container(border=True):
-                st.markdown("#### 🤖 FloorCast Executive Summary")
-                days_tracked = len(df_ytd) if len(df_ytd) > 0 else 1
-                st.write(f"Digital strategy contributes an average lift of **{int(total_lift / days_tracked)}** visitors daily.")
-                st.write(f"At an average spend of **${c['Avg_Coin_In']}**, marketing is a key revenue driver.")
-        
-        with sum_col2:
-            with st.container(border=True):
-                st.markdown("#### 🎯 Model Performance")
-                st.write(f"Current Model Accuracy: **{accuracy_pct:.1f}%**")
-                st.info("The AI Baseline factors in weather, calendar cycles, and your digital weights.")
-    else:
-        st.info("No ledger data detected. Please upload data in the Admin tab.")
-
+    st.line_chart(df_exec.set_index('entry_date')[['actual_coin_in', 'Engine_Expected_Rev']])
+    st.caption(f"Engine Baseline currently set to ${avg_spend:,.2f} per head.")
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
     st.markdown("""
@@ -415,123 +350,50 @@ with tab2:
         display_df['entry_date'] = display_df['entry_date'].dt.strftime('%Y-%m-%d')
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-# --- TAB 3: STRATEGIC REPORTING & ROI ---
+# --- TAB 3: STRATEGY & ROI ---
 with tab3:
-    # 1. HEADER WITH ACCENT (Fixed the parameter name here)
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">📊 Strategic Performance & Digital ROI</h2>
-            <p style="color: #888; margin: 0;">Correlating Digital Matters Now metrics with Property Floor Reality.</p>
+            <h2 style="color: #FFCC00; margin: 0;">🚀 Strategy & Digital ROI</h2>
+            <p style="color: #888; margin: 0;">Calculating the financial lift of digital marketing efforts.</p>
         </div>
     """, unsafe_allow_html=True)
+
+    # Pull latest coefficients
+    c = st.session_state.coeffs
+    click_weight = c.get('Clicks', 0)
+    promo_lift = c.get('Promo', 0)
+    avg_spend = c.get('Avg_Coin_In', 1200)
+
+    # 1. ROI CALCULATOR
+    st.write("### Digital Lift Analysis")
+    col_input, col_result = st.columns([1, 1])
     
-    if ledger_data:
-        df_rep = pd.DataFrame(ledger_data).copy()
-        df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
-        df_rep = df_rep.sort_values('entry_date', ascending=False)
+    with col_input:
+        st.info("Current Engine Weights applied:")
+        st.write(f"* **Weight per Click:** {click_weight}")
+        st.write(f"* **Promo Base Lift:** {promo_lift} guests")
+        st.write(f"* **Revenue Value:** ${avg_spend:,.2f} / head")
 
-        # 2. DATE FILTER
-        with st.container(border=True):
-            f1, f2, f3 = st.columns([1, 1, 1])
-            start_rep = f1.date_input("📅 Report Start", df_rep['entry_date'].min().date())
-            end_rep = f2.date_input("📅 Report End", df_rep['entry_date'].max().date())
-            f3.write("##") 
-            if f3.button("🔄 Refresh Data", use_container_width=True):
-                st.rerun()
+    with col_result:
+        # Example Calculation based on 1,000 clicks
+        test_clicks = 1000
+        attributed_traffic = (test_clicks * click_weight) + promo_lift
+        attributed_rev = attributed_traffic * avg_spend
         
-        mask = (df_rep['entry_date'].dt.date >= start_rep) & (df_rep['entry_date'].dt.date <= end_rep)
-        df_filtered = df_rep.loc[mask].copy()
+        st.success(f"**Attributed Revenue per 1k Clicks**")
+        st.header(f"${attributed_rev:,.2f}")
+        st.caption(f"Estimated {attributed_traffic:,.0f} additional guests driven by digital.")
 
-        if not df_filtered.empty:
-            st.write("##")
-            
-            # 3. DIGITAL PERFORMANCE BENTO
-            st.markdown("#### 📱 Digital Impact Metrics")
-            d1, d2, d3, d4 = st.columns(4)
-            
-            # Ensure numeric conversion for sums
-            df_filtered['ad_impressions'] = pd.to_numeric(df_filtered['ad_impressions'], errors='coerce').fillna(0)
-            df_filtered['ad_clicks'] = pd.to_numeric(df_filtered['ad_clicks'], errors='coerce').fillna(0)
-            df_filtered['social_engagements'] = pd.to_numeric(df_filtered['social_engagements'], errors='coerce').fillna(0)
-            df_filtered['actual_coin_in'] = pd.to_numeric(df_filtered['actual_coin_in'], errors='coerce').fillna(0)
-
-            total_imps = df_filtered['ad_impressions'].sum()
-            total_clks = df_filtered['ad_clicks'].sum()
-            total_engs = df_filtered['social_engagements'].sum()
-            total_rev = df_filtered['actual_coin_in'].sum()
-            
-            with d1:
-                with st.container(border=True):
-                    st.metric("Ad Impressions", f"{total_imps:,.0f}")
-            with d2:
-                with st.container(border=True):
-                    st.metric("Ad Clicks", f"{total_clks:,.0f}")
-            with d3:
-                with st.container(border=True):
-                    st.metric("Engagements", f"{total_engs:,.0f}")
-            with d4:
-                with st.container(border=True):
-                    rpc = total_rev / total_clks if total_clks > 0 else 0
-                    st.metric("Rev per Click", f"${rpc:.2f}")
-
-            st.write("##")
-
-            # 4. CHARTING & SUMMARY
-            t_col, c_col = st.columns([2.5, 1])
-            with t_col:
-                with st.container(border=True):
-                    st.markdown("#### 📈 Actual Traffic vs. AI Predicted Baseline")
-                    c = st.session_state.coeffs
-                    df_filtered['ai_baseline'] = df_filtered.apply(lambda row: 
-                        c['Intercept'] + c.get(f"DOW_{row['entry_date'].strftime('%a')}", 0) + 
-                        (row.get('temp_c', 0) * c['Temp_C']) + (c['Promo'] if row.get('active_promo', False) else 0), axis=1)
-                    
-                    chart_rep = df_filtered.sort_values('entry_date')
-                    chart_rep = chart_rep.rename(columns={'actual_traffic': 'Floor Reality', 'ai_baseline': 'AI Baseline'})
-                    st.area_chart(chart_rep.set_index('entry_date')[['Floor Reality', 'AI Baseline']], color=["#FFCC00", "#555555"])
-            
-            with c_col:
-                with st.container(border=True):
-                    st.markdown("#### 📝 Executive Summary")
-                    total_var = df_filtered['actual_traffic'].sum() - df_filtered['ai_baseline'].sum()
-                    perf_color = "#28a745" if total_var > 0 else "#dc3545"
-                    st.markdown(f"""
-                        <div style="text-align: center; padding: 10px;">
-                            <h1 style="color: {perf_color}; margin: 0;">{total_var:+,.0f}</h1>
-                            <p style="color: #888;">Net Traffic Variance</p>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    st.info(f"During this period, digital efforts influenced {total_clks:,.0f} clicks to the property.")
-
-            st.write("##")
-            st.download_button(
-                label="📥 Export Hard Rock ROI Report (CSV)",
-                data=df_filtered.to_csv(index=False),
-                file_name=f"FloorPace_ROI_{start_rep}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        else:
-            st.warning("No data found for the selected date range.")
-
-import google.generativeai as genai
-
-import google.generativeai as genai
-import json
-
-import google.generativeai as genai
-import json
-import google.generativeai as genai
-import json
-import pandas as pd
-
-import google.generativeai as genai
-import json
-import pandas as pd
-
-import google.generativeai as genai
-import json
-import pandas as pd
+    # 2. HISTORICAL ROI TREND
+    df_strat = pd.DataFrame(ledger_data)
+    if not df_strat.empty:
+        # Calculate daily attributed revenue
+        df_strat['Digital_Revenue_Lift'] = ((df_strat['ad_clicks'] * click_weight) + 
+                                           (df_strat['active_promo'].astype(int) * promo_lift)) * avg_spend
+        
+        st.write("### Historical Digital Revenue Contribution")
+        st.area_chart(df_strat.set_index('entry_date')['Digital_Revenue_Lift'])
 
 # --- TAB 4: ADMIN ENGINE & DATA MANAGEMENT ---
 with tab4:
