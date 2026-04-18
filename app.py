@@ -126,17 +126,17 @@ if 'coeffs' not in st.session_state:
     except Exception as e:
         st.error(f"Failed to load Engine Weights: {e}")
 
-# --- TAB 1: EXECUTIVE DASHBOARD (YTD & DIGITAL LIFT RESTORED) ---
+# --- TAB 1: EXECUTIVE DASHBOARD (CARD STYLE - NO CHARTS) ---
 with tab1:
     # 1. BRANDED HEADER
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🏛️ Executive Property Overview</h2>
-            <p style="color: #888; margin: 0;">YTD Performance, Digital Lift ROI, and Revenue Metrics.</p>
+            <p style="color: #888; margin: 0;">YTD Performance & Digital Lift ROI (Synced with Engine Weights)</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # Pull latest coefficients for live math
+    # Pull latest coefficients
     c = st.session_state.coeffs
     avg_spend = c.get('Avg_Coin_In', 1200)
     click_weight = c.get('Clicks', 0)
@@ -146,67 +146,67 @@ with tab1:
     
     if not df_exec.empty:
         # DATA PREP: Calculate Daily Digital Lift and Revenue
-        df_exec['entry_date'] = pd.to_datetime(df_exec['entry_date'])
-        df_exec = df_exec.sort_values('entry_date')
-        
-        # Calculate Digital Lift (Traffic) and Digital Revenue (Dollars)
         df_exec['daily_digital_lift'] = (df_exec['ad_clicks'] * click_weight) + (df_exec['active_promo'].astype(int) * promo_lift)
         df_exec['daily_digital_revenue'] = df_exec['daily_digital_lift'] * avg_spend
         
-        # Calculate YTD Running Totals
-        df_exec['ytd_traffic'] = df_exec['actual_traffic'].cumsum()
-        df_exec['ytd_revenue'] = df_exec['actual_coin_in'].cumsum()
-        df_exec['ytd_digital_lift'] = df_exec['daily_digital_lift'].cumsum()
-        df_exec['ytd_digital_revenue'] = df_exec['daily_digital_revenue'].cumsum()
+        # Calculate YTD Totals
+        total_traffic = df_exec['actual_traffic'].sum()
+        total_revenue = df_exec['actual_coin_in'].sum()
+        total_lift_ytd = df_exec['daily_digital_lift'].sum()
+        total_lift_rev_ytd = df_exec['daily_digital_revenue'].sum()
+        lift_contribution = (total_lift_ytd / total_traffic * 100) if total_traffic > 0 else 0
 
-        # 2. TOP LEVEL KPI CARDS (Styled)
-        st.markdown("### 📈 YTD Cumulative Performance")
-        k1, k2, k3, k4 = st.columns(4)
-        with k1:
-            st.metric("YTD Traffic", f"{df_exec['actual_traffic'].sum():,}")
-        with k2:
-            st.metric("YTD Revenue", f"${df_exec['actual_coin_in'].sum():,.0f}")
-        with k3:
-            # RESTORED: Digital Lift YTD
-            st.metric("Digital Lift YTD", f"{df_exec['ytd_digital_lift'].iloc[-1]:,.0f}", help="Guests driven by Clicks/Promos")
-        with k4:
-            # RESTORED: Digital Lift Revenue YTD
-            st.metric("Digital ROI YTD", f"${df_exec['ytd_digital_revenue'].iloc[-1]:,.0f}", help="Revenue attributed to Digital Lift")
-
-        st.write("---")
-
-        # 3. VISUAL ANALYSIS (Styled Charts)
-        col_main, col_side = st.columns([2, 1])
+        # 2. THE BIG CARDS (Bento Style)
+        row1_col1, row1_col2 = st.columns(2)
         
-        with col_main:
-            st.markdown("#### 💰 Revenue vs. Engine Baseline")
-            # Actual vs Expected based on current Admin coefficients
-            df_exec['engine_expected_ytd'] = df_exec['ytd_traffic'] * avg_spend
-            st.line_chart(df_exec.set_index('entry_date')[['ytd_revenue', 'engine_expected_ytd']])
-            
-            st.markdown("#### 🚀 Digital Contribution Trend")
-            st.area_chart(df_exec.set_index('entry_date')['ytd_digital_revenue'], color="#FFCC00")
+        with row1_col1:
+            st.markdown(f"""
+                <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
+                    <p style="color: #888; font-size: 14px; text-transform: uppercase; margin-bottom: 5px;">Total YTD Traffic</p>
+                    <h1 style="color: #FFF; margin: 0;">{total_traffic:,}</h1>
+                    <p style="color: #FFCC00; font-size: 12px; margin-top: 10px;">Property Wide Volume</p>
+                </div>
+            """, unsafe_allow_html=True)
 
-        with col_side:
-            st.markdown("#### 🎯 Quick Insights")
-            with st.container(border=True):
-                lift_pct = (df_exec['ytd_digital_lift'].iloc[-1] / df_exec['ytd_traffic'].iloc[-1]) * 100
-                st.write(f"**Digital Impact:**")
-                st.write(f"Marketing is responsible for **{lift_pct:.1f}%** of total property traffic YTD.")
-                
-                st.write("---")
-                
-                avg_actual = df_exec['actual_coin_in'].sum() / df_exec['actual_traffic'].sum()
-                st.write(f"**True Avg Spend:**")
-                st.write(f"The ledger reflects **${avg_actual:,.2f}** per head vs your Engine setting of **${avg_spend:,.2f}**.")
+        with row1_col2:
+            st.markdown(f"""
+                <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
+                    <p style="color: #888; font-size: 14px; text-transform: uppercase; margin-bottom: 5px;">Total YTD Revenue</p>
+                    <h1 style="color: #FFF; margin: 0;">${total_revenue:,.0f}</h1>
+                    <p style="color: #FFCC00; font-size: 12px; margin-top: 10px;">Actual Ledger Coin-In</p>
+                </div>
+            """, unsafe_allow_html=True)
 
-        # 4. RECENT ACTIVITY TABLE
-        st.write("#### Recent 10 Days")
-        st.dataframe(df_exec[['entry_date', 'actual_traffic', 'actual_coin_in', 'daily_digital_lift', 'daily_digital_revenue']].tail(10), 
+        st.write("##")
+
+        row2_col1, row2_col2 = st.columns(2)
+
+        with row2_col1:
+            st.markdown(f"""
+                <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
+                    <p style="color: #888; font-size: 14px; text-transform: uppercase; margin-bottom: 5px;">Digital Lift YTD</p>
+                    <h1 style="color: #FFF; margin: 0;">{total_lift_ytd:,.0f}</h1>
+                    <p style="color: #FFCC00; font-size: 12px; margin-top: 10px;">{lift_contribution:.1f}% of Total Volume</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with row2_col2:
+            st.markdown(f"""
+                <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
+                    <p style="color: #888; font-size: 14px; text-transform: uppercase; margin-bottom: 5px;">Digital Lift Revenue YTD</p>
+                    <h1 style="color: #FFF; margin: 0;">${total_lift_rev_ytd:,.0f}</h1>
+                    <p style="color: #FFCC00; font-size: 12px; margin-top: 10px;">Value of Marketing Efforts</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+        # 3. RECENT ACTIVITY TABLE (Optional - Keeps things clean)
+        st.write("---")
+        st.write("#### 🗓️ Recent Ledger Entries")
+        st.dataframe(df_exec[['entry_date', 'actual_traffic', 'actual_coin_in', 'daily_digital_lift', 'daily_digital_revenue']].tail(7), 
                      use_container_width=True, hide_index=True)
 
     else:
-        st.warning("Ledger is empty. Please check Supabase or add entries in the Input tab.")
+        st.warning("Ledger is empty. Please add data in the Input tab.")
 # --- TAB 2: DAILY TRACKER & FORECAST ---
 with tab2:
     st.markdown("""
