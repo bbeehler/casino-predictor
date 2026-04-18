@@ -99,7 +99,7 @@ def fetch_data():
 ledger_data = fetch_data()
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "Executive", "Input", "Strategy", "Admin, "Analyst", "Master Report"
+    "Executive", "Input", "Strategy", "Admin", "Analyst", "Master Report"
 ])
 
 # --- 1. INITIAL DATA HYDRATION (Run at Startup) ---
