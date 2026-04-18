@@ -121,13 +121,13 @@ if 'coeffs' not in st.session_state:
     except Exception as e:
         st.error(f"Failed to load Engine Weights: {e}")
 
-# --- TAB 1: EXECUTIVE DASHBOARD (CARD STYLE - NO CHARTS) ---
+# --- TAB 1: EXECUTIVE DASHBOARD (FULL BENTO + PREDICTABILITY) ---
 with tab1:
     # 1. BRANDED HEADER
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🏛️ Executive Property Overview</h2>
-            <p style="color: #888; margin: 0;">YTD Performance & Digital Lift ROI (Synced with Engine Weights)</p>
+            <p style="color: #888; margin: 0;">YTD Performance & AI Model Confidence (Synced with Engine Weights)</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -136,74 +136,48 @@ with tab1:
     avg_spend = c.get('Avg_Coin_In', 1200)
     click_weight = c.get('Clicks', 0)
     promo_lift = c.get('Promo', 0)
+    intercept = c.get('Intercept', 0)
 
     df_exec = pd.DataFrame(ledger_data)
     
     if not df_exec.empty:
-        # DATA PREP: Calculate Daily Digital Lift and Revenue
+        # --- DATA PREP ---
+        df_exec['entry_date'] = pd.to_datetime(df_exec['entry_date'])
+        
+        # Calculate Digital Lift & Expected Traffic
         df_exec['daily_digital_lift'] = (df_exec['ad_clicks'] * click_weight) + (df_exec['active_promo'].astype(int) * promo_lift)
         df_exec['daily_digital_revenue'] = df_exec['daily_digital_lift'] * avg_spend
         
-        # Calculate YTD Totals
-        total_traffic = df_exec['actual_traffic'].sum()
-        total_revenue = df_exec['actual_coin_in'].sum()
-        total_lift_ytd = df_exec['daily_digital_lift'].sum()
-        total_lift_rev_ytd = df_exec['daily_digital_revenue'].sum()
-        lift_contribution = (total_lift_ytd / total_traffic * 100) if total_traffic > 0 else 0
-
-        # --- NEW: AI PREDICTABILITY LOGIC ---
-        # 1. Calculate Expected Traffic for every day based on weights
+        # Calculate AI Expected Traffic for Predictability Score
         df_exec['expected_traffic'] = (
             intercept + 
-            (df_exec['ad_clicks'] * click_weight) + 
-            (df_exec['active_promo'].astype(int) * promo_lift) + 
+            df_exec['daily_digital_lift'] + 
             (df_exec['temp_c'] * c.get('Temp_C', 0)) + 
             (df_exec['snow_cm'] * c.get('Snow_cm', 0)) + 
             (df_exec['rain_mm'] * c.get('Rain_mm', 0))
         )
         
-        # 2. Calculate MAPE (Mean Absolute Percentage Error)
-        # We subtract the error from 100% to get an "Accuracy" or "Predictability" score
+        # Metrics Aggregation
+        total_traffic = df_exec['actual_traffic'].sum()
+        total_revenue = df_exec['actual_coin_in'].sum()
+        total_lift_ytd = df_exec['daily_digital_lift'].sum()
+        total_lift_rev_ytd = df_exec['daily_digital_revenue'].sum()
+        
+        # AI Predictability Logic (MAPE)
         df_exec['error'] = abs(df_exec['actual_traffic'] - df_exec['expected_traffic']) / df_exec['actual_traffic']
-        accuracy_score = (1 - df_exec['error'].mean()) * 100
-        
-        # 3. THE KPI DISPLAY (Card Style)
-        st.write("##")
-        p_col1, p_col2 = st.columns([1, 1])
-        
-        with p_col1:
-            # Color code based on performance
-            score_color = "#00FF00" if accuracy_score > 85 else "#FFCC00" if accuracy_score > 70 else "#FF0000"
-            
-            st.markdown(f"""
-                <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-left: 10px solid {score_color};">
-                    <p style="color: #888; font-size: 14px; text-transform: uppercase; margin: 0;">AI Predictability Score</p>
-                    <h1 style="color: {score_color}; margin: 5px 0;">{accuracy_score:.1f}%</h1>
-                    <p style="color: #eee; font-size: 12px;">The model is currently tracking within <b>{100-accuracy_score:.1f}%</b> of actual property traffic.</p>
-                </div>
-            """, unsafe_allow_html=True)
-            
-        with p_col2:
-            st.markdown(f"""
-                <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #444;">
-                    <p style="color: #888; font-size: 14px; text-transform: uppercase; margin: 0;">Model Status</p>
-                    <h3 style="color: #FFF; margin: 15px 0;">{"✅ OPTIMIZED" if accuracy_score > 85 else "⚠️ CALIBRATION SUGGESTED"}</h3>
-                    <p style="color: #888; font-size: 12px;">Based on a {len(df_exec)} day lookback period.</p>
-                </div>
-            """, unsafe_allow_html=True)
+        accuracy_score = max(0, (1 - df_exec['error'].mean()) * 100)
+        score_color = "#00FF00" if accuracy_score > 85 else "#FFCC00" if accuracy_score > 70 else "#FF0000"
 
-        # 2. THE BIG CARDS (Bento Style)
+        # --- 2. THE TOP BENTO CARDS ---
         row1_col1, row1_col2 = st.columns(2)
-        
         with row1_col1:
             st.markdown(f"""
                 <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
                     <p style="color: #888; font-size: 14px; text-transform: uppercase; margin-bottom: 5px;">Total YTD Traffic</p>
                     <h1 style="color: #FFF; margin: 0;">{total_traffic:,}</h1>
-                    <p style="color: #FFCC00; font-size: 12px; margin-top: 10px;">Property Wide Volume</p>
+                    <p style="color: #FFCC00; font-size: 12px; margin-top: 10px;">Property Volume</p>
                 </div>
             """, unsafe_allow_html=True)
-
         with row1_col2:
             st.markdown(f"""
                 <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
@@ -214,32 +188,32 @@ with tab1:
             """, unsafe_allow_html=True)
 
         st.write("##")
-
         row2_col1, row2_col2 = st.columns(2)
-
         with row2_col1:
             st.markdown(f"""
                 <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
-                    <p style="color: #888; font-size: 14px; text-transform: uppercase; margin-bottom: 5px;">Digital Lift YTD</p>
-                    <h1 style="color: #FFF; margin: 0;">{total_lift_ytd:,.0f}</h1>
-                    <p style="color: #FFCC00; font-size: 12px; margin-top: 10px;">{lift_contribution:.1f}% of Total Volume</p>
-                </div>
-            """, unsafe_allow_html=True)
-
-        with row2_col2:
-            st.markdown(f"""
-                <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-top: 5px solid #FFCC00; text-align: center;">
-                    <p style="color: #888; font-size: 14px; text-transform: uppercase; margin-bottom: 5px;">Digital Lift Revenue YTD</p>
+                    <p style="color: #888; font-size: 14px; text-transform: uppercase; margin-bottom: 5px;">Digital Lift Revenue</p>
                     <h1 style="color: #FFF; margin: 0;">${total_lift_rev_ytd:,.0f}</h1>
-                    <p style="color: #FFCC00; font-size: 12px; margin-top: 10px;">Value of Marketing Efforts</p>
+                    <p style="color: #FFCC00; font-size: 12px; margin-top: 10px;">Value of Marketing Weights</p>
+                </div>
+            """, unsafe_allow_html=True)
+        with row2_col2:
+            # PREDICTABILITY CARD
+            st.markdown(f"""
+                <div style="background-color: #1a1a1a; padding: 30px; border-radius: 15px; border-left: 10px solid {score_color}; text-align: center;">
+                    <p style="color: #888; font-size: 14px; text-transform: uppercase; margin-bottom: 5px;">AI Predictability Score</p>
+                    <h1 style="color: {score_color}; margin: 0;">{accuracy_score:.1f}%</h1>
+                    <p style="color: #FFF; font-size: 12px; margin-top: 10px;">Model Confidence Level</p>
                 </div>
             """, unsafe_allow_html=True)
 
-        # 3. RECENT ACTIVITY TABLE (Optional - Keeps things clean)
+        # --- 3. RECENT SUMMARY ---
         st.write("---")
-        st.write("#### 🗓️ Recent Ledger Entries")
-        st.dataframe(df_exec[['entry_date', 'actual_traffic', 'actual_coin_in', 'daily_digital_lift', 'daily_digital_revenue']].tail(7), 
-                     use_container_width=True, hide_index=True)
+        st.write("#### 🗓️ Recent Ledger Activity")
+        st.dataframe(
+            df_exec[['entry_date', 'actual_traffic', 'actual_coin_in', 'daily_digital_lift', 'daily_digital_revenue']].tail(5), 
+            use_container_width=True, hide_index=True
+        )
 
     else:
         st.warning("Ledger is empty. Please add data in the Input tab.")
