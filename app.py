@@ -676,7 +676,7 @@ with tab5:
                 
                 # B. CALL GEMINI
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-2.5-flash')
                 
                 prompt = f"""
                 SYSTEM: You are the Lead Data Analyst for Hard Rock Hotel & Casino Ottawa.
