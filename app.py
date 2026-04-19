@@ -34,6 +34,37 @@ url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
+# --- AUTHENTICATION LOGIC ---
+if 'user_authenticated' not in st.session_state:
+    st.session_state.user_authenticated = False
+
+def login_user(email, password):
+    try:
+        # Supabase handles the secure hashing and verification
+        response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        if response.user:
+            st.session_state.user_authenticated = True
+            st.rerun()
+    except Exception as e:
+        st.error("Invalid credentials. Please try again.")
+
+# The Gatekeeper: If not logged in, show the login UI and STOP execution
+if not st.session_state.user_authenticated:
+    st.markdown("""
+        <div style="text-align: center; padding: 50px;">
+            <h1 style="color: #FFCC00;">🎰 Hard Rock Ottawa</h1>
+            <h3>Strategic Predictor Login</h3>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    with st.container(border=True):
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        if st.button("Login", use_container_width=True):
+            login_user(email, password)
+    
+    st.stop() # Prevents the rest of the app/tabs from loading
+
 # 2. THE HYDRATION BLOCK (Add this now)
 # This checks the "Vault" (Supabase) as soon as the app wakes up
 if 'coeffs' not in st.session_state:
