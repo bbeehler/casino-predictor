@@ -250,195 +250,67 @@ with tab1:
 
     else:
         st.warning("Ledger is empty. Please add data in the Input tab.")
-# --- TAB 2: DAILY TRACKER & FORECAST ---
+# --- TAB 2: LEDGER MANAGEMENT ---
 with tab2:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">🕹️ FloorPace Control Panel</h2>
-            <p style="color: #888; margin: 0;">Log Daily Actuals, Simulate Forecasts, and Audit Historical Data.</p>
+            <h2 style="color: #FFCC00; margin: 0;">📑 Ledger Management</h2>
+            <p style="color: #888; margin: 0;">Data Integrity & History: Manage your historical property performance records.</p>
         </div>
     """, unsafe_allow_html=True)
-    
-    # Create the two-column "Bento" layout
-    col_input, col_sandbox = st.columns([1, 1.2])
-    
-    with col_input:
+
+    # 1. DATA ENTRY & UPLOAD AREA
+    col_upload, col_entry = st.columns([1, 1], gap="large")
+
+    with col_upload:
         with st.container(border=True):
-            st.subheader("📝 1. Log Actuals")
-            with st.form("entry_form", clear_on_submit=True):
-                date_in = st.date_input("Date", datetime.date.today())
-                act_traf = st.number_input("Actual Traffic", min_value=0, step=100)
-                act_coin = st.number_input("Actual Coin-In ($)", min_value=0, step=1000)
-                
-                st.divider()
-                st.markdown("**Environment & Marketing**")
-                w1, w2 = st.columns(2)
-                temp = w1.slider("Temp (°C)", -30, 40, 15)
-                snow = w2.slider("Snow (cm)", 0, 50, 0)
-                
-                promo = st.checkbox("Active Promotion")
-                
-                with st.expander("Detailed Digital Metrics"):
-                    imp = st.number_input("Ad Impressions", 0, 1000000, 300000)
-                    clks = st.number_input("Ad Clicks", 0, 5000, 200)
+            st.write("### 📤 Bulk Import")
+            st.info("Upload your historical CSV. Ensure columns match the standard ledger schema.")
+            uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+            if uploaded_file:
+                # Add your existing CSV processing logic here
+                st.success("File uploaded successfully.")
 
-                if st.form_submit_button("💾 Save to FloorPace Ledger", use_container_width=True):
-                    c = st.session_state.coeffs
-                    dow_key = f"DOW_{date_in.strftime('%a')}"
-                    
-                    # Math for Prediction
-                    base_v = float(c['Intercept'] + c.get(dow_key, 0))
-                    weather_v = float((temp * c['Temp_C']) + (snow * c['Snow_cm']))
-                    dig_lift_v = float((promo * c['Promo']) + (imp * c['Impressions']) + (clks * c['Clicks']))
-                    final_pred = float(base_v + weather_v + dig_lift_v)
-                    
-                    # CLEAN PAYLOAD: Removing 'variance' to match SQL Schema
-                    data = {
-                        "entry_date": str(date_in),
-                        "actual_traffic": int(act_traf),
-                        "actual_coin_in": float(act_coin),
-                        "predicted_traffic": int(final_pred),
-                        "temp_c": float(temp),
-                        "snow_cm": float(snow),
-                        "active_promo": bool(promo),
-                        "ad_impressions": int(imp),
-                        "ad_clicks": int(clks)
-                    }
-                    
-                    try:
-                        supabase.table("ledger").upsert(data, on_conflict="entry_date").execute()
-                        st.toast("✅ Record saved successfully!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Database Sync Error: {e}")
-
-    with col_sandbox:
+    with col_entry:
         with st.container(border=True):
-            st.subheader("🔮 2. Forecast Sandbox")
-            st.write("Simulate future dates with full environmental and digital variables.")
-            
-            # 1. DATE & PRIMARY ENVIRONMENT
-            f_range = st.date_input("Forecast Range", [datetime.date.today(), datetime.date.today() + datetime.timedelta(days=7)])
-            
-            s1, s2, s3 = st.columns(3)
-            sim_temp = s1.slider("Sim. Temp (°C)", -30, 40, 15)
-            sim_rain = s2.slider("Sim. Rain (mm)", 0, 50, 0)
-            sim_snow = s3.slider("Sim. Snow (cm)", 0, 50, 0)
-            
-            # 2. ALERTS & PROMOS
-            a1, a2 = st.columns(2)
-            sim_promo = a1.checkbox("Apply Promotion?")
-            sim_alert = a2.checkbox("Simulate Weather Alert?")
-            
-            # 3. DIGITAL CAMPAIGN SIMULATOR
-            st.markdown("**Digital Campaign Simulation**")
-            sd1, sd2 = st.columns(2)
-            sim_imp = sd1.number_input("Est. Impressions", value=300000, step=10000)
-            sim_clk = sd2.number_input("Est. Ad Clicks", value=500, step=50)
-            
-            if len(f_range) == 2:
-                dates = pd.date_range(f_range[0], f_range[1])
-                c = st.session_state.coeffs
-                f_list = []
-                
-                for d in dates:
-                    dk = f"DOW_{d.strftime('%a')}"
-                    
-                    # ENHANCED MULTIVARIATE MATH
-                    # We assume a -15% 'Alert Penalty' if a Weather Alert is simulated
-                    alert_penalty = 0.85 if sim_alert else 1.0
-                    
-                    p_traffic = (
-                        c['Intercept'] + 
-                        c.get(dk, 0) + 
-                        (sim_temp * c.get('Temp_C', 0)) + 
-                        (sim_snow * c.get('Snow_cm', 0)) +
-                        (sim_rain * c.get('Rain_mm', -2.5)) + # Fallback penalty for rain
-                        (c.get('Promo', 0) if sim_promo else 0) +
-                        (sim_imp * c.get('Impressions', 0)) + 
-                        (sim_clk * c.get('Clicks', 0))
-                    ) * alert_penalty
-                    
-                    p_revenue = p_traffic * c['Avg_Coin_In']
-                    
-                    f_list.append({
-                        "Date": d.strftime("%a %d"), 
-                        "Visitors": int(max(0, p_traffic)), 
-                        "Revenue": float(max(0, p_revenue))
-                    })
-                
-                df_f = pd.DataFrame(f_list)
-                
-                # 4. DUAL METRIC DISPLAY
-                m_col1, m_col2 = st.columns(2)
-                m_col1.metric("Est. Total Visitors", f"{df_f['Visitors'].sum():,.0f}")
-                m_col2.metric("Est. Total Revenue", f"${df_f['Revenue'].sum():,.0f}")
-                
-                # 5. VISUAL TREND
-                st.line_chart(df_f.set_index("Date")["Visitors"], color="#FFCC00")
-                
-                if sim_alert:
-                    st.warning("⚠️ Projections reflect a 15% reduction due to Simulated Weather Alert.")
+            st.write("### ✍️ Manual Entry")
+            st.write("Add a single day's performance directly to the database.")
+            if st.button("➕ Open Entry Form", use_container_width=True):
+                # You can trigger a modal or expander for entry here
+                pass
 
-    # --- SECTION 3: AUDIT & FULL-FIELD EDIT ---
-    st.markdown("---")
-    st.markdown("### 🔍 3. Historical Ledger Audit & Corrections")
+    st.write("---")
+
+    # 2. DATA EXPLORER (The Ledger View)
+    st.write("### 🔍 Historical Records Explorer")
+    
     if ledger_data:
-        df_edit = pd.DataFrame(ledger_data)
-        df_edit['entry_date'] = pd.to_datetime(df_edit['entry_date'])
+        df_display = pd.DataFrame(ledger_data)
         
-        with st.container(border=True):
-            st.markdown("**Find & Fix a Specific Entry**")
-            edit_col1, edit_col2 = st.columns([1, 2])
-            
-            with edit_col1:
-                search_date = st.date_input("Select Date to Edit", value=df_edit['entry_date'].max().date())
-                search_str = search_date.strftime("%Y-%m-%d")
-            
-            found = df_edit[df_edit['entry_date'].dt.strftime('%Y-%m-%d') == search_str]
-            
-            with edit_col2:
-                if not found.empty:
-                    record = found.iloc[0]
-                    if st.toggle(f"🔓 Unlock ALL FIELDS for {search_str}"):
-                        with st.form(f"full_edit_{search_str}"):
-                            ec1, ec2, ec3 = st.columns(3)
-                            with ec1:
-                                up_t = st.number_input("Traffic", value=int(record.get('actual_traffic', 0)))
-                                up_c = st.number_input("Coin-In ($)", value=float(record.get('actual_coin_in', 0.0)))
-                                up_p = st.number_input("Pred. Traffic", value=int(record.get('predicted_traffic', 0)))
-                            with ec2:
-                                up_temp = st.number_input("Temp", value=float(record.get('temp_c', 0.0)))
-                                up_snow = st.number_input("Snow", value=float(record.get('snow_cm', 0.0)))
-                            with ec3:
-                                up_promo = st.checkbox("Promo", value=bool(record.get('active_promo', False)))
-                                up_imp = st.number_input("Impressions", value=int(record.get('ad_impressions', 0)))
-                                up_clk = st.number_input("Clicks", value=int(record.get('ad_clicks', 0)))
-
-                            if st.form_submit_button("💾 Save All Changes", use_container_width=True):
-                                try:
-                                    # STRICT TYPES: Ints for traffic/impressions, Floats for money/temp
-                                    supabase.table("ledger").update({
-                                        "actual_traffic": int(up_t), 
-                                        "actual_coin_in": float(up_c), 
-                                        "predicted_traffic": int(up_p),
-                                        "temp_c": float(up_temp), 
-                                        "snow_cm": float(up_snow), 
-                                        "active_promo": bool(up_promo), 
-                                        "ad_impressions": int(up_imp), 
-                                        "ad_clicks": int(up_clk)
-                                    }).eq("entry_date", search_str).execute()
-                                    st.toast(f"Record for {search_str} updated!")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Update Error: {e}")
-                else:
-                    st.info("No record found for this date.")
-
-        st.markdown("**Full Historical Ledger**")
-        display_df = df_edit.sort_values('entry_date', ascending=False)
-        display_df['entry_date'] = display_df['entry_date'].dt.strftime('%Y-%m-%d')
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        # Style the dataframe for a more premium feel
+        st.dataframe(
+            df_display.style.format({
+                "actual_traffic": "{:,.0f}",
+                "actual_coin_in": "${:,.2f}",
+                "social_impressions": "{:,.0f}",
+                "snow_cm": "{:.1f} cm",
+                "rain_mm": "{:.1f} mm"
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        # Download Action
+        csv = df_display.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Export Ledger to CSV",
+            data=csv,
+            file_name='hard_rock_ottawa_ledger.csv',
+            mime='text/csv',
+            use_container_width=True
+        )
+    else:
+        st.warning("No data found in the ledger. Please upload a CSV to begin.")
 
 # --- TAB 3: STRATEGY & ROI ---
 with tab3:
