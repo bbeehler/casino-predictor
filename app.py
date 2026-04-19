@@ -555,96 +555,86 @@ with tab4:
         except Exception as e:
             st.error(f"Sync failed: {e}")
 
-# --- TAB 5: INTERACTIVE STRATEGIC ANALYST ---
+# --- TAB 5: STRATEGIC CONSULTANT (OMNISCIENT VERSION) ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic FloorCast Analyst</h2>
-            <p style="color: #888; margin: 0;">Forensic AI: Benchmarking user queries against 60-day ledger history and live feeds.</p>
+            <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic Consultant</h2>
+            <p style="color: #888; margin: 0;">Full-Spectrum Intelligence: Ledger History, Live Federal Feeds, and Global Industry Benchmarks.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. INITIALIZE CHAT HISTORY
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 2. PRE-CALCULATE BENCHMARKS (WITH SAFETY)
+    # 1. THE DATA VAULT (Pre-processing for the AI)
     if ledger_data:
-        df_bench = pd.DataFrame(ledger_data).copy()
-        # Ensure column safety
-        target_cols = {'social_impressions': 0, 'social_engagement': 0, 'actual_traffic': 1500}
-        for col, default in target_cols.items():
-            if col not in df_bench.columns: df_bench[col] = default
-            df_bench[col] = pd.to_numeric(df_bench[col], errors='coerce').fillna(default)
+        df_vault = pd.DataFrame(ledger_data).copy()
+        df_vault['entry_date'] = pd.to_datetime(df_vault['entry_date'])
         
-        df_bench['entry_date'] = pd.to_datetime(df_bench['entry_date'])
-        df_bench['day_name'] = df_bench['entry_date'].dt.day_name()
+        # Calculate Rolling Averages & Totals for Trend Intelligence
+        last_30 = df_vault[df_vault['entry_date'] > (df_vault['entry_date'].max() - datetime.timedelta(days=30))]
+        last_60 = df_vault[df_vault['entry_date'] > (df_vault['entry_date'].max() - datetime.timedelta(days=60))]
         
-        dow_stats = df_bench.groupby('day_name')['actual_traffic'].mean().to_dict()
-        avg_imp, avg_eng = df_bench['social_impressions'].mean(), df_bench['social_engagement'].mean()
+        vault_metrics = {
+            "30d_revenue": last_30['actual_coin_in'].sum() if 'actual_coin_in' in last_30 else 0,
+            "30d_traffic": last_30['actual_traffic'].sum() if 'actual_traffic' in last_30 else 0,
+            "avg_social_imp": df_vault['social_impressions'].mean() if 'social_impressions' in df_bench else 0,
+            "avg_social_eng": df_vault['social_engagement'].mean() if 'social_engagement' in df_bench else 0,
+            "heartbeats": df_vault.groupby(df_vault['entry_date'].dt.day_name())['actual_traffic'].mean().to_dict()
+        }
     else:
-        dow_stats, avg_imp, avg_eng = {}, 0, 0
+        vault_metrics = {}
 
-    # 3. DISPLAY CHAT INTERFACE
+    # 2. CHAT INTERFACE
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # 4. CHAT INPUT LOGIC
-    if prompt := st.chat_input("Ask about a date or respond to the AI's questions..."):
-        # Display user message
+    if prompt := st.chat_input("Ask me anything: Trends, Forecasts, Social Strategy, or Industry Benchmarks..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Generate AI response
         with st.chat_message("assistant"):
-            with st.spinner("Analyzing strategy..."):
+            with st.spinner("Triangulating property data and global industry intelligence..."):
                 try:
                     import google.generativeai as genai
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                     model = genai.GenerativeModel('gemini-2.5-flash')
                     
+                    # Context Payload
                     live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
-
-                    # Construct the context-heavy prompt
-                    sys_context = f"""
-                    SYSTEM ROLE: Senior Business Strategist for Hard Rock Hotel & Casino Ottawa.
-                    You are in a live conversation with the Marketing/Operations Director.
                     
-                    DATASET 1: HISTORICAL HEARTBEATS (Actual Averages)
-                    {json.dumps(dow_stats)}
-                    - BENCHMARK SOCIAL: {avg_imp:,.0f} impressions / {avg_eng:,.0f} engagements.
+                    sys_context = f"""
+                    SYSTEM ROLE: You are the Chief Strategy Officer at Hard Rock Hotel & Casino Ottawa.
+                    You are a world-class expert in casino operations, digital marketing, and predictive analytics.
 
-                    DATASET 2: CALIBRATED ENGINE COEFFICIENTS
-                    {json.dumps(st.session_state.coeffs)}
+                    YOUR ASSETS:
+                    - INTERNAL LEDGER: {json.dumps(vault_metrics)}
+                    - LIVE WEATHER: {json.dumps(live_forecast, default=str)}
+                    - CALIBRATED WEIGHTS: {json.dumps(st.session_state.coeffs)}
+                    - GLOBAL KNOWLEDGE: Use your internal training to provide industry context (e.g. typical industry CTRs, seasonal gambling trends, or competitor analysis).
 
-                    DATASET 3: LIVE ENVIRONMENT CANADA FORECAST
-                    {json.dumps(live_forecast, default=str)}
-
-                    INSTRUCTIONS:
-                    1. Use the chat history to maintain context.
-                    2. If the user answers your previous questions, update your prediction immediately.
-                    3. Always cross-reference the Ledger Heartbeats. 
-                    4. End every response with 1-2 sharp follow-up questions to refine the revenue model.
+                    YOUR MANDATE:
+                    1. NO LIMITS: Answer any question. If it's about the past, use the Ledger. If it's about the future, use the Weather + Weights. If it's about strategy, use your Global Knowledge.
+                    2. DATA FIRST: Always ground your opinions in the numbers provided in the asset lists above.
+                    3. PROACTIVE: If you see a trend in the ledger that the user didn't ask about, but is relevant (e.g. 'Social engagement is dropping while traffic stays flat'), point it out.
+                    4. DYNAMIC INTERVIEW: End every response with 1-2 questions that challenge the user to refine their strategy.
                     """
 
-                    # Prepare conversation history for Gemini
                     history = [{"role": m["role"], "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
                     chat = model.start_chat(history=history)
                     
-                    # Send the system context + the user prompt
-                    full_input = f"{sys_context}\n\nUSER MESSAGE: {prompt}"
-                    response = chat.send_message(full_input)
+                    response = chat.send_message(f"{sys_context}\n\nUSER MESSAGE: {prompt}")
                     
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
 
                 except Exception as e:
-                    st.error(f"Analysis Error: {e}")
+                    st.error(f"Consultation Error: {e}")
 
-    # 5. CLEAR CHAT BUTTON
-    if st.button("🗑️ Clear Strategy Session", use_container_width=True):
+    if st.button("🗑️ Reset Consultation Space", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
