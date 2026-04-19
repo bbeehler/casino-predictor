@@ -554,25 +554,25 @@ with tab4:
                 st.success("✅ Database Synced.")
             except Exception as e:
                 st.error(f"Sync failed: {e}")
-# --- TAB 5: EXECUTIVE STRATEGIC CONSULTANT ---
+# --- TAB 5: EXECUTIVE STRATEGIC CONSULTANT (ROLE FIX) ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic Consultant</h2>
-            <p style="color: #888; margin: 0;">Executive Mode: Concise outlooks with on-demand deep dives.</p>
+            <p style="color: #888; margin: 0;">Executive Mode: Seamless back-and-forth conversation enabled.</p>
         </div>
     """, unsafe_allow_html=True)
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 1. THE DATA VAULT (Stable Pre-processing)
+    # 1. THE DATA VAULT (Pre-processing)
     vault_metrics = {}
     if ledger_data:
         df_vault = pd.DataFrame(ledger_data).copy()
         df_vault['entry_date'] = pd.to_datetime(df_vault['entry_date'])
         
-        # Standardize Columns
+        # Standardize Columns for the AI
         col_map = {'actual_traffic': ['actual_traffic', 'Traffic'], 'actual_coin_in': ['actual_coin_in', 'Revenue']}
         for target, aliases in col_map.items():
             if target not in df_vault.columns:
@@ -592,13 +592,13 @@ with tab5:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    if prompt := st.chat_input("Ask about Monday, trends, or strategy..."):
+    if prompt := st.chat_input("Ask about Monday, trends, or follow up on the previous response..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("Preparing executive summary..."):
+            with st.spinner("Preparing executive briefing..."):
                 try:
                     import google.generativeai as genai
                     import json
@@ -608,15 +608,20 @@ with tab5:
                     coeffs = st.session_state.coeffs
                     live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
                     
+                    # --- CRITICAL FIX: ROLE MAPPING ---
+                    # Translates Streamlit's 'assistant' to Google's 'model'
+                    history_payload = []
+                    for m in st.session_state.messages[:-1]:
+                        role = "model" if m["role"] == "assistant" else "user"
+                        history_payload.append({"role": role, "parts": [m["content"]]})
+                    
                     sys_context = f"""
                     SYSTEM ROLE: Chief Strategy Officer at Hard Rock Hotel & Casino Ottawa.
-                    
-                    MANDATE: BE CONCISE. Provide the "Answer" first.
-                    1. For predictions: Give the final Traffic/Revenue numbers and the 'Reasoning' in 2-3 sentences.
-                    2. For trends: Summarize the movement (Up/Down) immediately.
-                    3. DATA RULE: Use DOW Heartbeats as the ONLY baseline. Do not add Global Intercept to them.
-                    4. HIDDEN DETAIL: Do not show the math (additions/multiplications) unless the user explicitly asks 'How?' or 'Show me the math'.
-                    5. FOLLOW-UP: Always end with 1 strategic question.
+                    MANDATE: BE CONCISE. 
+                    - Provide the 'Answer' first in 2-3 sentences.
+                    - Do NOT show math/multiplications unless the user explicitly asks 'How?' or 'Show me the math'.
+                    - Use DOW Heartbeats as the ONLY baseline. Never add Global Intercept to them.
+                    - Always end with 1 strategic follow-up question.
 
                     DATA:
                     - Heartbeats: {json.dumps(vault_metrics.get('heartbeats', {}))}
@@ -624,9 +629,9 @@ with tab5:
                     - Weather: {json.dumps(live_forecast, default=str)}
                     """
 
-                    history = [{"role": m["role"], "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
-                    chat = model.start_chat(history=history)
+                    chat = model.start_chat(history=history_payload)
                     
+                    # Send the prompt with the system context attached for continuity
                     response = chat.send_message(f"{sys_context}\n\nUSER MESSAGE: {prompt}")
                     
                     st.markdown(response.text)
@@ -638,7 +643,6 @@ with tab5:
     if st.button("🗑️ Reset Consultation", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
-
 # --- TAB 6: MASTER ANALYTICS & FORENSIC REPORT ---
 with tab6:
     st.markdown("""
