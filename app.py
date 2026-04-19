@@ -250,7 +250,7 @@ with tab1:
 
     else:
         st.warning("Ledger is empty. Please add data in the Input tab.")
-# --- TAB 2: LEDGER MANAGEMENT ---
+# --- TAB 2: LEDGER MANAGEMENT (RESTYLED & FUNCTIONAL) ---
 with tab2:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
@@ -259,7 +259,7 @@ with tab2:
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. DATA ENTRY & UPLOAD AREA
+    # 1. TOP ACTIONS: BULK IMPORT & MANUAL ENTRY
     col_upload, col_entry = st.columns([1, 1], gap="large")
 
     with col_upload:
@@ -268,16 +268,72 @@ with tab2:
             st.info("Upload your historical CSV. Ensure columns match the standard ledger schema.")
             uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
             if uploaded_file:
-                # Add your existing CSV processing logic here
-                st.success("File uploaded successfully.")
+                try:
+                    import_df = pd.read_csv(uploaded_file)
+                    # Force numeric conversion for known columns during import
+                    num_cols = ['actual_traffic', 'actual_coin_in', 'social_impressions', 'social_engagement', 'snow_cm', 'rain_mm']
+                    for col in num_cols:
+                        if col in import_df.columns:
+                            import_df[col] = pd.to_numeric(import_df[col], errors='coerce').fillna(0)
+                    
+                    # Convert to list of dicts for Supabase
+                    data_to_insert = import_df.to_dict(orient='records')
+                    supabase.table("ledger_data").insert(data_to_insert).execute()
+                    st.success(f"Successfully imported {len(import_df)} records!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Import failed: {e}")
 
     with col_entry:
         with st.container(border=True):
             st.write("### ✍️ Manual Entry")
             st.write("Add a single day's performance directly to the database.")
-            if st.button("➕ Open Entry Form", use_container_width=True):
-                # You can trigger a modal or expander for entry here
-                pass
+            
+            # THE FORM: Now inside a popover for a clean restyled UI
+            with st.popover("➕ Open Entry Form", use_container_width=True):
+                with st.form("manual_entry_form", clear_on_submit=True):
+                    st.write("#### Daily Performance Details")
+                    
+                    f_date = st.date_input("Entry Date", datetime.date.today())
+                    f_traffic = st.number_input("Actual Traffic (Heads)", min_value=0, step=1)
+                    f_coin = st.number_input("Actual Coin-In ($)", min_value=0.0, step=100.0)
+                    
+                    st.divider()
+                    st.write("#### Marketing & Social")
+                    m_col1, m_col2 = st.columns(2)
+                    f_promo = m_col1.checkbox("Active Promotion?")
+                    f_clicks = m_col2.number_input("Ad Clicks", min_value=0, step=1)
+                    f_imp = m_col1.number_input("Social Impressions", min_value=0, step=100)
+                    f_eng = m_col2.number_input("Social Engagement", min_value=0, step=10)
+                    
+                    st.divider()
+                    st.write("#### Weather Data")
+                    w_col1, w_col2, w_col3 = st.columns(3)
+                    f_temp = w_col1.number_input("Temp (°C)", value=15.0)
+                    f_rain = w_col2.number_input("Rain (mm)", min_value=0.0)
+                    f_snow = w_col3.number_input("Snow (cm)", min_value=0.0)
+                    
+                    submitted = st.form_submit_button("🚀 Commit to Ledger", use_container_width=True)
+                    
+                    if submitted:
+                        try:
+                            new_entry = {
+                                "entry_date": str(f_date),
+                                "actual_traffic": f_traffic,
+                                "actual_coin_in": f_coin,
+                                "active_promo": f_promo,
+                                "ad_clicks": f_clicks,
+                                "social_impressions": f_imp,
+                                "social_engagement": f_eng,
+                                "temp_c": f_temp,
+                                "rain_mm": f_rain,
+                                "snow_cm": f_snow
+                            }
+                            supabase.table("ledger_data").insert(new_entry).execute()
+                            st.success("Entry Saved!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Save failed: {e}")
 
     st.write("---")
 
@@ -285,32 +341,38 @@ with tab2:
     st.write("### 🔍 Historical Records Explorer")
     
     if ledger_data:
-        df_display = pd.DataFrame(ledger_data)
+        df_display = pd.DataFrame(ledger_data).copy()
         
-        # Style the dataframe for a more premium feel
+        # Ensure proper sorting by date
+        df_display['entry_date'] = pd.to_datetime(df_display['entry_date'])
+        df_display = df_display.sort_values(by='entry_date', ascending=False)
+        
+        # Premium Styled Dataframe
         st.dataframe(
             df_display.style.format({
                 "actual_traffic": "{:,.0f}",
                 "actual_coin_in": "${:,.2f}",
                 "social_impressions": "{:,.0f}",
+                "social_engagement": "{:,.0f}",
                 "snow_cm": "{:.1f} cm",
-                "rain_mm": "{:.1f} mm"
+                "rain_mm": "{:.1f} mm",
+                "temp_c": "{:.1f}°C"
             }),
             use_container_width=True,
             hide_index=True
         )
         
-        # Download Action
-        csv = df_display.to_csv(index=False).encode('utf-8')
+        # Export Option
+        csv_data = df_display.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Export Ledger to CSV",
-            data=csv,
-            file_name='hard_rock_ottawa_ledger.csv',
+            data=csv_data,
+            file_name=f'Hard_Rock_Ledger_Export_{datetime.date.today()}.csv',
             mime='text/csv',
             use_container_width=True
         )
     else:
-        st.warning("No data found in the ledger. Please upload a CSV to begin.")
+        st.warning("Ledger is empty. Please upload data or use the Manual Entry form.")
 
 # --- TAB 3: STRATEGY & ROI ---
 with tab3:
