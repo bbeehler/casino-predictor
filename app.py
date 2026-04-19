@@ -1,36 +1,33 @@
 import streamlit as st
 import pandas as pd
 import datetime
-from supabase import create_client, Client
-import google.generativeai as genai
-from sklearn.linear_model import LinearRegression
-import numpy as np
 import json
-import requests
-import xml.etree.ElementTree as ET
+import asyncio
+from env_canada import ECWeather
+import google.generativeai as genai
+from supabase import create_client
 
-def get_env_canada_forecast():
-    # Coordinates for Hard Rock Ottawa area
-    lat, lon = 45.33, -75.71 
-    
-    # Environment Canada GeoMet WFS URL
-    # We are pulling the HRDPS (High-Resolution Deterministic Prediction System)
-    url = f"https://geo.weather.gc.ca/geomet?service=WFS&version=2.0.0&request=GetFeature&typeName=GDPS.DIAG_2M.TA&outputFormat=application/json&srsName=EPSG:4326&bbox={lat-0.1},{lon-0.1},{lat+0.1},{lon+0.1}"
-    
+# --- CORE WEATHER FUNCTION ---
+async def fetch_live_ec_data():
+    """Fetches real-time data from Environment Canada"""
     try:
-        # Note: For production, we'd parse the specific GRIB2 layers. 
-        # Here is a simplified version that structures the data for your AI.
-        # Environment Canada's API is free and requires no API key.
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            # We structure this specifically for the Gemini prompt
-            return {
-                "source": "Environment Canada (MSC GeoMet)",
-                "region": "Ottawa-Gatineau",
-                "data_points": "High-Res Deterministic Model"
-            }
+        # Hard Rock Ottawa / Embrun Coordinates
+        ec = ECWeather(coordinates=(45.33, -75.71))
+        await ec.update()
+        return {
+            "current": ec.conditions,
+            "forecast": ec.daily_forecasts,
+            "alerts": ec.alerts
+        }
     except Exception as e:
-        return None
+        return {"error": str(e)}
+
+# --- APP INITIALIZATION ---
+if 'weather_data' not in st.session_state:
+    # Run the weather fetcher once so it's ready for Tab 5
+    st.session_state.weather_data = asyncio.run(fetch_live_ec_data())
+
+live_data = st.session_state.weather_data
 
 # 1. INITIALIZE SUPABASE
 url = st.secrets["SUPABASE_URL"]
@@ -603,102 +600,92 @@ with tab4:
         except Exception as e:
             st.error(f"Database save failed: {e}")
 
-# --- TAB 5: FLOORCAST ANALYST (ENVIRONMENT CANADA INTEGRATED) ---
+# --- TAB 5: DYNAMIC ENVIRONMENT CANADA ANALYST ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🔍 FloorCast Analyst</h2>
-            <p style="color: #888; margin: 0;">Federal Weather Integration: Environment Canada GeoMet + Historical Ledger.</p>
+            <p style="color: #888; margin: 0;">Live Federal Forecast Integration (MSC GeoMet) + 60-Day Deep Analysis.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. LIVE FEDERAL DATA FETCH (MSC GeoMet Logic)
-    # This pulls from the public OGC API for Ottawa/Embrun coordinates
-    def get_federal_ottawa_data():
-        try:
-            # We target the most recent HRDPS (High-Res) forecast data
-            # For the demo, we structure the actual current EC Special Weather Statement
-            # as it would appear in the GeoMet JSON feed for tonight/tomorrow.
-            ec_feed = {
-                "station": "Ottawa Macdonald-Cartier Int'l",
-                "issued_at": "2026-04-18T15:30:00Z",
-                "alerts": "Special Weather Statement: Heavy Rainfall Expected",
-                "forecast": [
-                    {"date": "2026-04-18", "high": 22, "low": 2, "precip_type": "Rain", "amount": 15, "desc": "Showers/T-Storm risk"},
-                    {"date": "2026-04-19", "high": 8, "low": -5, "precip_type": "Rain/Flurries", "amount": 5, "desc": "60% chance of showers"},
-                    {"date": "2026-04-20", "high": 4, "low": -6, "precip_type": "Clear", "amount": 0, "desc": "Mainly sunny"},
-                    {"date": "2026-04-21", "high": 6, "low": 1, "precip_type": "Flurries", "amount": 2, "desc": "60% chance of flurries"}
-                ]
-            }
-            return ec_feed
-        except:
-            return None
+    # 1. LIVE WEATHER FETCH (No hard-coding)
+    async def fetch_live_ec_data():
+        # Using exact coordinates for Hard Rock Ottawa area
+        ec = ECWeather(coordinates=(45.33, -75.71))
+        await ec.update()
+        return {
+            "current": ec.conditions,
+            "forecast": ec.daily_forecasts,
+            "alerts": ec.alerts
+        }
 
-    fed_data = get_federal_ottawa_data()
+    # Streamlit wrapper for async
+    if 'weather_data' not in st.session_state:
+        st.session_state.weather_data = asyncio.run(fetch_live_ec_data())
 
-    # UI Inputs
+    live_data = st.session_state.weather_data
+
     with st.container(border=True):
-        st.write("### 🧠 Strategic Property Intelligence")
-        user_query = st.text_input("Ask about future predictions or historical trends:", 
-                                  placeholder="e.g., 'Analyze the impact of tonight's rain vs. a typical Saturday.'")
-        analyze_btn = st.button("🚀 Run Comprehensive Analysis", use_container_width=True)
+        st.write("### 📊 Strategic Intelligence Query")
+        user_query = st.text_input("Ask for a prediction based on LIVE federal data:", 
+                                  placeholder="e.g., 'Analyze our 60-day Saturday trend against tonight's rain warning.'")
+        analyze_btn = st.button("🚀 Run Live Forensic Analysis", use_container_width=True)
 
     if analyze_btn and user_query:
-        with st.spinner("Syncing Environment Canada GeoMet feed and Ledger history..."):
+        with st.spinner("Triangulating LIVE federal weather with 60-day property momentum..."):
             try:
-                # 2. ENRICH DATA FOR WHOLESOME ANALYSIS
+                # 2. ENRICH DATA: THE 60-DAY HEARTBEAT
                 df_raw = pd.DataFrame(ledger_data)
                 df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
-                df_raw = df_raw.sort_values('entry_date')
-
-                # Momentum Analysis
-                df_raw['traffic_7d_avg'] = df_raw['actual_traffic'].rolling(window=7).mean()
+                df_raw['day_name'] = df_raw['entry_date'].dt.day_name()
                 
+                sixty_days_ago = datetime.datetime.now() - datetime.timedelta(days=60)
+                df_60 = df_raw[df_raw['entry_date'] >= sixty_days_ago].copy()
+
                 # 3. AI STRATEGY CALL (Gemini 1.5 Flash)
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel('gemini-2.5-flash')
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 
                 prompt = f"""
                 SYSTEM: Senior Strategist for Hard Rock Hotel & Casino Ottawa.
-                You are performing a wholesome analysis.
+                You are performing a WHOLISTIC TRIANGULATION of three real-time datasets.
 
-                ENGINE CONSTANTS (MANDATORY MATH):
-                - Target Revenue Per Head: ${st.session_state.coeffs['Avg_Coin_In']:,.2f}
-                - Intercept (Daily Base): {st.session_state.coeffs['Intercept']}
-                - Snow Weight (Negative Friction): {st.session_state.coeffs['Snow_cm']}
-                - Rain Weight (Negative Friction): {st.session_state.coeffs['Rain_mm']}
+                DATASET 1: LIVE ENVIRONMENT CANADA (MSC GEOMET)
+                - Current Conditions: {json.dumps(live_data['current'])}
+                - 7-Day Forecast: {json.dumps(live_data['forecast'])}
+                - Active Alerts: {json.dumps(live_data['alerts'])}
 
-                OFFICIAL FEDERAL WEATHER (Environment Canada GeoMet):
-                {json.dumps(fed_data)}
+                DATASET 2: 60-DAY WEEKLY HEARTBEAT (Long-term Averages)
+                {df_60.groupby('day_name')['actual_traffic'].mean().to_dict()}
 
-                HISTORICAL LEDGER (90-Day Trend Context):
-                {df_raw.tail(90)[['entry_date', 'actual_traffic', 'traffic_7d_avg', 'temp_c', 'snow_cm', 'actual_coin_in']].to_csv(index=False)}
+                DATASET 3: PEAK PERFORMANCE (Last 5 Saturdays)
+                {df_60[df_60['day_name'] == 'Saturday'].nlargest(5, 'actual_traffic')[['entry_date', 'actual_traffic']].to_csv(index=False)}
 
-                ANALYST PROTOCOL:
-                1. PREVENT HALLUCINATION: If precipitation is 10-20mm and Temp is > 2°C, it is RAIN. Do not call it SNOW.
-                2. MOMENTUM: Compare current property energy (7-day average) against the forecast.
-                3. REVENUE FORECAST: Calculate the 'Friction Tax' by applying weather weights to the traffic forecast. 
-                4. Multiply predicted traffic by ${st.session_state.coeffs['Avg_Coin_In']:,.2f} to get the revenue floor.
+                ENGINE PARAMETERS:
+                - Target Revenue: ${st.session_state.coeffs['Avg_Coin_In']:,.2f}
+                - Weather Weights: Snow ({st.session_state.coeffs['Snow_cm']}), Rain ({st.session_state.coeffs['Rain_mm']})
+
+                INSTRUCTIONS:
+                1. If predicting a Saturday, do not let weather friction drop the baseline below a typical Saturday heartbeat unless a MAJOR alert (Blizzard/Flash Flood) is present.
+                2. Calculate predicted revenue by multiplying your guest forecast by ${st.session_state.coeffs['Avg_Coin_In']:,.2f}.
+                3. Saturday April 18 high was warm (23C); ensure you distinguish between 'Daytime Volume' and 'Late Night Friction' from the rain.
                 """
                 
                 response = model.generate_content(prompt)
                 
-                # 4. DISPLAY RESULTS
                 st.write("---")
                 st.markdown(f"""
                     <div style="background-color: #1a1a1a; padding: 25px; border-radius: 15px; border-top: 3px solid #FFCC00;">
-                        <p style="color: #FFCC00; font-weight: bold; margin-bottom: 10px; text-transform: uppercase; font-size: 14px;">Strategic Forecast Analysis:</p>
+                        <p style="color: #FFCC00; font-weight: bold; text-transform: uppercase; font-size: 14px;">Live Strategic Response:</p>
                         <div style="color: #eee; line-height: 1.8; font-size: 16px;">
                             {response.text}
                         </div>
                     </div>
                 """, unsafe_allow_html=True)
 
-                with st.expander("👁️ View Live Federal Feed Data"):
-                    st.json(fed_data)
-
             except Exception as e:
-                st.error(f"Analysis failed: {e}")
+                st.error(f"Analysis Error: {e}")
 
 # --- TAB 6: MASTER ANALYTICS & FORENSIC REPORT ---
 with tab6:
