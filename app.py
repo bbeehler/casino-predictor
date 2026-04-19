@@ -555,7 +555,7 @@ with tab4:
         except Exception as e:
             st.error(f"Sync failed: {e}")
 
-# --- TAB 5: STRATEGIC CONSULTANT (OMNISCIENT VERSION) ---
+# --- TAB 5: STRATEGIC CONSULTANT (FINAL STABILIZED) ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
@@ -567,24 +567,39 @@ with tab5:
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 1. THE DATA VAULT (Pre-processing for the AI)
+    # 1. THE DATA VAULT (Pre-processing with safety)
+    vault_metrics = {}
     if ledger_data:
         df_vault = pd.DataFrame(ledger_data).copy()
         df_vault['entry_date'] = pd.to_datetime(df_vault['entry_date'])
         
-        # Calculate Rolling Averages & Totals for Trend Intelligence
+        # --- COLUMN NORMALIZATION (Ensures AI can always find your data) ---
+        col_map = {
+            'social_impressions': ['social_impressions', 'Impressions', 'Social_Imp'],
+            'social_engagement': ['social_engagement', 'Engagement', 'Social_Eng'],
+            'actual_traffic': ['actual_traffic', 'Traffic', 'Attendance'],
+            'actual_coin_in': ['actual_coin_in', 'Revenue', 'Coin_In', 'Coin In']
+        }
+        for target, aliases in col_map.items():
+            if target not in df_vault.columns:
+                for alias in aliases:
+                    if alias in df_vault.columns:
+                        df_vault.rename(columns={alias: target}, inplace=True)
+                        break
+            if target not in df_vault.columns:
+                df_vault[target] = 0 # Fallback so math doesn't break
+            df_vault[target] = pd.to_numeric(df_vault[target], errors='coerce').fillna(0)
+
+        # Calculate Rolling Totals
         last_30 = df_vault[df_vault['entry_date'] > (df_vault['entry_date'].max() - datetime.timedelta(days=30))]
-        last_60 = df_vault[df_vault['entry_date'] > (df_vault['entry_date'].max() - datetime.timedelta(days=60))]
         
         vault_metrics = {
-            "30d_revenue": last_30['actual_coin_in'].sum() if 'actual_coin_in' in last_30 else 0,
-            "30d_traffic": last_30['actual_traffic'].sum() if 'actual_traffic' in last_30 else 0,
-            "avg_social_imp": df_vault['social_impressions'].mean() if 'social_impressions' in df_bench else 0,
-            "avg_social_eng": df_vault['social_engagement'].mean() if 'social_engagement' in df_bench else 0,
+            "30d_revenue": float(last_30['actual_coin_in'].sum()),
+            "30d_traffic": int(last_30['actual_traffic'].sum()),
+            "avg_social_imp": float(df_vault['social_impressions'].mean()),
+            "avg_social_eng": float(df_vault['social_engagement'].mean()),
             "heartbeats": df_vault.groupby(df_vault['entry_date'].dt.day_name())['actual_traffic'].mean().to_dict()
         }
-    else:
-        vault_metrics = {}
 
     # 2. CHAT INTERFACE
     for message in st.session_state.messages:
@@ -600,27 +615,23 @@ with tab5:
             with st.spinner("Triangulating property data and global industry intelligence..."):
                 try:
                     import google.generativeai as genai
+                    import json
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                     model = genai.GenerativeModel('gemini-2.5-flash')
                     
-                    # Context Payload
                     live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
                     
                     sys_context = f"""
-                    SYSTEM ROLE: You are the Chief Strategy Officer at Hard Rock Hotel & Casino Ottawa.
-                    You are a world-class expert in casino operations, digital marketing, and predictive analytics.
-
+                    SYSTEM ROLE: Chief Strategy Officer at Hard Rock Hotel & Casino Ottawa.
+                    
                     YOUR ASSETS:
                     - INTERNAL LEDGER: {json.dumps(vault_metrics)}
                     - LIVE WEATHER: {json.dumps(live_forecast, default=str)}
                     - CALIBRATED WEIGHTS: {json.dumps(st.session_state.coeffs)}
-                    - GLOBAL KNOWLEDGE: Use your internal training to provide industry context (e.g. typical industry CTRs, seasonal gambling trends, or competitor analysis).
-
-                    YOUR MANDATE:
-                    1. NO LIMITS: Answer any question. If it's about the past, use the Ledger. If it's about the future, use the Weather + Weights. If it's about strategy, use your Global Knowledge.
-                    2. DATA FIRST: Always ground your opinions in the numbers provided in the asset lists above.
-                    3. PROACTIVE: If you see a trend in the ledger that the user didn't ask about, but is relevant (e.g. 'Social engagement is dropping while traffic stays flat'), point it out.
-                    4. DYNAMIC INTERVIEW: End every response with 1-2 questions that challenge the user to refine their strategy.
+                    
+                    MANDATE: 
+                    Answer ANY query. Use Ledger for history/trends, Forecast for future dates, and your internal AI knowledge for general casino industry strategy.
+                    Proactively identify anomalies in the data.
                     """
 
                     history = [{"role": m["role"], "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
