@@ -587,66 +587,71 @@ with tab4:
         except Exception as e:
             st.error(f"Global sync failed: {e}")
 
-# --- TAB 5: FloorCast Analyst ---
+# --- TAB 5: FLOORCAST ANALYST (HIGH-PRECISION RESTORE) ---
 with tab5:
-    # 1. BRANDED HEADER
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🔍 FloorCast Analyst</h2>
-            <p style="color: #888; margin: 0;">Natural language insights based on your property ledger and digital weights.</p>
+            <p style="color: #888; margin: 0;">Predictive Intelligence & Forensic Analysis of Property Trends.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 2. CHAT INTERFACE CONTAINER
+    # 1. ANALYST CHAT INTERFACE
     with st.container(border=True):
-        st.write("### FloorCast AI")
+        st.write("### Property Intelligence Query")
+        user_query = st.text_input("Ask about future predictions, revenue trends, or historical 'Whale' days:", 
+                                  placeholder="e.g., 'Predict traffic for the first weekend of May if it rains.'")
         
-        # FIX: The User Input box
-        user_query = st.text_input("Ask about traffic trends, high-revenue days, or ROI:", 
-                                  placeholder="e.g., 'What was our highest traffic day in the last 6 months?'")
-        
-        col_btn, col_spacer = st.columns([1, 2])
-        with col_btn:
-            analyze_button = st.button("🚀 Ask FloorCast", use_container_width=True)
+        analyze_btn = st.button("🚀 Run Deep Analysis", use_container_width=True)
 
-    # 3. ANALYSIS LOGIC
-    if analyze_button and user_query:
-        with st.spinner("Consulting the ledger and calculating variances..."):
+    # 2. ANALYSIS LOGIC
+    if analyze_btn and user_query:
+        with st.spinner("Analyzing YTD Ledger against Engine Coefficients..."):
             try:
-                # A. PREPARE THE DATA (The "Hard Math" Context)
-                df_full = pd.DataFrame(ledger_data)
+                # PREPARE DATA: We send the AI the "Big Picture"
+                df_analyst = pd.DataFrame(ledger_data)
                 
-                # We give the AI the top 20 "Best" days and the 30 "Latest" days
-                df_highlights = df_full.sort_values('actual_traffic', ascending=False).head(20)
-                df_recent = df_full.tail(30)
-                context_df = pd.concat([df_highlights, df_recent]).drop_duplicates()
+                # We extract the 50 most recent days + the top 20 record days
+                # This ensures the AI sees both current trends and peak performance.
+                df_recent = df_analyst.tail(50)
+                df_peaks = df_analyst.sort_values('actual_traffic', ascending=False).head(20)
+                context_context = pd.concat([df_recent, df_peaks]).drop_duplicates().to_csv(index=False)
                 
-                # B. CALL GEMINI
+                # CALL GEMINI
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel('gemini-2.5-flash')
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 
+                # THE "PRO" PROMPT: Forces AI to respect your $1,200+ spend math
                 prompt = f"""
-                SYSTEM: You are the Lead Data Analyst for Hard Rock Hotel & Casino Ottawa.
-                PROPERTY COEFFICIENTS: {st.session_state.coeffs}
+                SYSTEM: You are the Senior Data Analyst for Hard Rock Hotel & Casino Ottawa.
                 
-                LEDGER CONTEXT (Top Performers & Recent Records):
-                {context_df.to_csv(index=False)}
+                ENGINE COEFFICIENTS (YOU MUST USE THESE FOR PREDICTIONS):
+                - Base Intercept (Organic Traffic): {st.session_state.coeffs['Intercept']}
+                - Revenue Per Head (Coin-In): ${st.session_state.coeffs['Avg_Coin_In']:,.2f}
+                - Ad Click Weight: {st.session_state.coeffs['Clicks']}
+                - Promo Lift (Flat): {st.session_state.coeffs['Promo']}
+                - Snow Impact (per cm): {st.session_state.coeffs['Snow_cm']}
+                - Rain Impact (per mm): {st.session_state.coeffs['Rain_mm']}
                 
-                QUESTION: {user_query}
+                HISTORICAL DATA CONTEXT (YTD Trends):
+                {context_context}
                 
-                INSTRUCTION: Use the actual_traffic and actual_coin_in columns to provide 
-                specific, data-backed answers. If a user asks for the 'highest' or 'best' day, 
-                scan the provided LEDGER CONTEXT for the maximum value.
+                USER QUESTION: {user_query}
+                
+                INSTRUCTION: 
+                1. If asked for a prediction, apply the ENGINE COEFFICIENTS to the provided scenario.
+                2. Calculate predicted revenue by multiplying your traffic forecast by ${st.session_state.coeffs['Avg_Coin_In']:,.2f}.
+                3. Be specific. Quote dates or values from the HISTORICAL DATA to back up your reasoning.
                 """
                 
                 response = model.generate_content(prompt)
                 
-                # C. DISPLAY STYLED RESPONSE
+                # DISPLAY RESPONSE
                 st.write("---")
                 st.markdown(f"""
-                    <div style="background-color: #1a1a1a; padding: 20px; border-radius: 10px; border-top: 3px solid #FFCC00;">
-                        <p style="color: #FFCC00; font-weight: bold; margin-bottom: 10px;">ANALYSIS RESULT:</p>
-                        <div style="color: #eee; line-height: 1.6;">
+                    <div style="background-color: #1a1a1a; padding: 25px; border-radius: 15px; border-top: 3px solid #FFCC00;">
+                        <p style="color: #FFCC00; font-weight: bold; margin-bottom: 15px; text-transform: uppercase; font-size: 14px;">Executive Analyst Response:</p>
+                        <div style="color: #eee; line-height: 1.7; font-size: 16px;">
                             {response.text}
                         </div>
                     </div>
