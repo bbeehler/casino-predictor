@@ -11,7 +11,7 @@ from supabase import create_client
 async def fetch_live_ec_data():
     """Fetches real-time data from Environment Canada"""
     try:
-        # Hard Rock Ottawa / Embrun Coordinates
+        # Ottawa Property / Embrun Coordinates
         ec = ECWeather(coordinates=(45.33, -75.71))
         await ec.update()
         return {
@@ -52,8 +52,8 @@ def login_user(email, password):
 if not st.session_state.user_authenticated:
     st.markdown("""
         <div style="text-align: center; padding: 50px;">
-            <h1 style="color: #FFCC00;">🎰 Hard Rock Ottawa</h1>
-            <h3>Strategic Predictor Login</h3>
+            <h1 style="color: #FFCC00;">🎰 FloorCast</h1>
+            <h3>Digial Lift and Predictor Login</h3>
         </div>
     """, unsafe_allow_html=True)
     
