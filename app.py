@@ -8,20 +8,33 @@ from env_canada import ECWeather
 import google.generativeai as genai
 from supabase import create_client
 
-# 1. PAGE CONFIG (MUST BE FIRST)
+# 1. PAGE CONFIG (Must be the very first Streamlit command)
 st.set_page_config(page_title="FloorCast", layout="wide")
 
 # 2. THE UNIFIED FORENSIC ENGINE (Single Source of Truth)
 def get_forensic_metrics(df, coeffs):
-    """Calculates KPIs once for the entire app to ensure Tab 1 and Tab 5 match."""
-    if df is None or len(df) == 0:
+    """Calculates KPIs once for the entire app. Safely handles missing columns."""
+    if df is None or df.empty:
         return {"predictability": "0.0%", "digital_lift": "0.0%", "heartbeats": {}}
 
     df = df.copy()
-    # Normalize potential column naming variations
-    if 'Clicks' in df.columns: df.rename(columns={'Clicks': 'ad_clicks'}, inplace=True)
-    if 'Impressions' in df.columns: df.rename(columns={'Impressions': 'social_impressions'}, inplace=True)
     
+    # Standardize and protect against missing columns
+    cols_to_ensure = {
+        'ad_clicks': ['ad_clicks', 'Clicks', 'Ad_Clicks'],
+        'social_impressions': ['social_impressions', 'Impressions', 'Social_Imp'],
+        'actual_traffic': ['actual_traffic', 'Traffic'],
+        'actual_coin_in': ['actual_coin_in', 'Revenue', 'Coin_In']
+    }
+
+    for target, aliases in cols_to_ensure.items():
+        existing = next((c for c in aliases if c in df.columns), None)
+        if existing:
+            df.rename(columns={existing: target}, inplace=True)
+        if target not in df.columns:
+            df[target] = 0 
+        df[target] = pd.to_numeric(df[target], errors='coerce').fillna(0)
+
     df['entry_date'] = pd.to_datetime(df['entry_date'])
     df['day_name'] = df['entry_date'].dt.day_name()
     
@@ -34,15 +47,19 @@ def get_forensic_metrics(df, coeffs):
     
     # Forensic 1: Digital Lift %
     total_traffic = df['actual_traffic'].sum()
-    marketing_impact = (df.get('ad_clicks', 0).sum() * c_clicks) + (df.get('social_impressions', 0).sum() * c_social)
+    marketing_impact = (df['ad_clicks'].sum() * c_clicks) + (df['social_impressions'].sum() * c_social)
     lift_val = (marketing_impact / total_traffic * 100) if total_traffic > 0 else 0
 
     # Forensic 2: AI Predictability (1 - MAPE)
     df['expected'] = df.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
-                             (x.get('ad_clicks', 0) * c_clicks) + 
-                             (x.get('social_impressions', 0) * c_social), axis=1)
+                             (x['ad_clicks'] * c_clicks) + 
+                             (x['social_impressions'] * c_social), axis=1)
 
-    mape = (np.abs(df['actual_traffic'] - df['expected']) / df['actual_traffic']).replace([np.inf, -np.inf], np.nan).dropna().mean()
+    df_filtered = df[df['actual_traffic'] > 0].copy()
+    if df_filtered.empty:
+        return {"predictability": "0.0%", "digital_lift": f"{lift_val:.1f}%", "heartbeats": heartbeats}
+        
+    mape = (np.abs(df_filtered['actual_traffic'] - df_filtered['expected']) / df_filtered['actual_traffic']).mean()
     pred_val = (1 - mape) * 100 if not np.isnan(mape) else 0
 
     return {
@@ -74,7 +91,7 @@ if 'weather_data' not in st.session_state:
 if 'user_authenticated' not in st.session_state:
     st.session_state.user_authenticated = False
 
-# 5. GATEKEEPER (Login Screen)
+# 5. GATEKEEPER (Login UI)
 if not st.session_state.user_authenticated:
     st.markdown("<div style='text-align:center; padding:50px;'><h1 style='color:#FFCC00;'>🎰 FloorCast</h1><h3>Digital Lift & Predictor Login</h3></div>", unsafe_allow_html=True)
     with st.container(border=True):
@@ -90,7 +107,7 @@ if not st.session_state.user_authenticated:
                 st.error("Invalid credentials.")
     st.stop()
 
-# 6. HYDRATE ENGINE WEIGHTS (From Database)
+# 6. HYDRATE ENGINE WEIGHTS & DATA
 if 'coeffs' not in st.session_state:
     try:
         response = supabase.table("coefficients").select("*").eq("id", 1).execute()
@@ -101,7 +118,6 @@ if 'coeffs' not in st.session_state:
     except:
         st.session_state.coeffs = {"Intercept": 3250, "Avg_Coin_In": 112.50}
 
-# 7. FETCH GLOBAL LEDGER
 @st.cache_data(ttl=600)
 def fetch_ledger_data():
     try:
@@ -112,7 +128,7 @@ def fetch_ledger_data():
 
 ledger_data = fetch_ledger_data()
 
-# 8. HEADER & NAV LOGOUT
+# 7. HEADER & LOGOUT
 header_col1, header_col2 = st.columns([4, 1])
 with header_col1:
     st.markdown("<h1 style='color:#FFCC00; margin:0;'>🎰 FloorCast</h1>", unsafe_allow_html=True)
@@ -124,7 +140,7 @@ with header_col2:
 
 st.divider()
 
-# 9. TABS DEFINITION
+# 8. MAIN NAVIGATION
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📈 Executive Overview", "📑 Ledger Management", "📊 Property Analytics", 
     "⚙️ Engine Control", "🧠 FloorCast Analyst", "📋 Master Report", "🧪 Forecast Sandbox"
