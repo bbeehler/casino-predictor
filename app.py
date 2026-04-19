@@ -142,7 +142,7 @@ with tab1:
     if not ledger_data:
         st.info("👋 Welcome. Please upload your ledger in **Tab 2** to see your property performance metrics.")
     else:
-        # 1. PULL UNIFIED TRUTH (Matches Tab 5 exactly)
+        # 1. PULL UNIFIED TRUTH
         df_ledger = pd.DataFrame(ledger_data)
         
         # Call the unified function we placed at the top of the script
@@ -166,9 +166,9 @@ with tab1:
             )
             
         with kpi3:
-            # Safely calculate total revenue from the ledger
+            # Safely calculate total revenue by finding the right column
             rev_col = next((c for c in ['actual_coin_in', 'Revenue', 'Coin_In'] if c in df_ledger.columns), None)
-            total_rev = df_ledger[rev_col].sum() if rev_col else 0
+            total_rev = pd.to_numeric(df_ledger[rev_col], errors='coerce').sum() if rev_col else 0
             st.metric(label="YTD Ledger Revenue", value=f"${total_rev:,.0f}")
 
         st.divider()
@@ -185,14 +185,19 @@ with tab1:
         c_clicks = st.session_state.coeffs.get('Clicks', 0.02)
         c_social = st.session_state.coeffs.get('Social_Imp', 0.0002)
 
-        # Map internal column names for the lambda function
+        # Map internal column names safely for the visualization
         click_col = next((c for c in ['ad_clicks', 'Clicks'] if c in df_viz.columns), None)
         imp_col = next((c for c in ['social_impressions', 'Impressions'] if c in df_viz.columns), None)
         traffic_col = next((c for c in ['actual_traffic', 'Traffic'] if c in df_viz.columns), None)
         
-        df_viz['Predicted'] = df_viz.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
-                                         (x[click_col] * c_clicks if click_col else 0) + 
-                                         (x[imp_col] * c_social if imp_col else 0), axis=1)
+        # Lambda function that handles missing columns without crashing
+        def calculate_prediction(row):
+            base = heartbeats.get(row['day_name'], 0)
+            clicks = pd.to_numeric(row[click_col], errors='coerce') if click_col else 0
+            imps = pd.to_numeric(row[imp_col], errors='coerce') if imp_col else 0
+            return base + (np.nan_to_num(clicks) * c_clicks) + (np.nan_to_num(imps) * c_social)
+
+        df_viz['Predicted'] = df_viz.apply(calculate_prediction, axis=1)
         
         if traffic_col:
             df_viz = df_viz.rename(columns={traffic_col: 'Actual Traffic'})
@@ -221,12 +226,10 @@ with tab1:
         ].copy()
 
         if not df_current.empty:
-            # Sort with most recent at the top
             df_current = df_current.sort_values(by='entry_date', ascending=False)
             
             # Formatting for display
             display_cols = ['entry_date', 'Actual Traffic', rev_col, click_col, imp_col]
-            # Filter out any None values
             final_cols = [c for c in display_cols if c is not None and c in df_current.columns]
             
             st.dataframe(
