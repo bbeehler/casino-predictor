@@ -554,49 +554,40 @@ with tab4:
                 st.success("✅ Database Synced.")
             except Exception as e:
                 st.error(f"Sync failed: {e}")
-# --- TAB 5: STRATEGIC CONSULTANT (FINAL STABILIZED) ---
+# --- TAB 5: STRATEGIC CONSULTANT (LOGIC FIX) ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic Consultant</h2>
-            <p style="color: #888; margin: 0;">Full-Spectrum Intelligence: Ledger History, Live Federal Feeds, and Global Industry Benchmarks.</p>
+            <p style="color: #888; margin: 0;">Corrected Logic: DOW-Anchored Predictions & Benchmark Awareness.</p>
         </div>
     """, unsafe_allow_html=True)
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 1. THE DATA VAULT (Pre-processing with safety)
+    # 1. DATA VAULT (Same as before, ensuring numeric safety)
     vault_metrics = {}
     if ledger_data:
         df_vault = pd.DataFrame(ledger_data).copy()
         df_vault['entry_date'] = pd.to_datetime(df_vault['entry_date'])
         
-        # --- COLUMN NORMALIZATION (Ensures AI can always find your data) ---
-        col_map = {
-            'social_impressions': ['social_impressions', 'Impressions', 'Social_Imp'],
-            'social_engagement': ['social_engagement', 'Engagement', 'Social_Eng'],
-            'actual_traffic': ['actual_traffic', 'Traffic', 'Attendance'],
-            'actual_coin_in': ['actual_coin_in', 'Revenue', 'Coin_In', 'Coin In']
-        }
+        # Column Normalization
+        col_map = {'actual_traffic': ['actual_traffic', 'Traffic'], 'actual_coin_in': ['actual_coin_in', 'Revenue']}
         for target, aliases in col_map.items():
             if target not in df_vault.columns:
                 for alias in aliases:
                     if alias in df_vault.columns:
-                        df_vault.rename(columns={alias: target}, inplace=True)
-                        break
-            if target not in df_vault.columns:
-                df_vault[target] = 0 # Fallback so math doesn't break
+                        df_vault.rename(columns={alias: target}, inplace=True); break
             df_vault[target] = pd.to_numeric(df_vault[target], errors='coerce').fillna(0)
 
-        # Calculate Rolling Totals
         last_30 = df_vault[df_vault['entry_date'] > (df_vault['entry_date'].max() - datetime.timedelta(days=30))]
         
         vault_metrics = {
             "30d_revenue": float(last_30['actual_coin_in'].sum()),
             "30d_traffic": int(last_30['actual_traffic'].sum()),
-            "avg_social_imp": float(df_vault['social_impressions'].mean()),
-            "avg_social_eng": float(df_vault['social_engagement'].mean()),
+            "avg_social_imp": float(df_vault['social_impressions'].mean()) if 'social_impressions' in df_vault else 0,
+            "avg_social_eng": float(df_vault['social_engagement'].mean()) if 'social_engagement' in df_vault else 0,
             "heartbeats": df_vault.groupby(df_vault['entry_date'].dt.day_name())['actual_traffic'].mean().to_dict()
         }
 
@@ -605,32 +596,38 @@ with tab5:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    if prompt := st.chat_input("Ask me anything: Trends, Forecasts, Social Strategy, or Industry Benchmarks..."):
+    if prompt := st.chat_input("Ask about Monday, social trends, or monthly revenue..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("Triangulating property data and global industry intelligence..."):
+            with st.spinner("Calculating via DOW-Anchored Logic..."):
                 try:
                     import google.generativeai as genai
                     import json
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                     model = genai.GenerativeModel('gemini-2.5-flash')
                     
+                    coeffs = st.session_state.coeffs
                     live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
                     
                     sys_context = f"""
                     SYSTEM ROLE: Chief Strategy Officer at Hard Rock Hotel & Casino Ottawa.
                     
-                    YOUR ASSETS:
-                    - INTERNAL LEDGER: {json.dumps(vault_metrics)}
+                    CORE CALCULATION RULES:
+                    1. BASELINE: When predicting for a specific day, the 'DOW_Profile' for that day is the ONLY starting intercept. 
+                    2. DO NOT ADD THE GLOBAL INTERCEPT TO THE DOW_PROFILE. (Example: If Monday Heartbeat is 2500, Predicted Traffic = 2500 + Lifts/Friction).
+                    3. SOCIAL BENCHMARKS: If the user doesn't provide social data, use the Internal Ledger 'avg_social_imp' ({vault_metrics.get('avg_social_imp', 0)})—do not assume it is 0.
+
+                    DATA ASSETS:
+                    - DOW HEARTBEATS: {json.dumps(vault_metrics.get('heartbeats', {}))}
+                    - ENGINE WEIGHTS: {json.dumps(coeffs)}
                     - LIVE WEATHER: {json.dumps(live_forecast, default=str)}
-                    - CALIBRATED WEIGHTS: {json.dumps(st.session_state.coeffs)}
                     
                     MANDATE: 
-                    Answer ANY query. Use Ledger for history/trends, Forecast for future dates, and your internal AI knowledge for general casino industry strategy.
-                    Proactively identify anomalies in the data.
+                    If the user asks for a prediction, show your math clearly. 
+                    Ensure the 'Start Point' is the heartbeat for that day.
                     """
 
                     history = [{"role": m["role"], "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
