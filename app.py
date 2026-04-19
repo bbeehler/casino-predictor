@@ -555,83 +555,64 @@ with tab4:
         except Exception as e:
             st.error(f"Sync failed: {e}")
 
-# --- TAB 5: STRATEGIC FORECAST ANALYST (STABILIZED) ---
+# --- TAB 5: INTERACTIVE STRATEGIC ANALYST ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic FloorCast Analyst</h2>
-            <p style="color: #888; margin: 0;">Forensic AI: Benchmarking user queries against ledger history and federal feeds.</p>
+            <p style="color: #888; margin: 0;">Forensic AI: Benchmarking user queries against 60-day ledger history and live feeds.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. PRE-CALCULATE LEDGER BENCHMARKS (WITH SAFETY CHECK)
+    # 1. INITIALIZE CHAT HISTORY
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # 2. PRE-CALCULATE BENCHMARKS (WITH SAFETY)
     if ledger_data:
         df_bench = pd.DataFrame(ledger_data).copy()
-        
-        # --- SAFE COLUMN MAPPING ---
-        # This prevents the KeyError by ensuring these columns exist
-        column_map = {
-            'social_impressions': ['social_impressions', 'Impressions', 'Social Imp', 'Social_Imp'],
-            'social_engagement': ['social_engagement', 'Engagement', 'Social Eng', 'Social_Eng'],
-            'actual_traffic': ['actual_traffic', 'Traffic', 'Attendance', 'Daily_Traffic']
-        }
-
-        for target_col, variations in column_map.items():
-            if target_col not in df_bench.columns:
-                # Check if a variation exists in the uploaded CSV
-                found = False
-                for v in variations:
-                    if v in df_bench.columns:
-                        df_bench.rename(columns={v: target_col}, inplace=True)
-                        found = True
-                        break
-                # If still not found, create a zero column to prevent crashing
-                if not found:
-                    df_bench[target_col] = 0
-
-        # Ensure numeric and date types for math
-        for col in ['actual_traffic', 'social_impressions', 'social_engagement']:
-            df_bench[col] = pd.to_numeric(df_bench[col], errors='coerce').fillna(0)
+        # Ensure column safety
+        target_cols = {'social_impressions': 0, 'social_engagement': 0, 'actual_traffic': 1500}
+        for col, default in target_cols.items():
+            if col not in df_bench.columns: df_bench[col] = default
+            df_bench[col] = pd.to_numeric(df_bench[col], errors='coerce').fillna(default)
         
         df_bench['entry_date'] = pd.to_datetime(df_bench['entry_date'])
         df_bench['day_name'] = df_bench['entry_date'].dt.day_name()
-
-        # Global Benchmarks
-        avg_imp = df_bench['social_impressions'].mean()
-        avg_eng = df_bench['social_engagement'].mean()
         
-        # Day-of-Week Heartbeats
         dow_stats = df_bench.groupby('day_name')['actual_traffic'].mean().to_dict()
+        avg_imp, avg_eng = df_bench['social_impressions'].mean(), df_bench['social_engagement'].mean()
     else:
-        dow_stats = {}
-        avg_imp, avg_eng = 0, 0
+        dow_stats, avg_imp, avg_eng = {}, 0, 0
 
-    # 2. INTERFACE
-    with st.container(border=True):
-        st.write("### 🗨️ Strategic Consultation")
-        user_query = st.text_input("Consult with AI Strategy:", 
-                                  placeholder="e.g. 'What is the outlook for Monday if we run a 20k impression social push?'")
-        analyze_btn = st.button("🚀 Run Forensic Analysis", use_container_width=True)
+    # 3. DISPLAY CHAT INTERFACE
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-    # 3. AI LOGIC (Matches Tab 4 Coefficients)
-    if analyze_btn and user_query:
-        if not ledger_data:
-            st.warning("Please upload ledger data in Tab 2 before running analysis.")
-        else:
-            with st.spinner("Triangulating ledger benchmarks..."):
+    # 4. CHAT INPUT LOGIC
+    if prompt := st.chat_input("Ask about a date or respond to the AI's questions..."):
+        # Display user message
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Generate AI response
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing strategy..."):
                 try:
                     import google.generativeai as genai
-                    import json
-
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                     model = genai.GenerativeModel('gemini-2.5-flash')
                     
                     live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
 
-                    prompt = f"""
+                    # Construct the context-heavy prompt
+                    sys_context = f"""
                     SYSTEM ROLE: Senior Business Strategist for Hard Rock Hotel & Casino Ottawa.
+                    You are in a live conversation with the Marketing/Operations Director.
                     
-                    DATASET 1: HISTORICAL HEARTBEATS (Averages from Ledger)
+                    DATASET 1: HISTORICAL HEARTBEATS (Actual Averages)
                     {json.dumps(dow_stats)}
                     - BENCHMARK SOCIAL: {avg_imp:,.0f} impressions / {avg_eng:,.0f} engagements.
 
@@ -641,28 +622,31 @@ with tab5:
                     DATASET 3: LIVE ENVIRONMENT CANADA FORECAST
                     {json.dumps(live_forecast, default=str)}
 
-                    USER QUERY: "{user_query}"
-
                     INSTRUCTIONS:
-                    1. Use the Ledger Heartbeat as the starting 'Normal' floor.
-                    2. Apply weather friction from the forecast and social lift from benchmarks.
-                    3. If the user query is vague on Promotion/Social, use the benchmarks.
-                    4. End with 2 strategic questions for the user.
+                    1. Use the chat history to maintain context.
+                    2. If the user answers your previous questions, update your prediction immediately.
+                    3. Always cross-reference the Ledger Heartbeats. 
+                    4. End every response with 1-2 sharp follow-up questions to refine the revenue model.
                     """
+
+                    # Prepare conversation history for Gemini
+                    history = [{"role": m["role"], "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
+                    chat = model.start_chat(history=history)
                     
-                    response = model.generate_content(prompt)
+                    # Send the system context + the user prompt
+                    full_input = f"{sys_context}\n\nUSER MESSAGE: {prompt}"
+                    response = chat.send_message(full_input)
                     
-                    st.write("---")
-                    st.markdown(f"""
-                        <div style="background-color: #1a1a1a; padding: 25px; border-radius: 15px; border-top: 3px solid #FFCC00;">
-                            <div style="color: #eee; line-height: 1.8; font-size: 16px;">
-                                {response.text}
-                            </div>
-                        </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(response.text)
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
 
                 except Exception as e:
-                    st.error(f"Strategic Analysis Error: {e}")
+                    st.error(f"Analysis Error: {e}")
+
+    # 5. CLEAR CHAT BUTTON
+    if st.button("🗑️ Clear Strategy Session", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
 
 # --- TAB 6: MASTER ANALYTICS & FORENSIC REPORT ---
 with tab6:
