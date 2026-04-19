@@ -152,6 +152,25 @@ def fetch_data():
 
 ledger_data = fetch_data()
 
+# --- HEADER & NAVIGATION LOGOUT ---
+header_col1, header_col2 = st.columns([4, 1])
+
+with header_col1:
+    st.markdown("<h1 style='color: #FFCC00; margin:0;'>🎰 Hard Rock Strategic Predictor</h1>", unsafe_allow_html=True)
+
+with header_col2:
+    # A small, clean logout button aligned to the right
+    if st.button("🔓 Logout", use_container_width=True):
+        supabase.auth.sign_out()
+        st.session_state.user_authenticated = False
+        st.session_state.messages = [] # Clear AI chat for security
+        st.rerun()
+
+st.divider() # Separation between header and your Tabs
+
+# Now your existing tabs definition
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Dashboard", "📑 Ledger", "🧪 Sandbox", "⚙️ Engine", "🧠 Consultant"])
+
 # --- REPLACEMENT NAV BLOCK ---
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📈 Executive Overview", 
