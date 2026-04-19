@@ -478,115 +478,66 @@ with tab3:
         st.write("### Historical Digital Revenue Contribution")
         st.area_chart(df_strat.set_index('entry_date')['Digital_Revenue_Lift'])
 
-# --- TAB 4: PRECISION ENGINE CALIBRATION ---
+# --- TAB 4: SEGMENTED ENGINE CALIBRATION ---
 with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control</h2>
-            <p style="color: #888; margin: 0;">Deterministic Math Calibration: Ensuring consistency across identical datasets.</p>
+            <h2 style="color: #FFCC00; margin: 0;">⚙️ Segmented Engine Control</h2>
+            <p style="color: #888; margin: 0;">Anchoring coefficients to the 60-Day Heartbeat for rock-solid stability.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. DATA PREP
     df_calc = pd.DataFrame(ledger_data).copy()
-    
-    # Ensure all required columns exist in the dataframe
-    required_cols = ['actual_traffic', 'ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo', 'actual_coin_in']
-    for col in required_cols:
-        if col not in df_calc.columns:
-            df_calc[col] = 0.0
+    df_calc['entry_date'] = pd.to_datetime(df_calc['entry_date'])
+    df_calc['day_name'] = df_calc['entry_date'].dt.day_name()
 
-    # 2. CHANGE DETECTION (Prevents redundant calibration)
-    # This creates a unique signature of your current ledger data
+    # 1. THE STABILITY HASH
     ledger_signature = hash(pd.util.hash_pandas_object(df_calc).sum())
 
     if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
-        # Check if we've already calibrated this exact data
         if st.session_state.get('last_calib_hash') == ledger_signature:
-            st.info("⚖️ **System Optimized**: No new data detected in ledger. Weights remain statistically locked.")
-        elif df_calc.empty or len(df_calc) < 7:
-            st.error("Cannot calibrate: Need at least 7 days of historical data.")
+            st.info("⚖️ **Weights Locked**: Existing coefficients are already mathematically optimized for this ledger.")
         else:
-            with st.spinner("Executing Deterministic Regression Analysis..."):
+            with st.spinner("Executing Segmented Regression Analysis..."):
                 try:
-                    # --- THE MATH ENGINE (LINEAR REGRESSION) ---
-                    # Instead of AI guessing, we use the standard mathematical approach
-                    # This guarantees the SAME result for the SAME data.
-                    from sklearn.linear_model import LinearRegression
-                    import numpy as np
-
-                    # Features (X) and Target (y)
+                    from sklearn.linear_model import Ridge # Using Ridge for multi-collinearity safety
+                    
+                    # --- STEP 1: CALCULATE THE 'HEARTBEAT' ANCHORS ---
+                    # We establish the average traffic for each day of the week over the last 60 days
+                    dow_profiles = df_calc.groupby('day_name')['actual_traffic'].mean().to_dict()
+                    
+                    # --- STEP 2: CALCULATE FRICTION (THE COEFFICIENTS) ---
+                    # We subtract the 'Day-of-Week Average' from the actual traffic to find the 'Residual'
+                    # This tells us exactly how much weather and marketing moved the needle away from the average.
+                    df_calc['residual'] = df_calc.apply(lambda x: x['actual_traffic'] - dow_profiles[x['day_name']], axis=1)
+                    
                     features = ['ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo']
                     X = df_calc[features].fillna(0)
-                    y = df_calc['actual_traffic']
+                    y = df_calc['residual']
 
-                    model_lr = LinearRegression()
-                    model_lr.fit(X, y)
+                    # Ridge regression is 'rock solid' because it prevents weights from exploding
+                    model = Ridge(alpha=1.0)
+                    model.fit(X, y)
+                    raw_weights = dict(zip(features, model.coef_))
 
-                    # Extract the raw coefficients from the math
-                    raw_weights = dict(zip(features, model_lr.coef_))
-                    
-                    # --- BUSINESS LOGIC GUARDRAILS ---
-                    # Math can sometimes flip signs if data is messy; we force Ottawa realities:
+                    # --- STEP 3: ENFORCE OTTAWA PROPERTY LOGIC ---
                     final_weights = {
-                        "Intercept": float(model_lr.intercept_),
+                        "Intercept": float(df_calc['actual_traffic'].mean()), 
                         "Avg_Coin_In": float(df_calc['actual_coin_in'].sum() / df_calc['actual_traffic'].sum()),
-                        "Clicks": max(0, float(raw_weights['ad_clicks'])), # Must be positive
-                        "Promo": max(0, float(raw_weights['active_promo'])), # Must be positive
+                        "Clicks": max(0, float(raw_weights['ad_clicks'])),
+                        "Promo": max(0, float(raw_weights['active_promo'])),
                         "Temp_C": float(raw_weights['temp_c']),
-                        "Snow_cm": -abs(float(raw_weights['snow_cm'])), # Must be negative
-                        "Rain_mm": -abs(float(raw_weights['rain_mm']))  # Must be negative
+                        "Snow_cm": -abs(float(raw_weights['snow_cm'])), # Force negative friction
+                        "Rain_mm": -abs(float(raw_weights['rain_mm']))  # Force negative friction
                     }
 
-                    # Update session state and the 'last run' hash
                     st.session_state.coeffs.update(final_weights)
                     st.session_state.last_calib_hash = ledger_signature
-                    
-                    st.success("🎯 **Engine Calibrated**: Weights mathematically anchored to 60-day performance.")
+                    st.success("🎯 **Segmented Calibration Complete**: Profiles anchored to 60-day performance.")
                     st.rerun()
 
                 except Exception as e:
-                    st.error(f"Calibration failed: {e}")
-
-    st.write("---")
-
-    # 3. MANUAL OVERRIDE & VISUALIZATION
-    c = st.session_state.coeffs
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        with st.container(border=True):
-            st.write("**💰 Financials**")
-            new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 1000)))
-            new_avg_spend = st.number_input("Spend / Head ($)", value=float(c.get('Avg_Coin_In', 1200)))
-
-    with col2:
-        with st.container(border=True):
-            st.write("**🚀 Marketing**")
-            new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
-            new_clicks = st.number_input("Weight / Click", value=float(c.get('Clicks', 0)))
-
-    with col3:
-        with st.container(border=True):
-            st.write("**☁️ Environment**")
-            new_temp = st.number_input("Temp Weight", value=float(c.get('Temp_C', 0)))
-            new_snow = st.number_input("Snow Weight (cm)", value=float(c.get('Snow_cm', 0)))
-            new_rain = st.number_input("Rain Weight (mm)", value=float(c.get('Rain_mm', 0)))
-
-    # 4. DATABASE SYNC
-    if st.button("💾 Save All Engine Changes to Database", use_container_width=True):
-        try:
-            updated_vals = {
-                "id": 1, 
-                "Intercept": new_intercept, "Avg_Coin_In": new_avg_spend,
-                "Promo": new_promo, "Clicks": new_clicks, 
-                "Temp_C": new_temp, "Snow_cm": new_snow, "Rain_mm": new_rain
-            }
-            supabase.table("coefficients").upsert(updated_vals).execute()
-            st.session_state.coeffs.update(updated_vals)
-            st.success("✅ Engine settings synced to Supabase.")
-        except Exception as e:
-            st.error(f"Sync failed: {e}")
+                    st.error(f"Calibration Error: {e}")
 
 # --- TAB 5: DYNAMIC "DATE-AWARE" ANALYST ---
 with tab5:
