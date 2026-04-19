@@ -600,92 +600,95 @@ with tab4:
         except Exception as e:
             st.error(f"Database save failed: {e}")
 
-# --- TAB 5: DYNAMIC ENVIRONMENT CANADA ANALYST ---
+# --- TAB 5: FLOORCAST ANALYST (TRIANGULATED FEDERAL VERSION) ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🔍 FloorCast Analyst</h2>
-            <p style="color: #888; margin: 0;">Live Federal Forecast Integration (MSC GeoMet) + 60-Day Deep Analysis.</p>
+            <p style="color: #888; margin: 0;">Triangulated Intelligence: 60-Day Heartbeat + Live Environment Canada Feed.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. LIVE WEATHER FETCH (No hard-coding)
-    async def fetch_live_ec_data():
-        # Using exact coordinates for Hard Rock Ottawa area
-        ec = ECWeather(coordinates=(45.33, -75.71))
-        await ec.update()
-        return {
-            "current": ec.conditions,
-            "forecast": ec.daily_forecasts,
-            "alerts": ec.alerts
-        }
-
-    # Streamlit wrapper for async
-    if 'weather_data' not in st.session_state:
-        st.session_state.weather_data = asyncio.run(fetch_live_ec_data())
-
-    live_data = st.session_state.weather_data
+    # 1. LIVE DATA RECOVERY
+    # Accesses the weather data fetched at the top of app.py
+    live_data = st.session_state.get('weather_data', {})
 
     with st.container(border=True):
-        st.write("### 📊 Strategic Intelligence Query")
-        user_query = st.text_input("Ask for a prediction based on LIVE federal data:", 
-                                  placeholder="e.g., 'Analyze our 60-day Saturday trend against tonight's rain warning.'")
-        analyze_btn = st.button("🚀 Run Live Forensic Analysis", use_container_width=True)
+        st.write("### 🧠 Strategic Intelligence Query")
+        user_query = st.text_input("Analyze seasonality, federal weather impacts, or future revenue:", 
+                                  placeholder="e.g., 'Compare tonight's rainfall warning against our typical Saturday volume.'")
+        analyze_btn = st.button("🚀 Run Forensic Triangulation", use_container_width=True)
 
     if analyze_btn and user_query:
-        with st.spinner("Triangulating LIVE federal weather with 60-day property momentum..."):
-            try:
-                # 2. ENRICH DATA: THE 60-DAY HEARTBEAT
-                df_raw = pd.DataFrame(ledger_data)
-                df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
-                df_raw['day_name'] = df_raw['entry_date'].dt.day_name()
-                
-                sixty_days_ago = datetime.datetime.now() - datetime.timedelta(days=60)
-                df_60 = df_raw[df_raw['entry_date'] >= sixty_days_ago].copy()
+        if not live_data or "error" in live_data:
+            st.error("Cannot run analysis: Environment Canada feed is unavailable.")
+        else:
+            with st.spinner("Triangulating 60-day history with federal friction..."):
+                try:
+                    # --- DATASET 1: 60-DAY HEARTBEAT ---
+                    df_raw = pd.DataFrame(ledger_data)
+                    df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
+                    df_raw['day_name'] = df_raw['entry_date'].dt.day_name()
+                    
+                    # Lookback for true seasonality
+                    sixty_days_ago = datetime.datetime.now() - datetime.timedelta(days=60)
+                    df_60 = df_raw[df_raw['entry_date'] >= sixty_days_ago].copy()
+                    
+                    # Calculate Day-of-Week Averages
+                    dow_stats = df_60.groupby('day_name')['actual_traffic'].mean().to_dict()
+                    
+                    # DATASET 2: 14-DAY MOMENTUM
+                    momentum_avg = df_raw.tail(14)['actual_traffic'].mean()
 
-                # 3. AI STRATEGY CALL (Gemini 1.5 Flash)
-                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                
-                prompt = f"""
-                SYSTEM: Senior Strategist for Hard Rock Hotel & Casino Ottawa.
-                You are performing a WHOLISTIC TRIANGULATION of three real-time datasets.
+                    # --- 3. AI STRATEGY CALL (GEMINI 2.5 FLASH) ---
+                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    
+                    # We use default=str to fix the 'datetime is not JSON serializable' error
+                    prompt = f"""
+                    SYSTEM: Senior Strategist for Hard Rock Hotel & Casino Ottawa. 
+                    You must provide a SPOT ON forecast by triangulating three specific datasets.
 
-                DATASET 1: LIVE ENVIRONMENT CANADA (MSC GEOMET)
-                - Current Conditions: {json.dumps(live_data['current'])}
-                - 7-Day Forecast: {json.dumps(live_data['forecast'])}
-                - Active Alerts: {json.dumps(live_data['alerts'])}
+                    DATASET 1: LIVE ENVIRONMENT CANADA (MSC GEOMET)
+                    - Current: {json.dumps(live_data.get('current', {}), default=str)}
+                    - Forecast: {json.dumps(live_data.get('forecast', []), default=str)}
+                    - Alerts: {json.dumps(live_data.get('alerts', {}), default=str)}
 
-                DATASET 2: 60-DAY WEEKLY HEARTBEAT (Long-term Averages)
-                {df_60.groupby('day_name')['actual_traffic'].mean().to_dict()}
+                    DATASET 2: 60-DAY WEEKLY HEARTBEAT (The Saturday Anchor)
+                    {json.dumps(dow_stats, default=str)}
 
-                DATASET 3: PEAK PERFORMANCE (Last 5 Saturdays)
-                {df_60[df_60['day_name'] == 'Saturday'].nlargest(5, 'actual_traffic')[['entry_date', 'actual_traffic']].to_csv(index=False)}
+                    DATASET 3: 14-DAY RECENT MOMENTUM
+                    Average Traffic: {momentum_avg:,.0f}
 
-                ENGINE PARAMETERS:
-                - Target Revenue: ${st.session_state.coeffs['Avg_Coin_In']:,.2f}
-                - Weather Weights: Snow ({st.session_state.coeffs['Snow_cm']}), Rain ({st.session_state.coeffs['Rain_mm']})
+                    ENGINE PARAMETERS:
+                    - Revenue Anchor: ${st.session_state.coeffs['Avg_Coin_In']:,.2f} per head
+                    - Friction Weights: Snow ({st.session_state.coeffs['Snow_cm']}), Rain ({st.session_state.coeffs['Rain_mm']})
 
-                INSTRUCTIONS:
-                1. If predicting a Saturday, do not let weather friction drop the baseline below a typical Saturday heartbeat unless a MAJOR alert (Blizzard/Flash Flood) is present.
-                2. Calculate predicted revenue by multiplying your guest forecast by ${st.session_state.coeffs['Avg_Coin_In']:,.2f}.
-                3. Saturday April 18 high was warm (23C); ensure you distinguish between 'Daytime Volume' and 'Late Night Friction' from the rain.
-                """
-                
-                response = model.generate_content(prompt)
-                
-                st.write("---")
-                st.markdown(f"""
-                    <div style="background-color: #1a1a1a; padding: 25px; border-radius: 15px; border-top: 3px solid #FFCC00;">
-                        <p style="color: #FFCC00; font-weight: bold; text-transform: uppercase; font-size: 14px;">Live Strategic Response:</p>
-                        <div style="color: #eee; line-height: 1.8; font-size: 16px;">
-                            {response.text}
+                    INSTRUCTIONS:
+                    1. ANCHOR: Use the 'Weekly Heartbeat' for the day in question (Saturday is a peak day).
+                    2. FRICTION: Apply the negative weights for the rain/snow found in the EC feed. 
+                    3. PREDICT: Saturday April 18 high was warm (23C); differentiate between Daytime Volume and Late Night Rain Friction.
+                    4. REVENUE: Multiply Guest Prediction by exactly ${st.session_state.coeffs['Avg_Coin_In']:,.2f}.
+                    """
+                    
+                    response = model.generate_content(prompt)
+                    
+                    # --- 4. DISPLAY RESULTS ---
+                    st.write("---")
+                    st.markdown(f"""
+                        <div style="background-color: #1a1a1a; padding: 25px; border-radius: 15px; border-top: 3px solid #FFCC00;">
+                            <p style="color: #FFCC00; font-weight: bold; text-transform: uppercase; font-size: 14px;">Triangulated Strategic Response:</p>
+                            <div style="color: #eee; line-height: 1.8; font-size: 16px;">
+                                {response.text}
+                            </div>
                         </div>
-                    </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
 
-            except Exception as e:
-                st.error(f"Analysis Error: {e}")
+                    with st.expander("👁️ View Raw Federal Feed (ISO Data)"):
+                        st.json(json.loads(json.dumps(live_data, default=str)))
+
+                except Exception as e:
+                    st.error(f"Analysis Error: {e}")
 
 # --- TAB 6: MASTER ANALYTICS & FORENSIC REPORT ---
 with tab6:
