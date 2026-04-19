@@ -478,63 +478,75 @@ with tab3:
         st.write("### Historical Digital Revenue Contribution")
         st.area_chart(df_strat.set_index('entry_date')['Digital_Revenue_Lift'])
 
-# --- TAB 4: SEGMENTED ENGINE CALIBRATION ---
+# --- TAB 4: ROCK-SOLID ENGINE CALIBRATION ---
 with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control</h2>
-            <p style="color: #888; margin: 0;">Anchoring coefficients to the 60-Day Heartbeat for rock-solid stability.</p>
+            <p style="color: #888; margin: 0;">Anchoring coefficients to the 60-Day Heartbeat with non-zero Promo Guardrails.</p>
         </div>
     """, unsafe_allow_html=True)
 
     df_calc = pd.DataFrame(ledger_data).copy()
     
-    # Ensure columns exist
-    for col in ['actual_traffic', 'ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo', 'actual_coin_in']:
-        if col not in df_calc.columns: df_calc[col] = 0.0
+    # Pre-processing: Ensure all math columns exist and are floats
+    required_cols = ['actual_traffic', 'ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo', 'actual_coin_in']
+    for col in required_cols:
+        if col not in df_calc.columns:
+            df_calc[col] = 0.0
+        df_calc[col] = pd.to_numeric(df_calc[col], errors='coerce').fillna(0.0)
 
-    # 1. THE STABILITY HASH
+    # 1. THE STABILITY HASH (Prevents re-running identical data)
     ledger_signature = hash(pd.util.hash_pandas_object(df_calc).sum())
 
     if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
         if st.session_state.get('last_calib_hash') == ledger_signature:
-            st.info("⚖️ **Weights Locked**: Existing coefficients are already mathematically optimized for this ledger.")
+            st.info("⚖️ **Weights Locked**: Data is identical to the last calibration. No adjustment needed.")
+        elif len(df_calc) < 14:
+            st.error("Insufficient Data: Need at least 14 days of ledger history for a 60-day profile.")
         else:
-            with st.spinner("Executing Segmented Regression Analysis..."):
+            with st.spinner("Executing Segmented Regression & Promo Floor Validation..."):
                 try:
                     from sklearn.linear_model import Ridge
+                    import numpy as np
+                    
                     df_calc['entry_date'] = pd.to_datetime(df_calc['entry_date'])
                     df_calc['day_name'] = df_calc['entry_date'].dt.day_name()
                     
-                    # STEP 1: CALCULATE THE 'HEARTBEAT' ANCHORS
+                    # STEP 1: CALCULATE THE 'HEARTBEAT' ANCHORS (60-Day DOW Averages)
                     dow_profiles = df_calc.groupby('day_name')['actual_traffic'].mean().to_dict()
                     
-                    # STEP 2: CALCULATE RESIDUALS (Deviation from Average)
+                    # STEP 2: CALCULATE RESIDUALS (Isolating the impact of Marketing/Weather)
                     df_calc['residual'] = df_calc.apply(lambda x: x['actual_traffic'] - dow_profiles[x['day_name']], axis=1)
                     
                     features = ['ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo']
-                    X = df_calc[features].fillna(0)
+                    X = df_calc[features]
                     y = df_calc['residual']
 
+                    # Ridge keeps coefficients from fluctuating wildly
                     model = Ridge(alpha=1.0)
                     model.fit(X, y)
                     raw_weights = dict(zip(features, model.coef_))
 
-                    # STEP 3: ENFORCE PROPERTY LOGIC
+                    # STEP 3: ENFORCE PROMO FLOOR & OTTAWA LOGIC
+                    # We ensure a promo ALWAYS generates at least 5% lift over the daily average
+                    avg_traffic = float(df_calc['actual_traffic'].mean())
+                    promo_floor = avg_traffic * 0.05
+                    
                     final_weights = {
-                        "Intercept": float(df_calc['actual_traffic'].mean()), 
-                        "Avg_Coin_In": float(df_calc['actual_coin_in'].sum() / df_calc['actual_traffic'].sum()),
-                        "Clicks": float(raw_weights['ad_clicks']),
-                        "Promo": float(raw_weights['active_promo']),
+                        "Intercept": avg_traffic, 
+                        "Avg_Coin_In": float(df_calc['actual_coin_in'].sum() / df_calc['actual_traffic'].sum()) if df_calc['actual_traffic'].sum() > 0 else 1200.0,
+                        "Clicks": max(0.001, float(raw_weights['ad_clicks'])),
+                        "Promo": max(float(raw_weights['active_promo']), promo_floor), # <--- ENFORCED FLOOR
                         "Temp_C": float(raw_weights['temp_c']),
-                        "Snow_cm": -abs(float(raw_weights['snow_cm'])), 
-                        "Rain_mm": -abs(float(raw_weights['rain_mm']))
+                        "Snow_cm": -abs(float(raw_weights['snow_cm'])), # Force Negative
+                        "Rain_mm": -abs(float(raw_weights['rain_mm']))  # Force Negative
                     }
 
                     # UPDATE STATE
                     st.session_state.coeffs.update(final_weights)
                     st.session_state.last_calib_hash = ledger_signature
-                    st.success("🎯 Calibration Complete.")
+                    st.success(f"🎯 Calibration Locked. Promo Floor established at +{promo_floor:.0f} guests.")
                     st.rerun()
 
                 except Exception as e:
@@ -542,37 +554,36 @@ with tab4:
 
     # --- 2. LIVE COEFFICIENT MONITOR ---
     st.write("### 📊 Active Engine Coefficients")
-    # This table shows you exactly what the math just did
-    coeff_display = pd.DataFrame([st.session_state.coeffs]).T.rename(columns={0: "Value"})
-    st.table(coeff_display)
+    # Horizontal display of current math
+    c = st.session_state.coeffs
+    mon_cols = st.columns(len(c))
+    for i, (key, val) in enumerate(c.items()):
+        mon_cols[i].metric(label=key, value=f"{val:.2f}")
 
     st.write("---")
 
-    # --- 3. MANUAL OVERRIDE GRID ---
-    c = st.session_state.coeffs
-    col1, col2, col3 = st.columns(3)
+    # --- 3. MANUAL OVERRIDE & DB SYNC ---
+    col_fin, col_mkt, col_env = st.columns(3)
 
-    with col1:
+    with col_fin:
         with st.container(border=True):
             st.write("**💰 Financials**")
-            # Use 'key' to link inputs to state correctly
             new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 0)), format="%.2f")
             new_avg_spend = st.number_input("Spend / Head ($)", value=float(c.get('Avg_Coin_In', 1200)), format="%.2f")
 
-    with col2:
+    with col_mkt:
         with st.container(border=True):
             st.write("**🚀 Marketing**")
-            new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)), format="%.4f")
+            new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)), format="%.2f")
             new_clicks = st.number_input("Weight / Click", value=float(c.get('Clicks', 0)), format="%.4f")
 
-    with col3:
+    with col_env:
         with st.container(border=True):
             st.write("**☁️ Environment**")
             new_temp = st.number_input("Temp Weight", value=float(c.get('Temp_C', 0)), format="%.4f")
             new_snow = st.number_input("Snow Weight (cm)", value=float(c.get('Snow_cm', 0)), format="%.4f")
             new_rain = st.number_input("Rain Weight (mm)", value=float(c.get('Rain_mm', 0)), format="%.4f")
 
-    # 4. DATABASE SYNC
     if st.button("💾 Save All Engine Changes to Database", use_container_width=True):
         try:
             updated_vals = {
@@ -583,7 +594,7 @@ with tab4:
             }
             supabase.table("coefficients").upsert(updated_vals).execute()
             st.session_state.coeffs.update(updated_vals)
-            st.success("✅ Engine settings synced to Supabase.")
+            st.success("✅ Engine settings synced to Database.")
         except Exception as e:
             st.error(f"Sync failed: {e}")
 
