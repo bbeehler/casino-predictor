@@ -565,19 +565,19 @@ with tab4:
                 st.success("✅ Database Synced.")
             except Exception as e:
                 st.error(f"Sync failed: {e}")
-# --- TAB 5: EXECUTIVE STRATEGIC CONSULTANT (FINAL KICK-ASS VERSION) ---
+# --- TAB 5: EXECUTIVE STRATEGIC CONSULTANT & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic Consultant</h2>
-            <p style="color: #888; margin: 0;">Real-Time Intelligence: Analyzing history, live weather, and social benchmarks.</p>
+            <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic Consultant & App Expert</h2>
+            <p style="color: #888; margin: 0;">Executive Intelligence: Real-time analysis and application guidance.</p>
         </div>
     """, unsafe_allow_html=True)
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 1. THE REAL-TIME DATA VAULT
+    # 1. THE REAL-TIME DATA VAULT (Calculated on the fly)
     vault_metrics = {}
     if ledger_data:
         df_vault = pd.DataFrame(ledger_data).copy()
@@ -599,7 +599,7 @@ with tab5:
             else:
                 df_vault[target] = 0
 
-        # Calculate Real-Time Benchmarks
+        # Real-Time Calculations
         avg_imp = float(df_vault['social_impressions'].mean())
         avg_eng = float(df_vault['social_engagement'].mean())
         df_vault['day_name'] = df_vault['entry_date'].dt.day_name()
@@ -612,7 +612,7 @@ with tab5:
         }
 
     # 2. CHAT INPUT (AT THE TOP)
-    prompt = st.chat_input("Analyze Monday, discuss social trends, or ask for a strategy...")
+    prompt = st.chat_input("Ask about Monday's outlook, social impact, or how to use this app...")
 
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -623,37 +623,44 @@ with tab5:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            # Filter coefficients to prevent double-counting
+            # Clean weights to prevent double-counting
             coeffs = st.session_state.coeffs
             clean_weights = {k: v for k, v in coeffs.items() if k not in ['Intercept', 'DOW_Profiles']}
-            
             live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
             
-            # ROLE MAPPER: Streamlit 'assistant' -> Gemini 'model'
+            # Role Mapping for Gemini API
             history_payload = []
             for m in st.session_state.messages[:-1]:
                 role = "model" if m["role"] == "assistant" else "user"
                 history_payload.append({"role": role, "parts": [m["content"]]})
             
-            # THE EXECUTIVE BRAIN
+            # THE INTEGRATED BRAIN (Strategy + Product Guide)
             sys_context = f"""
-            SYSTEM ROLE: Chief Strategy Officer at Hard Rock Hotel & Casino Ottawa.
+            SYSTEM ROLE: Chief Strategy Officer & Product Expert for the Hard Rock Strategic Predictor.
             
+            PRODUCT KNOWLEDGE (App Training Manual):
+            - Tab 1 (Dashboard): High-level KPIs, Digital Lift, and YTD revenue visualization.
+            - Tab 2 (Ledger): Database management. Upload CSVs or enter daily data manually here.
+            - Tab 3 (Sandbox): Simulation tool. Uses Tab 4 weights to test 'What-If' scenarios.
+            - Tab 4 (Engine): The calibration center. AI calculates weights (like Clicks) using ledger history and industry guardrails.
+            - Tab 5 (Consultant): Your current location. Used for analysis and app guidance.
+
             CRITICAL MATHEMATICAL MANDATE:
-            1. Use the 'Heartbeat' (DOW Average) as your ONLY baseline for predictions.
-            2. DO NOT ADD THE GLOBAL INTERCEPT (4365) TO THE HEARTBEAT. 
-            3. Prediction = [Specific Day Heartbeat] + (Weather Friction) + (Marketing Lifts).
-            4. USE REAL-TIME BENCHMARKS: For social media, use {vault_metrics.get('avg_social_imp', 0)} impressions and {vault_metrics.get('avg_social_eng', 0)} engagement as your standard reference.
+            1. The 'Heartbeat' (DOW Average) is the ONLY baseline for predictions.
+            2. NEVER add the Global Intercept (4365) to the Heartbeat. 
+            3. Prediction = [Specific Day Heartbeat] + (Weather/Marketing Lifts).
+            4. If user refers to 'average social', use {vault_metrics.get('avg_social_imp', 0)} impressions and {vault_metrics.get('avg_social_eng', 0)} engagement.
 
             DATA ASSETS:
-            - DOW HEARTBEATS (Your Start Points): {json.dumps(vault_metrics.get('heartbeats', {}))}
-            - ENGINE WEIGHTS: {json.dumps(clean_weights)}
-            - LIVE WEATHER: {json.dumps(live_forecast, default=str)}
-            
+            - Day-of-Week Heartbeats: {json.dumps(vault_metrics.get('heartbeats', {}))}
+            - Engine Weights: {json.dumps(clean_weights)}
+            - Weather Forecast: {json.dumps(live_forecast, default=str)}
+
             COMMUNICATION STYLE:
-            - Executive Summary first (2-3 sentences).
-            - Hide the math unless the user asks "How?" or "Show me the math".
-            - End with 1 strategic question.
+            - If asking about app features, act as a Product Guide.
+            - If asking about data, provide a 2-3 sentence Executive Summary first.
+            - Hide math unless 'Show me the math' is requested.
+            - End with 1 strategic follow-up question.
             """
 
             chat = model.start_chat(history=history_payload)
@@ -665,13 +672,13 @@ with tab5:
         except Exception as e:
             st.error(f"Consultation Error: {e}")
 
-    # 3. REVERSED FEED: LATEST RESPONSE AT THE TOP
+    # 3. REVERSED CHAT FEED (LATEST AT TOP)
     for message in reversed(st.session_state.messages):
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
     st.write("---")
-    if st.button("🗑️ Reset Strategy Session", use_container_width=True):
+    if st.button("🗑️ Reset Consultation", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 # --- TAB 6: MASTER ANALYTICS & FORENSIC REPORT ---
