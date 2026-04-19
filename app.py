@@ -3,37 +3,45 @@ import pandas as pd
 import datetime
 import json
 import asyncio
+import numpy as np
 from env_canada import ECWeather
 import google.generativeai as genai
 from supabase import create_client
 
-def get_forensic_metrics(df, coeffs):
-    """A single source of truth for Predictability and Digital Lift."""
-    if df.empty:
-        return {"predictability": "0%", "digital_lift": "0%", "heartbeats": {}}
+# 1. PAGE CONFIG (MUST BE FIRST)
+st.set_page_config(page_title="FloorCast", layout="wide")
 
-    # Standardize 
+# 2. THE UNIFIED FORENSIC ENGINE (Single Source of Truth)
+def get_forensic_metrics(df, coeffs):
+    """Calculates KPIs once for the entire app to ensure Tab 1 and Tab 5 match."""
+    if df is None or len(df) == 0:
+        return {"predictability": "0.0%", "digital_lift": "0.0%", "heartbeats": {}}
+
+    df = df.copy()
+    # Normalize potential column naming variations
+    if 'Clicks' in df.columns: df.rename(columns={'Clicks': 'ad_clicks'}, inplace=True)
+    if 'Impressions' in df.columns: df.rename(columns={'Impressions': 'social_impressions'}, inplace=True)
+    
     df['entry_date'] = pd.to_datetime(df['entry_date'])
     df['day_name'] = df['entry_date'].dt.day_name()
     
     # Calculate DOW Heartbeats
     heartbeats = df.groupby('day_name')['actual_traffic'].mean().to_dict()
     
-    # Calculate Expected Traffic based on DOW + Marketing
+    # Weights from Engine
     c_clicks = coeffs.get('Clicks', 0.02)
     c_social = coeffs.get('Social_Imp', 0.0002)
     
+    # Forensic 1: Digital Lift %
+    total_traffic = df['actual_traffic'].sum()
+    marketing_impact = (df.get('ad_clicks', 0).sum() * c_clicks) + (df.get('social_impressions', 0).sum() * c_social)
+    lift_val = (marketing_impact / total_traffic * 100) if total_traffic > 0 else 0
+
+    # Forensic 2: AI Predictability (1 - MAPE)
     df['expected'] = df.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
                              (x.get('ad_clicks', 0) * c_clicks) + 
                              (x.get('social_impressions', 0) * c_social), axis=1)
 
-    # Forensic 1: Digital Lift %
-    total_traffic = df['actual_traffic'].sum()
-    marketing_impact = (df['ad_clicks'].sum() * c_clicks) + (df['social_impressions'].sum() * c_social)
-    lift_val = (marketing_impact / total_traffic * 100) if total_traffic > 0 else 0
-
-    # Forensic 2: AI Predictability (1 - MAPE)
-    import numpy as np
     mape = (np.abs(df['actual_traffic'] - df['expected']) / df['actual_traffic']).replace([np.inf, -np.inf], np.nan).dropna().mean()
     pred_val = (1 - mape) * 100 if not np.isnan(mape) else 0
 
@@ -43,196 +51,84 @@ def get_forensic_metrics(df, coeffs):
         "heartbeats": heartbeats
     }
 
-# --- CORE WEATHER FUNCTION ---
-async def fetch_live_ec_data():
-    """Fetches real-time data from Environment Canada"""
-    try:
-        # Ottawa Property / Embrun Coordinates
-        ec = ECWeather(coordinates=(45.33, -75.71))
-        await ec.update()
-        return {
-            "current": ec.conditions,
-            "forecast": ec.daily_forecasts,
-            "alerts": ec.alerts
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-# --- APP INITIALIZATION ---
-if 'weather_data' not in st.session_state:
-    # Run the weather fetcher once so it's ready for Tab 5
-    st.session_state.weather_data = asyncio.run(fetch_live_ec_data())
-
-live_data = st.session_state.weather_data
-
-# 1. INITIALIZE SUPABASE
+# 3. INITIALIZE CLIENTS
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
-supabase: Client = create_client(url, key)
-
-# --- AUTHENTICATION LOGIC ---
-if 'user_authenticated' not in st.session_state:
-    st.session_state.user_authenticated = False
-
-def login_user(email, password):
-    try:
-        # Supabase handles the secure hashing and verification
-        response = supabase.auth.sign_in_with_password({"email": email, "password": password})
-        if response.user:
-            st.session_state.user_authenticated = True
-            st.rerun()
-    except Exception as e:
-        st.error("Invalid credentials. Please try again.")
-
-# The Gatekeeper: If not logged in, show the login UI and STOP execution
-if not st.session_state.user_authenticated:
-    st.markdown("""
-        <div style="text-align: center; padding: 50px;">
-            <h1 style="color: #FFCC00;">🎰 FloorCast</h1>
-            <h3>Digial Lift and Predictor Login</h3>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    with st.container(border=True):
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        if st.button("Login", use_container_width=True):
-            login_user(email, password)
-    
-    st.stop() # Prevents the rest of the app/tabs from loading
-
-# 2. THE HYDRATION BLOCK (Add this now)
-# This checks the "Vault" (Supabase) as soon as the app wakes up
-if 'coeffs' not in st.session_state:
-    try:
-        response = supabase.table("coefficients").select("*").eq("id", 1).execute()
-        if response.data:
-            st.session_state.coeffs = response.data[0]
-        else:
-            # Fallback if DB is empty
-            st.session_state.coeffs = {
-                "id": 1, "Intercept": 1000, "Avg_Coin_In": 1200,
-                "Temp_C": 0, "Snow_cm": 0, "Rain_mm": 0,
-                "Promo": 0, "Clicks": 0, "Impressions": 0
-            }
-    except Exception as e:
-        st.session_state.coeffs = {"Intercept": 1000, "Avg_Coin_In": 1200}
-
-# 3. GLOBAL DATA LOADING (Your ledger)
-# Ensure your ledger data is also loaded into session state here...
-# 1. PAGE CONFIG (Must be the very first Streamlit command)
-st.set_page_config(page_title="FloorCast", layout="wide")
-
-# 2. MODERN UI STYLING (The CSS)
-st.markdown("""
-    <style>
-    /* Main Background */
-    .stApp {
-        background-color: #f4f7f9;
-    }
-    
-    /* Bento Box Card Effect */
-    div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column;"] > div[data-testid="stVerticalBlock"] {
-        border: 1px solid #e6e9ef;
-        border-radius: 12px;
-        padding: 20px;
-        background-color: #ffffff;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-    }
-
-    /* Tab Styling */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: transparent;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #ffffff;
-        border: 1px solid #e6e9ef;
-        border-radius: 8px 8px 0px 0px;
-        padding: 10px 20px;
-        font-weight: 600;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #FFCC00 !important; /* Hard Rock Gold */
-        color: #000000 !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# 3. DATABASE & AI SETUP (Using your existing secrets)
-url: str = st.secrets["SUPABASE_URL"]
-key: str = st.secrets["SUPABASE_KEY"]
-supabase: Client = create_client(url, key)
+supabase = create_client(url, key)
 
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# 4. INITIALIZE SESSION STATE
-if 'coeffs' not in st.session_state:
-    st.session_state.coeffs = {
-        'Intercept': 3250.0,
-        'DOW_Mon': -450.0, 'DOW_Tue': -380.0, 'DOW_Wed': -210.0, 'DOW_Thu': 150.0,
-        'DOW_Fri': 1200.0, 'DOW_Sat': 2100.0, 'DOW_Sun': 850.0,
-        'Temp_C': 2.5, 'Snow_cm': -45.0, 'Rain_mm': -12.0, 'Alert': -500.0,
-        'Promo': 450.0, 'Impressions': 0.0002, 'Engagements': 0.15, 'Clicks': 0.85,
-        'Avg_Coin_In': 112.50
-    }
-
-# 5. FETCH DATA
-def fetch_data():
+# 4. WEATHER & AUTH LOGIC
+async def fetch_live_ec_data():
     try:
-        response = supabase.table("ledger").select("*").execute()
-        return response.data
+        ec = ECWeather(coordinates=(45.33, -75.71))
+        await ec.update()
+        return {"current": ec.conditions, "forecast": ec.daily_forecasts, "alerts": ec.alerts}
+    except:
+        return {"error": "Weather Unavailable"}
+
+if 'weather_data' not in st.session_state:
+    st.session_state.weather_data = asyncio.run(fetch_live_ec_data())
+
+if 'user_authenticated' not in st.session_state:
+    st.session_state.user_authenticated = False
+
+# 5. GATEKEEPER (Login Screen)
+if not st.session_state.user_authenticated:
+    st.markdown("<div style='text-align:center; padding:50px;'><h1 style='color:#FFCC00;'>🎰 FloorCast</h1><h3>Digital Lift & Predictor Login</h3></div>", unsafe_allow_html=True)
+    with st.container(border=True):
+        email = st.text_input("Email")
+        pw = st.text_input("Password", type="password")
+        if st.button("Login", use_container_width=True):
+            try:
+                res = supabase.auth.sign_in_with_password({"email": email, "password": pw})
+                if res.user:
+                    st.session_state.user_authenticated = True
+                    st.rerun()
+            except:
+                st.error("Invalid credentials.")
+    st.stop()
+
+# 6. HYDRATE ENGINE WEIGHTS (From Database)
+if 'coeffs' not in st.session_state:
+    try:
+        response = supabase.table("coefficients").select("*").eq("id", 1).execute()
+        if response.data:
+            st.session_state.coeffs = response.data[0]
+        else:
+            st.session_state.coeffs = {"id": 1, "Intercept": 3250, "Avg_Coin_In": 112.50, "Clicks": 0.02, "Social_Imp": 0.0002}
+    except:
+        st.session_state.coeffs = {"Intercept": 3250, "Avg_Coin_In": 112.50}
+
+# 7. FETCH GLOBAL LEDGER
+@st.cache_data(ttl=600)
+def fetch_ledger_data():
+    try:
+        res = supabase.table("ledger").select("*").execute()
+        return res.data if res.data else []
     except:
         return []
 
-ledger_data = fetch_data()
+ledger_data = fetch_ledger_data()
 
-# --- HEADER & NAVIGATION LOGOUT ---
+# 8. HEADER & NAV LOGOUT
 header_col1, header_col2 = st.columns([4, 1])
-
 with header_col1:
-    st.markdown("<h1 style='color: #FFCC00; margin:0;'>🎰 FloorCast</h1>", unsafe_allow_html=True)
-
+    st.markdown("<h1 style='color:#FFCC00; margin:0;'>🎰 FloorCast</h1>", unsafe_allow_html=True)
 with header_col2:
-    # A small, clean logout button aligned to the right
     if st.button("🔓 Logout", use_container_width=True):
         supabase.auth.sign_out()
         st.session_state.user_authenticated = False
-        st.session_state.messages = [] # Clear AI chat for security
         st.rerun()
 
-st.divider() # Separation between header and your Tabs
+st.divider()
 
-# MAIN NAV
+# 9. TABS DEFINITION
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "📈 Executive Overview", 
-    "📑 Ledger Management", 
-    "📊 Property Analytics", 
-    "⚙️ Engine Control", 
-    "🧠 FloorCast Analyst",
-    "📋 Master Report",
-    "🧪 Forecast Sandbox"
+    "📈 Executive Overview", "📑 Ledger Management", "📊 Property Analytics", 
+    "⚙️ Engine Control", "🧠 FloorCast Analyst", "📋 Master Report", "🧪 Forecast Sandbox"
 ])
-
-# --- 1. INITIAL DATA HYDRATION (Run at Startup) ---
-if 'coeffs' not in st.session_state:
-    try:
-        # Pull the master record (ID 1) from Supabase
-        response = supabase.table("coefficients").select("*").eq("id", 1).execute()
-        
-        if response.data:
-            # Load saved weights into session state
-            st.session_state.coeffs = response.data[0]
-        else:
-            # Fallback if the table is empty
-            st.session_state.coeffs = {
-                "id": 1, "Intercept": 1000, "Temp_C": 0, "Snow_cm": 0, 
-                "Rain_mm": 0, "Promo": 0, "Clicks": 0, 
-                "Impressions": 0, "Avg_Coin_In": 1200
-            }
-    except Exception as e:
-        st.error(f"Failed to load Engine Weights: {e}")
 
 # --- TAB 1: EXECUTIVE DASHBOARD ---
 with tab1:
