@@ -168,10 +168,7 @@ with header_col2:
 
 st.divider() # Separation between header and your Tabs
 
-# Now your existing tabs definition
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Dashboard", "📑 Ledger", "🧪 Sandbox", "⚙️ Engine", "🧠 Consultant"])
-
-# --- REPLACEMENT NAV BLOCK ---
+# MAIN NAV
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📈 Executive Overview", 
     "📑 Ledger Management", 
