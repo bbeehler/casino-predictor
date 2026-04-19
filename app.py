@@ -250,53 +250,43 @@ with tab1:
 
     else:
         st.warning("Ledger is empty. Please add data in the Input tab.")
-# --- TAB 2: LEDGER MANAGEMENT (SCHEMA GUIDE INTEGRATED) ---
+# --- TAB 2: LEDGER MANAGEMENT (INTEGRATED) ---
 with tab2:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h2 style="color: #FFCC00; margin: 0;">📑 Ledger Management</h2>
-                    <p style="color: #888; margin: 0;">Data Integrity & History: Manage your historical property performance records.</p>
-                </div>
-            </div>
+            <h2 style="color: #FFCC00; margin: 0;">📑 Ledger Management</h2>
+            <p style="color: #888; margin: 0;">Data Integrity: Upload history or record daily performance manually.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. HELP & SCHEMA GUIDE
-    with st.expander("ℹ️ CSV Upload Guide & Required Column Names"):
-        st.write("To ensure the AI Analyst and Engine calibrate correctly, your CSV should use these column headers:")
-        
-        col_help1, col_help2 = st.columns(2)
-        with col_help1:
-            st.markdown("""
-            **Core Property Data (Required)**
-            * `entry_date`: (YYYY-MM-DD)
-            * `actual_traffic`: (Total Daily Heads)
-            * `actual_coin_in`: (Total Daily Revenue)
-            """)
-        with col_help2:
-            st.markdown("""
-            **Marketing & Environment (Highly Recommended)**
-            * `social_impressions`: (Total Reach)
-            * `social_engagement`: (Likes, Shares, Comments)
-            * `active_promo`: (0 for No, 1 for Yes)
-            * `temp_c`, `snow_cm`, `rain_mm`
-            """)
-        st.info("💡 Note: The engine is smart enough to find variations like 'Traffic' or 'Revenue', but using the names above is the 'Gold Standard'.")
-
-    # 2. TOP ACTIONS: BULK IMPORT & MANUAL ENTRY
     col_upload, col_entry = st.columns([1, 1], gap="large")
 
+    # 1. BULK IMPORT CARD
     with col_upload:
         with st.container(border=True):
             st.write("### 📤 Bulk Import")
-            uploaded_file = st.file_uploader("Choose a CSV file", type="csv", label_visibility="collapsed")
+            
+            # --- INTEGRATED HELP GUIDE ---
+            with st.expander("❓ View Required CSV Columns"):
+                st.markdown("""
+                | Column Name | Description |
+                | :--- | :--- |
+                | `entry_date` | YYYY-MM-DD |
+                | `actual_traffic` | Daily Headcount |
+                | `actual_coin_in` | Daily Revenue ($) |
+                | `social_impressions` | Digital Reach |
+                | `social_engagement` | Digital Interactions |
+                | `active_promo` | 1 (Yes) or 0 (No) |
+                """)
+                st.caption("Note: Headers are case-sensitive. Use 'actual_traffic' for best results.")
+
+            uploaded_file = st.file_uploader("Upload Ledger CSV", type="csv", label_visibility="collapsed")
+            
             if uploaded_file:
                 try:
                     import_df = pd.read_csv(uploaded_file)
-                    # Force numeric conversion for known columns
-                    num_cols = ['actual_traffic', 'actual_coin_in', 'social_impressions', 'social_engagement', 'snow_cm', 'rain_mm']
+                    # Normalize and Convert
+                    num_cols = ['actual_traffic', 'actual_coin_in', 'social_impressions', 'social_engagement']
                     for col in num_cols:
                         if col in import_df.columns:
                             import_df[col] = pd.to_numeric(import_df[col], errors='coerce').fillna(0)
@@ -308,18 +298,19 @@ with tab2:
                 except Exception as e:
                     st.error(f"Import failed: {e}")
 
+    # 2. MANUAL ENTRY CARD
     with col_entry:
         with st.container(border=True):
             st.write("### ✍️ Manual Entry")
-            with st.popover("➕ Open Entry Form", use_container_width=True):
+            with st.popover("➕ Open Daily Entry Form", use_container_width=True):
                 with st.form("manual_entry_form", clear_on_submit=True):
-                    st.write("#### Daily Performance Details")
+                    st.write("#### Performance Data")
                     f_date = st.date_input("Entry Date", datetime.date.today())
                     f_traffic = st.number_input("Actual Traffic", min_value=0)
                     f_coin = st.number_input("Actual Coin-In ($)", min_value=0.0)
                     
                     st.divider()
-                    st.write("#### Marketing & Environment")
+                    st.write("#### Marketing Metrics")
                     m1, m2 = st.columns(2)
                     f_imp = m1.number_input("Social Impressions", min_value=0)
                     f_eng = m2.number_input("Social Engagement", min_value=0)
@@ -327,7 +318,15 @@ with tab2:
                     
                     submitted = st.form_submit_button("🚀 Commit to Ledger", use_container_width=True)
                     if submitted:
-                        # [Existing DB insert logic here]
+                        entry_data = {
+                            "entry_date": str(f_date),
+                            "actual_traffic": f_traffic,
+                            "actual_coin_in": f_coin,
+                            "social_impressions": f_imp,
+                            "social_engagement": f_eng,
+                            "active_promo": 1 if f_promo else 0
+                        }
+                        supabase.table("ledger_data").insert([entry_data]).execute()
                         st.success("Entry Saved!")
                         st.rerun()
 
@@ -344,13 +343,14 @@ with tab2:
             df_display.style.format({
                 "actual_traffic": "{:,.0f}",
                 "actual_coin_in": "${:,.2f}",
-                "social_impressions": "{:,.0f}"
+                "social_impressions": "{:,.0f}",
+                "social_engagement": "{:,.0f}"
             }),
             use_container_width=True,
             hide_index=True
         )
     else:
-        st.warning("Ledger is empty.")
+        st.info("The ledger is currently empty. Use the tools above to add data.")
 # --- TAB 3: STRATEGY & ROI ---
 with tab3:
     st.markdown("""
