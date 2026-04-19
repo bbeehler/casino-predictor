@@ -600,92 +600,82 @@ with tab4:
         except Exception as e:
             st.error(f"Database save failed: {e}")
 
-# --- TAB 5: FLOORCAST ANALYST (TRIANGULATED FEDERAL VERSION) ---
+# --- TAB 5: DYNAMIC "DATE-AWARE" ANALYST ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🔍 FloorCast Analyst</h2>
-            <p style="color: #888; margin: 0;">Triangulated Intelligence: 60-Day Heartbeat + Live Environment Canada Feed.</p>
+            <p style="color: #888; margin: 0;">Date-Specific Intelligence: Scanning Federal Forecasts vs. 60-Day Historical Baselines.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. LIVE DATA RECOVERY
-    # Accesses the weather data fetched at the top of app.py
+    # Access the live federal data from the top of app.py
     live_data = st.session_state.get('weather_data', {})
 
     with st.container(border=True):
         st.write("### 🧠 Strategic Intelligence Query")
-        user_query = st.text_input("Analyze seasonality, federal weather impacts, or future revenue:", 
-                                  placeholder="e.g., 'Compare tonight's rainfall warning against our typical Saturday volume.'")
-        analyze_btn = st.button("🚀 Run Forensic Triangulation", use_container_width=True)
+        user_query = st.text_input("Ask for a prediction (e.g., 'Monday April 20' or 'Next Friday'):", 
+                                  placeholder="Predict revenue for Monday April 20 based on the forecast.")
+        analyze_btn = st.button("🚀 Run Date-Specific Analysis", use_container_width=True)
 
     if analyze_btn and user_query:
         if not live_data or "error" in live_data:
-            st.error("Cannot run analysis: Environment Canada feed is unavailable.")
+            st.error("Cannot run analysis: Federal weather feed is currently unavailable.")
         else:
-            with st.spinner("Triangulating 60-day history with federal friction..."):
+            with st.spinner("Scanning historical ledger and future weather layers..."):
                 try:
-                    # --- DATASET 1: 60-DAY HEARTBEAT ---
+                    # 1. 60-DAY HEARTBEAT & LEDGER CONTEXT
                     df_raw = pd.DataFrame(ledger_data)
                     df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
                     df_raw['day_name'] = df_raw['entry_date'].dt.day_name()
                     
-                    # Lookback for true seasonality
                     sixty_days_ago = datetime.datetime.now() - datetime.timedelta(days=60)
                     df_60 = df_raw[df_raw['entry_date'] >= sixty_days_ago].copy()
-                    
-                    # Calculate Day-of-Week Averages
-                    dow_stats = df_60.groupby('day_name')['actual_traffic'].mean().to_dict()
-                    
-                    # DATASET 2: 14-DAY MOMENTUM
-                    momentum_avg = df_raw.tail(14)['actual_traffic'].mean()
 
-                    # --- 3. AI STRATEGY CALL (GEMINI 2.5 FLASH) ---
+                    # Calculate Averages for EVERY day of the week
+                    dow_stats = df_60.groupby('day_name')['actual_traffic'].mean().to_dict()
+
+                    # 2. AI TRIANGULATION (GEMINI 2.5 FLASH)
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                     model = genai.GenerativeModel('gemini-2.5-flash')
                     
-                    # We use default=str to fix the 'datetime is not JSON serializable' error
                     prompt = f"""
                     SYSTEM: Senior Strategist for Hard Rock Hotel & Casino Ottawa. 
-                    You must provide a SPOT ON forecast by triangulating three specific datasets.
+                    Your task is to provide a SPOT ON prediction for a SPECIFIC DATE.
 
-                    DATASET 1: LIVE ENVIRONMENT CANADA (MSC GEOMET)
-                    - Current: {json.dumps(live_data.get('current', {}), default=str)}
-                    - Forecast: {json.dumps(live_data.get('forecast', []), default=str)}
-                    - Alerts: {json.dumps(live_data.get('alerts', {}), default=str)}
+                    USER QUERY: "{user_query}"
 
-                    DATASET 2: 60-DAY WEEKLY HEARTBEAT (The Saturday Anchor)
+                    DATASET 1: LIVE ENVIRONMENT CANADA FORECAST (7-DAY)
+                    {json.dumps(live_data.get('forecast', []), default=str)}
+
+                    DATASET 2: 60-DAY WEEKLY HEARTBEAT (Averages)
                     {json.dumps(dow_stats, default=str)}
 
-                    DATASET 3: 14-DAY RECENT MOMENTUM
-                    Average Traffic: {momentum_avg:,.0f}
+                    DATASET 3: ENGINE COEFFICIENTS
+                    - Spend Anchor: ${st.session_state.coeffs['Avg_Coin_In']:,.2f}
+                    - Snow Friction: {st.session_state.coeffs['Snow_cm']}
+                    - Rain Friction: {st.session_state.coeffs['Rain_mm']}
 
-                    ENGINE PARAMETERS:
-                    - Revenue Anchor: ${st.session_state.coeffs['Avg_Coin_In']:,.2f} per head
-                    - Friction Weights: Snow ({st.session_state.coeffs['Snow_cm']}), Rain ({st.session_state.coeffs['Rain_mm']})
-
-                    INSTRUCTIONS:
-                    1. ANCHOR: Use the 'Weekly Heartbeat' for the day in question (Saturday is a peak day).
-                    2. FRICTION: Apply the negative weights for the rain/snow found in the EC feed. 
-                    3. PREDICT: Saturday April 18 high was warm (23C); differentiate between Daytime Volume and Late Night Rain Friction.
-                    4. REVENUE: Multiply Guest Prediction by exactly ${st.session_state.coeffs['Avg_Coin_In']:,.2f}.
+                    ANALYSIS STEPS:
+                    1. IDENTIFY TARGET: Scan the user query for a specific day/date (e.g. Monday).
+                    2. EXTRACT WEATHER: Find the exact weather for that day in the Environment Canada feed. 
+                    3. CALCULATE BASE: Start with the 60-day average for that specific day of the week.
+                    4. APPLY FRICTION: Subtract for rain or snow based on the weights.
+                    5. REVENUE: Predicted Traffic * ${st.session_state.coeffs['Avg_Coin_In']:,.2f}.
+                    6. EXPLAIN: Clearly state 'Based on the average Monday over the last 60 days ({dow_stats.get('Monday', 0):,.0f} guests)...'
                     """
                     
                     response = model.generate_content(prompt)
                     
-                    # --- 4. DISPLAY RESULTS ---
                     st.write("---")
                     st.markdown(f"""
                         <div style="background-color: #1a1a1a; padding: 25px; border-radius: 15px; border-top: 3px solid #FFCC00;">
-                            <p style="color: #FFCC00; font-weight: bold; text-transform: uppercase; font-size: 14px;">Triangulated Strategic Response:</p>
+                            <p style="color: #FFCC00; font-weight: bold; text-transform: uppercase; font-size: 14px;">Strategic Forecast Response:</p>
                             <div style="color: #eee; line-height: 1.8; font-size: 16px;">
                                 {response.text}
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
-
-                    with st.expander("👁️ View Raw Federal Feed (ISO Data)"):
-                        st.json(json.loads(json.dumps(live_data, default=str)))
 
                 except Exception as e:
                     st.error(f"Analysis Error: {e}")
