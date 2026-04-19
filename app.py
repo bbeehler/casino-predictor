@@ -396,7 +396,7 @@ with tab3:
         st.write("### Historical Digital Revenue Contribution")
         st.area_chart(df_strat.set_index('entry_date')['Digital_Revenue_Lift'])
 
-# --- TAB 4: THE INTEGRATED ENGINE CONTROL ---
+# --- TAB 4: THE FULLY INTEGRATED ENGINE CONTROL ---
 with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
@@ -410,7 +410,7 @@ with tab4:
     else:
         df_global = pd.DataFrame(ledger_data).copy()
         
-        # 1. DYNAMIC COLUMN NORMALIZATION (Kept from previous version)
+        # 1. DYNAMIC COLUMN NORMALIZATION
         target_schema = {
             'actual_traffic': ['actual_traffic', 'Traffic', 'Attendance', 'Daily_Traffic'],
             'actual_coin_in': ['actual_coin_in', 'Revenue', 'Coin_In', 'Daily_Revenue'],
@@ -433,22 +433,18 @@ with tab4:
 
         ledger_signature = hash(pd.util.hash_pandas_object(df_global).sum())
 
-        # 2. CALIBRATION WITH RESIDUALS & GUARDRAILS
-        if st.button("🤖 Auto-Calibrate with Dynamic Guardrails", use_container_width=True):
-            with st.spinner("Executing DOW-Segmented Regression..."):
+        # 2. CALIBRATION BUTTON
+        if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
+            with st.spinner("Executing DOW-Segmented Regression with Industry Guardrails..."):
                 try:
                     from sklearn.linear_model import Ridge
                     import numpy as np
                     
-                    # DYNAMIC DOW HEARTBEATS
                     df_global['entry_date'] = pd.to_datetime(df_global['entry_date'])
                     df_global['day_name'] = df_global['entry_date'].dt.day_name()
                     dow_profiles = df_global.groupby('day_name')['actual_traffic'].mean().to_dict()
-                    
-                    # CALCULATE RESIDUALS (Variance from the 'Norm')
                     df_global['residual'] = df_global.apply(lambda x: x['actual_traffic'] - dow_profiles[x['day_name']], axis=1)
 
-                    # REGRESSION ON RESIDUALS
                     features = ['ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo', 'social_impressions', 'social_engagement']
                     X = df_global[features]
                     y = df_global['residual']
@@ -457,17 +453,11 @@ with tab4:
                     model.fit(X, y)
                     raw_weights = dict(zip(features, model.coef_))
 
-                    # APPLY INDUSTRY GUARDRAILS (Protecting against unrealistic click-weights)
                     final_weights = {
                         "Intercept": float(df_global['actual_traffic'].mean()), 
                         "Avg_Coin_In": float(df_global['actual_coin_in'].sum() / df_global['actual_traffic'].sum()) if df_global['actual_traffic'].sum() > 0 else 1200.0,
-                        
-                        # GUARDRAIL: Clicks (0.01 to 0.08) - Ensures 1 click doesn't equal 1 person
                         "Clicks": np.clip(float(raw_weights.get('ad_clicks', 0.02)), 0.01, 0.08),
-                        
-                        # GUARDRAIL: Social Imp (0.0001 to 0.0005)
                         "Social_Imp": np.clip(float(raw_weights.get('social_impressions', 0.0002)), 0.0001, 0.0005),
-                        
                         "Promo": max(float(raw_weights.get('active_promo', 0)), 150.0),
                         "Social_Eng": max(float(raw_weights.get('social_engagement', 0)), 0.0100),
                         "Temp_C": float(raw_weights.get('temp_c', 0)),
@@ -478,17 +468,56 @@ with tab4:
 
                     st.session_state.coeffs.update(final_weights)
                     st.session_state.last_calib_hash = ledger_signature
-                    st.success("🎯 Dynamic Calibration Complete with Industry Guardrails.")
+                    st.success("🎯 Dynamic Calibration Complete.")
                     st.rerun()
 
                 except Exception as e:
                     st.error(f"Calibration Error: {e}")
 
-        # --- 3. LIVE MONITORING & MANUAL OVERRIDES ---
-        # (This section remains identical to ensure you can still tweak things manually)
-        c = st.session_state.coeffs
+        # 3. LIVE MONITORING & MANUAL OVERRIDES
         st.write("### 📊 Active Engine Weights")
-        # [Metric display and Manual Entry UI here...]
+        c = st.session_state.coeffs
+        
+        # Display key metrics in a clean row
+        col_m1, col_m2, col_m3 = st.columns(3)
+        col_m1.metric("Global Intercept", f"{float(c.get('Intercept',0)):.0f}")
+        col_m2.metric("Avg Spend", f"${float(c.get('Avg_Coin_In',0)):.2f}")
+        col_m3.metric("Click Weight", f"{float(c.get('Clicks',0)):.4f}")
+
+        st.divider()
+
+        # Input grid for manual tweaking
+        col_fin, col_mkt, col_env = st.columns(3)
+        
+        with col_fin:
+            st.write("**💰 Financials**")
+            n_intercept = st.number_input("Global Intercept", value=float(c.get('Intercept', 0)))
+            n_spend = st.number_input("Spend/Head ($)", value=float(c.get('Avg_Coin_In', 1200)))
+
+        with col_mkt:
+            st.write("**🚀 Marketing**")
+            n_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
+            n_clicks = st.number_input("Click Weight", value=float(c.get('Clicks', 0.02)), format="%.4f")
+            n_imp = st.number_input("Social Imp Weight", value=float(c.get('Social_Imp', 0.0002)), format="%.4f")
+
+        with col_env:
+            st.write("**☁️ Environment**")
+            n_temp = st.number_input("Temp Weight", value=float(c.get('Temp_C', 0)), format="%.4f")
+            n_snow = st.number_input("Snow Weight (cm)", value=float(c.get('Snow_cm', 0)), format="%.4f")
+            n_rain = st.number_input("Rain Weight (mm)", value=float(c.get('Rain_mm', 0)), format="%.4f")
+
+        if st.button("💾 Sync Engine to Database", use_container_width=True):
+            try:
+                update_data = {
+                    "id": 1, "Intercept": n_intercept, "Avg_Coin_In": n_spend,
+                    "Promo": n_promo, "Social_Imp": n_imp, "Clicks": n_clicks,
+                    "Temp_C": n_temp, "Snow_cm": n_snow, "Rain_mm": n_rain
+                }
+                supabase.table("coefficients").upsert(update_data).execute()
+                st.session_state.coeffs.update(update_data)
+                st.success("✅ Database Synced.")
+            except Exception as e:
+                st.error(f"Sync failed: {e}")
 # --- TAB 5: EXECUTIVE STRATEGIC CONSULTANT (FINAL KICK-ASS VERSION) ---
 with tab5:
     st.markdown("""
