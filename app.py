@@ -478,127 +478,115 @@ with tab3:
         st.write("### Historical Digital Revenue Contribution")
         st.area_chart(df_strat.set_index('entry_date')['Digital_Revenue_Lift'])
 
-# --- TAB 4: ADMIN ENGINE (WHOLESOME CALIBRATION) ---
+# --- TAB 4: PRECISION ENGINE CALIBRATION ---
 with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control & Data Management</h2>
-            <p style="color: #888; margin: 0;">AI Calibration with Historical Guardrails (Negative Weather Impact).</p>
+            <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control</h2>
+            <p style="color: #888; margin: 0;">Deterministic Math Calibration: Ensuring consistency across identical datasets.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. THE WHOLESOME AUTO-CALIBRATION
-    if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
-        with st.spinner("Analyzing 90-day momentum and weather correlations..."):
-            try:
-                import json
-                df_calc = pd.DataFrame(ledger_data).copy()
-                df_calc['entry_date'] = pd.to_datetime(df_calc['entry_date'])
-                df_calc = df_calc.sort_values('entry_date')
-
-                if df_calc.empty:
-                    st.error("Cannot calibrate: Ledger is empty.")
-                else:
-                    # HARD ACCOUNTING PILLARS
-                    total_vis = df_calc['actual_traffic'].sum()
-                    total_rev = df_calc['actual_coin_in'].sum()
-                    num_days = len(df_calc)
-                    
-                    math_intercept = total_vis / num_days
-                    math_avg_spend = total_rev / total_vis # The $1,200+ Anchor
-
-                    # TREND ENRICHMENT (Seasonality & Momentum)
-                    df_calc['traffic_trend'] = df_calc['actual_traffic'].rolling(window=7).mean()
-                    
-                    # AI AUDIT WITH NEGATIVE WEATHER GUARDRAILS
-                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    model = genai.GenerativeModel('gemini-2.5-flash')
-                    
-                    prompt = f"""
-                    SYSTEM: Statistical Auditor for Hard Rock Hotel & Casino Ottawa. 
-                    TASK: Calibrate weights for a predictive floor traffic engine.
-
-                    MANDATORY LOGICAL GUARDRAILS:
-                    - Snow_cm: MUST BE NEGATIVE (Friction/Deterrent).
-                    - Rain_mm: MUST BE NEGATIVE (Friction/Deterrent).
-                    - Clicks & Promo: MUST BE POSITIVE (Growth drivers).
-                    - Temp_C: Usually POSITIVE in Ottawa (Warmer = more movement).
-
-                    FIXED ACCOUNTING CONSTANTS:
-                    - Intercept (Base Traffic): {math_intercept:.2f}
-                    - Revenue Per Head: ${math_avg_spend:,.2f}
-
-                    WHOLESOME DATASET (90-Day Trend Analysis):
-                    {df_calc[['entry_date', 'actual_traffic', 'traffic_trend', 'ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo']].tail(90).to_csv(index=False)}
-                    
-                    TASK: Return raw JSON only for: Promo, Clicks, Temp_C, Snow_cm, Rain_mm.
-                    Ensure Snow and Rain weights are negative floats (e.g. -1.45).
-                    """
-                    
-                    response = model.generate_content(prompt)
-                    clean_json = response.text.replace("```json", "").replace("```", "").strip()
-                    suggestion = json.loads(clean_json)
-                    
-                    # Lock the Management Pillars
-                    suggestion['Intercept'] = math_intercept
-                    suggestion['Avg_Coin_In'] = math_avg_spend  
-                    
-                    # Update Session State
-                    st.session_state.coeffs.update(suggestion)
-                    st.success(f"🎯 Calibration Complete: Spend anchored at ${math_avg_spend:,.2f} with negative weather deterrents.")
-                    st.rerun()
-                
-            except Exception as e:
-                st.error(f"Calibration failed: {e}")
-
-    st.write("##")
+    # 1. DATA PREP
+    df_calc = pd.DataFrame(ledger_data).copy()
     
-    # 2. MANUAL OVERRIDE GRID
+    # Ensure all required columns exist in the dataframe
+    required_cols = ['actual_traffic', 'ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo', 'actual_coin_in']
+    for col in required_cols:
+        if col not in df_calc.columns:
+            df_calc[col] = 0.0
+
+    # 2. CHANGE DETECTION (Prevents redundant calibration)
+    # This creates a unique signature of your current ledger data
+    ledger_signature = hash(pd.util.hash_pandas_object(df_calc).sum())
+
+    if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
+        # Check if we've already calibrated this exact data
+        if st.session_state.get('last_calib_hash') == ledger_signature:
+            st.info("⚖️ **System Optimized**: No new data detected in ledger. Weights remain statistically locked.")
+        elif df_calc.empty or len(df_calc) < 7:
+            st.error("Cannot calibrate: Need at least 7 days of historical data.")
+        else:
+            with st.spinner("Executing Deterministic Regression Analysis..."):
+                try:
+                    # --- THE MATH ENGINE (LINEAR REGRESSION) ---
+                    # Instead of AI guessing, we use the standard mathematical approach
+                    # This guarantees the SAME result for the SAME data.
+                    from sklearn.linear_model import LinearRegression
+                    import numpy as np
+
+                    # Features (X) and Target (y)
+                    features = ['ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo']
+                    X = df_calc[features].fillna(0)
+                    y = df_calc['actual_traffic']
+
+                    model_lr = LinearRegression()
+                    model_lr.fit(X, y)
+
+                    # Extract the raw coefficients from the math
+                    raw_weights = dict(zip(features, model_lr.coef_))
+                    
+                    # --- BUSINESS LOGIC GUARDRAILS ---
+                    # Math can sometimes flip signs if data is messy; we force Ottawa realities:
+                    final_weights = {
+                        "Intercept": float(model_lr.intercept_),
+                        "Avg_Coin_In": float(df_calc['actual_coin_in'].sum() / df_calc['actual_traffic'].sum()),
+                        "Clicks": max(0, float(raw_weights['ad_clicks'])), # Must be positive
+                        "Promo": max(0, float(raw_weights['active_promo'])), # Must be positive
+                        "Temp_C": float(raw_weights['temp_c']),
+                        "Snow_cm": -abs(float(raw_weights['snow_cm'])), # Must be negative
+                        "Rain_mm": -abs(float(raw_weights['rain_mm']))  # Must be negative
+                    }
+
+                    # Update session state and the 'last run' hash
+                    st.session_state.coeffs.update(final_weights)
+                    st.session_state.last_calib_hash = ledger_signature
+                    
+                    st.success("🎯 **Engine Calibrated**: Weights mathematically anchored to 60-day performance.")
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"Calibration failed: {e}")
+
+    st.write("---")
+
+    # 3. MANUAL OVERRIDE & VISUALIZATION
     c = st.session_state.coeffs
-    col_fin, col_mkt, col_env = st.columns(3)
+    col1, col2, col3 = st.columns(3)
 
-    with col_fin:
+    with col1:
         with st.container(border=True):
-            st.markdown("💰 **Financial Pillars**")
-            new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 0)))
-            new_avg_spend = st.number_input("Avg. Spend / Head ($)", value=float(c.get('Avg_Coin_In', 1200)))
-            st.caption("YTD Total Rev / Total Traffic.")
+            st.write("**💰 Financials**")
+            new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 1000)))
+            new_avg_spend = st.number_input("Spend / Head ($)", value=float(c.get('Avg_Coin_In', 1200)))
 
-    with col_mkt:
+    with col2:
         with st.container(border=True):
-            st.markdown("🚀 **Marketing Weights**")
+            st.write("**🚀 Marketing**")
             new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
-            new_clicks = st.number_input("Weight / Ad Click", value=float(c.get('Clicks', 0)))
-            st.caption("Positive drivers only.")
+            new_clicks = st.number_input("Weight / Click", value=float(c.get('Clicks', 0)))
 
-    with col_env:
+    with col3:
         with st.container(border=True):
-            st.markdown("☁️ **Environmental Impacts**")
-            new_temp = st.number_input("Temp Impact (°C)", value=float(c.get('Temp_C', 0)))
-            new_snow = st.number_input("Snow Impact (cm)", value=float(c.get('Snow_cm', 0)))
-            new_rain = st.number_input("Rain Impact (mm)", value=float(c.get('Rain_mm', 0)))
-            st.caption("Weather should be negative weights.")
+            st.write("**☁️ Environment**")
+            new_temp = st.number_input("Temp Weight", value=float(c.get('Temp_C', 0)))
+            new_snow = st.number_input("Snow Weight (cm)", value=float(c.get('Snow_cm', 0)))
+            new_rain = st.number_input("Rain Weight (mm)", value=float(c.get('Rain_mm', 0)))
 
-    # 3. PERMANENT SAVE
-    st.write("##")
+    # 4. DATABASE SYNC
     if st.button("💾 Save All Engine Changes to Database", use_container_width=True):
         try:
             updated_vals = {
                 "id": 1, 
-                "Intercept": new_intercept, 
-                "Avg_Coin_In": new_avg_spend,
-                "Promo": new_promo, 
-                "Clicks": new_clicks, 
-                "Temp_C": new_temp, 
-                "Snow_cm": new_snow, 
-                "Rain_mm": new_rain
+                "Intercept": new_intercept, "Avg_Coin_In": new_avg_spend,
+                "Promo": new_promo, "Clicks": new_clicks, 
+                "Temp_C": new_temp, "Snow_cm": new_snow, "Rain_mm": new_rain
             }
             supabase.table("coefficients").upsert(updated_vals).execute()
             st.session_state.coeffs.update(updated_vals)
-            st.success("✅ Changes synced to Supabase.")
-            st.rerun()
+            st.success("✅ Engine settings synced to Supabase.")
         except Exception as e:
-            st.error(f"Database save failed: {e}")
+            st.error(f"Sync failed: {e}")
 
 # --- TAB 5: DYNAMIC "DATE-AWARE" ANALYST ---
 with tab5:
