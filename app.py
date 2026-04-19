@@ -555,78 +555,107 @@ with tab4:
         except Exception as e:
             st.error(f"Sync failed: {e}")
 
-# --- TAB 5: STRATEGIC FORECAST ANALYST ---
+# --- TAB 5: STRATEGIC FORECAST ANALYST (COMPLETE) ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic FloorCast</h2>
-            <p style="color: #888; margin: 0;">AI Strategy: Analyzing historical social benchmarks, weather friction, and promo lift.</p>
+            <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic FloorCast Analyst</h2>
+            <p style="color: #888; margin: 0;">Forensic AI: Benchmarking user queries against 60-day ledger history and live federal weather feeds.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    live_data = st.session_state.get('weather_data', {})
+    # 1. PRE-CALCULATE LEDGER BENCHMARKS
+    if ledger_data:
+        df_bench = pd.DataFrame(ledger_data)
+        
+        # Ensure numeric and date types
+        for col in ['actual_traffic', 'social_impressions', 'social_engagement']:
+            if col in df_bench.columns:
+                df_bench[col] = pd.to_numeric(df_bench[col], errors='coerce').fillna(0)
+        
+        df_bench['entry_date'] = pd.to_datetime(df_bench['entry_date'])
+        df_bench['day_name'] = df_bench['entry_date'].dt.day_name()
 
+        # Global Benchmarks
+        avg_imp = df_bench['social_impressions'].mean()
+        avg_eng = df_bench['social_engagement'].mean()
+        
+        # Day-of-Week Heartbeats
+        dow_stats = df_bench.groupby('day_name')['actual_traffic'].mean().to_dict()
+    else:
+        dow_stats = {}
+        avg_imp, avg_eng = 0, 0
+
+    # 2. INTERFACE
     with st.container(border=True):
-        st.write("### 🗨️ Strategy Consultation")
-        user_query = st.text_input("Ask about a date, a trend, or a scenario:", 
-                                  placeholder="e.g., 'How does Monday look if we double our social engagement?'")
+        st.write("### 🗨️ Strategic Consultation")
+        st.info("Ask about any date, promo scenario, or marketing push. The AI will cross-reference your ledger history.")
+        user_query = st.text_input("Consult with AI Strategy:", 
+                                  placeholder="e.g. 'What is the outlook for Monday if we run a 20k impression social push?'")
         analyze_btn = st.button("🚀 Run Forensic Analysis", use_container_width=True)
 
+    # 3. AI LOGIC
     if analyze_btn and user_query:
-        with st.spinner("Consulting ledger benchmarks and live federal feeds..."):
-            try:
-                # 1. CALCULATE SOCIAL BENCHMARKS (The 'Normal' Social Volume)
-                df_bench = pd.DataFrame(ledger_data)
-                avg_imp = df_bench['social_impressions'].mean() if 'social_impressions' in df_bench else 0
-                avg_eng = df_bench['social_engagement'].mean() if 'social_engagement' in df_bench else 0
-                
-                # 2. GET HEARTBEAT (Day-of-Week Averages)
-                df_bench['entry_date'] = pd.to_datetime(df_bench['entry_date'])
-                df_bench['day_name'] = df_bench['entry_date'].dt.day_name()
-                dow_stats = df_bench.groupby('day_name')['actual_traffic'].mean().to_dict()
+        if not ledger_data:
+            st.warning("Please upload ledger data in Tab 2 before running analysis.")
+        else:
+            with st.spinner("Triangulating ledger benchmarks and federal weather..."):
+                try:
+                    import google.generativeai as genai
+                    import json
 
-                # 3. CONFIGURE GEMINI FOR STRATEGY
-                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel('gemini-2.5-flash')
-                
-                prompt = f"""
-                SYSTEM: Senior Business Strategist for Hard Rock Hotel & Casino Ottawa.
-                Your goal is to provide a forensic revenue prediction AND act as a consultant.
+                    # Configure Gemini
+                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    
+                    # Live Weather Data
+                    live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
 
-                DATASET 1: LIVE ENVIRONMENT CANADA
-                {json.dumps(live_data.get('forecast', []), default=str)}
+                    prompt = f"""
+                    SYSTEM ROLE: You are the Senior Business Strategist for Hard Rock Hotel & Casino Ottawa.
+                    Your objective is to provide forensic, data-backed predictions using the provided datasets.
 
-                DATASET 2: HISTORICAL BENCHMARKS (The 'Normal' baseline)
-                - 60-Day Heartbeats: {json.dumps(dow_stats)}
-                - Avg Social Impressions: {avg_imp:,.0f}
-                - Avg Social Engagement: {avg_eng:,.0f}
+                    DATASET 1: HISTORICAL HEARTBEATS (Actual Averages from Ledger)
+                    - Monday: {dow_stats.get('Monday', 0):,.0f} guests
+                    - Tuesday: {dow_stats.get('Tuesday', 0):,.0f} guests
+                    - Wednesday: {dow_stats.get('Wednesday', 0):,.0f} guests
+                    - Thursday: {dow_stats.get('Thursday', 0):,.0f} guests
+                    - Friday: {dow_stats.get('Friday', 0):,.0f} guests
+                    - Saturday: {dow_stats.get('Saturday', 0):,.0f} guests
+                    - Sunday: {dow_stats.get('Sunday', 0):,.0f} guests
+                    - TYPICAL SOCIAL IMPACT: {avg_imp:,.0f} impressions / {avg_eng:,.0f} engagements per day.
 
-                DATASET 3: ENGINE COEFFICIENTS
-                {json.dumps(st.session_state.coeffs)}
+                    DATASET 2: CALIBRATED ENGINE COEFFICIENTS
+                    {json.dumps(st.session_state.coeffs)}
 
-                USER QUERY: "{user_query}"
+                    DATASET 3: LIVE ENVIRONMENT CANADA FORECAST
+                    {json.dumps(live_forecast, default=str)}
 
-                INSTRUCTIONS:
-                1. ANALYZE: Compare the user's request against the 60-day historical averages. 
-                2. SOCIAL CONTEXT: If the user mentions social media, compare it to the benchmark of {avg_imp} impressions.
-                3. PROMO CHECK: If the user hasn't specified IF a promotion is active for the date requested, point that out.
-                4. PREDICT: Provide a traffic and revenue estimate using the coefficients.
-                5. CONSULT: Ask 2-3 specific "Executive Questions" that would change the prediction (e.g., 'What is the specific offer for this promo?' or 'Is the social push targeting a specific demographic?').
-                """
-                
-                response = model.generate_content(prompt)
-                
-                st.write("---")
-                st.markdown(f"""
-                    <div style="background-color: #1a1a1a; padding: 25px; border-radius: 15px; border-top: 3px solid #FFCC00;">
-                        <div style="color: #eee; line-height: 1.8; font-size: 16px;">
-                            {response.text}
+                    USER QUERY: "{user_query}"
+
+                    EXECUTION RULES:
+                    1. START WITH THE TRUTH: Identify the day of the week requested and state its "Historical Heartbeat" from the ledger.
+                    2. NEVER ASSUME ZERO: If the user doesn't provide social/ad numbers, use the Typical Social Impact benchmarks listed above as the 'Status Quo'.
+                    3. WEATHER FRICTION: Look at the Environment Canada forecast for the date requested. Apply coefficients for Temp, Rain, and Snow.
+                    4. PREDICT: Calculate Traffic and Revenue (Traffic * Avg_Coin_In).
+                    5. STRATEGIC INTERVIEW: End your response by asking 2-3 specific questions that would change this prediction (e.g., 'Is there a competing local concert?' or 'What is the player-tier focus of this promo?').
+
+                    FORMATTING: Use bolding for key numbers. Maintain a professional, executive tone.
+                    """
+                    
+                    response = model.generate_content(prompt)
+                    
+                    st.write("---")
+                    st.markdown(f"""
+                        <div style="background-color: #1a1a1a; padding: 25px; border-radius: 15px; border-top: 3px solid #FFCC00; border-right: 1px solid #333; border-bottom: 1px solid #333; border-left: 1px solid #333;">
+                            <div style="color: #eee; line-height: 1.8; font-size: 16px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                                {response.text}
+                            </div>
                         </div>
-                    </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
 
-            except Exception as e:
-                st.error(f"Consultation Error: {e}")
+                except Exception as e:
+                    st.error(f"Strategic Analysis Error: {e}")
 
 # --- TAB 6: MASTER ANALYTICS & FORENSIC REPORT ---
 with tab6:
