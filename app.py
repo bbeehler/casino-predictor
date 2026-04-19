@@ -7,6 +7,42 @@ from env_canada import ECWeather
 import google.generativeai as genai
 from supabase import create_client
 
+def get_forensic_metrics(df, coeffs):
+    """A single source of truth for Predictability and Digital Lift."""
+    if df.empty:
+        return {"predictability": "0%", "digital_lift": "0%", "heartbeats": {}}
+
+    # Standardize 
+    df['entry_date'] = pd.to_datetime(df['entry_date'])
+    df['day_name'] = df['entry_date'].dt.day_name()
+    
+    # Calculate DOW Heartbeats
+    heartbeats = df.groupby('day_name')['actual_traffic'].mean().to_dict()
+    
+    # Calculate Expected Traffic based on DOW + Marketing
+    c_clicks = coeffs.get('Clicks', 0.02)
+    c_social = coeffs.get('Social_Imp', 0.0002)
+    
+    df['expected'] = df.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
+                             (x.get('ad_clicks', 0) * c_clicks) + 
+                             (x.get('social_impressions', 0) * c_social), axis=1)
+
+    # Forensic 1: Digital Lift %
+    total_traffic = df['actual_traffic'].sum()
+    marketing_impact = (df['ad_clicks'].sum() * c_clicks) + (df['social_impressions'].sum() * c_social)
+    lift_val = (marketing_impact / total_traffic * 100) if total_traffic > 0 else 0
+
+    # Forensic 2: AI Predictability (1 - MAPE)
+    import numpy as np
+    mape = (np.abs(df['actual_traffic'] - df['expected']) / df['actual_traffic']).replace([np.inf, -np.inf], np.nan).dropna().mean()
+    pred_val = (1 - mape) * 100 if not np.isnan(mape) else 0
+
+    return {
+        "predictability": f"{pred_val:.1f}%",
+        "digital_lift": f"{lift_val:.1f}%",
+        "heartbeats": heartbeats
+    }
+
 # --- CORE WEATHER FUNCTION ---
 async def fetch_live_ec_data():
     """Fetches real-time data from Environment Canada"""
