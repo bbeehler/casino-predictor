@@ -466,61 +466,65 @@ with tab4:
         </div>
     """, unsafe_allow_html=True)
 
-    # 2. THE ACCOUNTING-FIRST AUTO-CALIBRATION
+    # --- WHOLESOME AUTO-CALIBRATION ---
     if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
-        with st.spinner("Calculating YTD Financial Reality..."):
+        with st.spinner("Analyzing property momentum and historical correlations..."):
             try:
                 import json
-                # Load the full ledger context
                 df_calc = pd.DataFrame(ledger_data).copy()
-                
+                df_calc['entry_date'] = pd.to_datetime(df_calc['entry_date'])
+                df_calc = df_calc.sort_values('entry_date')
+
                 if df_calc.empty:
                     st.error("Cannot calibrate: Ledger is empty.")
                 else:
-                    # --- THE HARD ACCOUNTING MATH ---
-                    total_ytd_vis = df_calc['actual_traffic'].sum()
-                    total_ytd_rev = df_calc['actual_coin_in'].sum()
+                    # 1. HARD ACCOUNTING PILLARS
+                    total_vis = df_calc['actual_traffic'].sum()
+                    total_rev = df_calc['actual_coin_in'].sum()
                     num_days = len(df_calc)
-
-                    # Pillar 1: Base Traffic = Total YTD Traffic / Total Days
-                    math_intercept = total_ytd_vis / num_days if num_days > 0 else 0
                     
-                    # Pillar 2: Avg Spend = Total YTD Revenue / Total YTD Traffic
-                    # This ensures the $1,200+ reality is the anchor of the model
-                    math_avg_spend = total_ytd_rev / total_ytd_vis if total_ytd_vis > 0 else 0
+                    math_intercept = total_vis / num_days
+                    math_avg_spend = total_rev / total_vis # The $1,200+ Anchor
 
-                    # --- THE AI VARIANCE ENGINE ---
+                    # 2. TREND ENRICHMENT (The "Wholesome" part)
+                    # Calculate 7-day rolling average to show the AI the 'current energy'
+                    df_calc['traffic_trend'] = df_calc['actual_traffic'].rolling(window=7).mean()
+                    
+                    # 3. AI AUDIT
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-2.5-flash')
                     
                     prompt = f"""
                     SYSTEM: Statistical Auditor for Hard Rock Ottawa. 
-                    FIXED PILLARS: Base_Traffic={math_intercept:.2f}, Avg_Spend_Per_Head={math_avg_spend:.2f}.
-                    DATA: {df_calc.tail(150).to_csv(index=False)}
+                    You are calibrating weights for a predictive floor traffic engine.
+
+                    FIXED ACCOUNTING CONSTANTS:
+                    - Intercept (Daily Baseline): {math_intercept:.2f}
+                    - Target Revenue Per Head: ${math_avg_spend:,.2f}
+
+                    HISTORICAL DATASET (Including 7-Day Trends):
+                    {df_calc[['entry_date', 'actual_traffic', 'traffic_trend', 'ad_clicks', 'temp_c', 'snow_cm', 'active_promo']].tail(90).to_csv(index=False)}
                     
-                    TASK: Given these FIXED accounting pillars, calculate the optimal weights for the following 
-                    variables to minimize prediction error against 'actual_traffic':
-                    - Promo, Clicks, Impressions, Temp_C, Snow_cm, Rain_mm.
+                    TASK: Analyze the relationship between traffic, weather, and marketing. 
+                    Determine the WEIGHT of each variable in driving traffic ABOVE the intercept.
                     
-                    RETURN: A single raw JSON object. NO MARKDOWN.
+                    REQUIREMENT: Return only raw JSON for: Promo, Clicks, Impressions, Temp_C, Snow_cm, Rain_mm.
                     """
                     
                     response = model.generate_content(prompt)
                     clean_json = response.text.replace("```json", "").replace("```", "").strip()
                     suggestion = json.loads(clean_json)
                     
-                    # --- ENFORCE THE ACCOUNTING PILLARS ---
+                    # Lock the Pillars
                     suggestion['Intercept'] = math_intercept
                     suggestion['Avg_Coin_In'] = math_avg_spend  
                     
-                    # Update the live session state
                     st.session_state.coeffs.update(suggestion)
-                    st.success(f"🎯 YTD Reality Locked: Average Spend is ${math_avg_spend:,.2f}")
+                    st.success(f"🎯 Engine Calibrated: Weights updated based on 90-day trend analysis.")
+                    st.rerun()
                 
             except Exception as e:
                 st.error(f"Calibration failed: {e}")
-
-    st.write("##")
     
     # 3. BENTO CONTROL CENTER (Review & Manual Overrides)
     # Helper to prevent crashes if values are None
