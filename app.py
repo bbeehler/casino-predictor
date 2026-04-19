@@ -555,85 +555,78 @@ with tab4:
         except Exception as e:
             st.error(f"Sync failed: {e}")
 
-# --- TAB 5: DYNAMIC "DATE-AWARE" ANALYST ---
+# --- TAB 5: STRATEGIC FORECAST ANALYST ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">🔍 FloorCast Analyst</h2>
-            <p style="color: #888; margin: 0;">Date-Specific Intelligence: Scanning Federal Forecasts vs. 60-Day Historical Baselines.</p>
+            <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic FloorCast</h2>
+            <p style="color: #888; margin: 0;">AI Strategy: Analyzing historical social benchmarks, weather friction, and promo lift.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # Access the live federal data from the top of app.py
     live_data = st.session_state.get('weather_data', {})
 
     with st.container(border=True):
-        st.write("### 🧠 Strategic Intelligence Query")
-        user_query = st.text_input("Ask for a prediction (e.g., 'Monday April 20' or 'Next Friday'):", 
-                                  placeholder="Predict revenue for Monday April 20 based on the forecast.")
-        analyze_btn = st.button("🚀 Run Date-Specific Analysis", use_container_width=True)
+        st.write("### 🗨️ Strategy Consultation")
+        user_query = st.text_input("Ask about a date, a trend, or a scenario:", 
+                                  placeholder="e.g., 'How does Monday look if we double our social engagement?'")
+        analyze_btn = st.button("🚀 Run Forensic Analysis", use_container_width=True)
 
     if analyze_btn and user_query:
-        if not live_data or "error" in live_data:
-            st.error("Cannot run analysis: Federal weather feed is currently unavailable.")
-        else:
-            with st.spinner("Scanning historical ledger and future weather layers..."):
-                try:
-                    # 1. 60-DAY HEARTBEAT & LEDGER CONTEXT
-                    df_raw = pd.DataFrame(ledger_data)
-                    df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
-                    df_raw['day_name'] = df_raw['entry_date'].dt.day_name()
-                    
-                    sixty_days_ago = datetime.datetime.now() - datetime.timedelta(days=60)
-                    df_60 = df_raw[df_raw['entry_date'] >= sixty_days_ago].copy()
+        with st.spinner("Consulting ledger benchmarks and live federal feeds..."):
+            try:
+                # 1. CALCULATE SOCIAL BENCHMARKS (The 'Normal' Social Volume)
+                df_bench = pd.DataFrame(ledger_data)
+                avg_imp = df_bench['social_impressions'].mean() if 'social_impressions' in df_bench else 0
+                avg_eng = df_bench['social_engagement'].mean() if 'social_engagement' in df_bench else 0
+                
+                # 2. GET HEARTBEAT (Day-of-Week Averages)
+                df_bench['entry_date'] = pd.to_datetime(df_bench['entry_date'])
+                df_bench['day_name'] = df_bench['entry_date'].dt.day_name()
+                dow_stats = df_bench.groupby('day_name')['actual_traffic'].mean().to_dict()
 
-                    # Calculate Averages for EVERY day of the week
-                    dow_stats = df_60.groupby('day_name')['actual_traffic'].mean().to_dict()
+                # 3. CONFIGURE GEMINI FOR STRATEGY
+                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                model = genai.GenerativeModel('gemini-2.5-flash')
+                
+                prompt = f"""
+                SYSTEM: Senior Business Strategist for Hard Rock Hotel & Casino Ottawa.
+                Your goal is to provide a forensic revenue prediction AND act as a consultant.
 
-                    # 2. AI TRIANGULATION (GEMINI 2.5 FLASH)
-                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    model = genai.GenerativeModel('gemini-2.5-flash')
-                    
-                    prompt = f"""
-                    SYSTEM: Senior Strategist for Hard Rock Hotel & Casino Ottawa. 
-                    Your task is to provide a SPOT ON prediction for a SPECIFIC DATE.
+                DATASET 1: LIVE ENVIRONMENT CANADA
+                {json.dumps(live_data.get('forecast', []), default=str)}
 
-                    USER QUERY: "{user_query}"
+                DATASET 2: HISTORICAL BENCHMARKS (The 'Normal' baseline)
+                - 60-Day Heartbeats: {json.dumps(dow_stats)}
+                - Avg Social Impressions: {avg_imp:,.0f}
+                - Avg Social Engagement: {avg_eng:,.0f}
 
-                    DATASET 1: LIVE ENVIRONMENT CANADA FORECAST (7-DAY)
-                    {json.dumps(live_data.get('forecast', []), default=str)}
+                DATASET 3: ENGINE COEFFICIENTS
+                {json.dumps(st.session_state.coeffs)}
 
-                    DATASET 2: 60-DAY WEEKLY HEARTBEAT (Averages)
-                    {json.dumps(dow_stats, default=str)}
+                USER QUERY: "{user_query}"
 
-                    DATASET 3: ENGINE COEFFICIENTS
-                    - Spend Anchor: ${st.session_state.coeffs['Avg_Coin_In']:,.2f}
-                    - Snow Friction: {st.session_state.coeffs['Snow_cm']}
-                    - Rain Friction: {st.session_state.coeffs['Rain_mm']}
-
-                    ANALYSIS STEPS:
-                    1. IDENTIFY TARGET: Scan the user query for a specific day/date (e.g. Monday).
-                    2. EXTRACT WEATHER: Find the exact weather for that day in the Environment Canada feed. 
-                    3. CALCULATE BASE: Start with the 60-day average for that specific day of the week.
-                    4. APPLY FRICTION: Subtract for rain or snow based on the weights.
-                    5. REVENUE: Predicted Traffic * ${st.session_state.coeffs['Avg_Coin_In']:,.2f}.
-                    6. EXPLAIN: Clearly state 'Based on the average Monday over the last 60 days ({dow_stats.get('Monday', 0):,.0f} guests)...'
-                    """
-                    
-                    response = model.generate_content(prompt)
-                    
-                    st.write("---")
-                    st.markdown(f"""
-                        <div style="background-color: #1a1a1a; padding: 25px; border-radius: 15px; border-top: 3px solid #FFCC00;">
-                            <p style="color: #FFCC00; font-weight: bold; text-transform: uppercase; font-size: 14px;">Strategic Forecast Response:</p>
-                            <div style="color: #eee; line-height: 1.8; font-size: 16px;">
-                                {response.text}
-                            </div>
+                INSTRUCTIONS:
+                1. ANALYZE: Compare the user's request against the 60-day historical averages. 
+                2. SOCIAL CONTEXT: If the user mentions social media, compare it to the benchmark of {avg_imp} impressions.
+                3. PROMO CHECK: If the user hasn't specified IF a promotion is active for the date requested, point that out.
+                4. PREDICT: Provide a traffic and revenue estimate using the coefficients.
+                5. CONSULT: Ask 2-3 specific "Executive Questions" that would change the prediction (e.g., 'What is the specific offer for this promo?' or 'Is the social push targeting a specific demographic?').
+                """
+                
+                response = model.generate_content(prompt)
+                
+                st.write("---")
+                st.markdown(f"""
+                    <div style="background-color: #1a1a1a; padding: 25px; border-radius: 15px; border-top: 3px solid #FFCC00;">
+                        <div style="color: #eee; line-height: 1.8; font-size: 16px;">
+                            {response.text}
                         </div>
-                    """, unsafe_allow_html=True)
+                    </div>
+                """, unsafe_allow_html=True)
 
-                except Exception as e:
-                    st.error(f"Analysis Error: {e}")
+            except Exception as e:
+                st.error(f"Consultation Error: {e}")
 
 # --- TAB 6: MASTER ANALYTICS & FORENSIC REPORT ---
 with tab6:
