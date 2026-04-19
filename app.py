@@ -456,19 +456,18 @@ with tab3:
         st.write("### Historical Digital Revenue Contribution")
         st.area_chart(df_strat.set_index('entry_date')['Digital_Revenue_Lift'])
 
-# --- TAB 4: ADMIN ENGINE & DATA MANAGEMENT ---
+# --- TAB 4: ADMIN ENGINE (WHOLESOME CALIBRATION) ---
 with tab4:
-    # 1. BRANDED HEADER
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control & Data Management</h2>
-            <p style="color: #888; margin: 0;">Accounting-Verified YTD Calibration (Revenue ÷ Traffic).</p>
+            <p style="color: #888; margin: 0;">AI Calibration with Historical Guardrails (Negative Weather Impact).</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # --- WHOLESOME AUTO-CALIBRATION ---
+    # 1. THE WHOLESOME AUTO-CALIBRATION
     if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
-        with st.spinner("Analyzing property momentum and historical correlations..."):
+        with st.spinner("Analyzing 90-day momentum and weather correlations..."):
             try:
                 import json
                 df_calc = pd.DataFrame(ledger_data).copy()
@@ -478,7 +477,7 @@ with tab4:
                 if df_calc.empty:
                     st.error("Cannot calibrate: Ledger is empty.")
                 else:
-                    # 1. HARD ACCOUNTING PILLARS
+                    # HARD ACCOUNTING PILLARS
                     total_vis = df_calc['actual_traffic'].sum()
                     total_rev = df_calc['actual_coin_in'].sum()
                     num_days = len(df_calc)
@@ -486,110 +485,98 @@ with tab4:
                     math_intercept = total_vis / num_days
                     math_avg_spend = total_rev / total_vis # The $1,200+ Anchor
 
-                    # 2. TREND ENRICHMENT (The "Wholesome" part)
-                    # Calculate 7-day rolling average to show the AI the 'current energy'
+                    # TREND ENRICHMENT (Seasonality & Momentum)
                     df_calc['traffic_trend'] = df_calc['actual_traffic'].rolling(window=7).mean()
                     
-                    # 3. AI AUDIT
+                    # AI AUDIT WITH NEGATIVE WEATHER GUARDRAILS
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                     model = genai.GenerativeModel('gemini-2.5-flash')
                     
                     prompt = f"""
-                    SYSTEM: Statistical Auditor for Hard Rock Ottawa. 
-                    You are calibrating weights for a predictive floor traffic engine.
+                    SYSTEM: Statistical Auditor for Hard Rock Hotel & Casino Ottawa. 
+                    TASK: Calibrate weights for a predictive floor traffic engine.
+
+                    MANDATORY LOGICAL GUARDRAILS:
+                    - Snow_cm: MUST BE NEGATIVE (Friction/Deterrent).
+                    - Rain_mm: MUST BE NEGATIVE (Friction/Deterrent).
+                    - Clicks & Promo: MUST BE POSITIVE (Growth drivers).
+                    - Temp_C: Usually POSITIVE in Ottawa (Warmer = more movement).
 
                     FIXED ACCOUNTING CONSTANTS:
-                    - Intercept (Daily Baseline): {math_intercept:.2f}
-                    - Target Revenue Per Head: ${math_avg_spend:,.2f}
+                    - Intercept (Base Traffic): {math_intercept:.2f}
+                    - Revenue Per Head: ${math_avg_spend:,.2f}
 
-                    HISTORICAL DATASET (Including 7-Day Trends):
-                    {df_calc[['entry_date', 'actual_traffic', 'traffic_trend', 'ad_clicks', 'temp_c', 'snow_cm', 'active_promo']].tail(90).to_csv(index=False)}
+                    WHOLESOME DATASET (90-Day Trend Analysis):
+                    {df_calc[['entry_date', 'actual_traffic', 'traffic_trend', 'ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo']].tail(90).to_csv(index=False)}
                     
-                    TASK: Analyze the relationship between traffic, weather, and marketing. 
-                    Determine the WEIGHT of each variable in driving traffic ABOVE the intercept.
-                    
-                    REQUIREMENT: Return only raw JSON for: Promo, Clicks, Impressions, Temp_C, Snow_cm, Rain_mm.
+                    TASK: Return raw JSON only for: Promo, Clicks, Temp_C, Snow_cm, Rain_mm.
+                    Ensure Snow and Rain weights are negative floats (e.g. -1.45).
                     """
                     
                     response = model.generate_content(prompt)
                     clean_json = response.text.replace("```json", "").replace("```", "").strip()
                     suggestion = json.loads(clean_json)
                     
-                    # Lock the Pillars
+                    # Lock the Management Pillars
                     suggestion['Intercept'] = math_intercept
                     suggestion['Avg_Coin_In'] = math_avg_spend  
                     
+                    # Update Session State
                     st.session_state.coeffs.update(suggestion)
-                    st.success(f"🎯 Engine Calibrated: Weights updated based on 90-day trend analysis.")
+                    st.success(f"🎯 Calibration Complete: Spend anchored at ${math_avg_spend:,.2f} with negative weather deterrents.")
                     st.rerun()
                 
             except Exception as e:
                 st.error(f"Calibration failed: {e}")
-    
-    # 3. BENTO CONTROL CENTER (Review & Manual Overrides)
-    # Helper to prevent crashes if values are None
-    def safe_float(val):
-        try: return float(val) if val is not None else 0.0
-        except: return 0.0
 
+    st.write("##")
+    
+    # 2. MANUAL OVERRIDE GRID
     c = st.session_state.coeffs
-    col_fin, col_dig, col_env = st.columns(3)
+    col_fin, col_mkt, col_env = st.columns(3)
 
     with col_fin:
         with st.container(border=True):
-            st.markdown("💰 **Financial & Baseline**")
-            new_intercept = st.number_input("Base Daily Traffic", value=safe_float(c.get('Intercept', 0)))
-            new_avg_spend = st.number_input("Avg. Spend per Head ($)", value=safe_float(c.get('Avg_Coin_In', 0)))
-            st.caption("Locked to: Total YTD Revenue / Total YTD Traffic.")
+            st.markdown("💰 **Financial Pillars**")
+            new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 0)))
+            new_avg_spend = st.number_input("Avg. Spend / Head ($)", value=float(c.get('Avg_Coin_In', 1200)))
+            st.caption("YTD Total Rev / Total Traffic.")
 
-    with col_dig:
+    with col_mkt:
         with st.container(border=True):
-            st.markdown("🚀 **Digital Marketing Weights**")
-            new_promo = st.number_input("Promo Flat Lift", value=safe_float(c.get('Promo', 0)))
-            new_clicks = st.number_input("Weight / Ad Click", value=safe_float(c.get('Clicks', 0)))
-            new_imps = st.number_input("Weight / 1k Imps", value=safe_float(c.get('Impressions', 0)), format="%.4f")
-            st.caption("Marketing ROI multipliers.")
+            st.markdown("🚀 **Marketing Weights**")
+            new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
+            new_clicks = st.number_input("Weight / Ad Click", value=float(c.get('Clicks', 0)))
+            st.caption("Positive drivers only.")
 
     with col_env:
         with st.container(border=True):
-            st.markdown("☁️ **Environmental Impact**")
-            new_temp = st.number_input("Temp Impact (°C)", value=safe_float(c.get('Temp_C', 0)))
-            new_snow = st.number_input("Snow Impact (cm)", value=safe_float(c.get('Snow_cm', 0)))
-            new_rain = st.number_input("Rain Impact (mm)", value=safe_float(c.get('Rain_mm', 0)))
-            st.caption("Ottawa weather adjustments.")
+            st.markdown("☁️ **Environmental Impacts**")
+            new_temp = st.number_input("Temp Impact (°C)", value=float(c.get('Temp_C', 0)))
+            new_snow = st.number_input("Snow Impact (cm)", value=float(c.get('Snow_cm', 0)))
+            new_rain = st.number_input("Rain Impact (mm)", value=float(c.get('Rain_mm', 0)))
+            st.caption("Weather should be negative weights.")
 
-    # 4. PERMANENT DATABASE SYNC
+    # 3. PERMANENT SAVE
     st.write("##")
-    if st.button("💾 Save All Engine Changes", use_container_width=True):
+    if st.button("💾 Save All Engine Changes to Database", use_container_width=True):
         try:
-            updated_values = {
+            updated_vals = {
                 "id": 1, 
                 "Intercept": new_intercept, 
-                "Temp_C": new_temp, 
-                "Snow_cm": new_snow, 
-                "Rain_mm": new_rain, 
+                "Avg_Coin_In": new_avg_spend,
                 "Promo": new_promo, 
                 "Clicks": new_clicks, 
-                "Impressions": new_imps, 
-                "Avg_Coin_In": new_avg_spend
+                "Temp_C": new_temp, 
+                "Snow_cm": new_snow, 
+                "Rain_mm": new_rain
             }
-            # Permanent write to Supabase
-            supabase.table("coefficients").upsert(updated_values).execute()
-            st.session_state.coeffs.update(updated_values)
-            st.success("✅ Engine Tuned: All changes are now permanent in the database.")
+            supabase.table("coefficients").upsert(updated_vals).execute()
+            st.session_state.coeffs.update(updated_vals)
+            st.success("✅ Changes synced to Supabase.")
             st.rerun()
         except Exception as e:
             st.error(f"Database save failed: {e}")
-
-    # 5. MAINTENANCE
-    st.write("---")
-    if st.button("🚀 Force Global Promo: TRUE", use_container_width=True):
-        try:
-            supabase.table("ledger").update({"active_promo": True}).neq("active_promo", True).execute()
-            st.success("Ledger Synchronized: All records reflect active promotion.")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Global sync failed: {e}")
 
 # --- TAB 5: FLOORCAST ANALYST (WHOLESOME ANALYSIS UPGRADE) ---
 with tab5:
