@@ -489,21 +489,21 @@ with tab4:
 
     df_calc = pd.DataFrame(ledger_data).copy()
     
-    # Pre-processing: Ensure all math columns exist and are floats
+    # Pre-processing: Ensure all math columns exist and are numeric
     required_cols = ['actual_traffic', 'ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo', 'actual_coin_in']
     for col in required_cols:
         if col not in df_calc.columns:
             df_calc[col] = 0.0
         df_calc[col] = pd.to_numeric(df_calc[col], errors='coerce').fillna(0.0)
 
-    # 1. THE STABILITY HASH (Prevents re-running identical data)
+    # 1. THE STABILITY HASH
     ledger_signature = hash(pd.util.hash_pandas_object(df_calc).sum())
 
     if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
         if st.session_state.get('last_calib_hash') == ledger_signature:
-            st.info("⚖️ **Weights Locked**: Data is identical to the last calibration. No adjustment needed.")
+            st.info("⚖️ **Weights Locked**: Data is identical to the last calibration.")
         elif len(df_calc) < 14:
-            st.error("Insufficient Data: Need at least 14 days of ledger history for a 60-day profile.")
+            st.error("Insufficient Data: Need at least 14 days of ledger history.")
         else:
             with st.spinner("Executing Segmented Regression & Promo Floor Validation..."):
                 try:
@@ -513,34 +513,32 @@ with tab4:
                     df_calc['entry_date'] = pd.to_datetime(df_calc['entry_date'])
                     df_calc['day_name'] = df_calc['entry_date'].dt.day_name()
                     
-                    # STEP 1: CALCULATE THE 'HEARTBEAT' ANCHORS (60-Day DOW Averages)
+                    # STEP 1: CALCULATE THE 'HEARTBEAT' ANCHORS
                     dow_profiles = df_calc.groupby('day_name')['actual_traffic'].mean().to_dict()
                     
-                    # STEP 2: CALCULATE RESIDUALS (Isolating the impact of Marketing/Weather)
+                    # STEP 2: CALCULATE RESIDUALS
                     df_calc['residual'] = df_calc.apply(lambda x: x['actual_traffic'] - dow_profiles[x['day_name']], axis=1)
                     
                     features = ['ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo']
                     X = df_calc[features]
                     y = df_calc['residual']
 
-                    # Ridge keeps coefficients from fluctuating wildly
                     model = Ridge(alpha=1.0)
                     model.fit(X, y)
                     raw_weights = dict(zip(features, model.coef_))
 
-                    # STEP 3: ENFORCE PROMO FLOOR & OTTAWA LOGIC
-                    # We ensure a promo ALWAYS generates at least 5% lift over the daily average
+                    # STEP 3: ENFORCE PROMO FLOOR
                     avg_traffic = float(df_calc['actual_traffic'].mean())
                     promo_floor = avg_traffic * 0.05
                     
                     final_weights = {
                         "Intercept": avg_traffic, 
                         "Avg_Coin_In": float(df_calc['actual_coin_in'].sum() / df_calc['actual_traffic'].sum()) if df_calc['actual_traffic'].sum() > 0 else 1200.0,
-                        "Clicks": max(0.001, float(raw_weights['ad_clicks'])),
-                        "Promo": max(float(raw_weights['active_promo']), promo_floor), # <--- ENFORCED FLOOR
-                        "Temp_C": float(raw_weights['temp_c']),
-                        "Snow_cm": -abs(float(raw_weights['snow_cm'])), # Force Negative
-                        "Rain_mm": -abs(float(raw_weights['rain_mm']))  # Force Negative
+                        "Clicks": max(0.001, float(raw_weights.get('ad_clicks', 0))),
+                        "Promo": max(float(raw_weights.get('active_promo', 0)), promo_floor),
+                        "Temp_C": float(raw_weights.get('temp_c', 0)),
+                        "Snow_cm": -abs(float(raw_weights.get('snow_cm', 0))),
+                        "Rain_mm": -abs(float(raw_weights.get('rain_mm', 0)))
                     }
 
                     # UPDATE STATE
@@ -552,13 +550,16 @@ with tab4:
                 except Exception as e:
                     st.error(f"Calibration Error: {e}")
 
-    # --- 2. LIVE COEFFICIENT MONITOR ---
+    # --- 2. LIVE COEFFICIENT MONITOR (FIXED) ---
     st.write("### 📊 Active Engine Coefficients")
-    # Horizontal display of current math
     c = st.session_state.coeffs
-    mon_cols = st.columns(len(c))
-    for i, (key, val) in enumerate(c.items()):
-        mon_cols[i].metric(label=key, value=f"{val:.2f}")
+    
+    # Filter out 'id' or other non-coefficient keys to prevent the Traceback error
+    display_coeffs = {k: v for k, v in c.items() if k not in ['id', 'created_at']}
+    
+    mon_cols = st.columns(len(display_coeffs))
+    for i, (key, val) in enumerate(display_coeffs.items()):
+        mon_cols[i].metric(label=key, value=f"{float(val):.2f}")
 
     st.write("---")
 
