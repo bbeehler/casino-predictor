@@ -469,14 +469,14 @@ with tab4:
         </div>
     """, unsafe_allow_html=True)
 
-    # --- 1. INDUSTRY BENCHMARK REFERENCE ---
+    # 1. INDUSTRY BENCHMARK REFERENCE
     with st.expander("📊 View Casino Industry Benchmarks"):
         st.write("""
         | Metric | Industry Average (Gaming) | Your Current Weight |
         | :--- | :--- | :--- |
         | **Social Impressions** | 0.0001 - 0.0005 (1 guest per 2k-10k views) | {social_w:.4f} |
         | **Ad Clicks** | 0.02 - 0.08 (2% - 8% conversion to floor) | {click_w:.2f} |
-        | **Major Promo** | 1.10 - 1.25 (10% - 25% lift over baseline) | {promo_w:,.0f} |
+        | **Major Promo** | 1,000 - 5,000 (Flat guest lift for major events) | {promo_w:,.0f} |
         | **Weather Friction** | -20 to -60 (Guests lost per cm of snow) | {weather_w:,.0f} |
         """.format(
             social_w=st.session_state.coeffs.get('Social_Imp', 0.0002),
@@ -485,14 +485,14 @@ with tab4:
             weather_w=st.session_state.coeffs.get('Snow_cm', -45.0)
         ))
 
-    # --- 2. MANUAL CALIBRATION FORM ---
+    # 2. MANUAL CALIBRATION FORM
     with st.form("engine_settings"):
         col1, col2 = st.columns(2)
         
         with col1:
             st.write("### 📣 Marketing Multipliers")
             
-            # Safeguard: Clamping values to slider limits
+            # Safeguard Clamping
             curr_clicks = float(st.session_state.coeffs.get('Clicks', 0.02))
             new_clicks = st.slider("Click Conversion (Weight)", 0.00, 0.20, 
                                  value=max(min(curr_clicks, 0.20), 0.00))
@@ -516,14 +516,12 @@ with tab4:
             new_rain = st.slider("Rain Friction (Guests lost per mm)", -500, 0, 
                                 value=max(min(curr_rain, 0), -500))
             
-            # Expanded range to 5000 to prevent 'AboveMax' errors for Revenue data
             curr_coin = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
             new_coin = st.number_input("Avg Spend Per Head ($)", 0.0, 5000.0, 
                                      value=max(min(curr_coin, 5000.0), 0.0))
 
-        # --- 3. THE "CLEAN SYNC" LOGIC ---
+        # 3. CLEAN SYNC LOGIC
         if st.form_submit_button("💾 Save Calibration to Vault"):
-            # Update Local Session State
             st.session_state.coeffs.update({
                 'Clicks': new_clicks,
                 'Social_Imp': new_social,
@@ -533,26 +531,27 @@ with tab4:
                 'Avg_Coin_In': new_coin
             })
             
-            # Filter for Supabase (Prevents 'DOW_Profiles' error)
-            db_schema_columns = [
-                'id', 'Intercept', 'Avg_Coin_In', 'Temp_C', 
-                'Snow_cm', 'Rain_mm', 'Promo', 'Clicks', 'Impressions'
-            ]
-            
+            db_schema_columns = ['id', 'Intercept', 'Avg_Coin_In', 'Temp_C', 'Snow_cm', 'Rain_mm', 'Promo', 'Clicks', 'Impressions']
             sync_payload = {k: v for k, v in st.session_state.coeffs.items() if k in db_schema_columns}
             sync_payload['Impressions'] = st.session_state.coeffs.get('Social_Imp', 0.0002)
 
             try:
                 supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
-                st.success("✅ Engine Calibrated! Forensic models updated.")
+                st.success("✅ Engine Calibrated! Data synced to Vault.")
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Sync failed: {e}")
 
+    # 4. ENGINE INTEGRITY (Appears only once)
     st.divider()
     st.write("### 🔍 Engine Integrity")
-    if st.session_state.coeffs.get('Clicks', 0) < 0.01:
-        st.warning("⚠️ Warning: Click Weight is below industry floor. Digital Lift will be undervalued.")
+    
+    # Validation Logic
+    if st.session_state.coeffs.get('Clicks', 0) < 0.015:
+        st.warning("⚠️ **Low Attribution Warning:** Your Click Weight is significantly below industry averages. This may cause 'Digital Lift' in Tab 1 to appear undervalued.")
+    
+    if st.session_state.coeffs.get('Avg_Coin_In', 0) > 400:
+        st.info("ℹ️ **Premium Spend Profile:** Your Avg. Spend per head is set for a high-limit environment. If this includes non-gaming revenue, ensure the ledger reflects total property spend.")
 
     # --- 4. DATA HEALTH CHECK ---
     st.divider()
