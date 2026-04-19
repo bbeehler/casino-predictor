@@ -554,44 +554,63 @@ with tab4:
                 st.success("✅ Database Synced.")
             except Exception as e:
                 st.error(f"Sync failed: {e}")
-# --- TAB 5: EXECUTIVE STRATEGIC CONSULTANT (REVERSED FEED) ---
+# --- TAB 5: EXECUTIVE STRATEGIC CONSULTANT (REAL-TIME ENGINE) ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic Consultant</h2>
-            <p style="color: #888; margin: 0;">Executive Briefing: Latest analysis at the top.</p>
+            <p style="color: #888; margin: 0;">Real-Time Intelligence: Calculating live benchmarks from your active ledger.</p>
         </div>
     """, unsafe_allow_html=True)
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 1. THE DATA VAULT (Pre-processing)
+    # 1. THE REAL-TIME DATA VAULT
     vault_metrics = {}
     if ledger_data:
+        # We work on a fresh copy to ensure real-time accuracy without altering the main ledger
         df_vault = pd.DataFrame(ledger_data).copy()
         df_vault['entry_date'] = pd.to_datetime(df_vault['entry_date'])
         
-        # Standardize Columns
-        col_map = {'actual_traffic': ['actual_traffic', 'Traffic'], 'actual_coin_in': ['actual_coin_in', 'Revenue']}
+        # --- DYNAMIC COLUMN NORMALIZATION ---
+        col_map = {
+            'social_impressions': ['social_impressions', 'Impressions', 'Social_Imp', 'Reach'],
+            'social_engagement': ['social_engagement', 'Engagement', 'Social_Eng', 'Interactions'],
+            'actual_traffic': ['actual_traffic', 'Traffic', 'Attendance'],
+            'actual_coin_in': ['actual_coin_in', 'Revenue', 'Coin_In']
+        }
+        
         for target, aliases in col_map.items():
-            if target not in df_vault.columns:
-                for alias in aliases:
-                    if alias in df_vault.columns:
-                        df_vault.rename(columns={alias: target}, inplace=True); break
-            df_vault[target] = pd.to_numeric(df_vault[target], errors='coerce').fillna(0)
+            # Check if target or any alias exists
+            existing_col = next((c for c in aliases if c in df_vault.columns), None)
+            if existing_col:
+                df_vault.rename(columns={existing_col: target}, inplace=True)
+                # Force numeric conversion in real-time
+                df_vault[target] = pd.to_numeric(df_vault[target], errors='coerce').fillna(0)
+            else:
+                df_vault[target] = 0
+
+        # --- REAL-TIME CALCULATIONS ---
+        # We calculate these exactly when the tab is rendered
+        avg_imp = float(df_vault['social_impressions'].mean())
+        avg_eng = float(df_vault['social_engagement'].mean())
+        
+        # Heartbeats (Daily Baselines)
+        df_vault['day_name'] = df_vault['entry_date'].dt.day_name()
+        heartbeats = df_vault.groupby('day_name')['actual_traffic'].mean().to_dict()
 
         vault_metrics = {
-            "30d_revenue": float(df_vault.tail(30)['actual_coin_in'].sum()),
-            "avg_social_imp": float(df_vault['social_impressions'].mean()) if 'social_impressions' in df_vault else 0,
-            "heartbeats": df_vault.groupby(df_vault['entry_date'].dt.day_name())['actual_traffic'].mean().to_dict()
+            "avg_social_imp": avg_imp,
+            "avg_social_eng": avg_eng,
+            "heartbeats": heartbeats,
+            "sample_size_days": len(df_vault)
         }
 
-    # 2. CHAT INPUT AT THE TOP
-    prompt = st.chat_input("Ask about Monday, trends, or strategy...")
+    # 2. CHAT INPUT (AT THE TOP)
+    prompt = st.chat_input("Analyze Monday, discuss social trends, or ask for a strategy...")
 
     if prompt:
-        # Add User Message
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         try:
@@ -603,37 +622,40 @@ with tab5:
             coeffs = st.session_state.coeffs
             live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
             
-            # Role Mapping for History
+            # Map history for Google API
             history_payload = []
             for m in st.session_state.messages[:-1]:
                 role = "model" if m["role"] == "assistant" else "user"
                 history_payload.append({"role": role, "parts": [m["content"]]})
             
+            # THE EXECUTIVE CONTEXT
             sys_context = f"""
             SYSTEM ROLE: Chief Strategy Officer at Hard Rock Hotel & Casino Ottawa.
-            MANDATE: BE CONCISE. 
-            - Provide the 'Answer' first in 2-3 sentences.
-            - Do NOT show math unless asked ('Show me the math' / 'How?').
-            - Use DOW Heartbeats as the ONLY baseline.
-            - Always end with 1 strategic follow-up question.
+            MANDATE: 
+            - Use the REAL-TIME BENCHMARKS provided. 
+            - If user refers to 'average social engagement', use the value {vault_metrics.get('avg_social_eng', 0)}.
+            - If user refers to 'average impressions', use {vault_metrics.get('avg_social_imp', 0)}.
+            - DO NOT claim data is missing. The values above are the current property averages.
+            - Provide a concise Executive Summary (2-3 sentences). 
+            - Hide math unless 'Show me the math' is requested.
 
-            DATA:
-            - Heartbeats: {json.dumps(vault_metrics.get('heartbeats', {}))}
-            - Weights: {json.dumps(coeffs)}
-            - Weather: {json.dumps(live_forecast, default=str)}
+            CURRENT PROPERTY ASSETS:
+            - Daily Social Benchmarks: {vault_metrics.get('avg_social_imp', 0)} Imp / {vault_metrics.get('avg_social_eng', 0)} Eng.
+            - Day-of-Week Heartbeats: {json.dumps(vault_metrics.get('heartbeats', {}))}
+            - Coefficients: {json.dumps(coeffs)}
+            - Forecast: {json.dumps(live_forecast, default=str)}
             """
 
             chat = model.start_chat(history=history_payload)
             response = chat.send_message(f"{sys_context}\n\nUSER MESSAGE: {prompt}")
             
-            # Add Assistant Message
             st.session_state.messages.append({"role": "assistant", "content": response.text})
             st.rerun()
 
         except Exception as e:
-            st.error(f"Consultation Error: {e}")
+            st.error(f"Strategic Consultation Error: {e}")
 
-    # 3. DISPLAY MESSAGES IN REVERSE ORDER
+    # 3. REVERSED CHAT FEED
     for message in reversed(st.session_state.messages):
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
