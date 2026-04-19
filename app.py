@@ -587,78 +587,79 @@ with tab4:
         except Exception as e:
             st.error(f"Global sync failed: {e}")
 
-# --- TAB 5: FLOORCAST ANALYST (HIGH-PRECISION RESTORE) ---
+# --- TAB 5: FLOORCAST ANALYST (WHOLESOME ANALYSIS UPGRADE) ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🔍 FloorCast Analyst</h2>
-            <p style="color: #888; margin: 0;">Predictive Intelligence & Forensic Analysis of Property Trends.</p>
+            <p style="color: #888; margin: 0;">Deep-time forensic analysis & predictive future modeling.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. ANALYST CHAT INTERFACE
     with st.container(border=True):
         st.write("### Property Intelligence Query")
-        user_query = st.text_input("Ask about future predictions, revenue trends, or historical 'Whale' days:", 
-                                  placeholder="e.g., 'Predict traffic for the first weekend of May if it rains.'")
-        
-        analyze_btn = st.button("🚀 Run Deep Analysis", use_container_width=True)
+        user_query = st.text_input("Analyze specific trends or predict future scenarios:", 
+                                  placeholder="e.g., 'Compare our last 3 holiday weekends and predict the next one.'")
+        analyze_btn = st.button("🚀 Run Comprehensive Analysis", use_container_width=True)
 
-    # 2. ANALYSIS LOGIC
     if analyze_btn and user_query:
-        with st.spinner("Analyzing YTD Ledger against Engine Coefficients..."):
+        with st.spinner("Processing historical seasonality and momentum..."):
             try:
-                # PREPARE DATA: We send the AI the "Big Picture"
-                df_analyst = pd.DataFrame(ledger_data)
+                # 1. ENRICH THE DATA (This gives the AI "Eyes")
+                df_raw = pd.DataFrame(ledger_data)
+                df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
+                df_raw = df_raw.sort_values('entry_date')
+
+                # Calculate Momentum (Is traffic growing or shrinking?)
+                df_raw['traffic_7d_avg'] = df_raw['actual_traffic'].rolling(window=7).mean()
+                df_raw['rev_7d_avg'] = df_raw['actual_coin_in'].rolling(window=7).mean()
                 
-                # We extract the 50 most recent days + the top 20 record days
-                # This ensures the AI sees both current trends and peak performance.
-                df_recent = df_analyst.tail(50)
-                df_peaks = df_analyst.sort_values('actual_traffic', ascending=False).head(20)
-                context_context = pd.concat([df_recent, df_peaks]).drop_duplicates().to_csv(index=False)
-                
-                # CALL GEMINI
+                # Identify Peak Seasonality (High/Low Performers)
+                df_peaks = df_raw.nlargest(15, 'actual_traffic')
+                df_recent = df_raw.tail(60) # Last 2 months for trend
+
+                # 2. CALL GEMINI WITH ENRICHED CONTEXT
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                 model = genai.GenerativeModel('gemini-2.5-flash')
                 
-                # THE "PRO" PROMPT: Forces AI to respect your $1,200+ spend math
                 prompt = f"""
-                SYSTEM: You are the Senior Data Analyst for Hard Rock Hotel & Casino Ottawa.
+                SYSTEM: You are the Senior Strategist for Hard Rock Hotel & Casino Ottawa.
+                You are performing a WHOLESOME analysis based on YTD Ledger Data and Engine Coefficients.
+
+                HARD MATH PILLARS:
+                - Target Revenue Per Head: ${st.session_state.coeffs['Avg_Coin_In']:,.2f}
+                - Base Intercept (Organic): {st.session_state.coeffs['Intercept']}
                 
-                ENGINE COEFFICIENTS (YOU MUST USE THESE FOR PREDICTIONS):
-                - Base Intercept (Organic Traffic): {st.session_state.coeffs['Intercept']}
-                - Revenue Per Head (Coin-In): ${st.session_state.coeffs['Avg_Coin_In']:,.2f}
-                - Ad Click Weight: {st.session_state.coeffs['Clicks']}
-                - Promo Lift (Flat): {st.session_state.coeffs['Promo']}
-                - Snow Impact (per cm): {st.session_state.coeffs['Snow_cm']}
-                - Rain Impact (per mm): {st.session_state.coeffs['Rain_mm']}
+                ENRICHED HISTORICAL CONTEXT:
+                - Peak Performance Records (Historical Highs):
+                {df_peaks[['entry_date', 'actual_traffic', 'actual_coin_in']].to_csv(index=False)}
                 
-                HISTORICAL DATA CONTEXT (YTD Trends):
-                {context_context}
+                - Recent 60-Day Momentum & 7-Day Moving Averages:
+                {df_recent[['entry_date', 'actual_traffic', 'traffic_7d_avg', 'ad_clicks', 'temp_c']].to_csv(index=False)}
                 
-                USER QUESTION: {user_query}
+                USER QUERY: {user_query}
                 
-                INSTRUCTION: 
-                1. If asked for a prediction, apply the ENGINE COEFFICIENTS to the provided scenario.
-                2. Calculate predicted revenue by multiplying your traffic forecast by ${st.session_state.coeffs['Avg_Coin_In']:,.2f}.
-                3. Be specific. Quote dates or values from the HISTORICAL DATA to back up your reasoning.
+                ANALYST INSTRUCTIONS:
+                1. Look for CORRELATIONS between past weather/promo events and traffic.
+                2. Use the 7-day moving averages to determine if the property is currently in a growth or contraction phase.
+                3. If predicting the future, cross-reference the query with your 'Peak Performance Records' to see if the request is realistic for property capacity.
+                4. Always calculate Revenue by multiplying predicted traffic by ${st.session_state.coeffs['Avg_Coin_In']:,.2f}.
                 """
                 
                 response = model.generate_content(prompt)
                 
-                # DISPLAY RESPONSE
                 st.write("---")
                 st.markdown(f"""
                     <div style="background-color: #1a1a1a; padding: 25px; border-radius: 15px; border-top: 3px solid #FFCC00;">
-                        <p style="color: #FFCC00; font-weight: bold; margin-bottom: 15px; text-transform: uppercase; font-size: 14px;">Executive Analyst Response:</p>
-                        <div style="color: #eee; line-height: 1.7; font-size: 16px;">
+                        <p style="color: #FFCC00; font-weight: bold; margin-bottom: 10px; text-transform: uppercase; font-size: 14px;">Strategic Forecast:</p>
+                        <div style="color: #eee; line-height: 1.8; font-size: 16px;">
                             {response.text}
                         </div>
                     </div>
                 """, unsafe_allow_html=True)
 
             except Exception as e:
-                st.error(f"Analyst Error: {e}")
+                st.error(f"Analysis Error: {e}")
 
 # --- TAB 6: MASTER ANALYTICS & FORENSIC REPORT ---
 with tab6:
