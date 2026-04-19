@@ -121,6 +121,7 @@ def fetch_data():
 
 ledger_data = fetch_data()
 
+# --- REPLACEMENT NAV BLOCK ---
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📈 Executive Overview", 
     "📑 Ledger Management", 
@@ -129,7 +130,6 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🧠 FloorCast Analyst",
     "📋 Master Report",
     "🧪 Forecast Sandbox"
-])
 ])
 
 # --- 1. INITIAL DATA HYDRATION (Run at Startup) ---
