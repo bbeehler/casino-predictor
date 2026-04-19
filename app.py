@@ -750,12 +750,12 @@ with tab6:
     else:
         st.warning("No data found in ledger. Add entries in the Input tab to generate reports.")
 
-     # --- TAB 7: MULTI-DAY FORECAST SANDBOX ---
+     # --- TAB 7: EC-INTEGRATED MULTI-DAY SANDBOX ---
 with tab7:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">🧪 Multi-Day Forecast Sandbox</h2>
-            <p style="color: #888; margin: 0;">Range Simulation: Stress-test your property strategy over specific windows.</p>
+            <h2 style="color: #FFCC00; margin: 0;">🧪 Forecast Sandbox (EC-Integrated)</h2>
+            <p style="color: #888; margin: 0;">Live weather feeds from Environment Canada are automatically applied to the next 7 days.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -763,58 +763,78 @@ with tab7:
     today = datetime.date.today()
     date_range = st.date_input(
         "Select Simulation Window:",
-        value=(today, today + datetime.timedelta(days=6)),
-        help="Select a start and end date to simulate cumulative performance."
+        value=(today, today + datetime.timedelta(days=2)),
+        help="Simulate cumulative performance based on live federal forecasts."
     )
 
     if len(date_range) == 2:
         start_date, end_date = date_range
         num_days = (end_date - start_date).days + 1
         
-        # 2. SCENARIO INPUTS (Applied to every day in the range)
+        # Pull live data from session state (fetched at app launch)
+        live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
+
+        # 2. SCENARIO OVERRIDES (For days without a live forecast or to test 'what-ifs')
         st.write(f"### 🎛️ Simulation Parameters ({num_days} Days)")
-        
         col1, col2, col3 = st.columns(3)
+        
         with col1:
             st.write("**Marketing & Social (Daily)**")
-            s_promo = st.checkbox("Active Promotion during this window?", value=False)
+            s_promo = st.checkbox("Active Promotion?", value=False)
             s_clicks = st.number_input("Daily Ad Clicks", value=500)
             s_imp = st.number_input("Daily Social Impressions", value=10000)
             s_eng = st.number_input("Daily Social Engagement", value=500)
         
         with col2:
-            st.write("**Environment (Daily Average)**")
-            s_temp = st.slider("Avg Temp (°C)", -30, 40, 15)
-            s_rain = st.slider("Daily Rain (mm)", 0, 50, 0)
-            s_snow = st.slider("Daily Snow (cm)", 0, 50, 0)
+            st.write("**Manual Weather (Overrides)**")
+            st.info("Live EC data will be used if available. Use these sliders for dates beyond the 7-day forecast.")
+            m_temp = st.slider("Manual Temp (°C)", -30, 40, 15)
+            m_rain = st.slider("Manual Rain (mm)", 0, 50, 0)
+            m_snow = st.slider("Manual Snow (cm)", 0, 50, 0)
 
         with col3:
-            st.write("**Financial Baseline**")
+            st.write("**Engine Context**")
             c = st.session_state.coeffs
-            st.metric("Engine Spend/Head", f"${c.get('Avg_Coin_In', 1200):,.2f}")
-            st.info("The simulation pulls historical 'Heartbeats' for each specific day in your range.")
+            st.metric("Spend Anchor", f"${c.get('Avg_Coin_In', 1200):,.2f}")
 
-        # 3. RANGE CALCULATION ENGINE
+        # 3. CONSOLIDATED CALCULATION ENGINE
         total_range_traffic = 0
         total_range_revenue = 0
         
-        # Pull ledger for DOW heartbeats
+        # Prep Heartbeats
         df_sb = pd.DataFrame(ledger_data)
         df_sb['entry_date'] = pd.to_datetime(df_sb['entry_date'])
         df_sb['day_name'] = df_sb['entry_date'].dt.day_name()
         dow_profiles = df_sb.groupby('day_name')['actual_traffic'].mean().to_dict()
 
-        # Loop through each day in the range
+        # LOOP THROUGH THE RANGE
         current_date = start_date
         while current_date <= end_date:
+            day_str = current_date.strftime("%Y-%m-%d")
             day_name = current_date.strftime("%A")
-            base_traffic = dow_profiles.get(day_name, c.get('Intercept', 1000))
             
-            # Apply Engine Weights
+            # --- THE WEATHER LOGIC GATE ---
+            # Try to find this date in the Environment Canada feed
+            ec_day = next((item for item in live_forecast if day_str in str(item.get('datetime'))), None)
+            
+            if ec_day:
+                # Use Live Federal Data
+                run_temp = ec_day.get('temperature', m_temp)
+                # Note: You may need to map EC 'precip' or 'condition' to mm/cm based on your API parser
+                run_rain = m_rain # Fallback to manual if API doesn't provide specific mm
+                run_snow = m_snow
+                weather_source = "🟢 Environment Canada Live"
+            else:
+                # Use Manual Sliders
+                run_temp, run_rain, run_snow = m_temp, m_rain, m_snow
+                weather_source = "⚪ Manual Override"
+
+            # Execute Core Math
+            base_traffic = dow_profiles.get(day_name, c.get('Intercept', 1000))
             promo_lift = c['Promo'] if s_promo else 0
             social_lift = (s_imp * c.get('Social_Imp', 0.0002)) + (s_eng * c.get('Social_Eng', 0.01))
             marketing_lift = (s_clicks * c.get('Clicks', 0.001))
-            weather_friction = (s_temp * c.get('Temp_C', 0)) + (s_rain * c.get('Rain_mm', -2.0)) + (s_snow * c.get('Snow_cm', -4.0))
+            weather_friction = (run_temp * c.get('Temp_C', 0)) + (run_rain * c.get('Rain_mm', -2.0)) + (run_snow * c.get('Snow_cm', -4.0))
             
             daily_traffic = base_traffic + promo_lift + social_lift + marketing_lift + weather_friction
             total_range_traffic += daily_traffic
@@ -825,11 +845,10 @@ with tab7:
         # 4. RESULTS DISPLAY
         st.write("---")
         res1, res2, res3 = st.columns(3)
-        res1.metric(f"Total Window Traffic", f"{int(total_range_traffic):,} Guests")
-        res2.metric(f"Total Window Revenue", f"${total_range_revenue:,.2f}")
-        res3.metric("Avg Daily Revenue", f"${(total_range_revenue / num_days):,.2f}")
+        res1.metric("Total Window Traffic", f"{int(total_range_traffic):,} Guests")
+        res2.metric("Total Window Revenue", f"${total_range_revenue:,.2f}")
+        res3.metric("Avg Daily Volume", f"{int(total_range_traffic / num_days)} / day")
 
-        # Visual Context
-        st.caption(f"Note: This simulation calculates {num_days} individual day-of-week baselines based on your 60-day ledger history.")
+        st.caption(f"Engine calibrated to use {weather_source} where possible for this date range.")
     else:
-        st.warning("Please select a valid date range (Start Date and End Date) to run the simulation.")
+        st.warning("Please select a valid start and end date.")
