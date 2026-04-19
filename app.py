@@ -554,25 +554,25 @@ with tab4:
                 st.success("✅ Database Synced.")
             except Exception as e:
                 st.error(f"Sync failed: {e}")
-# --- TAB 5: STRATEGIC CONSULTANT (LOGIC FIX) ---
+# --- TAB 5: EXECUTIVE STRATEGIC CONSULTANT ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic Consultant</h2>
-            <p style="color: #888; margin: 0;">Corrected Logic: DOW-Anchored Predictions & Benchmark Awareness.</p>
+            <p style="color: #888; margin: 0;">Executive Mode: Concise outlooks with on-demand deep dives.</p>
         </div>
     """, unsafe_allow_html=True)
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 1. DATA VAULT (Same as before, ensuring numeric safety)
+    # 1. THE DATA VAULT (Stable Pre-processing)
     vault_metrics = {}
     if ledger_data:
         df_vault = pd.DataFrame(ledger_data).copy()
         df_vault['entry_date'] = pd.to_datetime(df_vault['entry_date'])
         
-        # Column Normalization
+        # Standardize Columns
         col_map = {'actual_traffic': ['actual_traffic', 'Traffic'], 'actual_coin_in': ['actual_coin_in', 'Revenue']}
         for target, aliases in col_map.items():
             if target not in df_vault.columns:
@@ -581,13 +581,9 @@ with tab5:
                         df_vault.rename(columns={alias: target}, inplace=True); break
             df_vault[target] = pd.to_numeric(df_vault[target], errors='coerce').fillna(0)
 
-        last_30 = df_vault[df_vault['entry_date'] > (df_vault['entry_date'].max() - datetime.timedelta(days=30))]
-        
         vault_metrics = {
-            "30d_revenue": float(last_30['actual_coin_in'].sum()),
-            "30d_traffic": int(last_30['actual_traffic'].sum()),
+            "30d_revenue": float(df_vault.tail(30)['actual_coin_in'].sum()),
             "avg_social_imp": float(df_vault['social_impressions'].mean()) if 'social_impressions' in df_vault else 0,
-            "avg_social_eng": float(df_vault['social_engagement'].mean()) if 'social_engagement' in df_vault else 0,
             "heartbeats": df_vault.groupby(df_vault['entry_date'].dt.day_name())['actual_traffic'].mean().to_dict()
         }
 
@@ -596,13 +592,13 @@ with tab5:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    if prompt := st.chat_input("Ask about Monday, social trends, or monthly revenue..."):
+    if prompt := st.chat_input("Ask about Monday, trends, or strategy..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("Calculating via DOW-Anchored Logic..."):
+            with st.spinner("Preparing executive summary..."):
                 try:
                     import google.generativeai as genai
                     import json
@@ -615,19 +611,17 @@ with tab5:
                     sys_context = f"""
                     SYSTEM ROLE: Chief Strategy Officer at Hard Rock Hotel & Casino Ottawa.
                     
-                    CORE CALCULATION RULES:
-                    1. BASELINE: When predicting for a specific day, the 'DOW_Profile' for that day is the ONLY starting intercept. 
-                    2. DO NOT ADD THE GLOBAL INTERCEPT TO THE DOW_PROFILE. (Example: If Monday Heartbeat is 2500, Predicted Traffic = 2500 + Lifts/Friction).
-                    3. SOCIAL BENCHMARKS: If the user doesn't provide social data, use the Internal Ledger 'avg_social_imp' ({vault_metrics.get('avg_social_imp', 0)})—do not assume it is 0.
+                    MANDATE: BE CONCISE. Provide the "Answer" first.
+                    1. For predictions: Give the final Traffic/Revenue numbers and the 'Reasoning' in 2-3 sentences.
+                    2. For trends: Summarize the movement (Up/Down) immediately.
+                    3. DATA RULE: Use DOW Heartbeats as the ONLY baseline. Do not add Global Intercept to them.
+                    4. HIDDEN DETAIL: Do not show the math (additions/multiplications) unless the user explicitly asks 'How?' or 'Show me the math'.
+                    5. FOLLOW-UP: Always end with 1 strategic question.
 
-                    DATA ASSETS:
-                    - DOW HEARTBEATS: {json.dumps(vault_metrics.get('heartbeats', {}))}
-                    - ENGINE WEIGHTS: {json.dumps(coeffs)}
-                    - LIVE WEATHER: {json.dumps(live_forecast, default=str)}
-                    
-                    MANDATE: 
-                    If the user asks for a prediction, show your math clearly. 
-                    Ensure the 'Start Point' is the heartbeat for that day.
+                    DATA:
+                    - Heartbeats: {json.dumps(vault_metrics.get('heartbeats', {}))}
+                    - Weights: {json.dumps(coeffs)}
+                    - Weather: {json.dumps(live_forecast, default=str)}
                     """
 
                     history = [{"role": m["role"], "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
@@ -641,7 +635,7 @@ with tab5:
                 except Exception as e:
                     st.error(f"Consultation Error: {e}")
 
-    if st.button("🗑️ Reset Consultation Space", use_container_width=True):
+    if st.button("🗑️ Reset Consultation", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
