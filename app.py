@@ -754,7 +754,7 @@ with tab6:
 with tab7:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">🧪 Forecast Sandbox (EC-Integrated)</h2>
+            <h2 style="color: #FFCC00; margin: 0;">🧪 Forecast Sandbox</h2>
             <p style="color: #888; margin: 0;">Live weather feeds from Environment Canada are automatically applied to the next 7 days.</p>
         </div>
     """, unsafe_allow_html=True)
