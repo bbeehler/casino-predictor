@@ -465,58 +465,82 @@ with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Calibration</h2>
-            <p style="color: #888; margin: 0;">Adjust marketing multipliers based on industry benchmarks.</p>
+            <p style="color: #888; margin: 0;">Adjust marketing multipliers based on industry benchmarks and forensic reality.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # --- INDUSTRY BENCHMARK REFERENCE ---
+    # --- 1. INDUSTRY BENCHMARK REFERENCE ---
     with st.expander("📊 View Casino Industry Benchmarks"):
         st.write("""
-        | Metric | Industry Average (Casino) | Your Current Weight |
+        | Metric | Industry Average (Gaming) | Your Current Weight |
         | :--- | :--- | :--- |
-        | **Social Impressions** | 0.0001 - 0.0005 (1 visitor per 2k-10k views) | {social_w} |
-        | **Ad Clicks** | 0.02 - 0.08 (2% - 8% conversion to foot traffic) | {click_w} |
-        | **Major Promo** | 1.10 - 1.25 (10% - 25% lift over baseline) | {promo_w} |
-        | **Severe Weather** | 0.70 - 0.90 (10% - 30% friction/loss) | {weather_w} |
+        | **Social Impressions** | 0.0001 - 0.0005 (1 guest per 2k-10k views) | {social_w:.4f} |
+        | **Ad Clicks** | 0.02 - 0.08 (2% - 8% conversion to floor) | {click_w:.2f} |
+        | **Major Promo** | 1.10 - 1.25 (10% - 25% lift over baseline) | {promo_w:,.0f} |
+        | **Weather Friction** | -20 to -60 (Guests lost per cm of snow) | {weather_w:,.0f} |
         """.format(
             social_w=st.session_state.coeffs.get('Social_Imp', 0.0002),
             click_w=st.session_state.coeffs.get('Clicks', 0.02),
-            promo_w=st.session_state.coeffs.get('Promo', 450.0), # Assuming flat-head count lift
+            promo_w=st.session_state.coeffs.get('Promo', 450.0),
             weather_w=st.session_state.coeffs.get('Snow_cm', -45.0)
         ))
 
-    # --- MANUAL CALIBRATION FORM ---
+    # --- 2. MANUAL CALIBRATION FORM ---
     with st.form("engine_settings"):
         col1, col2 = st.columns(2)
         
         with col1:
             st.write("### 📣 Marketing Multipliers")
-            new_clicks = st.slider("Click Conversion (Weight)", 0.00, 0.15, float(st.session_state.coeffs.get('Clicks', 0.02)), help="How many guests result from 1 ad click?")
-            new_social = st.number_input("Impression Weight", 0.0000, 0.0010, float(st.session_state.coeffs.get('Social_Imp', 0.0002)), format="%.4f")
-            new_promo = st.number_input("Promo Lift (Flat Guest Count)", 0, 2000, int(st.session_state.coeffs.get('Promo', 450)))
+            new_clicks = st.slider("Click Conversion (Weight)", 0.00, 0.15, float(st.session_state.coeffs.get('Clicks', 0.02)), help="Expected guests per 1 digital ad click.")
+            new_social = st.number_input("Social Impression Weight", 0.0000, 0.0010, float(st.session_state.coeffs.get('Social_Imp', 0.0002)), format="%.4f")
+            new_promo = st.number_input("Promo Lift (Flat Guest Count)", 0, 5000, int(st.session_state.coeffs.get('Promo', 450)))
 
         with col2:
             st.write("### ❄️ Environmental Friction")
-            new_snow = st.slider("Snow Friction (Guests lost per cm)", -200, 0, int(st.session_state.coeffs.get('Snow_cm', -45)))
-            new_rain = st.slider("Rain Friction (Guests lost per mm)", -100, 0, int(st.session_state.coeffs.get('Rain_mm', -12)))
+            new_snow = st.slider("Snow Friction (Guests lost per cm)", -500, 0, int(st.session_state.coeffs.get('Snow_cm', -45)))
+            new_rain = st.slider("Rain Friction (Guests lost per mm)", -200, 0, int(st.session_state.coeffs.get('Rain_mm', -12)))
+            new_coin = st.number_input("Avg Spend Per Head ($)", 50.0, 500.0, float(st.session_state.coeffs.get('Avg_Coin_In', 112.50)))
 
+        # --- 3. THE "CLEAN SYNC" LOGIC ---
         if st.form_submit_button("💾 Save Calibration to Vault"):
-            # Update Session State
+            # Update Local Session State First
             st.session_state.coeffs.update({
                 'Clicks': new_clicks,
                 'Social_Imp': new_social,
                 'Promo': new_promo,
                 'Snow_cm': new_snow,
-                'Rain_mm': new_rain
+                'Rain_mm': new_rain,
+                'Avg_Coin_In': new_coin
             })
             
-            # Sync to Supabase
+            # SCHEMA GATEKEEPER: Filter for only columns that exist in the Supabase Table
+            # This strips out 'DOW_Profiles' and other session noise
+            db_schema_columns = [
+                'id', 'Intercept', 'Avg_Coin_In', 'Temp_C', 
+                'Snow_cm', 'Rain_mm', 'Promo', 'Clicks', 'Impressions'
+            ]
+            
+            # Build the payload for the DB
+            sync_payload = {k: v for k, v in st.session_state.coeffs.items() if k in db_schema_columns}
+            
+            # Map the app's 'Social_Imp' variable to the DB's 'Impressions' column name
+            sync_payload['Impressions'] = st.session_state.coeffs.get('Social_Imp', 0.0002)
+
             try:
-                supabase.table("coefficients").update(st.session_state.coeffs).eq("id", 1).execute()
-                st.success("Engine Calibrated! Tab 1 and Tab 5 are now updated with these weights.")
+                # Force ID to 1 to ensure we are always updating the master record
+                supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
+                st.success("✅ Engine Calibrated! Forensic models in Tab 1 and Tab 5 have been updated.")
                 st.rerun()
             except Exception as e:
-                st.error(f"Sync failed: {e}")
+                st.error(f"❌ Sync failed: {e}")
+
+    # --- 4. DATA HEALTH CHECK ---
+    st.divider()
+    st.write("### 🔍 Engine Integrity")
+    if st.session_state.coeffs.get('Clicks', 0) < 0.01:
+        st.warning("⚠️ Warning: Click Weight is below industry floor (0.02). This will cause Digital Lift to appear artificially low.")
+    if abs(st.session_state.coeffs.get('Snow_cm', 0)) > 150:
+        st.info("ℹ️ Snow friction is set high. Ensure this accounts for road closures, not just property discomfort.")
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
