@@ -555,23 +555,43 @@ with tab4:
         except Exception as e:
             st.error(f"Sync failed: {e}")
 
-# --- TAB 5: STRATEGIC FORECAST ANALYST (COMPLETE) ---
+# --- TAB 5: STRATEGIC FORECAST ANALYST (STABILIZED) ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic FloorCast Analyst</h2>
-            <p style="color: #888; margin: 0;">Forensic AI: Benchmarking user queries against 60-day ledger history and live federal weather feeds.</p>
+            <p style="color: #888; margin: 0;">Forensic AI: Benchmarking user queries against ledger history and federal feeds.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. PRE-CALCULATE LEDGER BENCHMARKS
+    # 1. PRE-CALCULATE LEDGER BENCHMARKS (WITH SAFETY CHECK)
     if ledger_data:
-        df_bench = pd.DataFrame(ledger_data)
+        df_bench = pd.DataFrame(ledger_data).copy()
         
-        # Ensure numeric and date types
+        # --- SAFE COLUMN MAPPING ---
+        # This prevents the KeyError by ensuring these columns exist
+        column_map = {
+            'social_impressions': ['social_impressions', 'Impressions', 'Social Imp', 'Social_Imp'],
+            'social_engagement': ['social_engagement', 'Engagement', 'Social Eng', 'Social_Eng'],
+            'actual_traffic': ['actual_traffic', 'Traffic', 'Attendance', 'Daily_Traffic']
+        }
+
+        for target_col, variations in column_map.items():
+            if target_col not in df_bench.columns:
+                # Check if a variation exists in the uploaded CSV
+                found = False
+                for v in variations:
+                    if v in df_bench.columns:
+                        df_bench.rename(columns={v: target_col}, inplace=True)
+                        found = True
+                        break
+                # If still not found, create a zero column to prevent crashing
+                if not found:
+                    df_bench[target_col] = 0
+
+        # Ensure numeric and date types for math
         for col in ['actual_traffic', 'social_impressions', 'social_engagement']:
-            if col in df_bench.columns:
-                df_bench[col] = pd.to_numeric(df_bench[col], errors='coerce').fillna(0)
+            df_bench[col] = pd.to_numeric(df_bench[col], errors='coerce').fillna(0)
         
         df_bench['entry_date'] = pd.to_datetime(df_bench['entry_date'])
         df_bench['day_name'] = df_bench['entry_date'].dt.day_name()
@@ -589,41 +609,31 @@ with tab5:
     # 2. INTERFACE
     with st.container(border=True):
         st.write("### 🗨️ Strategic Consultation")
-        st.info("Ask about any date, promo scenario, or marketing push. The AI will cross-reference your ledger history.")
         user_query = st.text_input("Consult with AI Strategy:", 
                                   placeholder="e.g. 'What is the outlook for Monday if we run a 20k impression social push?'")
         analyze_btn = st.button("🚀 Run Forensic Analysis", use_container_width=True)
 
-    # 3. AI LOGIC
+    # 3. AI LOGIC (Matches Tab 4 Coefficients)
     if analyze_btn and user_query:
         if not ledger_data:
             st.warning("Please upload ledger data in Tab 2 before running analysis.")
         else:
-            with st.spinner("Triangulating ledger benchmarks and federal weather..."):
+            with st.spinner("Triangulating ledger benchmarks..."):
                 try:
                     import google.generativeai as genai
                     import json
 
-                    # Configure Gemini
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                     model = genai.GenerativeModel('gemini-2.5-flash')
                     
-                    # Live Weather Data
                     live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
 
                     prompt = f"""
-                    SYSTEM ROLE: You are the Senior Business Strategist for Hard Rock Hotel & Casino Ottawa.
-                    Your objective is to provide forensic, data-backed predictions using the provided datasets.
-
-                    DATASET 1: HISTORICAL HEARTBEATS (Actual Averages from Ledger)
-                    - Monday: {dow_stats.get('Monday', 0):,.0f} guests
-                    - Tuesday: {dow_stats.get('Tuesday', 0):,.0f} guests
-                    - Wednesday: {dow_stats.get('Wednesday', 0):,.0f} guests
-                    - Thursday: {dow_stats.get('Thursday', 0):,.0f} guests
-                    - Friday: {dow_stats.get('Friday', 0):,.0f} guests
-                    - Saturday: {dow_stats.get('Saturday', 0):,.0f} guests
-                    - Sunday: {dow_stats.get('Sunday', 0):,.0f} guests
-                    - TYPICAL SOCIAL IMPACT: {avg_imp:,.0f} impressions / {avg_eng:,.0f} engagements per day.
+                    SYSTEM ROLE: Senior Business Strategist for Hard Rock Hotel & Casino Ottawa.
+                    
+                    DATASET 1: HISTORICAL HEARTBEATS (Averages from Ledger)
+                    {json.dumps(dow_stats)}
+                    - BENCHMARK SOCIAL: {avg_imp:,.0f} impressions / {avg_eng:,.0f} engagements.
 
                     DATASET 2: CALIBRATED ENGINE COEFFICIENTS
                     {json.dumps(st.session_state.coeffs)}
@@ -633,22 +643,19 @@ with tab5:
 
                     USER QUERY: "{user_query}"
 
-                    EXECUTION RULES:
-                    1. START WITH THE TRUTH: Identify the day of the week requested and state its "Historical Heartbeat" from the ledger.
-                    2. NEVER ASSUME ZERO: If the user doesn't provide social/ad numbers, use the Typical Social Impact benchmarks listed above as the 'Status Quo'.
-                    3. WEATHER FRICTION: Look at the Environment Canada forecast for the date requested. Apply coefficients for Temp, Rain, and Snow.
-                    4. PREDICT: Calculate Traffic and Revenue (Traffic * Avg_Coin_In).
-                    5. STRATEGIC INTERVIEW: End your response by asking 2-3 specific questions that would change this prediction (e.g., 'Is there a competing local concert?' or 'What is the player-tier focus of this promo?').
-
-                    FORMATTING: Use bolding for key numbers. Maintain a professional, executive tone.
+                    INSTRUCTIONS:
+                    1. Use the Ledger Heartbeat as the starting 'Normal' floor.
+                    2. Apply weather friction from the forecast and social lift from benchmarks.
+                    3. If the user query is vague on Promotion/Social, use the benchmarks.
+                    4. End with 2 strategic questions for the user.
                     """
                     
                     response = model.generate_content(prompt)
                     
                     st.write("---")
                     st.markdown(f"""
-                        <div style="background-color: #1a1a1a; padding: 25px; border-radius: 15px; border-top: 3px solid #FFCC00; border-right: 1px solid #333; border-bottom: 1px solid #333; border-left: 1px solid #333;">
-                            <div style="color: #eee; line-height: 1.8; font-size: 16px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                        <div style="background-color: #1a1a1a; padding: 25px; border-radius: 15px; border-top: 3px solid #FFCC00;">
+                            <div style="color: #eee; line-height: 1.8; font-size: 16px;">
                                 {response.text}
                             </div>
                         </div>
