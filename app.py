@@ -478,66 +478,79 @@ with tab3:
         st.write("### Historical Digital Revenue Contribution")
         st.area_chart(df_strat.set_index('entry_date')['Digital_Revenue_Lift'])
 
-# --- TAB 4: ROCK-SOLID ENGINE CALIBRATION (V3) ---
+# --- TAB 4: ULTIMATE CONSOLIDATED ENGINE ---
 with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control</h2>
-            <p style="color: #888; margin: 0;">Anchoring coefficients to the 60-Day Heartbeat with non-zero Friction Guardrails.</p>
+            <p style="color: #888; margin: 0;">Global Anchoring: Heartbeat, Weather Guardrails, and Social Conversion Standards.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    df_calc = pd.DataFrame(ledger_data).copy()
+    # Use the FULL ledger for coefficients
+    df_global = pd.DataFrame(ledger_data).copy()
     
-    # Pre-processing
-    required_cols = ['actual_traffic', 'ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo', 'actual_coin_in']
-    for col in required_cols:
-        if col not in df_calc.columns: df_calc[col] = 0.0
-        df_calc[col] = pd.to_numeric(df_calc[col], errors='coerce').fillna(0.0)
+    # 1. DATA INTEGRITY SHIELD
+    # Include every variable we've built: Weather, Marketing, and Social
+    social_cols = ['social_impressions', 'social_engagement']
+    numeric_cols = ['actual_traffic', 'snow_cm', 'rain_mm', 'active_promo', 'temp_c', 'ad_clicks', 'actual_coin_in'] + social_cols
+    
+    for col in numeric_cols:
+        if col in df_global.columns:
+            df_global[col] = pd.to_numeric(df_global[col], errors='coerce').fillna(0.0)
+        else:
+            df_global[col] = 0.0 # Create column with 0 if missing from CSV
 
-    ledger_signature = hash(pd.util.hash_pandas_object(df_calc).sum())
+    ledger_signature = hash(pd.util.hash_pandas_object(df_global).sum())
 
     if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
         if st.session_state.get('last_calib_hash') == ledger_signature:
-            st.info("⚖️ **Weights Locked**: Data is identical to the last calibration.")
+            st.info("⚖️ **Weights Locked**: Global history is unchanged.")
         else:
-            with st.spinner("Executing Segmented Regression & Weather Guardrails..."):
+            with st.spinner("Executing Global Forensic Calibration..."):
                 try:
                     from sklearn.linear_model import Ridge
-                    df_calc['entry_date'] = pd.to_datetime(df_calc['entry_date'])
-                    df_calc['day_name'] = df_calc['entry_date'].dt.day_name()
                     
-                    dow_profiles = df_calc.groupby('day_name')['actual_traffic'].mean().to_dict()
-                    df_calc['residual'] = df_calc.apply(lambda x: x['actual_traffic'] - dow_profiles[x['day_name']], axis=1)
-                    
-                    features = ['ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo']
-                    X = df_calc[features]
-                    y = df_calc['residual']
+                    # STEP 1: SEGMENTED HEARTBEAT (60-Day DOW Averages)
+                    df_global['entry_date'] = pd.to_datetime(df_global['entry_date'])
+                    df_global['day_name'] = df_global['entry_date'].dt.day_name()
+                    dow_profiles = df_global.groupby('day_name')['actual_traffic'].mean().to_dict()
+                    df_global['residual'] = df_global.apply(lambda x: x['actual_traffic'] - dow_profiles[x['day_name']], axis=1)
 
-                    model = Ridge(alpha=1.0)
+                    # STEP 2: MULTI-CHANNEL REGRESSION
+                    features = ['ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo', 'social_impressions', 'social_engagement']
+                    X = df_global[features]
+                    y = df_global['residual']
+
+                    model = Ridge(alpha=0.1) # Sensitive to rare events (like snow)
                     model.fit(X, y)
                     raw_weights = dict(zip(features, model.coef_))
 
-                    # DATA-DRIVEN GUARDRAILS
-                    avg_traffic = float(df_calc['actual_traffic'].mean())
-                    promo_floor = avg_traffic * 0.05
-                    snow_floor  = -2.50 # Loss per cm
-                    rain_floor  = -1.50 # Loss per mm
+                    # STEP 3: INDUSTRY & OTTAWA GUARDRAILS (Permanent Memory)
+                    avg_traffic = float(df_global['actual_traffic'].mean())
                     
+                    # Hard-coded Floors (Industry Standards)
+                    promo_floor = avg_traffic * 0.05
+                    imp_floor   = 0.0002 # 2 guests per 10k impressions
+                    eng_floor   = 0.0100 # 1 guest per 100 engagements
+                    snow_floor  = -4.00   # 4 guests lost per cm
+                    rain_floor  = -2.00   # 2 guests lost per mm
+
                     final_weights = {
                         "Intercept": avg_traffic, 
-                        "Avg_Coin_In": float(df_calc['actual_coin_in'].sum() / df_calc['actual_traffic'].sum()) if df_calc['actual_traffic'].sum() > 0 else 1200.0,
+                        "Avg_Coin_In": float(df_global['actual_coin_in'].sum() / df_global['actual_traffic'].sum()) if df_global['actual_traffic'].sum() > 0 else 1200.0,
                         "Clicks": max(0.001, float(raw_weights.get('ad_clicks', 0))),
                         "Promo": max(float(raw_weights.get('active_promo', 0)), promo_floor),
+                        "Social_Imp": max(float(raw_weights.get('social_impressions', 0)), imp_floor),
+                        "Social_Eng": max(float(raw_weights.get('social_engagement', 0)), eng_floor),
                         "Temp_C": float(raw_weights.get('temp_c', 0)),
-                        # Ensure we always have negative friction, even if ledger is 'clean'
                         "Snow_cm": min(-abs(float(raw_weights.get('snow_cm', 0))), snow_floor),
                         "Rain_mm": min(-abs(float(raw_weights.get('rain_mm', 0))), rain_floor)
                     }
 
                     st.session_state.coeffs.update(final_weights)
                     st.session_state.last_calib_hash = ledger_signature
-                    st.success("🎯 Calibration Locked with Weather Guardrails.")
+                    st.success("🎯 Global Calibration Complete: Weather & Social Integrated.")
                     st.rerun()
 
                 except Exception as e:
@@ -546,11 +559,20 @@ with tab4:
     # --- 2. LIVE COEFFICIENT MONITOR ---
     st.write("### 📊 Active Engine Coefficients")
     c = st.session_state.coeffs
-    display_coeffs = {k: v for k, v in c.items() if k not in ['id', 'created_at']}
+    d_coeffs = {k: v for k, v in c.items() if k not in ['id', 'created_at']}
     
-    mon_cols = st.columns(len(display_coeffs))
-    for i, (key, val) in enumerate(display_coeffs.items()):
-        mon_cols[i].metric(label=key, value=f"{float(val):.2f}")
+    # Use metrics for high-level visibility
+    r1, r2 = st.columns(2), st.columns(3)
+    # Financials
+    r1[0].metric("Base Daily Traffic", f"{float(d_coeffs.get('Intercept',0)):.2f}")
+    r1[1].metric("Avg Spend", f"${float(d_coeffs.get('Avg_Coin_In',0)):.2f}")
+    
+    # Friction/Lift Details (Second Row)
+    st.write("**Friction & Lift Factors**")
+    f_cols = st.columns(len(d_coeffs) - 2)
+    friction_keys = [k for k in d_coeffs if k not in ['Intercept', 'Avg_Coin_In']]
+    for i, k in enumerate(friction_keys):
+        f_cols[i].metric(label=k, value=f"{float(d_coeffs.get(k,0)):.4f}")
 
     st.write("---")
 
@@ -560,14 +582,15 @@ with tab4:
     with col_fin:
         with st.container(border=True):
             st.write("**💰 Financials**")
-            new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 0)), format="%.2f")
-            new_avg_spend = st.number_input("Spend / Head ($)", value=float(c.get('Avg_Coin_In', 1200)), format="%.2f")
+            new_intercept = st.number_input("Base Daily Traffic", value=float(c.get('Intercept', 0)))
+            new_avg_spend = st.number_input("Spend / Head ($)", value=float(c.get('Avg_Coin_In', 1200)))
 
     with col_mkt:
         with st.container(border=True):
-            st.write("**🚀 Marketing**")
-            new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)), format="%.2f")
-            new_clicks = st.number_input("Weight / Click", value=float(c.get('Clicks', 0)), format="%.4f")
+            st.write("**🚀 Marketing & Social**")
+            new_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
+            new_imp = st.number_input("Weight / Impression", value=float(c.get('Social_Imp', 0.0002)), format="%.4f")
+            new_eng = st.number_input("Weight / Engagement", value=float(c.get('Social_Eng', 0.0100)), format="%.4f")
 
     with col_env:
         with st.container(border=True):
@@ -578,14 +601,16 @@ with tab4:
 
     if st.button("💾 Save All Engine Changes to Database", use_container_width=True):
         try:
+            # We must include the NEW Social keys in the Supabase update
             updated_vals = {
-                "id": 1, "Intercept": new_intercept, "Avg_Coin_In": new_avg_spend,
-                "Promo": new_promo, "Clicks": new_clicks, 
+                "id": 1, 
+                "Intercept": new_intercept, "Avg_Coin_In": new_avg_spend,
+                "Promo": new_promo, "Social_Imp": new_imp, "Social_Eng": new_eng,
                 "Temp_C": new_temp, "Snow_cm": new_snow, "Rain_mm": new_rain
             }
             supabase.table("coefficients").upsert(updated_vals).execute()
             st.session_state.coeffs.update(updated_vals)
-            st.success("✅ Engine settings synced.")
+            st.success("✅ Engine settings synced to Database.")
         except Exception as e:
             st.error(f"Sync failed: {e}")
 
