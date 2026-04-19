@@ -419,7 +419,7 @@ with tab3:
         st.write("### Historical Digital Revenue Contribution")
         st.area_chart(df_strat.set_index('entry_date')['Digital_Revenue_Lift'])
 
-# --- TAB 4: DYNAMIC ENGINE CONTROL ---
+# --- TAB 4: DYNAMIC ENGINE CONTROL (STABILIZED) ---
 with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
@@ -428,128 +428,132 @@ with tab4:
         </div>
     """, unsafe_allow_html=True)
 
-    df_global = pd.DataFrame(ledger_data).copy()
-    
-    # 1. DATA INTEGRITY & NORMALIZATION
-    col_map = {
-        'social_impressions': ['social_impressions', 'Impressions', 'Social_Imp'],
-        'social_engagement': ['social_engagement', 'Engagement', 'Social_Eng'],
-        'actual_traffic': ['actual_traffic', 'Traffic', 'Attendance'],
-        'actual_coin_in': ['actual_coin_in', 'Revenue', 'Coin_In']
-    }
-    for target, aliases in col_map.items():
-        if target not in df_global.columns:
-            for alias in aliases:
-                if alias in df_global.columns:
-                    df_global.rename(columns={alias: target}, inplace=True)
-                    break
-        df_global[target] = pd.to_numeric(df_global[target], errors='coerce').fillna(0)
+    if not ledger_data:
+        st.warning("⚠️ No ledger data detected. Please upload a CSV in Tab 2 to begin calibration.")
+    else:
+        df_global = pd.DataFrame(ledger_data).copy()
+        
+        # 1. ROBUST COLUMN MAPPING
+        # We define what we WANT vs what might be in the CSV
+        target_schema = {
+            'actual_traffic': ['actual_traffic', 'Traffic', 'Attendance', 'Daily_Traffic', 'Heads'],
+            'actual_coin_in': ['actual_coin_in', 'Revenue', 'Coin_In', 'Coin-In', 'Daily_Revenue'],
+            'social_impressions': ['social_impressions', 'Impressions', 'Social_Imp', 'Reach'],
+            'social_engagement': ['social_engagement', 'Engagement', 'Social_Eng', 'Interactions'],
+            'ad_clicks': ['ad_clicks', 'Clicks', 'Ad_Clicks', 'Web_Traffic'],
+            'temp_c': ['temp_c', 'Temp', 'Temperature', 'T_Celsius'],
+            'snow_cm': ['snow_cm', 'Snow', 'Snowfall', 'Snow_cm'],
+            'rain_mm': ['rain_mm', 'Rain', 'Rainfall', 'Precip_mm'],
+            'active_promo': ['active_promo', 'Promo', 'Promotion', 'Event_Flag']
+        }
 
-    ledger_signature = hash(pd.util.hash_pandas_object(df_global).sum())
+        # Rename columns if aliases are found
+        for target, aliases in target_schema.items():
+            if target not in df_global.columns:
+                for alias in aliases:
+                    if alias in df_global.columns:
+                        df_global.rename(columns={alias: target}, inplace=True)
+                        break
+            
+            # Final Safety: If column still doesn't exist, create it with zeros so code doesn't crash
+            if target not in df_global.columns:
+                df_global[target] = 0
+            
+            # Force numeric conversion
+            df_global[target] = pd.to_numeric(df_global[target], errors='coerce').fillna(0)
 
-    if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
-        if st.session_state.get('last_calib_hash') == ledger_signature:
-            st.info("⚖️ **Weights Locked**: Global history is unchanged.")
-        else:
-            with st.spinner("Executing DOW-Segmented Regression..."):
-                try:
-                    from sklearn.linear_model import Ridge
-                    
-                    # STEP 1: CALCULATE THE 'HEARTBEAT' (DOW Baseline)
-                    df_global['entry_date'] = pd.to_datetime(df_global['entry_date'])
-                    df_global['day_name'] = df_global['entry_date'].dt.day_name()
-                    dow_profiles = df_global.groupby('day_name')['actual_traffic'].mean().to_dict()
-                    
-                    # Calculate Residuals (How much does traffic move ABOVE or BELOW the DOW norm?)
-                    df_global['residual'] = df_global.apply(lambda x: x['actual_traffic'] - dow_profiles[x['day_name']], axis=1)
+        ledger_signature = hash(pd.util.hash_pandas_object(df_global).sum())
 
-                    # STEP 2: MULTI-CHANNEL REGRESSION ON RESIDUALS
-                    features = ['ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo', 'social_impressions', 'social_engagement']
-                    X = df_global[features]
-                    y = df_global['residual']
+        # 2. CALIBRATION LOGIC
+        if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
+            if st.session_state.get('last_calib_hash') == ledger_signature:
+                st.info("⚖️ **Weights Locked**: Data is identical to the last calibration.")
+            else:
+                with st.spinner("Executing DOW-Segmented Regression..."):
+                    try:
+                        from sklearn.linear_model import Ridge
+                        
+                        # Calculate Heartbeats
+                        df_global['entry_date'] = pd.to_datetime(df_global['entry_date'])
+                        df_global['day_name'] = df_global['entry_date'].dt.day_name()
+                        dow_profiles = df_global.groupby('day_name')['actual_traffic'].mean().to_dict()
+                        
+                        # Calculate Residuals (Variance from DOW average)
+                        df_global['residual'] = df_global.apply(lambda x: x['actual_traffic'] - dow_profiles[x['day_name']], axis=1)
 
-                    model = Ridge(alpha=0.1)
-                    model.fit(X, y)
-                    raw_weights = dict(zip(features, model.coef_))
+                        # Regression on residuals
+                        features = ['ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo', 'social_impressions', 'social_engagement']
+                        X = df_global[features]
+                        y = df_global['residual']
 
-                    # STEP 3: CONSOLIDATED CALIBRATION
-                    avg_traffic = float(df_global['actual_traffic'].mean())
-                    
-                    final_weights = {
-                        "Intercept": avg_traffic, 
-                        "Avg_Coin_In": float(df_global['actual_coin_in'].sum() / df_global['actual_traffic'].sum()) if df_global['actual_traffic'].sum() > 0 else 1200.0,
-                        "Clicks": float(raw_weights.get('ad_clicks', 0)),
-                        "Promo": max(float(raw_weights.get('active_promo', 0)), avg_traffic * 0.05),
-                        "Social_Imp": max(float(raw_weights.get('social_impressions', 0)), 0.0002),
-                        "Social_Eng": max(float(raw_weights.get('social_engagement', 0)), 0.0100),
-                        "Temp_C": float(raw_weights.get('temp_c', 0)),
-                        "Snow_cm": min(-abs(float(raw_weights.get('snow_cm', 0))), -4.00),
-                        "Rain_mm": min(-abs(float(raw_weights.get('rain_mm', 0))), -2.00),
-                        # Store the DOW Profiles for the Sandbox to pull
-                        "DOW_Profiles": dow_profiles 
-                    }
+                        model = Ridge(alpha=0.1)
+                        model.fit(X, y)
+                        raw_weights = dict(zip(features, model.coef_))
 
-                    st.session_state.coeffs.update(final_weights)
-                    st.session_state.last_calib_hash = ledger_signature
-                    st.success("🎯 DOW-Segmented Calibration Complete. Baseline gap resolved.")
-                    st.rerun()
+                        # Final Calibration State
+                        avg_traffic = float(df_global['actual_traffic'].mean())
+                        
+                        final_weights = {
+                            "Intercept": avg_traffic, 
+                            "Avg_Coin_In": float(df_global['actual_coin_in'].sum() / df_global['actual_traffic'].sum()) if df_global['actual_traffic'].sum() > 0 else 1200.0,
+                            "Clicks": float(raw_weights.get('ad_clicks', 0)),
+                            "Promo": max(float(raw_weights.get('active_promo', 0)), avg_traffic * 0.05),
+                            "Social_Imp": max(float(raw_weights.get('social_impressions', 0)), 0.0002),
+                            "Social_Eng": max(float(raw_weights.get('social_engagement', 0)), 0.0100),
+                            "Temp_C": float(raw_weights.get('temp_c', 0)),
+                            "Snow_cm": min(-abs(float(raw_weights.get('snow_cm', 0))), -4.00),
+                            "Rain_mm": min(-abs(float(raw_weights.get('rain_mm', 0))), -2.00),
+                            "DOW_Profiles": dow_profiles 
+                        }
 
-                except Exception as e:
-                    st.error(f"Calibration Error: {e}")
+                        st.session_state.coeffs.update(final_weights)
+                        st.session_state.last_calib_hash = ledger_signature
+                        st.success("🎯 DOW-Segmented Calibration Complete.")
+                        st.rerun()
 
-    # --- 2. LIVE MONITORING ---
-    st.write("### 📊 Active Engine Weights")
-    c = st.session_state.coeffs
-    d_coeffs = {k: v for k, v in c.items() if k not in ['id', 'created_at', 'DOW_Profiles']}
-    
-    col_a, col_b = st.columns(2)
-    col_a.metric("Global Base Traffic", f"{float(d_coeffs.get('Intercept',0)):.0f}")
-    col_b.metric("Avg Spend/Head", f"${float(d_coeffs.get('Avg_Coin_In',0)):.2f}")
+                    except Exception as e:
+                        st.error(f"Calibration Error: {e}")
 
-    st.write("**Marketing & Environmental Weights**")
-    f_keys = [k for k in d_coeffs if k not in ['Intercept', 'Avg_Coin_In']]
-    f_cols = st.columns(len(f_keys))
-    for i, k in enumerate(f_keys):
-        f_cols[i].metric(label=k, value=f"{float(d_coeffs.get(k,0)):.4f}")
+        # --- 3. LIVE MONITORING & OVERRIDES ---
+        c = st.session_state.coeffs
+        d_coeffs = {k: v for k, v in c.items() if k not in ['id', 'created_at', 'DOW_Profiles']}
+        
+        st.write("### 📊 Active Engine Weights")
+        r1, r2 = st.columns(2), st.columns(len(d_coeffs)-2)
+        r1[0].metric("Global Intercept", f"{float(d_coeffs.get('Intercept',0)):.0f}")
+        r1[1].metric("Avg Spend", f"${float(d_coeffs.get('Avg_Coin_In',0)):.2f}")
+        
+        keys = [k for k in d_coeffs if k not in ['Intercept', 'Avg_Coin_In']]
+        for i, k in enumerate(keys):
+            r2[i].metric(label=k, value=f"{float(d_coeffs.get(k,0)):.4f}")
 
-    st.write("---")
-
-    # --- 3. MANUAL OVERRIDE & DB SYNC ---
-    col_fin, col_mkt, col_env = st.columns(3)
-
-    with col_fin:
-        with st.container(border=True):
-            st.write("**💰 Financials**")
+        st.divider()
+        
+        col_fin, col_mkt, col_env = st.columns(3)
+        with col_fin:
             n_intercept = st.number_input("Global Intercept", value=float(c.get('Intercept', 0)))
             n_spend = st.number_input("Spend/Head ($)", value=float(c.get('Avg_Coin_In', 1200)))
-
-    with col_mkt:
-        with st.container(border=True):
-            st.write("**🚀 Marketing**")
+        with col_mkt:
             n_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
             n_imp = st.number_input("Social Imp Weight", value=float(c.get('Social_Imp', 0.0002)), format="%.4f")
             n_eng = st.number_input("Social Eng Weight", value=float(c.get('Social_Eng', 0.0100)), format="%.4f")
-
-    with col_env:
-        with st.container(border=True):
-            st.write("**☁️ Environment**")
+        with col_env:
             n_temp = st.number_input("Temp Weight", value=float(c.get('Temp_C', 0)), format="%.4f")
             n_snow = st.number_input("Snow Weight (cm)", value=float(c.get('Snow_cm', 0)), format="%.4f")
             n_rain = st.number_input("Rain Weight (mm)", value=float(c.get('Rain_mm', 0)), format="%.4f")
 
-    if st.button("💾 Sync Engine to Database", use_container_width=True):
-        try:
-            # Note: DOW_Profiles is complex, we keep Intercept as the DB primary anchor
-            update_data = {
-                "id": 1, "Intercept": n_intercept, "Avg_Coin_In": n_spend,
-                "Promo": n_promo, "Social_Imp": n_imp, "Social_Eng": n_eng,
-                "Temp_C": n_temp, "Snow_cm": n_snow, "Rain_mm": n_rain
-            }
-            supabase.table("coefficients").upsert(update_data).execute()
-            st.session_state.coeffs.update(update_data)
-            st.success("✅ Database Synced.")
-        except Exception as e:
-            st.error(f"Sync failed: {e}")
+        if st.button("💾 Sync Engine to Database", use_container_width=True):
+            try:
+                update_data = {
+                    "id": 1, "Intercept": n_intercept, "Avg_Coin_In": n_spend,
+                    "Promo": n_promo, "Social_Imp": n_imp, "Social_Eng": n_eng,
+                    "Temp_C": n_temp, "Snow_cm": n_snow, "Rain_mm": n_rain
+                }
+                supabase.table("coefficients").upsert(update_data).execute()
+                st.session_state.coeffs.update(update_data)
+                st.success("✅ Database Synced.")
+            except Exception as e:
+                st.error(f"Sync failed: {e}")
 # --- TAB 5: STRATEGIC CONSULTANT (FINAL STABILIZED) ---
 with tab5:
     st.markdown("""
