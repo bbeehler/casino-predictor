@@ -128,17 +128,53 @@ def fetch_ledger_data():
 
 ledger_data = fetch_ledger_data()
 
-# 7. HEADER & LOGOUT
-header_col1, header_col2 = st.columns([4, 1])
-with header_col1:
-    st.markdown("<h1 style='color:#FFCC00; margin:0;'>🎰 FloorCast</h1>", unsafe_allow_html=True)
-with header_col2:
-    if st.button("🔓 Logout", use_container_width=True):
-        supabase.auth.sign_out()
-        st.session_state.user_authenticated = False
-        st.rerun()
+# --- MODERN UI STYLING (The CSS) ---
+st.markdown("""
+    <style>
+    /* Main Background - Clean Professional Grey */
+    .stApp {
+        background-color: #f4f7f9;
+    }
+    
+    /* Bento Box / Card Effect for Tab Content */
+    div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column;"] > div[data-testid="stVerticalBlock"] {
+        border: 1px solid #e6e9ef;
+        border-radius: 12px;
+        padding: 25px;
+        background-color: #ffffff;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+    }
 
-st.divider()
+    /* Tab Navigation Styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+        background-color: transparent;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background-color: #ffffff;
+        border: 1px solid #e6e9ef;
+        border-radius: 8px 8px 0px 0px;
+        padding: 12px 24px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+    /* Active Tab - Hard Rock Gold */
+    .stTabs [aria-selected="true"] {
+        background-color: #FFCC00 !important; 
+        color: #000000 !important;
+        border-bottom: 3px solid #000000;
+    }
+
+    /* Metric Styling */
+    [data-testid="stMetricValue"] {
+        color: #111;
+        font-weight: 700;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 # 8. MAIN NAVIGATION
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
