@@ -565,19 +565,19 @@ with tab4:
                 st.success("✅ Database Synced.")
             except Exception as e:
                 st.error(f"Sync failed: {e}")
-# --- TAB 5: EXECUTIVE STRATEGIC CONSULTANT & PRODUCT EXPERT ---
+# --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic Consultant & App Expert</h2>
-            <p style="color: #888; margin: 0;">Executive Intelligence: Real-time analysis and application guidance.</p>
+            <h2 style="color: #FFCC00; margin: 0;">🧠 Forensic Consultant & App Expert</h2>
+            <p style="color: #888; margin: 0;">Real-time KPI calculation and strategic guidance.</p>
         </div>
     """, unsafe_allow_html=True)
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 1. THE REAL-TIME DATA VAULT (Calculated on the fly)
+    # 1. THE FORENSIC DATA VAULT
     vault_metrics = {}
     if ledger_data:
         df_vault = pd.DataFrame(ledger_data).copy()
@@ -585,10 +585,10 @@ with tab5:
         
         # --- DYNAMIC COLUMN NORMALIZATION ---
         col_map = {
-            'social_impressions': ['social_impressions', 'Impressions', 'Social_Imp', 'Reach'],
-            'social_engagement': ['social_engagement', 'Engagement', 'Social_Eng', 'Interactions'],
-            'actual_traffic': ['actual_traffic', 'Traffic', 'Attendance'],
-            'actual_coin_in': ['actual_coin_in', 'Revenue', 'Coin_In']
+            'social_impressions': ['social_impressions', 'Impressions', 'Social_Imp'],
+            'ad_clicks': ['ad_clicks', 'Clicks', 'Ad_Clicks'],
+            'actual_traffic': ['actual_traffic', 'Traffic'],
+            'actual_coin_in': ['actual_coin_in', 'Revenue']
         }
         
         for target, aliases in col_map.items():
@@ -599,20 +599,38 @@ with tab5:
             else:
                 df_vault[target] = 0
 
-        # Real-Time Calculations
+        # Basic Averages
         avg_imp = float(df_vault['social_impressions'].mean())
-        avg_eng = float(df_vault['social_engagement'].mean())
         df_vault['day_name'] = df_vault['entry_date'].dt.day_name()
         heartbeats = df_vault.groupby('day_name')['actual_traffic'].mean().to_dict()
+        
+        # --- FORENSIC KPI CALCULATIONS ---
+        clean_weights = {k: v for k, v in st.session_state.coeffs.items() if k not in ['Intercept', 'DOW_Profiles']}
+        
+        # Digital Lift: Attribution of marketing vs Total Traffic
+        total_traffic = df_vault['actual_traffic'].sum()
+        marketing_impact = (df_vault['ad_clicks'].sum() * clean_weights.get('Clicks', 0.02)) + \
+                           (df_vault['social_impressions'].sum() * clean_weights.get('Social_Imp', 0.0002))
+        digital_lift_pct = (marketing_impact / total_traffic) * 100 if total_traffic > 0 else 0
+
+        # AI Predictability: (1 - Mean Absolute Percentage Error)
+        df_vault['expected'] = df_vault.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
+                                            (x['ad_clicks'] * clean_weights.get('Clicks', 0.02)) + 
+                                            (x['social_impressions'] * clean_weights.get('Social_Imp', 0.0002)), axis=1)
+        
+        import numpy as np
+        mape = (np.abs(df_vault['actual_traffic'] - df_vault['expected']) / df_vault['actual_traffic']).replace([np.inf, -np.inf], np.nan).dropna().mean()
+        predictability_score = (1 - mape) * 100 if not np.isnan(mape) else 0
 
         vault_metrics = {
             "avg_social_imp": avg_imp,
-            "avg_social_eng": avg_eng,
-            "heartbeats": heartbeats
+            "heartbeats": heartbeats,
+            "digital_lift": f"{digital_lift_pct:.1f}%",
+            "predictability": f"{predictability_score:.1f}%"
         }
 
-    # 2. CHAT INPUT (AT THE TOP)
-    prompt = st.chat_input("Ask about Monday's outlook, social impact, or how to use this app...")
+    # 2. CHAT INPUT
+    prompt = st.chat_input("Ask about KPIs, predictability, or how to use the app...")
 
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -621,45 +639,36 @@ with tab5:
             import google.generativeai as genai
             import json
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model = genai.GenerativeModel('gemini-2.5-flash')
+            model = genai.GenerativeModel('gemini-1.5-flash')
             
-            # Clean weights to prevent double-counting
-            coeffs = st.session_state.coeffs
-            clean_weights = {k: v for k, v in coeffs.items() if k not in ['Intercept', 'DOW_Profiles']}
-            live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
-            
-            # Role Mapping for Gemini API
             history_payload = []
             for m in st.session_state.messages[:-1]:
                 role = "model" if m["role"] == "assistant" else "user"
                 history_payload.append({"role": role, "parts": [m["content"]]})
             
-            # THE INTEGRATED BRAIN (Strategy + Product Guide)
+            # THE FORENSIC BRAIN
             sys_context = f"""
-            SYSTEM ROLE: Chief Strategy Officer & Product Expert for the Hard Rock Strategic Predictor.
+            SYSTEM ROLE: Chief Strategy Officer & Product Expert.
             
-            PRODUCT KNOWLEDGE (App Training Manual):
-            - Tab 1 (Dashboard): High-level KPIs, Digital Lift, and YTD revenue visualization.
-            - Tab 2 (Ledger): Database management. Upload CSVs or enter daily data manually here.
-            - Tab 3 (Sandbox): Simulation tool. Uses Tab 4 weights to test 'What-If' scenarios.
-            - Tab 4 (Engine): The calibration center. AI calculates weights (like Clicks) using ledger history and industry guardrails.
-            - Tab 5 (Consultant): Your current location. Used for analysis and app guidance.
+            CORE KPIs (ACTIVE DATA):
+            - AI Predictability: {vault_metrics.get('predictability', 'N/A')}
+            - Digital Lift: {vault_metrics.get('digital_lift', 'N/A')}
 
-            CRITICAL MATHEMATICAL MANDATE:
-            1. The 'Heartbeat' (DOW Average) is the ONLY baseline for predictions.
-            2. NEVER add the Global Intercept (4365) to the Heartbeat. 
-            3. Prediction = [Specific Day Heartbeat] + (Weather/Marketing Lifts).
-            4. If user refers to 'average social', use {vault_metrics.get('avg_social_imp', 0)} impressions and {vault_metrics.get('avg_social_eng', 0)} engagement.
+            PRODUCT KNOWLEDGE:
+            - Tab 1 (Dashboard): Shows Digital Lift and Predictability forensic views.
+            - Tab 2 (Ledger): Database for CSV uploads and manual data entry.
+            - Tab 3 (Sandbox): Simulation tool for 'What-If' scenarios.
+            - Tab 4 (Engine): Calibration of weights using industry guardrails.
+            - Tab 5 (Consultant): Real-time analysis and user training.
 
-            DATA ASSETS:
-            - Day-of-Week Heartbeats: {json.dumps(vault_metrics.get('heartbeats', {}))}
-            - Engine Weights: {json.dumps(clean_weights)}
-            - Weather Forecast: {json.dumps(live_forecast, default=str)}
+            MATH RULES:
+            1. DOW Heartbeats are the ONLY baseline. 
+            2. NEVER add the Global Intercept (4365) to the Heartbeat.
+            3. Use {vault_metrics.get('heartbeats', {})} for baseline analysis.
 
-            COMMUNICATION STYLE:
-            - If asking about app features, act as a Product Guide.
-            - If asking about data, provide a 2-3 sentence Executive Summary first.
-            - Hide math unless 'Show me the math' is requested.
+            MANDATE: 
+            - Answer product questions like a Help Guide.
+            - Answer data questions as a Forensic CSO (Concise Executive Summary first).
             - End with 1 strategic follow-up question.
             """
 
@@ -672,13 +681,12 @@ with tab5:
         except Exception as e:
             st.error(f"Consultation Error: {e}")
 
-    # 3. REVERSED CHAT FEED (LATEST AT TOP)
+    # 3. REVERSED FEED
     for message in reversed(st.session_state.messages):
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    st.write("---")
-    if st.button("🗑️ Reset Consultation", use_container_width=True):
+    if st.button("🗑️ Reset Forensic Session", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 # --- TAB 6: MASTER ANALYTICS & FORENSIC REPORT ---
