@@ -351,7 +351,6 @@ with tab2:
         )
     else:
         st.warning("Ledger is empty.")
-
 # --- TAB 3: STRATEGY & ROI ---
 with tab3:
     st.markdown("""
