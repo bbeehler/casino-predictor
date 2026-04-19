@@ -144,6 +144,8 @@ with tab1:
     else:
         # 1. PULL UNIFIED TRUTH (Matches Tab 5 exactly)
         df_ledger = pd.DataFrame(ledger_data)
+        
+        # Call the unified function we placed at the top of the script
         metrics = get_forensic_metrics(df_ledger, st.session_state.coeffs)
 
         # 2. TOP-LEVEL KPI TILES
@@ -164,7 +166,9 @@ with tab1:
             )
             
         with kpi3:
-            total_rev = df_ledger['actual_coin_in'].sum() if 'actual_coin_in' in df_ledger.columns else 0
+            # Safely calculate total revenue from the ledger
+            rev_col = next((c for c in ['actual_coin_in', 'Revenue', 'Coin_In'] if c in df_ledger.columns), None)
+            total_rev = df_ledger[rev_col].sum() if rev_col else 0
             st.metric(label="YTD Ledger Revenue", value=f"${total_rev:,.0f}")
 
         st.divider()
@@ -174,55 +178,63 @@ with tab1:
         
         df_viz = df_ledger.copy()
         df_viz['entry_date'] = pd.to_datetime(df_viz['entry_date'])
+        df_viz['day_name'] = df_viz['entry_date'].dt.day_name()
         
-        # We recreate the prediction line for the chart using the Shared Brain logic
+        # Ensure we use the exact same logic as the metrics for the chart line
         heartbeats = metrics['heartbeats']
         c_clicks = st.session_state.coeffs.get('Clicks', 0.02)
         c_social = st.session_state.coeffs.get('Social_Imp', 0.0002)
+
+        # Map internal column names for the lambda function
+        click_col = next((c for c in ['ad_clicks', 'Clicks'] if c in df_viz.columns), None)
+        imp_col = next((c for c in ['social_impressions', 'Impressions'] if c in df_viz.columns), None)
+        traffic_col = next((c for c in ['actual_traffic', 'Traffic'] if c in df_viz.columns), None)
         
         df_viz['Predicted'] = df_viz.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
-                                         (x.get('ad_clicks', 0) * c_clicks) + 
-                                         (x.get('social_impressions', 0) * c_social), axis=1)
+                                         (x[click_col] * c_clicks if click_col else 0) + 
+                                         (x[imp_col] * c_social if imp_col else 0), axis=1)
         
-        df_viz = df_viz.rename(columns={'actual_traffic': 'Actual Traffic'}).sort_values('entry_date')
-        
-        # Line chart showing the 'Tug of War' between reality and our model
-        st.line_chart(
-            df_viz, 
-            x='entry_date', 
-            y=['Actual Traffic', 'Predicted'], 
-            color=["#FFCC00", "#555555"]
-        )
+        if traffic_col:
+            df_viz = df_viz.rename(columns={traffic_col: 'Actual Traffic'})
+            df_viz = df_viz.sort_values('entry_date')
+            
+            st.line_chart(
+                df_viz, 
+                x='entry_date', 
+                y=['Actual Traffic', 'Predicted'], 
+                color=["#FFCC00", "#555555"]
+            )
+        else:
+            st.error("Missing Traffic column in ledger data.")
 
         st.divider()
 
         # 4. CURRENT MONTH PERFORMANCE TABLE
-        # This keeps the view relevant to Brian's current focus
         st.write(f"### 🗓️ Performance Ledger: {datetime.date.today().strftime('%B %Y')}")
         
-        df_ledger['entry_date'] = pd.to_datetime(df_ledger['entry_date'])
         current_month = datetime.date.today().month
         current_year = datetime.date.today().year
         
-        df_current = df_ledger[
-            (df_ledger['entry_date'].dt.month == current_month) & 
-            (df_ledger['entry_date'].dt.year == current_year)
+        df_current = df_viz[
+            (df_viz['entry_date'].dt.month == current_month) & 
+            (df_viz['entry_date'].dt.year == current_year)
         ].copy()
 
         if not df_current.empty:
             # Sort with most recent at the top
             df_current = df_current.sort_values(by='entry_date', ascending=False)
             
-            # Select relevant executive columns
-            display_cols = ['entry_date', 'actual_traffic', 'actual_coin_in', 'ad_clicks', 'social_impressions']
-            existing_cols = [c for c in display_cols if c in df_current.columns]
+            # Formatting for display
+            display_cols = ['entry_date', 'Actual Traffic', rev_col, click_col, imp_col]
+            # Filter out any None values
+            final_cols = [c for c in display_cols if c is not None and c in df_current.columns]
             
             st.dataframe(
-                df_current[existing_cols].style.format({
-                    "actual_traffic": "{:,.0f}",
-                    "actual_coin_in": "${:,.2f}",
-                    "ad_clicks": "{:,.0f}",
-                    "social_impressions": "{:,.0f}"
+                df_current[final_cols].style.format({
+                    "Actual Traffic": "{:,.0f}",
+                    rev_col: "${:,.2f}" if rev_col else "{:}",
+                    click_col: "{:,.0f}" if click_col else "{:}",
+                    imp_col: "{:,.0f}" if imp_col else "{:}"
                 }),
                 use_container_width=True,
                 hide_index=True
