@@ -156,7 +156,7 @@ ledger_data = fetch_data()
 header_col1, header_col2 = st.columns([4, 1])
 
 with header_col1:
-    st.markdown("<h1 style='color: #FFCC00; margin:0;'>🎰 Hard Rock Strategic Predictor</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='color: #FFCC00; margin:0;'>🎰 FloorCast</h1>", unsafe_allow_html=True)
 
 with header_col2:
     # A small, clean logout button aligned to the right
