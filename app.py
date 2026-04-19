@@ -554,12 +554,12 @@ with tab4:
                 st.success("✅ Database Synced.")
             except Exception as e:
                 st.error(f"Sync failed: {e}")
-# --- TAB 5: EXECUTIVE STRATEGIC CONSULTANT (ROLE FIX) ---
+# --- TAB 5: EXECUTIVE STRATEGIC CONSULTANT (REVERSED FEED) ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🧠 Strategic Consultant</h2>
-            <p style="color: #888; margin: 0;">Executive Mode: Seamless back-and-forth conversation enabled.</p>
+            <p style="color: #888; margin: 0;">Executive Briefing: Latest analysis at the top.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -572,7 +572,7 @@ with tab5:
         df_vault = pd.DataFrame(ledger_data).copy()
         df_vault['entry_date'] = pd.to_datetime(df_vault['entry_date'])
         
-        # Standardize Columns for the AI
+        # Standardize Columns
         col_map = {'actual_traffic': ['actual_traffic', 'Traffic'], 'actual_coin_in': ['actual_coin_in', 'Revenue']}
         for target, aliases in col_map.items():
             if target not in df_vault.columns:
@@ -587,59 +587,58 @@ with tab5:
             "heartbeats": df_vault.groupby(df_vault['entry_date'].dt.day_name())['actual_traffic'].mean().to_dict()
         }
 
-    # 2. CHAT INTERFACE
-    for message in st.session_state.messages:
+    # 2. CHAT INPUT AT THE TOP
+    prompt = st.chat_input("Ask about Monday, trends, or strategy...")
+
+    if prompt:
+        # Add User Message
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        try:
+            import google.generativeai as genai
+            import json
+            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            
+            coeffs = st.session_state.coeffs
+            live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
+            
+            # Role Mapping for History
+            history_payload = []
+            for m in st.session_state.messages[:-1]:
+                role = "model" if m["role"] == "assistant" else "user"
+                history_payload.append({"role": role, "parts": [m["content"]]})
+            
+            sys_context = f"""
+            SYSTEM ROLE: Chief Strategy Officer at Hard Rock Hotel & Casino Ottawa.
+            MANDATE: BE CONCISE. 
+            - Provide the 'Answer' first in 2-3 sentences.
+            - Do NOT show math unless asked ('Show me the math' / 'How?').
+            - Use DOW Heartbeats as the ONLY baseline.
+            - Always end with 1 strategic follow-up question.
+
+            DATA:
+            - Heartbeats: {json.dumps(vault_metrics.get('heartbeats', {}))}
+            - Weights: {json.dumps(coeffs)}
+            - Weather: {json.dumps(live_forecast, default=str)}
+            """
+
+            chat = model.start_chat(history=history_payload)
+            response = chat.send_message(f"{sys_context}\n\nUSER MESSAGE: {prompt}")
+            
+            # Add Assistant Message
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            st.rerun()
+
+        except Exception as e:
+            st.error(f"Consultation Error: {e}")
+
+    # 3. DISPLAY MESSAGES IN REVERSE ORDER
+    for message in reversed(st.session_state.messages):
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    if prompt := st.chat_input("Ask about Monday, trends, or follow up on the previous response..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant"):
-            with st.spinner("Preparing executive briefing..."):
-                try:
-                    import google.generativeai as genai
-                    import json
-                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    model = genai.GenerativeModel('gemini-2.5-flash')
-                    
-                    coeffs = st.session_state.coeffs
-                    live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
-                    
-                    # --- CRITICAL FIX: ROLE MAPPING ---
-                    # Translates Streamlit's 'assistant' to Google's 'model'
-                    history_payload = []
-                    for m in st.session_state.messages[:-1]:
-                        role = "model" if m["role"] == "assistant" else "user"
-                        history_payload.append({"role": role, "parts": [m["content"]]})
-                    
-                    sys_context = f"""
-                    SYSTEM ROLE: Chief Strategy Officer at Hard Rock Hotel & Casino Ottawa.
-                    MANDATE: BE CONCISE. 
-                    - Provide the 'Answer' first in 2-3 sentences.
-                    - Do NOT show math/multiplications unless the user explicitly asks 'How?' or 'Show me the math'.
-                    - Use DOW Heartbeats as the ONLY baseline. Never add Global Intercept to them.
-                    - Always end with 1 strategic follow-up question.
-
-                    DATA:
-                    - Heartbeats: {json.dumps(vault_metrics.get('heartbeats', {}))}
-                    - Weights: {json.dumps(coeffs)}
-                    - Weather: {json.dumps(live_forecast, default=str)}
-                    """
-
-                    chat = model.start_chat(history=history_payload)
-                    
-                    # Send the prompt with the system context attached for continuity
-                    response = chat.send_message(f"{sys_context}\n\nUSER MESSAGE: {prompt}")
-                    
-                    st.markdown(response.text)
-                    st.session_state.messages.append({"role": "assistant", "content": response.text})
-
-                except Exception as e:
-                    st.error(f"Consultation Error: {e}")
-
+    st.write("---")
     if st.button("🗑️ Reset Consultation", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
