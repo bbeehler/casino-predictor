@@ -639,7 +639,7 @@ with tab5:
             import google.generativeai as genai
             import json
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash')
             
             history_payload = []
             for m in st.session_state.messages[:-1]:
