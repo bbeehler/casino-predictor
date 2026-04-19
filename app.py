@@ -460,126 +460,61 @@ with tab3:
         st.write("### Historical Digital Revenue Contribution")
         st.area_chart(df_strat.set_index('entry_date')['Digital_Revenue_Lift'])
 
-# --- TAB 4: THE FULLY INTEGRATED ENGINE CONTROL ---
+# --- TAB 4: ENGINE CONTROL (CALIBRATION) ---
 with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Control</h2>
-            <p style="color: #888; margin: 0;">Dynamic DOW Heartbeats + Industry-Standard Guardrails.</p>
+            <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Calibration</h2>
+            <p style="color: #888; margin: 0;">Adjust marketing multipliers based on industry benchmarks.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    if not ledger_data:
-        st.warning("⚠️ No ledger data detected. Please upload a CSV in Tab 2 to begin calibration.")
-    else:
-        df_global = pd.DataFrame(ledger_data).copy()
+    # --- INDUSTRY BENCHMARK REFERENCE ---
+    with st.expander("📊 View Casino Industry Benchmarks"):
+        st.write("""
+        | Metric | Industry Average (Casino) | Your Current Weight |
+        | :--- | :--- | :--- |
+        | **Social Impressions** | 0.0001 - 0.0005 (1 visitor per 2k-10k views) | {social_w} |
+        | **Ad Clicks** | 0.02 - 0.08 (2% - 8% conversion to foot traffic) | {click_w} |
+        | **Major Promo** | 1.10 - 1.25 (10% - 25% lift over baseline) | {promo_w} |
+        | **Severe Weather** | 0.70 - 0.90 (10% - 30% friction/loss) | {weather_w} |
+        """.format(
+            social_w=st.session_state.coeffs.get('Social_Imp', 0.0002),
+            click_w=st.session_state.coeffs.get('Clicks', 0.02),
+            promo_w=st.session_state.coeffs.get('Promo', 450.0), # Assuming flat-head count lift
+            weather_w=st.session_state.coeffs.get('Snow_cm', -45.0)
+        ))
+
+    # --- MANUAL CALIBRATION FORM ---
+    with st.form("engine_settings"):
+        col1, col2 = st.columns(2)
         
-        # 1. DYNAMIC COLUMN NORMALIZATION
-        target_schema = {
-            'actual_traffic': ['actual_traffic', 'Traffic', 'Attendance', 'Daily_Traffic'],
-            'actual_coin_in': ['actual_coin_in', 'Revenue', 'Coin_In', 'Daily_Revenue'],
-            'social_impressions': ['social_impressions', 'Impressions', 'Social_Imp'],
-            'social_engagement': ['social_engagement', 'Engagement', 'Social_Eng'],
-            'ad_clicks': ['ad_clicks', 'Clicks', 'Ad_Clicks'],
-            'temp_c': ['temp_c', 'Temp', 'Temperature'],
-            'snow_cm': ['snow_cm', 'Snow', 'Snowfall'],
-            'rain_mm': ['rain_mm', 'Rain', 'Rainfall'],
-            'active_promo': ['active_promo', 'Promo', 'Promotion']
-        }
+        with col1:
+            st.write("### 📣 Marketing Multipliers")
+            new_clicks = st.slider("Click Conversion (Weight)", 0.00, 0.15, float(st.session_state.coeffs.get('Clicks', 0.02)), help="How many guests result from 1 ad click?")
+            new_social = st.number_input("Impression Weight", 0.0000, 0.0010, float(st.session_state.coeffs.get('Social_Imp', 0.0002)), format="%.4f")
+            new_promo = st.number_input("Promo Lift (Flat Guest Count)", 0, 2000, int(st.session_state.coeffs.get('Promo', 450)))
 
-        for target, aliases in target_schema.items():
-            if target not in df_global.columns:
-                for alias in aliases:
-                    if alias in df_global.columns:
-                        df_global.rename(columns={alias: target}, inplace=True); break
-            if target not in df_global.columns: df_global[target] = 0
-            df_global[target] = pd.to_numeric(df_global[target], errors='coerce').fillna(0)
+        with col2:
+            st.write("### ❄️ Environmental Friction")
+            new_snow = st.slider("Snow Friction (Guests lost per cm)", -200, 0, int(st.session_state.coeffs.get('Snow_cm', -45)))
+            new_rain = st.slider("Rain Friction (Guests lost per mm)", -100, 0, int(st.session_state.coeffs.get('Rain_mm', -12)))
 
-        ledger_signature = hash(pd.util.hash_pandas_object(df_global).sum())
-
-        # 2. CALIBRATION BUTTON
-        if st.button("🤖 Auto-Calibrate Engine weights with AI", use_container_width=True):
-            with st.spinner("Executing DOW-Segmented Regression with Industry Guardrails..."):
-                try:
-                    from sklearn.linear_model import Ridge
-                    import numpy as np
-                    
-                    df_global['entry_date'] = pd.to_datetime(df_global['entry_date'])
-                    df_global['day_name'] = df_global['entry_date'].dt.day_name()
-                    dow_profiles = df_global.groupby('day_name')['actual_traffic'].mean().to_dict()
-                    df_global['residual'] = df_global.apply(lambda x: x['actual_traffic'] - dow_profiles[x['day_name']], axis=1)
-
-                    features = ['ad_clicks', 'temp_c', 'snow_cm', 'rain_mm', 'active_promo', 'social_impressions', 'social_engagement']
-                    X = df_global[features]
-                    y = df_global['residual']
-
-                    model = Ridge(alpha=1.0)
-                    model.fit(X, y)
-                    raw_weights = dict(zip(features, model.coef_))
-
-                    final_weights = {
-                        "Intercept": float(df_global['actual_traffic'].mean()), 
-                        "Avg_Coin_In": float(df_global['actual_coin_in'].sum() / df_global['actual_traffic'].sum()) if df_global['actual_traffic'].sum() > 0 else 1200.0,
-                        "Clicks": np.clip(float(raw_weights.get('ad_clicks', 0.02)), 0.01, 0.08),
-                        "Social_Imp": np.clip(float(raw_weights.get('social_impressions', 0.0002)), 0.0001, 0.0005),
-                        "Promo": max(float(raw_weights.get('active_promo', 0)), 150.0),
-                        "Social_Eng": max(float(raw_weights.get('social_engagement', 0)), 0.0100),
-                        "Temp_C": float(raw_weights.get('temp_c', 0)),
-                        "Snow_cm": min(-abs(float(raw_weights.get('snow_cm', -5.0))), -2.00),
-                        "Rain_mm": min(-abs(float(raw_weights.get('rain_mm', -2.0))), -1.00),
-                        "DOW_Profiles": dow_profiles 
-                    }
-
-                    st.session_state.coeffs.update(final_weights)
-                    st.session_state.last_calib_hash = ledger_signature
-                    st.success("🎯 Dynamic Calibration Complete.")
-                    st.rerun()
-
-                except Exception as e:
-                    st.error(f"Calibration Error: {e}")
-
-        # 3. LIVE MONITORING & MANUAL OVERRIDES
-        st.write("### 📊 Active Engine Weights")
-        c = st.session_state.coeffs
-        
-        # Display key metrics in a clean row
-        col_m1, col_m2, col_m3 = st.columns(3)
-        col_m1.metric("Global Intercept", f"{float(c.get('Intercept',0)):.0f}")
-        col_m2.metric("Avg Spend", f"${float(c.get('Avg_Coin_In',0)):.2f}")
-        col_m3.metric("Click Weight", f"{float(c.get('Clicks',0)):.4f}")
-
-        st.divider()
-
-        # Input grid for manual tweaking
-        col_fin, col_mkt, col_env = st.columns(3)
-        
-        with col_fin:
-            st.write("**💰 Financials**")
-            n_intercept = st.number_input("Global Intercept", value=float(c.get('Intercept', 0)))
-            n_spend = st.number_input("Spend/Head ($)", value=float(c.get('Avg_Coin_In', 1200)))
-
-        with col_mkt:
-            st.write("**🚀 Marketing**")
-            n_promo = st.number_input("Promo Flat Lift", value=float(c.get('Promo', 0)))
-            n_clicks = st.number_input("Click Weight", value=float(c.get('Clicks', 0.02)), format="%.4f")
-            n_imp = st.number_input("Social Imp Weight", value=float(c.get('Social_Imp', 0.0002)), format="%.4f")
-
-        with col_env:
-            st.write("**☁️ Environment**")
-            n_temp = st.number_input("Temp Weight", value=float(c.get('Temp_C', 0)), format="%.4f")
-            n_snow = st.number_input("Snow Weight (cm)", value=float(c.get('Snow_cm', 0)), format="%.4f")
-            n_rain = st.number_input("Rain Weight (mm)", value=float(c.get('Rain_mm', 0)), format="%.4f")
-
-        if st.button("💾 Sync Engine to Database", use_container_width=True):
+        if st.form_submit_button("💾 Save Calibration to Vault"):
+            # Update Session State
+            st.session_state.coeffs.update({
+                'Clicks': new_clicks,
+                'Social_Imp': new_social,
+                'Promo': new_promo,
+                'Snow_cm': new_snow,
+                'Rain_mm': new_rain
+            })
+            
+            # Sync to Supabase
             try:
-                update_data = {
-                    "id": 1, "Intercept": n_intercept, "Avg_Coin_In": n_spend,
-                    "Promo": n_promo, "Social_Imp": n_imp, "Clicks": n_clicks,
-                    "Temp_C": n_temp, "Snow_cm": n_snow, "Rain_mm": n_rain
-                }
-                supabase.table("coefficients").upsert(update_data).execute()
-                st.session_state.coeffs.update(update_data)
-                st.success("✅ Database Synced.")
+                supabase.table("coefficients").update(st.session_state.coeffs).eq("id", 1).execute()
+                st.success("Engine Calibrated! Tab 1 and Tab 5 are now updated with these weights.")
+                st.rerun()
             except Exception as e:
                 st.error(f"Sync failed: {e}")
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
