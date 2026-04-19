@@ -121,8 +121,15 @@ def fetch_data():
 
 ledger_data = fetch_data()
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "Executive", "Input", "Strategy", "Admin", "Analyst", "Master Report"
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "📈 Executive Overview", 
+    "📑 Ledger Management", 
+    "📊 Property Analytics", 
+    "⚙️ Engine Control", 
+    "🧠 FloorCast Analyst",
+    "📋 Master Report",
+    "🧪 Forecast Sandbox"
+])
 ])
 
 # --- 1. INITIAL DATA HYDRATION (Run at Startup) ---
@@ -808,3 +815,76 @@ with tab6:
 
     else:
         st.warning("No data found in ledger. Add entries in the Input tab to generate reports.")
+
+        # --- TAB 7: FORECAST SANDBOX ---
+with tab7:
+    st.markdown("""
+        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
+            <h2 style="color: #FFCC00; margin: 0;">🧪 Forecast Sandbox</h2>
+            <p style="color: #888; margin: 0;">Manual Scenario Simulator: Use the sliders to stress-test your strategy.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # 1. DATE SELECTION
+    # This identifies the "Heartbeat" (DOW Average) for the simulation
+    target_date = st.date_input("Target Simulation Date:", datetime.date(2026, 4, 20))
+    target_day = target_date.strftime("%A")
+
+    # Pull the 60-day DOW Average from the Ledger
+    df_sb = pd.DataFrame(ledger_data)
+    df_sb['entry_date'] = pd.to_datetime(df_sb['entry_date'])
+    df_sb['day_name'] = df_sb['entry_date'].dt.day_name()
+    dow_avg = df_sb[df_sb['day_name'] == target_day]['actual_traffic'].mean() if not df_sb.empty else 1000
+
+    # 2. SCENARIO INPUTS
+    st.write(f"### 🎛️ Adjust Factors for {target_day}")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.write("**Marketing & Social**")
+        s_promo = st.checkbox("Active Promotion?", value=False)
+        s_clicks = st.number_input("Ad Clicks", value=500)
+        s_imp = st.number_input("Social Impressions", value=10000)
+        s_eng = st.number_input("Social Engagement", value=500)
+    
+    with col2:
+        st.write("**Environment**")
+        s_temp = st.slider("Temperature (°C)", -30, 40, 15)
+        s_rain = st.slider("Rainfall (mm)", 0, 50, 0)
+        s_snow = st.slider("Snowfall (cm)", 0, 50, 0)
+
+    with col3:
+        st.write("**Baseline Anchor**")
+        # This defaults to the 60-day average we calculated above
+        s_base = st.number_input("Starting Traffic (DOW Avg)", value=int(dow_avg))
+        st.info(f"The 60-day average for {target_day} is {int(dow_avg)} guests.")
+
+    # 3. THE UNIFIED CALCULATION
+    # This uses the exact same coefficients from Tab 4
+    c = st.session_state.coeffs
+    
+    promo_lift = c['Promo'] if s_promo else 0
+    social_lift = (s_imp * c.get('Social_Imp', 0.0002)) + (s_eng * c.get('Social_Eng', 0.01))
+    marketing_lift = (s_clicks * c.get('Clicks', 0.001))
+    weather_friction = (s_temp * c.get('Temp_C', 0)) + (s_rain * c.get('Rain_mm', -2.0)) + (s_snow * c.get('Snow_cm', -4.0))
+    
+    # Final Math
+    total_traffic = s_base + promo_lift + social_lift + marketing_lift + weather_friction
+    total_revenue = total_traffic * c.get('Avg_Coin_In', 1200.0)
+
+    # 4. RESULTS DISPLAY
+    st.write("---")
+    res1, res2, res3 = st.columns(3)
+    res1.metric("Predicted Traffic", f"{int(total_traffic)} Guests")
+    res2.metric("Predicted Revenue", f"${total_revenue:,.2f}")
+    res3.metric("Revenue Variance", f"{((total_revenue/(dow_avg * c['Avg_Coin_In']))-1)*100:.1f}% vs. Avg")
+
+    st.markdown(f"""
+        <div style="background-color: #1a1a1a; padding: 15px; border-radius: 10px; border-left: 3px solid #FFCC00;">
+            <p style="color: #888; font-size: 13px; margin: 0;">
+                <b>Scenario Note:</b> This simulation uses your <b>Global Anchor Weights</b>. 
+                Any change here should reflect the strategic output provided by the AI Analyst in Tab 5.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
