@@ -687,7 +687,7 @@ with tab5:
         try:
             import google.generativeai as genai
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model = genai.GenerativeModel('gemini-2.0-flash') # Using the latest flash model
+            model = genai.GenerativeModel('gemini-2.5-flash') # Using the latest flash model
             
             history_payload = []
             for m in st.session_state.messages[:-1]:
