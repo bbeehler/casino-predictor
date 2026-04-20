@@ -494,7 +494,6 @@ with tab3:
         st.info("No data found in the Vault. Please backfill results in Tab 2 to see analytics.")
 # --- TAB 4: ENGINE CONTROL (CALIBRATION) ---
 with tab4:
-    st.write(f"DEBUG: Current Static Weight is {st.session_state.coeffs.get('Static_Weight')}")
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Calibration</h2>
