@@ -95,17 +95,28 @@ if 'user_authenticated' not in st.session_state:
 # 5. GATEKEEPER (Secure Login UI)
 if not st.session_state.user_authenticated:
     st.markdown("<div style='text-align:center; padding:50px;'><h1 style='color:#FFCC00;'>🎰 FloorCast</h1><h3>Hard Rock Ottawa | Strategic Engine</h3></div>", unsafe_allow_html=True)
+    
     with st.container(border=True):
         email = st.text_input("Email")
         pw = st.text_input("Password", type="password")
-        if st.button("Access Engine", use_container_width=True):
+        
+        # Use a unique key for the button to avoid state collisions
+        if st.button("Access Engine", use_container_width=True, key="login_btn"):
             try:
+                # 1. Check with Supabase
                 res = supabase.auth.sign_in_with_password({"email": email, "password": pw})
+                
                 if res.user:
+                    # 2. Update status
                     st.session_state.user_authenticated = True
-                    st.rerun()
-            except:
-                st.error("Invalid credentials.")
+                    # 3. FORCE REFRESH: This bypasses the st.stop() on the next lines
+                    st.rerun() 
+                else:
+                    st.error("Authentication failed.")
+            except Exception as e:
+                st.error("Invalid credentials or connection error.")
+    
+    # This is the line that causes the double-click if st.rerun() isn't called above
     st.stop()
 
 # 6. DATA HYDRATION (Pulling from Supabase)
