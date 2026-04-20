@@ -442,7 +442,7 @@ with tab2:
             hide_index=True
         )
 
-        if st.button("✅ Confirm & Sync Edits"):
+        if st.button("✅ Confirm & Sync Edits", key="sync_ledger"):
             with st.spinner("Updating records..."):
                 try:
                     for _, row in edited_df.iterrows():
@@ -497,7 +497,7 @@ with tab2:
             hide_index=True
         )
 
-        if st.button("✅ Confirm & Sync Edits"):
+        if st.button("✅ Confirm & Sync Edits", key="sync_ledger"):
             try:
                 for _, row in edited_df.iterrows():
                     up_data = row.to_dict()
@@ -522,49 +522,70 @@ with tab3:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">📊 Property Performance Analytics</h2>
-            <p style="color: #888; margin: 0;">Forensic correlation of digital KPIs to physical property traffic.</p>
+            <p style="color: #888; margin: 0;">Analyzing the correlation between digital effort and physical floor results.</p>
         </div>
     """, unsafe_allow_html=True)
 
     if ledger_data:
-        # 1. Prepare Data
         df_analysis = pd.DataFrame(ledger_data)
         df_analysis['entry_date'] = pd.to_datetime(df_analysis['entry_date'])
         df_analysis = df_analysis.sort_values('entry_date')
 
-        # 2. Executive Metric Tiles
-        m1, m2, m3 = st.columns(3)
-        avg_traffic = int(df_analysis['actual_traffic'].mean())
-        total_clicks = int(df_analysis['ad_clicks'].sum())
-        avg_coin = df_analysis['actual_coin_in'].mean()
-        
-        m1.metric("Avg Daily Traffic", f"{avg_traffic:,}")
-        m2.metric("Total Ad Clicks", f"{total_clicks:,}")
-        m3.metric("Avg Daily Coin-In", f"${avg_coin:,.2f}")
+        # 1. VISUAL TREND SELECTION
+        st.write("### 📈 Property Trends")
+        metric_choice = st.pills("Select Metric to Analyze", 
+                                ["Traffic", "Coin-In", "Ad Clicks"], 
+                                selection_mode="single",
+                                default="Traffic",
+                                key="analysis_pills") # UNIQUE KEY
 
-        # 3. Trends (Using Plotly or Streamlit Charts)
-        st.write("### 📈 Performance Trends")
-        
-        # We use a selection box so you can toggle what you want to see
-        analysis_view = st.radio("Select Metric to View Trend", 
-                                ["Foot Traffic", "Ad Clicks", "Coin-In"], 
-                                horizontal=True)
-        
-        if analysis_view == "Foot Traffic":
+        if metric_choice == "Traffic":
             st.area_chart(df_analysis.set_index('entry_date')['actual_traffic'], color="#FFCC00")
-        elif analysis_view == "Ad Clicks":
-            st.line_chart(df_analysis.set_index('entry_date')['ad_clicks'], color="#00CCFF")
+        elif metric_choice == "Coin-In":
+            st.line_chart(df_analysis.set_index('entry_date')['actual_coin_in'], color="#2ecc71")
         else:
-            st.bar_chart(df_analysis.set_index('entry_date')['actual_coin_in'], color="#2ecc71")
+            st.bar_chart(df_analysis.set_index('entry_date')['ad_clicks'], color="#00CCFF")
 
-        # 4. Correlation Insight (Clicks vs Traffic)
+        # 2. DATA TABLE WITH UNIQUE KEY
         st.divider()
-        st.write("### 🔍 Forensic Correlation")
-        st.scatter_chart(df_analysis, x='ad_clicks', y='actual_traffic', color="#FFCC00")
-        st.caption("This scatter chart shows if higher digital clicks actually resulted in more bodies on the floor.")
+        st.write("### 📜 Detailed Analytics Ledger")
+        
+        # We add key="analytics_editor" to prevent the duplicate ID error
+        edited_analysis_df = st.data_editor(
+            df_analysis,
+            key="analytics_editor", 
+            column_config={
+                "entry_date": st.column_config.DateColumn("Date", disabled=True),
+                "actual_traffic": st.column_config.NumberColumn("Traffic"),
+                "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)", format="$%.2f"),
+                "ad_clicks": st.column_config.NumberColumn("Ad Clicks"),
+                "ad_impressions": st.column_config.NumberColumn("Ad Impressions"),
+                "social_engagements": st.column_config.NumberColumn("Social Engagements")
+            },
+            use_container_width=True,
+            hide_index=True
+        )
 
+        # 3. THE BUTTON (The fix for your latest error)
+        if st.button("✅ Confirm & Sync Edits", key="btn_analytics_sync"): 
+            with st.spinner("Updating Vault..."):
+                try:
+                    for _, row in edited_analysis_df.iterrows():
+                        up_data = row.to_dict()
+                        date_key = pd.to_datetime(up_data['entry_date']).strftime('%Y-%m-%d')
+                        up_data['entry_date'] = date_key
+                        
+                        # Remove ID if it exists to avoid schema errors
+                        if 'id' in up_data: del up_data['id']
+                        
+                        supabase.table("ledger").update(up_data).eq("entry_date", date_key).execute()
+                    
+                    st.success("Analytics Ledger Synced!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Sync failed: {e}")
     else:
-        st.info("The Vault is currently empty. Add data in the Ledger (Tab 2) to unlock these analytics.")
+        st.info("No data found in the Vault. Please backfill weekend results in Tab 2 to see analytics.")
 # --- TAB 4: ENGINE CONTROL (CALIBRATION) ---
 with tab4:
     st.markdown("""
