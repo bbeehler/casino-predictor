@@ -503,36 +503,41 @@ with tab4:
         </div>
     """, unsafe_allow_html=True)
 
-    # INITIALIZATION CHECK: Prevents crash if DB hasn't loaded yet
+    # 1. INITIALIZATION & SYNC CHECK
     if 'coeffs' not in st.session_state:
         st.error("Engine coefficients not found. Please refresh the app.")
         st.stop()
 
-    # 1. INDUSTRY BENCHMARK REFERENCE
+    # 2. INDUSTRY BENCHMARK REFERENCE
+    # We use a helper variable to ensure we are looking at the CORRECT key
+    current_social_weight = st.session_state.coeffs.get('Impressions') or st.session_state.coeffs.get('Social_Imp', 0.0002)
+    
     with st.expander("📊 View Casino Industry Benchmarks"):
         st.write(f"""
         | Metric | Industry Average (Gaming) | Your Current Weight |
         | :--- | :--- | :--- |
-        | **Social Impressions** | 0.0001 - 0.0005 | {st.session_state.coeffs.get('Social_Imp', 0.0002):.4f} |
+        | **Social Impressions** | 0.0001 - 0.0005 | {current_social_weight:.4f} |
         | **Ad Clicks** | 0.02 - 0.08 | {st.session_state.coeffs.get('Clicks', 0.02):.2f} |
         | **Major Promo** | 1,000 - 5,000 | {st.session_state.coeffs.get('Promo', 450.0):,.0f} |
         | **Weather Friction** | -20 to -60 | {st.session_state.coeffs.get('Snow_cm', -45.0):,.0f} |
         """)
 
-    # 2. MANUAL CALIBRATION FORM
-    with st.form("engine_settings"):
+    # 3. MANUAL CALIBRATION FORM
+    with st.form("engine_settings_v2"):
         col1, col2 = st.columns(2)
         
         with col1:
             st.write("### 📣 Marketing Multipliers")
             
-            # Use local variables for clamping to keep slider 'value' clean
+            # Click Weight
             c_clicks = float(st.session_state.coeffs.get('Clicks', 0.02))
-            new_clicks = st.slider("Click Conversion (Weight)", 0.00, 0.20, value=float(max(min(c_clicks, 0.20), 0.00)))
+            new_clicks = st.slider("Click Conversion (Weight)", 0.00, 0.20, value=float(max(min(c_clicks, 0.20), 0.00)), step=0.01)
             
-            c_social = float(st.session_state.coeffs.get('Social_Imp', 0.0002))
+            # Social Weight (Matched to your Impressions column)
+            c_social = float(current_social_weight)
             new_social = st.number_input("Social Impression Weight", 0.0000, 0.0100, value=float(max(min(c_social, 0.0100), 0.0000)), format="%.4f")
             
+            # Promo Lift
             c_promo = int(st.session_state.coeffs.get('Promo', 450))
             new_promo = st.number_input("Promo Lift (Flat Guest Count)", 0, 10000, value=int(max(min(c_promo, 10000), 0)))
 
@@ -548,52 +553,49 @@ with tab4:
             c_coin = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
             new_coin = st.number_input("Avg Spend Per Head ($)", 0.0, 5000.0, value=float(max(min(c_coin, 5000.0), 0.0)))
 
-        # 3. CLEAN SYNC LOGIC
+        # 4. DATA VAULT SYNC
         if st.form_submit_button("💾 Save Calibration to Vault"):
-            # Update Session State first for immediate UI feedback
+            # Update Session State with both common names to ensure all tabs stay synced
             st.session_state.coeffs.update({
                 'Clicks': new_clicks,
                 'Social_Imp': new_social,
+                'Impressions': new_social,
                 'Promo': new_promo,
                 'Snow_cm': new_snow,
                 'Rain_mm': new_rain,
                 'Avg_Coin_In': new_coin
             })
             
-            # Map Session State keys to your Supabase Column names
-            db_cols = ['Avg_Coin_In', 'Snow_cm', 'Rain_mm', 'Promo', 'Clicks', 'Impressions']
+            # Map exactly to Supabase Columns
             sync_payload = {
                 'Avg_Coin_In': new_coin,
                 'Snow_cm': new_snow,
                 'Rain_mm': new_rain,
                 'Promo': new_promo,
                 'Clicks': new_clicks,
-                'Impressions': new_social # Mapping Social_Imp to Impressions column
+                'Impressions': new_social 
             }
 
             try:
-                # We assume ID 1 is the master calibration row
                 supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
-                st.success("✅ Engine Calibrated! Vault Updated.")
+                st.success("✅ Engine Calibrated! Data synced to Vault.")
                 import time
                 time.sleep(1)
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Sync failed: {e}")
 
-    # 4. ENGINE INTEGRITY (Unified Logic)
+    # 5. INTEGRITY CHECK (Visual Warnings)
     st.divider()
     st.write("### 🔍 Engine Integrity Check")
     
-    # Validation Logic
+    # Check Click Weight against industry standard
     if st.session_state.coeffs.get('Clicks', 0) < 0.015:
-        st.warning("⚠️ **Low Attribution Warning:** Click Weight is below industry floor. Digital Lift results in Tab 1 will be conservative.")
+        st.warning("⚠️ **Low Attribution Warning:** Click Weight is below 1.5%. This may lead to under-reporting Digital Lift.")
     
-    if abs(st.session_state.coeffs.get('Snow_cm', 0)) > 200:
-        st.info("ℹ️ **Extreme Weather Sensitivity:** Snow friction is set very high. Ensure this accounts for full property closures.")
-    
+    # Check if Spend is realistic for Hard Rock Ottawa
     if st.session_state.coeffs.get('Avg_Coin_In', 0) > 400:
-        st.info("ℹ️ **Premium Spend Profile:** Avg. Spend per head is set for a high-limit environment.")
+        st.info("ℹ️ **High Roller Profile:** Avg. Spend is set high. Verify if this includes F&B revenue or just Gaming Coin-In.")
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
