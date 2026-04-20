@@ -298,15 +298,42 @@ with tab1:
         else:
             st.warning("Weather sync unavailable.")
 
-    # 4. TREND VISUALIZATION (Optional/Placeholder for your Chart)
+# 4. TREND VISUALIZATION (Performance vs. Prediction)
     st.write("---")
     st.write("### 📊 Performance vs. Prediction")
+    
     if ledger_data:
-        df_chart = pd.DataFrame(ledger_data)
-        # Ensure latest dates are plotted
+        # 1. Convert ledger to DataFrame
+        df_chart = pd.DataFrame(ledger_data).copy()
         df_chart['entry_date'] = pd.to_datetime(df_chart['entry_date'])
-        df_chart = df_chart.sort_values('entry_date').tail(14) # Last 14 days
-        st.line_chart(df_chart, x='entry_date', y='actual_traffic')
+        
+        # 2. RUN THE FORENSIC ENGINE TO GET PREDICTIONS
+        # This adds the 'expected' column using your calibration weights
+        # We need to calculate this specifically for the chart
+        heartbeats = metrics.get('heartbeats', {})
+        c_clicks = st.session_state.coeffs.get('Clicks', 0.02)
+        c_social = st.session_state.coeffs.get('Impressions', 0.0002)
+        total_ooh = metrics.get('ooh_total_daily', 0)
+        
+        # Apply the exact same math used in Section 2
+        df_chart['day_name'] = df_chart['entry_date'].dt.day_name()
+        df_chart['Expected Traffic'] = df_chart.apply(lambda x: 
+            heartbeats.get(x['day_name'], 0) + 
+            (float(x.get('ad_clicks', 0)) * c_clicks) + 
+            (float(x.get('ad_impressions', 0)) * c_social) + 
+            total_ooh, axis=1)
+        
+        # Rename actual traffic for the legend
+        df_chart = df_chart.rename(columns={'actual_traffic': 'Actual Traffic'})
+        
+        # 3. Sort and Filter for the last 14 days
+        df_chart = df_chart.sort_values('entry_date').tail(14)
+        
+        # 4. PLOT THE MULTI-LINE CHART
+        # This will show two lines: Actual (Gold/Blue) vs Expected (Shadow)
+        st.line_chart(df_chart.set_index('entry_date')[['Actual Traffic', 'Expected Traffic']])
+        
+        st.caption("The 'Expected' line accounts for historical baselines, weather friction, digital spend, and OOH inertia.")
 # --- TAB 2: LEDGER MANAGEMENT ---
 with tab2:
     st.markdown("""
