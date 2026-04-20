@@ -316,34 +316,85 @@ with tab1:
             st.info(f"No entries logged yet for {datetime.date.today().strftime('%B %Y')}.")
 # --- TAB 2: LEDGER MANAGEMENT ---
 with tab2:
-    st.markdown("### 📑 Add New Daily Record")
-    
-    with st.form("ledger_entry"):
-        col1, col2 = st.columns(2)
-        with col1:
-            date = st.date_input("Entry Date", datetime.date.today())
-            traffic = st.number_input("Actual Traffic (Footfall)", min_value=0)
-            coin_in = st.number_input("Actual Coin-In ($)", min_value=0.0)
-        with col2:
-            clicks = st.number_input("Digital Ad Clicks", min_value=0)
+    st.markdown("""
+        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
+            <h2 style="color: #FFCC00; margin: 0;">📑 Ledger Management</h2>
+            <p style="color: #888; margin: 0;">Manual entry and bulk CSV uploads for property performance.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    col_a, col_b = st.columns([1, 1])
+
+    with col_a:
+        st.write("### ✍️ Manual Daily Entry")
+        with st.form("manual_entry", clear_on_submit=True):
+            entry_date = st.date_input("Date", datetime.date.today())
+            traffic = st.number_input("Total Traffic (Headcount)", min_value=0)
+            coin_in = st.number_input("Total Coin-In ($)", min_value=0.0, format="%.2f")
+            
+            st.divider()
+            st.write("**Digital Attribution**")
+            clicks = st.number_input("Ad Clicks", min_value=0)
             impressions = st.number_input("Social Impressions", min_value=0)
             
-        if st.form_submit_button("💾 Save to Property Ledger"):
-            entry_data = {
-                "entry_date": date.isoformat(),
-                "actual_traffic": traffic,
-                "actual_coin_in": coin_in,
-                "ad_clicks": clicks,
-                "social_impressions": impressions
-            }
+            if st.form_submit_button("💾 Save to Vault"):
+                new_row = {
+                    "entry_date": entry_date.isoformat(),
+                    "actual_traffic": traffic,
+                    "actual_coin_in": coin_in,
+                    "ad_clicks": clicks,
+                    "social_impressions": impressions
+                }
+                try:
+                    supabase.table("ledger").insert([new_row]).execute()
+                    st.success(f"Success! Data for {entry_date} is now in the Vault.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error saving to database: {e}")
+
+    with col_b:
+        st.write("### 📤 Bulk CSV Upload")
+        uploaded_file = st.file_uploader("Drop your ledger CSV here", type="csv")
+        
+        if uploaded_file is not None:
+            df_upload = pd.read_csv(uploaded_file)
+            st.write("Preview of Upload:")
+            st.dataframe(df_upload.head(3), use_container_width=True)
             
-            try:
-                # FIX: Changed "ledger_data" to "ledger" to match your DB
-                supabase.table("ledger").insert([entry_data]).execute()
-                st.success(f"Record for {date} successfully added to the Vault!")
+            if st.button("🚀 Push to Vault", use_container_width=True):
+                try:
+                    # Rename columns to match Supabase if necessary
+                    # df_upload.rename(columns={'Your_CSV_Name': 'actual_traffic'}, inplace=True)
+                    data_dict = df_upload.to_dict(orient='records')
+                    supabase.table("ledger").insert(data_dict).execute()
+                    st.success(f"Bulk upload of {len(data_dict)} rows complete!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Upload failed: {e}")
+
+    # --- RECENT LEDGER HISTORY ---
+    st.divider()
+    st.write("### 📜 Recent Ledger Entries")
+    
+    if ledger_data:
+        df_history = pd.DataFrame(ledger_data)
+        df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
+        df_history = df_history.sort_values(by='entry_date', ascending=False)
+        
+        # Display the last 10 entries
+        st.dataframe(
+            df_history.head(10)[['entry_date', 'actual_traffic', 'actual_coin_in', 'ad_clicks', 'social_impressions']],
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        if st.button("🗑️ Clear Entire Ledger (Danger Zone)"):
+            if st.checkbox("I am sure I want to wipe the ledger history"):
+                supabase.table("ledger").delete().neq("id", 0).execute()
+                st.warning("Ledger wiped. Please refresh.")
                 st.rerun()
-            except Exception as e:
-                st.error(f"Failed to sync with Vault: {e}")
+    else:
+        st.info("No data found in the Vault. Use the form above to add your first record.")
 
 # --- TAB 3: STRATEGY & ROI ---
 with tab3:
