@@ -526,7 +526,7 @@ with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Calibration</h2>
-            <p style="color: #888; margin: 0;">Calibrate all multipliers including Marketing, Environmental, and OOH Pressure.</p>
+            <p style="color: #888; margin: 0;">Calibrate all multipliers: Marketing, Environmental Friction, and OOH Pressure.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -534,14 +534,14 @@ with tab4:
         st.error("Engine coefficients not found. Please refresh.")
         st.stop()
 
-    with st.form("engine_settings_full_v3"):
+    with st.form("engine_settings_full_v4"):
         col1, col2 = st.columns(2)
         
         with col1:
             st.write("### 📣 Marketing Multipliers")
-            # Ad Clicks
+            # RESTORED: Ad Clicks Weight
             c_clicks = float(st.session_state.coeffs.get('Clicks', 0.02))
-            new_clicks = st.slider("Click Conversion Weight", 0.00, 0.50, value=c_clicks)
+            new_clicks = st.slider("Click Conversion Weight", 0.00, 0.50, value=c_clicks, step=0.01)
             
             # Social Impressions (mapping to 'Impressions' column)
             c_social = float(st.session_state.coeffs.get('Impressions', 0.0002))
@@ -575,7 +575,7 @@ with tab4:
             
             st.write("---")
             st.write("### 💰 Financial Anchor")
-            # Avg Spend
+            # Avg Spend (Fixed at $5000 limit to prevent app crash)
             c_coin = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
             new_coin = st.number_input("Avg Spend Per Head ($)", 0.0, 5000.0, value=c_coin)
 
@@ -590,7 +590,7 @@ with tab4:
                 'Snow_cm': new_snow,
                 'Rain_mm': new_rain,
                 'Promo': new_promo,
-                'Clicks': new_clicks,
+                'Clicks': new_clicks, # RESTORED
                 'Impressions': new_social,
                 'Static_Weight': new_static_w,
                 'Static_Count': new_static_c,
@@ -598,9 +598,11 @@ with tab4:
                 'Digital_OOH_Count': new_digital_c
             }
             try:
+                # Update Supabase Vault
                 supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
+                # Update local session state for instant calculation
                 st.session_state.coeffs.update(sync_payload)
-                st.success("✅ Full Calibration Synced to Vault!")
+                st.success("✅ Full Engine Calibration Synced to Vault!")
                 import time
                 time.sleep(1)
                 st.rerun()
@@ -614,7 +616,7 @@ with tab4:
     m1, m2, m3 = st.columns(3)
     m1.metric("OOH Daily Lift", f"{total_ooh:,.0f}")
     m2.metric("Rain Friction/mm", f"{new_rain:,.0f}")
-    m3.metric("Digital SOV Weight", f"{new_digital_w:,.1f}")
+    m3.metric("Click Multiplier", f"{new_clicks:.2f}")
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
