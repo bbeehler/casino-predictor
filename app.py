@@ -372,27 +372,62 @@ with tab2:
                 except Exception as e:
                     st.error(f"Upload failed: {e}")
 
-    # --- RECENT LEDGER HISTORY ---
+   # --- RECENT LEDGER HISTORY (Defensive Version) ---
     st.divider()
     st.write("### 📜 Recent Ledger Entries")
     
     if ledger_data:
         df_history = pd.DataFrame(ledger_data)
-        df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
-        df_history = df_history.sort_values(by='entry_date', ascending=False)
         
-        # Display the last 10 entries
-        st.dataframe(
-            df_history.head(10)[['entry_date', 'actual_traffic', 'actual_coin_in', 'ad_clicks', 'social_impressions']],
-            use_container_width=True,
-            hide_index=True
-        )
+        # 1. Clean up dates
+        if 'entry_date' in df_history.columns:
+            df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
+            df_history = df_history.sort_values(by='entry_date', ascending=False)
         
-        if st.button("🗑️ Clear Entire Ledger (Danger Zone)"):
-            if st.checkbox("I am sure I want to wipe the ledger history"):
-                supabase.table("ledger").delete().neq("id", 0).execute()
-                st.warning("Ledger wiped. Please refresh.")
-                st.rerun()
+        # 2. Defensive Column Mapping
+        # This prevents the KeyError by only picking columns that exist in your DB
+        potential_cols = {
+            'entry_date': 'Date',
+            'actual_traffic': 'Traffic',
+            'Traffic': 'Traffic',
+            'actual_coin_in': 'Coin-In',
+            'Revenue': 'Coin-In',
+            'ad_clicks': 'Clicks',
+            'Clicks': 'Clicks',
+            'social_impressions': 'Impressions',
+            'Impressions': 'Impressions'
+        }
+        
+        # Find which of our target columns actually exist in the dataframe
+        existing_cols = [col for col in potential_cols.keys() if col in df_history.columns]
+        
+        if existing_cols:
+            # Create a clean display version
+            df_display = df_history[existing_cols].copy()
+            
+            # Optional: Rename for the UI to look cleaner
+            # df_display.columns = [potential_cols[c] for c in df_display.columns]
+
+            st.dataframe(
+                df_display.head(15),
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.warning("Ledger columns not recognized. Check your Supabase schema.")
+        
+        # --- DANGER ZONE ---
+        with st.expander("⚠️ Danger Zone"):
+            if st.button("🗑️ Wipe Ledger History"):
+                # Use a text input for a simple "password" to prevent accidental clicks
+                confirm = st.text_input("Type 'DELETE' to confirm")
+                if confirm == "DELETE":
+                    try:
+                        supabase.table("ledger").delete().neq("id", 0).execute()
+                        st.success("Ledger wiped. Refreshing...")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Wipe failed: {e}")
     else:
         st.info("No data found in the Vault. Use the form above to add your first record.")
 
