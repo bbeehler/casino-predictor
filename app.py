@@ -788,16 +788,18 @@ with tab6:
     f1, f2 = st.columns(2)
     with f1:
         st.write("**Volume Contribution**")
-        st.write(f"* Baseline: {df_rep['Historical Baseline'].sum():,.0f}")
-        st.write(f"* OOH: {ooh_daily * len(df_rep):,.0f}")
-        st.write(f"* Digital: {df_rep['Digital_Impact'].sum():,.0f}")
+        # Ensure 'Digital Impact' uses a space to match the calculation above
+        st.write(f"* Historical Baseline: {df_rep['Historical Baseline'].sum():,.0f}")
+        st.write(f"* OOH Inertia: {df_rep['OOH Inertia'].sum():,.0f}")
+        st.write(f"* Digital Marketing: {df_rep['Digital Impact'].sum():,.0f}")
         st.write(f"* Weather Penalty: {df_rep['Weather Friction'].sum():,.0f}")
     
     with f2:
         mkt_share = (mkt_revenue / total_revenue * 100) if total_revenue > 0 else 0
         st.write("**Revenue Share**")
         st.success(f"**Marketing Contribution: {mkt_share:.1f}%**")
-        st.write(f"This model is currently explaining **{metrics['predictability']}** of traffic.")
+        st.write(f"---")
+        st.write(f"Property-wide predictability is currently **{metrics['predictability']}**.")
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
 with tab7:
     st.markdown("""
