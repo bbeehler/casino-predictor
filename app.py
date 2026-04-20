@@ -12,7 +12,7 @@ from supabase import create_client
 st.set_page_config(page_title="FloorCast | Hard Rock Ottawa", layout="wide", page_icon="🎰")
 
 # --- AUTH LIST ---
-ADMIN_USERS = ["bjbeehler@gmail.com]
+ADMIN_USERS = ["bjbeehler@gmail.com"]
 
 # 2. THE UNIFIED FORENSIC ENGINE
 def get_forensic_metrics(df, coeffs):
