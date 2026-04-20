@@ -530,29 +530,47 @@ with tab4:
         </div>
     """, unsafe_allow_html=True)
 
-    with st.form("engine_settings_refined_ooh"):
+    # Safety check for coefficients
+    if 'coeffs' not in st.session_state:
+        st.error("Engine coefficients not found. Please refresh.")
+        st.stop()
+
+    # 1. MANUAL CALIBRATION FORM
+    with st.form("engine_settings_refined_v2"):
         col1, col2 = st.columns(2)
         
         with col1:
             st.write("### 🖼️ Static Billboards (24/7)")
-            # Static vinyl boards
+            # Pull values with high safety ceilings to prevent 'AboveMax' errors
             s_weight = float(st.session_state.coeffs.get('Static_Weight', 50.0))
-            new_static_w = st.slider("Lift per Static Board", 0, 200, value=int(s_weight))
-            new_static_c = st.number_input("Active Static Boards", 0, 10, value=2)
+            new_static_w = st.slider("Lift per Static Board", 0.0, 500.0, value=float(s_weight))
+            new_static_c = st.number_input("Active Static Boards", 0, 20, value=int(st.session_state.coeffs.get('Static_Count', 2)))
 
             st.write("### 📺 Digital OOH (Shared Loop)")
-            # Shared digital boards (accounting for Loop SOV)
             d_weight = float(st.session_state.coeffs.get('Digital_OOH_Weight', 10.0))
-            new_digital_w = st.slider("Lift per Digital Board (Shared)", 0, 100, value=int(d_weight))
-            new_digital_c = st.number_input("Active Digital Boards", 0, 20, value=4)
+            new_digital_w = st.slider("Lift per Digital Board (Shared)", 0.0, 200.0, value=float(d_weight))
+            new_digital_c = st.number_input("Active Digital Boards", 0, 50, value=int(st.session_state.coeffs.get('Digital_OOH_Count', 4)))
 
         with col2:
             st.write("### 📣 Marketing & Environment")
-            new_clicks = st.slider("Click Weight", 0.00, 0.20, value=float(st.session_state.coeffs.get('Clicks', 0.02)))
-            new_snow = st.slider("Snow Friction", -500, 0, value=int(st.session_state.coeffs.get('Snow_cm', -45)))
-            new_coin = st.number_input("Avg Spend ($)", 0.0, 500.0, value=float(st.session_state.coeffs.get('Avg_Coin_In', 112.50)))
+            # Click Weight
+            c_clicks = float(st.session_state.coeffs.get('Clicks', 0.02))
+            new_clicks = st.slider("Click Weight", 0.00, 0.50, value=float(c_clicks))
+            
+            # Snow Friction
+            c_snow = float(st.session_state.coeffs.get('Snow_cm', -45.0))
+            new_snow = st.slider("Snow Friction (Guests/cm)", -1000.0, 0.0, value=float(c_snow))
+            
+            # Financial Anchor - Raised to $5,000 to prevent 'AboveMax' crashes
+            c_coin = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
+            new_coin = st.number_input("Avg Spend Per Head ($)", 0.0, 5000.0, value=float(c_coin))
 
-        if st.form_submit_button("💾 Save Calibration to Vault"):
+        st.divider()
+        
+        # THE SUBMIT BUTTON - Must be inside the 'with st.form' block
+        submit_cal = st.form_submit_button("💾 Save Calibration to Vault", use_container_width=True)
+
+        if submit_cal:
             sync_payload = {
                 'Static_Weight': new_static_w,
                 'Static_Count': new_static_c,
@@ -563,17 +581,27 @@ with tab4:
                 'Avg_Coin_In': new_coin
             }
             try:
+                # Update Supabase
                 supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
+                # Update Session State immediately for UI consistency
                 st.session_state.coeffs.update(sync_payload)
-                st.success("✅ OOH Calibration Updated!")
+                st.success("✅ OOH Calibration Updated & Vault Synced!")
+                import time
+                time.sleep(1)
                 st.rerun()
             except Exception as e:
                 st.error(f"Sync failed: {e}")
 
-    # 4. FORENSIC INSIGHT
-    total_ooh = (new_static_w * new_static_c) + (new_digital_w * new_digital_c)
-    st.info(f"🔍 **Forensic Summary:** Your OOH mix is contributing an estimated **{total_ooh} guests per day.** "
-            f"({(new_static_w * new_static_c)} from Static, {(new_digital_w * new_digital_c)} from Digital).")
+    # 2. FORENSIC SUMMARY
+    st.write("### 🔍 Current Campaign Pressure")
+    total_static = new_static_w * new_static_c
+    total_digital = new_digital_w * new_digital_c
+    total_ooh = total_static + total_digital
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Static OOH Lift", f"{total_static:,.0f}")
+    c2.metric("Digital OOH Lift", f"{total_digital:,.0f}")
+    c3.metric("Total OOH Impact", f"{total_ooh:,.0f}", help="Estimated daily guest lift from all boards")
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
