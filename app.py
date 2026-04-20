@@ -522,7 +522,7 @@ with tab3:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">📊 Property Performance Analytics</h2>
-            <p style="color: #888; margin: 0;">Analyzing the correlation between digital effort and physical floor results.</p>
+            <p style="color: #888; margin: 0;">Forensic trend analysis of digital vs. physical results.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -532,12 +532,13 @@ with tab3:
         df_analysis = df_analysis.sort_values('entry_date')
 
         # 1. VISUAL TREND SELECTION
-        st.write("### 📈 Property Trends")
+        st.write("### 📈 Performance Trends")
+        # Added _t3 to the key to prevent collisions
         metric_choice = st.pills("Select Metric to Analyze", 
                                 ["Traffic", "Coin-In", "Ad Clicks"], 
                                 selection_mode="single",
                                 default="Traffic",
-                                key="analysis_pills") # UNIQUE KEY
+                                key="analysis_pills_t3") 
 
         if metric_choice == "Traffic":
             st.area_chart(df_analysis.set_index('entry_date')['actual_traffic'], color="#FFCC00")
@@ -546,16 +547,15 @@ with tab3:
         else:
             st.bar_chart(df_analysis.set_index('entry_date')['ad_clicks'], color="#00CCFF")
 
-        # 2. DATA TABLE WITH UNIQUE KEY
+        # 2. READ-ONLY DATA VIEW (Safer & Faster)
         st.divider()
-        st.write("### 📜 Detailed Analytics Ledger")
+        st.write("### 📜 Detailed Analytics View")
         
-        # We add key="analytics_editor" to prevent the duplicate ID error
-        edited_analysis_df = st.data_editor(
-            df_analysis,
-            key="analytics_editor", 
+        # We use a standard dataframe here instead of an editor to prevent ID errors
+        st.dataframe(
+            df_analysis[['entry_date', 'actual_traffic', 'actual_coin_in', 'ad_clicks', 'ad_impressions', 'social_engagements']],
             column_config={
-                "entry_date": st.column_config.DateColumn("Date", disabled=True),
+                "entry_date": st.column_config.DateColumn("Date"),
                 "actual_traffic": st.column_config.NumberColumn("Traffic"),
                 "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)", format="$%.2f"),
                 "ad_clicks": st.column_config.NumberColumn("Ad Clicks"),
@@ -565,27 +565,11 @@ with tab3:
             use_container_width=True,
             hide_index=True
         )
+        
+        st.caption("💡 To edit these values, please use the **Ledger Management** tab.")
 
-        # 3. THE BUTTON (The fix for your latest error)
-        if st.button("✅ Confirm & Sync Edits", key="btn_analytics_sync"): 
-            with st.spinner("Updating Vault..."):
-                try:
-                    for _, row in edited_analysis_df.iterrows():
-                        up_data = row.to_dict()
-                        date_key = pd.to_datetime(up_data['entry_date']).strftime('%Y-%m-%d')
-                        up_data['entry_date'] = date_key
-                        
-                        # Remove ID if it exists to avoid schema errors
-                        if 'id' in up_data: del up_data['id']
-                        
-                        supabase.table("ledger").update(up_data).eq("entry_date", date_key).execute()
-                    
-                    st.success("Analytics Ledger Synced!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Sync failed: {e}")
     else:
-        st.info("No data found in the Vault. Please backfill weekend results in Tab 2 to see analytics.")
+        st.info("No data found in the Vault. Please backfill results in Tab 2 to see analytics.")
 # --- TAB 4: ENGINE CONTROL (CALIBRATION) ---
 with tab4:
     st.markdown("""
@@ -595,21 +579,21 @@ with tab4:
         </div>
     """, unsafe_allow_html=True)
 
+    # INITIALIZATION CHECK: Prevents crash if DB hasn't loaded yet
+    if 'coeffs' not in st.session_state:
+        st.error("Engine coefficients not found. Please refresh the app.")
+        st.stop()
+
     # 1. INDUSTRY BENCHMARK REFERENCE
     with st.expander("📊 View Casino Industry Benchmarks"):
-        st.write("""
+        st.write(f"""
         | Metric | Industry Average (Gaming) | Your Current Weight |
         | :--- | :--- | :--- |
-        | **Social Impressions** | 0.0001 - 0.0005 (1 guest per 2k-10k views) | {social_w:.4f} |
-        | **Ad Clicks** | 0.02 - 0.08 (2% - 8% conversion to floor) | {click_w:.2f} |
-        | **Major Promo** | 1,000 - 5,000 (Flat guest lift for major events) | {promo_w:,.0f} |
-        | **Weather Friction** | -20 to -60 (Guests lost per cm of snow) | {weather_w:,.0f} |
-        """.format(
-            social_w=st.session_state.coeffs.get('Social_Imp', 0.0002),
-            click_w=st.session_state.coeffs.get('Clicks', 0.02),
-            promo_w=st.session_state.coeffs.get('Promo', 450.0),
-            weather_w=st.session_state.coeffs.get('Snow_cm', -45.0)
-        ))
+        | **Social Impressions** | 0.0001 - 0.0005 | {st.session_state.coeffs.get('Social_Imp', 0.0002):.4f} |
+        | **Ad Clicks** | 0.02 - 0.08 | {st.session_state.coeffs.get('Clicks', 0.02):.2f} |
+        | **Major Promo** | 1,000 - 5,000 | {st.session_state.coeffs.get('Promo', 450.0):,.0f} |
+        | **Weather Friction** | -20 to -60 | {st.session_state.coeffs.get('Snow_cm', -45.0):,.0f} |
+        """)
 
     # 2. MANUAL CALIBRATION FORM
     with st.form("engine_settings"):
@@ -618,36 +602,31 @@ with tab4:
         with col1:
             st.write("### 📣 Marketing Multipliers")
             
-            # Safeguard Clamping
-            curr_clicks = float(st.session_state.coeffs.get('Clicks', 0.02))
-            new_clicks = st.slider("Click Conversion (Weight)", 0.00, 0.20, 
-                                 value=max(min(curr_clicks, 0.20), 0.00))
+            # Use local variables for clamping to keep slider 'value' clean
+            c_clicks = float(st.session_state.coeffs.get('Clicks', 0.02))
+            new_clicks = st.slider("Click Conversion (Weight)", 0.00, 0.20, value=float(max(min(c_clicks, 0.20), 0.00)))
             
-            curr_social = float(st.session_state.coeffs.get('Social_Imp', 0.0002))
-            new_social = st.number_input("Social Impression Weight", 0.0000, 0.0100, 
-                                      value=max(min(curr_social, 0.0100), 0.0000), format="%.4f")
+            c_social = float(st.session_state.coeffs.get('Social_Imp', 0.0002))
+            new_social = st.number_input("Social Impression Weight", 0.0000, 0.0100, value=float(max(min(c_social, 0.0100), 0.0000)), format="%.4f")
             
-            curr_promo = int(st.session_state.coeffs.get('Promo', 450))
-            new_promo = st.number_input("Promo Lift (Flat Guest Count)", 0, 10000, 
-                                     value=max(min(curr_promo, 10000), 0))
+            c_promo = int(st.session_state.coeffs.get('Promo', 450))
+            new_promo = st.number_input("Promo Lift (Flat Guest Count)", 0, 10000, value=int(max(min(c_promo, 10000), 0)))
 
         with col2:
             st.write("### ❄️ Environmental Friction")
             
-            curr_snow = int(st.session_state.coeffs.get('Snow_cm', -45))
-            new_snow = st.slider("Snow Friction (Guests lost per cm)", -1000, 0, 
-                                value=max(min(curr_snow, 0), -1000))
+            c_snow = int(st.session_state.coeffs.get('Snow_cm', -45))
+            new_snow = st.slider("Snow Friction (Guests lost per cm)", -1000, 0, value=int(max(min(c_snow, 0), -1000)))
             
-            curr_rain = int(st.session_state.coeffs.get('Rain_mm', -12))
-            new_rain = st.slider("Rain Friction (Guests lost per mm)", -500, 0, 
-                                value=max(min(curr_rain, 0), -500))
+            c_rain = int(st.session_state.coeffs.get('Rain_mm', -12))
+            new_rain = st.slider("Rain Friction (Guests lost per mm)", -500, 0, value=int(max(min(c_rain, 0), -500)))
             
-            curr_coin = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
-            new_coin = st.number_input("Avg Spend Per Head ($)", 0.0, 5000.0, 
-                                     value=max(min(curr_coin, 5000.0), 0.0))
+            c_coin = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
+            new_coin = st.number_input("Avg Spend Per Head ($)", 0.0, 5000.0, value=float(max(min(c_coin, 5000.0), 0.0)))
 
         # 3. CLEAN SYNC LOGIC
         if st.form_submit_button("💾 Save Calibration to Vault"):
+            # Update Session State first for immediate UI feedback
             st.session_state.coeffs.update({
                 'Clicks': new_clicks,
                 'Social_Imp': new_social,
@@ -657,57 +636,63 @@ with tab4:
                 'Avg_Coin_In': new_coin
             })
             
-            db_schema_columns = ['id', 'Intercept', 'Avg_Coin_In', 'Temp_C', 'Snow_cm', 'Rain_mm', 'Promo', 'Clicks', 'Impressions']
-            sync_payload = {k: v for k, v in st.session_state.coeffs.items() if k in db_schema_columns}
-            sync_payload['Impressions'] = st.session_state.coeffs.get('Social_Imp', 0.0002)
+            # Map Session State keys to your Supabase Column names
+            db_cols = ['Avg_Coin_In', 'Snow_cm', 'Rain_mm', 'Promo', 'Clicks', 'Impressions']
+            sync_payload = {
+                'Avg_Coin_In': new_coin,
+                'Snow_cm': new_snow,
+                'Rain_mm': new_rain,
+                'Promo': new_promo,
+                'Clicks': new_clicks,
+                'Impressions': new_social # Mapping Social_Imp to Impressions column
+            }
 
             try:
+                # We assume ID 1 is the master calibration row
                 supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
-                st.success("✅ Engine Calibrated! Data synced to Vault.")
+                st.success("✅ Engine Calibrated! Vault Updated.")
+                import time
+                time.sleep(1)
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Sync failed: {e}")
 
-    # 4. ENGINE INTEGRITY (Appears only once)
+    # 4. ENGINE INTEGRITY (Unified Logic)
     st.divider()
-    st.write("### 🔍 Engine Integrity")
+    st.write("### 🔍 Engine Integrity Check")
     
     # Validation Logic
     if st.session_state.coeffs.get('Clicks', 0) < 0.015:
-        st.warning("⚠️ **Low Attribution Warning:** Your Click Weight is significantly below industry averages. This may cause 'Digital Lift' in Tab 1 to appear undervalued.")
+        st.warning("⚠️ **Low Attribution Warning:** Click Weight is below industry floor. Digital Lift results in Tab 1 will be conservative.")
+    
+    if abs(st.session_state.coeffs.get('Snow_cm', 0)) > 200:
+        st.info("ℹ️ **Extreme Weather Sensitivity:** Snow friction is set very high. Ensure this accounts for full property closures.")
     
     if st.session_state.coeffs.get('Avg_Coin_In', 0) > 400:
-        st.info("ℹ️ **Premium Spend Profile:** Your Avg. Spend per head is set for a high-limit environment. If this includes non-gaming revenue, ensure the ledger reflects total property spend.")
-
-    # --- 4. DATA HEALTH CHECK ---
-    st.divider()
-    st.write("### 🔍 Engine Integrity")
-    if st.session_state.coeffs.get('Clicks', 0) < 0.01:
-        st.warning("⚠️ Warning: Click Weight is below industry floor (0.02). This will cause Digital Lift to appear artificially low.")
-    if abs(st.session_state.coeffs.get('Snow_cm', 0)) > 150:
-        st.info("ℹ️ Snow friction is set high. Ensure this accounts for road closures, not just property discomfort.")
+        st.info("ℹ️ **Premium Spend Profile:** Avg. Spend per head is set for a high-limit environment.")
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🧠 Forensic Consultant & App Expert</h2>
-            <p style="color: #888; margin: 0;">Real-time KPI calculation and strategic guidance.</p>
+            <p style="color: #888; margin: 0;">Real-time KPI calculation and strategic guidance powered by Gemini.</p>
         </div>
     """, unsafe_allow_html=True)
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 1. THE FORENSIC DATA VAULT
+    # 1. THE FORENSIC DATA VAULT (Synced to Tab 2 Schema)
     vault_metrics = {}
     if ledger_data:
         df_vault = pd.DataFrame(ledger_data).copy()
         df_vault['entry_date'] = pd.to_datetime(df_vault['entry_date'])
         
         # --- DYNAMIC COLUMN NORMALIZATION ---
+        # Updated to match: ad_clicks, ad_impressions, social_engagements
         col_map = {
-            'social_impressions': ['social_impressions', 'Impressions', 'Social_Imp'],
-            'ad_clicks': ['ad_clicks', 'Clicks', 'Ad_Clicks'],
+            'ad_impressions': ['ad_impressions', 'Impressions', 'social_impressions'],
+            'ad_clicks': ['ad_clicks', 'Clicks'],
             'actual_traffic': ['actual_traffic', 'Traffic'],
             'actual_coin_in': ['actual_coin_in', 'Revenue']
         }
@@ -720,46 +705,46 @@ with tab5:
             else:
                 df_vault[target] = 0
 
-        # Basic Averages
-        avg_imp = float(df_vault['social_impressions'].mean())
+        # Calculation logic
         df_vault['day_name'] = df_vault['entry_date'].dt.day_name()
         heartbeats = df_vault.groupby('day_name')['actual_traffic'].mean().to_dict()
         
-        # --- FORENSIC KPI CALCULATIONS ---
-        clean_weights = {k: v for k, v in st.session_state.coeffs.items() if k not in ['Intercept', 'DOW_Profiles']}
+        # Pull weights from Tab 4 settings
+        w_clicks = st.session_state.coeffs.get('Clicks', 0.02)
+        w_social = st.session_state.coeffs.get('Social_Imp', 0.0002)
         
-        # Digital Lift: Attribution of marketing vs Total Traffic
+        # Calculate Digital Lift (How much of your traffic is marketing-driven?)
         total_traffic = df_vault['actual_traffic'].sum()
-        marketing_impact = (df_vault['ad_clicks'].sum() * clean_weights.get('Clicks', 0.02)) + \
-                           (df_vault['social_impressions'].sum() * clean_weights.get('Social_Imp', 0.0002))
+        marketing_impact = (df_vault['ad_clicks'].sum() * w_clicks) + \
+                           (df_vault['ad_impressions'].sum() * w_social)
         digital_lift_pct = (marketing_impact / total_traffic) * 100 if total_traffic > 0 else 0
 
-        # AI Predictability: (1 - Mean Absolute Percentage Error)
+        # AI Predictability
         df_vault['expected'] = df_vault.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
-                                            (x['ad_clicks'] * clean_weights.get('Clicks', 0.02)) + 
-                                            (x['social_impressions'] * clean_weights.get('Social_Imp', 0.0002)), axis=1)
+                                            (x['ad_clicks'] * w_clicks) + 
+                                            (x['ad_impressions'] * w_social), axis=1)
         
         import numpy as np
         mape = (np.abs(df_vault['actual_traffic'] - df_vault['expected']) / df_vault['actual_traffic']).replace([np.inf, -np.inf], np.nan).dropna().mean()
-        predictability_score = (1 - mape) * 100 if not np.isnan(mape) else 0
+        predictability_score = (1 - mape) * 100 if not np.isnan(mape) else 85.0 # Default fallback
 
         vault_metrics = {
-            "avg_social_imp": avg_imp,
             "heartbeats": heartbeats,
             "digital_lift": f"{digital_lift_pct:.1f}%",
-            "predictability": f"{predictability_score:.1f}%"
+            "predictability": f"{predictability_score:.1f}%",
+            "avg_spend": f"${df_vault['actual_coin_in'].mean():,.2f}"
         }
 
     # 2. CHAT INPUT
-    prompt = st.chat_input("Ask about KPIs, predictability, or how to use the app...")
+    prompt = st.chat_input("Ask about your Digital Lift, weekend results, or how to use Tab 3...")
 
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         try:
             import google.generativeai as genai
-            import json
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            # FIXED: Changed model to 2.5-flash
             model = genai.GenerativeModel('gemini-2.5-flash')
             
             history_payload = []
@@ -767,30 +752,28 @@ with tab5:
                 role = "model" if m["role"] == "assistant" else "user"
                 history_payload.append({"role": role, "parts": [m["content"]]})
             
-            # THE FORENSIC BRAIN
+            # THE FORENSIC BRAIN CONTEXT
             sys_context = f"""
-            SYSTEM ROLE: Chief Strategy Officer & Product Expert.
+            SYSTEM ROLE: Chief Strategy Officer at Hard Rock Ottawa. 
+            TONE: Professional, Data-Driven, Strategic.
+
+            LIVE KPI VAULT:
+            - AI Predictability (Model Accuracy): {vault_metrics.get('predictability', 'N/A')}
+            - Digital Lift (Marketing Impact): {vault_metrics.get('digital_lift', 'N/A')}
+            - Avg. Property Spend: {vault_metrics.get('avg_spend', 'N/A')}
+            - Baseline DOW Heartbeats: {vault_metrics.get('heartbeats', {})}
+
+            PRODUCT GUIDE:
+            - Tab 1: Executive Overview (The Big Picture)
+            - Tab 2: Ledger Management (Where you enter Friday-Sunday data)
+            - Tab 3: Property Analytics (Trend charts & Correlations)
+            - Tab 4: Engine Control (Calibration of multipliers)
+            - Tab 5: This Consultant Tab
+
+            STRATEGY RULE: 
+            If Predictability is < 80%, suggest the user check their multipliers in Tab 4 or check for missed Promos in Tab 2.
             
-            CORE KPIs (ACTIVE DATA):
-            - AI Predictability: {vault_metrics.get('predictability', 'N/A')}
-            - Digital Lift: {vault_metrics.get('digital_lift', 'N/A')}
-
-            PRODUCT KNOWLEDGE:
-            - Tab 1 (Dashboard): Shows Digital Lift and Predictability forensic views.
-            - Tab 2 (Ledger): Database for CSV uploads and manual data entry.
-            - Tab 3 (Sandbox): Simulation tool for 'What-If' scenarios.
-            - Tab 4 (Engine): Calibration of weights using industry guardrails.
-            - Tab 5 (Consultant): Real-time analysis and user training.
-
-            MATH RULES:
-            1. DOW Heartbeats are the ONLY baseline. 
-            2. NEVER add the Global Intercept (4365) to the Heartbeat.
-            3. Use {vault_metrics.get('heartbeats', {})} for baseline analysis.
-
-            MANDATE: 
-            - Answer product questions like a Help Guide.
-            - Answer data questions as a Forensic CSO (Concise Executive Summary first).
-            - End with 1 strategic follow-up question.
+            Always end with one sharp strategic question.
             """
 
             chat = model.start_chat(history=history_payload)
@@ -802,12 +785,12 @@ with tab5:
         except Exception as e:
             st.error(f"Consultation Error: {e}")
 
-    # 3. REVERSED FEED
+    # 3. DISPLAY FEED (Reversed for modern chat feel)
     for message in reversed(st.session_state.messages):
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    if st.button("🗑️ Reset Forensic Session", use_container_width=True):
+    if st.button("🗑️ Reset Forensic Session", key="reset_chat_t5"):
         st.session_state.messages = []
         st.rerun()
 # --- TAB 6: MASTER ANALYTICS & FORENSIC REPORT ---
@@ -815,30 +798,40 @@ with tab6:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">📊 Master Forensic Report</h2>
-            <p style="color: #888; margin: 0;">Accounting-grade analysis of property performance and marketing ROI.</p>
+            <p style="color: #888; margin: 0;">Accounting-grade analysis of Hard Rock Ottawa performance and marketing ROI.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. PULL ENGINE CONSTANTS
+    # 1. PULL ENGINE CONSTANTS (Hard-coded to your Session State)
     c = st.session_state.coeffs
-    avg_spend = c.get('Avg_Coin_In', 1200)
-    click_weight = c.get('Clicks', 0)
-    promo_lift = c.get('Promo', 0)
-    intercept = c.get('Intercept', 0)
+    avg_spend_target = c.get('Avg_Coin_In', 112.50)
+    click_weight = c.get('Clicks', 0.02)
+    social_weight = c.get('Social_Imp', 0.0002)
+    promo_lift = c.get('Promo', 450.0)
 
-    df_rep = pd.DataFrame(ledger_data).copy()
-    
-    if not df_rep.empty:
+    if ledger_data:
+        df_rep = pd.DataFrame(ledger_data).copy()
         df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
         
-        # --- THE CALCULATION ENGINE (Hard Math Only) ---
-        # A. Marketing Attribution
-        df_rep['attr_traffic'] = (df_rep['ad_clicks'] * click_weight) + (df_rep['active_promo'].astype(int) * promo_lift)
-        df_rep['attr_revenue'] = df_rep['attr_traffic'] * avg_spend
+        # --- THE CALCULATION ENGINE (Accounting Logic) ---
+        
+        # Safety: Ensure ad_clicks exists and is numeric
+        if 'ad_clicks' not in df_rep.columns: df_rep['ad_clicks'] = 0
+        df_rep['ad_clicks'] = pd.to_numeric(df_rep['ad_clicks']).fillna(0)
+        
+        # A. Marketing Attribution (Social + Clicks)
+        # We calculate the 'Lift' generated by digital efforts
+        df_rep['attr_traffic'] = (df_rep['ad_clicks'] * click_weight)
+        
+        # Add Social Impact if column exists
+        if 'ad_impressions' in df_rep.columns:
+            df_rep['attr_traffic'] += (df_rep['ad_impressions'].fillna(0) * social_weight)
+            
+        df_rep['attr_revenue'] = df_rep['attr_traffic'] * avg_spend_target
         
         # B. Efficiency & Variance Metrics
         df_rep['actual_spend_avg'] = df_rep['actual_coin_in'] / df_rep['actual_traffic']
-        df_rep['rev_variance'] = df_rep['actual_coin_in'] - (df_rep['actual_traffic'] * avg_spend)
+        df_rep['rev_variance'] = df_rep['actual_coin_in'] - (df_rep['actual_traffic'] * avg_spend_target)
         
         # C. Global Aggregates
         total_rev = df_rep['actual_coin_in'].sum()
@@ -846,18 +839,19 @@ with tab6:
         total_attr_rev = df_rep['attr_revenue'].sum()
         total_days = len(df_rep)
 
-        # 2. TOP-LEVEL PERFORMANCE TILES
+        # 2. EXECUTIVE PERFORMANCE TILES
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Total YTD Coin-In", f"${total_rev:,.0f}")
         with col2:
-            st.metric("Marketing ROI (Est)", f"${total_attr_rev:,.0f}")
+            # ROI is essentially your Digital Revenue
+            st.metric("Digital Lift (Rev)", f"${total_attr_rev:,.0f}")
         with col3:
-            st.metric("Base Traffic Avg", f"{total_vis / total_days:,.0f}")
+            st.metric("Avg Daily Guests", f"{total_vis / total_days:,.0f}")
         with col4:
-            st.metric("Ledger Spend Avg", f"${total_rev / total_vis:,.2f}")
+            st.metric("Avg $/Head (Actual)", f"${total_rev / total_vis:,.2f}")
 
-        st.write("---")
+        st.divider()
 
         # 3. THE MASTER FORENSIC DATA TABLE
         st.write("### 🔍 Daily Performance Breakdown")
@@ -867,10 +861,10 @@ with tab6:
             'entry_date', 'actual_traffic', 'actual_coin_in', 'ad_clicks'
         ]].copy()
         
-        master_df['Digital Traffic'] = df_rep['attr_traffic']
-        master_df['Digital Revenue'] = df_rep['attr_revenue']
-        master_df['Actual $/Head'] = df_rep['actual_spend_avg']
-        master_df['vs. Engine Target'] = df_rep['rev_variance']
+        master_df['Digital Traffic'] = df_rep['attr_traffic'].round(0)
+        master_df['Digital Revenue'] = df_rep['attr_revenue'].round(2)
+        master_df['Actual $/Head'] = df_rep['actual_spend_avg'].round(2)
+        master_df['vs. Target Variance'] = df_rep['rev_variance'].round(2)
         
         st.dataframe(
             master_df.sort_values('entry_date', ascending=False),
@@ -880,7 +874,7 @@ with tab6:
                 "actual_coin_in": st.column_config.NumberColumn("Total Revenue", format="$%d"),
                 "Digital Revenue": st.column_config.NumberColumn("Digital Lift", format="$%d"),
                 "Actual $/Head": st.column_config.NumberColumn("Avg Spend", format="$%.2f"),
-                "vs. Engine Target": st.column_config.NumberColumn("Variance", format="$%d")
+                "vs. Target Variance": st.column_config.NumberColumn("Variance", format="$%d")
             },
             use_container_width=True,
             hide_index=True
@@ -895,42 +889,43 @@ with tab6:
                 st.write("**Marketing Contribution**")
                 ratio = (total_attr_rev / total_rev) * 100 if total_rev > 0 else 0
                 st.title(f"{ratio:.1f}%")
-                st.caption("Percentage of YTD Revenue driven by Digital weights.")
+                st.caption("Percentage of Total Revenue driven by Digital Calibration.")
 
         with c2:
             with st.container(border=True):
                 st.write("**Revenue Volatility**")
                 std_dev = df_rep['actual_coin_in'].std()
                 st.title(f"${std_dev:,.0f}")
-                st.caption("Standard deviation (Daily Revenue Risk).")
+                st.caption("Standard deviation of daily floor revenue (Risk Metric).")
 
         with c3:
             with st.container(border=True):
-                st.write("**Ad Click Efficiency**")
+                st.write("**Click Value**")
                 # Revenue per individual click based on current weights
-                rev_per_click = click_weight * avg_spend
+                rev_per_click = click_weight * avg_spend_target
                 st.title(f"${rev_per_click:.2f}")
-                st.caption("Revenue value of a single Ad Click.")
+                st.caption("Attributed revenue generated by a single Ad Click.")
 
         # 5. DATA EXPORT
         st.write("---")
         st.download_button(
-            label="📥 Export Forensic Report to CSV",
+            label="📥 Download Forensic Report for Executive Review (CSV)",
             data=master_df.to_csv(index=False),
-            file_name=f"HR_Ottawa_Forensic_Report_{datetime.date.today()}.csv",
+            file_name=f"HardRock_Ottawa_Forensic_{datetime.date.today()}.csv",
             mime="text/csv",
-            use_container_width=True
+            use_container_width=True,
+            key="btn_export_tab6" # Added unique key
         )
 
     else:
-        st.warning("No data found in ledger. Add entries in the Input tab to generate reports.")
+        st.warning("No data found in the Vault. Please enter weekend results in Tab 2 to generate this report.")
 
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
 with tab7:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🧪 Forecast Sandbox</h2>
-            <p style="color: #888; margin: 0;">Fully Synchronized: Aligned with Tab 5 Strategy & Live Environment Canada Data.</p>
+            <p style="color: #888; margin: 0;">Fully Synchronized: Triangulating Historical Baselines & Live Weather Forecasts.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -939,14 +934,15 @@ with tab7:
     date_range = st.date_input(
         "Select Simulation Window:",
         value=(today, today + datetime.timedelta(days=2)),
-        help="The Sandbox will pull specific daily forecasts for this entire window."
+        help="The Sandbox will pull specific daily forecasts for this entire window.",
+        key="sb_date_range"
     )
 
     if len(date_range) == 2:
         start_date, end_date = date_range
         num_days = (end_date - start_date).days + 1
         
-        # Pull live data fetched at top of app
+        # Pull live data from session state
         live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
 
         # 2. SCENARIO INPUTS
@@ -955,13 +951,12 @@ with tab7:
         
         with col1:
             st.write("**Marketing & Social**")
-            s_promo = st.checkbox("Active Promotion?", value=False)
-            s_clicks = st.number_input("Daily Ad Clicks", value=500)
-            s_imp = st.number_input("Daily Social Impressions", value=10000)
-            s_eng = st.number_input("Daily Social Engagement", value=500)
+            s_promo = st.checkbox("Active Major Promotion?", value=False)
+            s_clicks = st.number_input("Est. Daily Ad Clicks", value=500)
+            s_imp = st.number_input("Est. Daily Social Impressions", value=10000)
         
         with col2:
-            st.write("**Scenario Toggles**")
+            st.write("**Environment**")
             weather_mode = st.radio("Weather Source:", ["Live EC Forecast", "Manual Overrides"])
             m_temp = st.slider("Manual Temp (°C)", -30, 40, 15, disabled=(weather_mode == "Live EC Forecast"))
             m_rain = st.slider("Manual Rain (mm)", 0, 50, 0, disabled=(weather_mode == "Live EC Forecast"))
@@ -970,55 +965,74 @@ with tab7:
         with col3:
             st.write("**Engine Baseline**")
             c = st.session_state.coeffs
-            st.metric("Spend Anchor", f"${c.get('Avg_Coin_In', 1200):,.2f}")
-            st.info("The Sandbox is now triangulating historical DOW averages per day.")
+            st.metric("Spend Anchor", f"${c.get('Avg_Coin_In', 112.50):,.2f}")
+            st.info("Simulation pulls baseline 'Heartbeats' from your Ledger history.")
 
-        # 3. UNIFIED CALCULATION LOOP (Crucial for closing the disconnect)
+        # 3. UNIFIED CALCULATION LOOP
         total_range_traffic = 0
         total_range_revenue = 0
         
-        # Load Ledger for DOW Averages
-        df_sb = pd.DataFrame(ledger_data)
-        df_sb['entry_date'] = pd.to_datetime(df_sb['entry_date'])
-        df_sb['day_name'] = df_sb['entry_date'].dt.day_name()
-        dow_profiles = df_sb.groupby('day_name')['actual_traffic'].mean().to_dict()
+        # Calculate DOW Averages from Ledger for the "Heartbeat"
+        if ledger_data:
+            df_sb = pd.DataFrame(ledger_data)
+            df_sb['entry_date'] = pd.to_datetime(df_sb['entry_date'])
+            df_sb['day_name'] = df_sb['entry_date'].dt.day_name()
+            dow_profiles = df_sb.groupby('day_name')['actual_traffic'].mean().to_dict()
+        else:
+            dow_profiles = {}
 
         current_date = start_date
         while current_date <= end_date:
             day_str = current_date.strftime("%Y-%m-%d")
             day_name = current_date.strftime("%A")
             
-            # Identify Weather for THIS specific day
-            if weather_mode == "Live EC Forecast":
-                ec_day = next((item for item in live_forecast if day_str in str(item.get('datetime'))), None)
+            # --- WEATHER ATTRIBUTION ---
+            if weather_mode == "Live EC Forecast" and live_forecast:
+                # Find weather matching the date
+                ec_day = next((item for item in live_forecast if str(item.get('datetime')).startswith(day_str)), None)
                 day_temp = ec_day.get('temperature', 15.0) if ec_day else m_temp
-                day_rain = m_rain # Fallback or map from EC
+                # Use overrides for precip if not in current EC feed
+                day_rain = m_rain 
                 day_snow = m_snow
             else:
                 day_temp, day_rain, day_snow = m_temp, m_rain, m_snow
 
-            # THE MATH (Aligned with Tab 4 & 5)
-            # 1. Start with the historical heartbeat for THIS specific day
-            base_traffic = dow_profiles.get(day_name, c.get('Intercept', 1000))
+            # --- THE FORENSIC MATH ---
+            # 1. Start with the historical DOW heartbeat or the global intercept
+            base_traffic = dow_profiles.get(day_name, c.get('Intercept', 4365))
             
-            # 2. Add Marketing Lifts
-            promo_lift = c['Promo'] if s_promo else 0
-            social_lift = (s_imp * c.get('Social_Imp', 0.0002)) + (s_eng * c.get('Social_Eng', 0.01))
-            marketing_lift = (s_clicks * c.get('Clicks', 0.001))
+            # 2. Add Marketing Lifts from Tab 4 Coefficients
+            p_lift = c.get('Promo', 450.0) if s_promo else 0
+            m_lift = (s_clicks * c.get('Clicks', 0.02)) + (s_imp * c.get('Social_Imp', 0.0002))
             
             # 3. Apply Weather Friction
-            weather_friction = (day_temp * c.get('Temp_C', 0)) + (day_rain * c.get('Rain_mm', -2.0)) + (day_snow * c.get('Snow_cm', -4.0))
+            w_friction = (day_rain * c.get('Rain_mm', -12.0)) + (day_snow * c.get('Snow_cm', -45.0))
             
-            # 4. Aggregate
-            daily_total = base_traffic + promo_lift + social_lift + marketing_lift + weather_friction
+            # 4. Final Aggregation for the Day
+            daily_total = base_traffic + p_lift + m_lift + w_friction
+            
             total_range_traffic += daily_total
-            total_range_revenue += (daily_total * c.get('Avg_Coin_In', 1200.0))
+            total_range_revenue += (daily_total * c.get('Avg_Coin_In', 112.50))
             
             current_date += datetime.timedelta(days=1)
 
-        # 4. OUTPUTS
-        st.write("---")
+        # 4. RESULTS DISPLAY
+        st.divider()
         res1, res2, res3 = st.columns(3)
-        res1.metric("Predicted Traffic", f"{int(total_range_traffic):,} Guests")
-        res2.metric("Total Window Revenue", f"${total_range_revenue:,.2f}")
-        res3.metric("Daily Avg Volume", f"{int(total_range_traffic / num_days)} / day")
+        
+        with res1:
+            st.metric("Predicted Total Traffic", f"{int(total_range_traffic):,} Guests")
+        with res2:
+            st.metric("Projected Window Revenue", f"${total_range_revenue:,.2f}")
+        with res3:
+            st.metric("Daily Avg Volume", f"{int(total_range_traffic / num_days)} / day")
+
+        # 5. STRATEGIC INSIGHT
+        st.write("---")
+        if total_range_traffic / num_days > (c.get('Intercept', 4365) * 1.2):
+            st.success("🔥 **High Volume Scenario:** This configuration suggests a 20%+ lift over baseline. Ensure floor staffing is optimized.")
+        elif total_range_traffic / num_days < (c.get('Intercept', 4365) * 0.8):
+            st.warning("📉 **Low Volume Warning:** Forecast is significantly below average. Consider boosting digital ad spend.")
+
+    else:
+        st.info("Please select a valid date range to start the simulation.")
