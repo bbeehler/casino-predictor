@@ -516,50 +516,88 @@ with tab2:
             except Exception as e:
                 st.error(f"Sync failed: {e}")
 
-# --- TAB 3: STRATEGY & ROI ---
+# --- TAB 3: PROMOTION & EVENT REGISTRY ---
 with tab3:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">🚀 Strategy & Digital ROI</h2>
-            <p style="color: #888; margin: 0;">Calculating the financial lift of digital marketing efforts.</p>
+            <h2 style="color: #FFCC00; margin: 0;">📅 Promotion Registry</h2>
+            <p style="color: #888; margin: 0;">Log major property events to calibrate the Forensic Engine's 'Promo Lift'.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # Pull latest coefficients
-    c = st.session_state.coeffs
-    click_weight = c.get('Clicks', 0)
-    promo_lift = c.get('Promo', 0)
-    avg_spend = c.get('Avg_Coin_In', 1200)
+    # 1. ADD NEW PROMOTION
+    with st.expander("➕ Register New Event"):
+        with st.form("promo_entry"):
+            p_date = st.date_input("Event Date", datetime.date.today())
+            p_name = st.text_input("Promotion Name", placeholder="e.g., $50k Slot Tournament")
+            p_type = st.selectbox("Event Type", ["Major Draw", "Gift Giveaway", "Concert", "Holiday", "Other"])
+            
+            if st.form_submit_button("🚀 Register Event"):
+                new_event = {
+                    "event_date": p_date.isoformat(),
+                    "event_name": p_name,
+                    "event_type": p_type
+                }
+                try:
+                    # Note: Ensure your table name is correct (e.g., 'promotions' or 'events')
+                    supabase.table("promotions").insert([new_event]).execute()
+                    st.success(f"Registered: {p_name}")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to register: {e}")
 
-    # 1. ROI CALCULATOR
-    st.write("### Digital Lift Analysis")
-    col_input, col_result = st.columns([1, 1])
+    # 2. THE EDITOR (The fix for the Duplicate ID Error is the 'key' below)
+    st.divider()
+    st.write("### 📋 Event Calendar")
     
-    with col_input:
-        st.info("Current Engine Weights applied:")
-        st.write(f"* **Weight per Click:** {click_weight}")
-        st.write(f"* **Promo Base Lift:** {promo_lift} guests")
-        st.write(f"* **Revenue Value:** ${avg_spend:,.2f} / head")
+    # Assuming you fetched promotion data into a variable called 'promo_data'
+    try:
+        res = supabase.table("promotions").select("*").execute()
+        promo_data = res.data
+    except:
+        promo_data = []
 
-    with col_result:
-        # Example Calculation based on 1,000 clicks
-        test_clicks = 1000
-        attributed_traffic = (test_clicks * click_weight) + promo_lift
-        attributed_rev = attributed_traffic * avg_spend
-        
-        st.success(f"**Attributed Revenue per 1k Clicks**")
-        st.header(f"${attributed_rev:,.2f}")
-        st.caption(f"Estimated {attributed_traffic:,.0f} additional guests driven by digital.")
+    if promo_data:
+        df_promo = pd.DataFrame(promo_data)
+        if 'event_date' in df_promo.columns:
+            df_promo['event_date'] = pd.to_datetime(df_promo['event_date'])
+            df_promo = df_promo.sort_values(by='event_date', ascending=False)
 
-    # 2. HISTORICAL ROI TREND
-    df_strat = pd.DataFrame(ledger_data)
-    if not df_strat.empty:
-        # Calculate daily attributed revenue
-        df_strat['Digital_Revenue_Lift'] = ((df_strat['ad_clicks'] * click_weight) + 
-                                           (df_strat['active_promo'].astype(int) * promo_lift)) * avg_spend
-        
-        st.write("### Historical Digital Revenue Contribution")
-        st.area_chart(df_strat.set_index('entry_date')['Digital_Revenue_Lift'])
+        # We add the 'key' parameter here to stop the error
+        edited_promo_df = st.data_editor(
+            df_promo,
+            key="promo_editor_unique", 
+            column_config={
+                "id": None,
+                "event_date": st.column_config.DateColumn("Date"),
+                "event_name": st.column_config.TextColumn("Promotion Name"),
+                "event_type": st.column_config.SelectboxColumn("Type", options=["Major Draw", "Gift Giveaway", "Concert", "Holiday", "Other"])
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+
+        if st.button("✅ Update Calendar"):
+            with st.spinner("Updating Registry..."):
+                try:
+                    for _, row in edited_promo_df.iterrows():
+                        up_row = row.to_dict()
+                        # Use ID or date as key depending on your schema
+                        d_key = pd.to_datetime(up_row['event_date']).strftime('%Y-%m-%d')
+                        up_row['event_date'] = d_key
+                        
+                        # Sync logic
+                        if 'id' in up_row:
+                            supabase.table("promotions").update(up_row).eq("id", up_row['id']).execute()
+                        else:
+                            supabase.table("promotions").update(up_row).eq("event_date", d_key).execute()
+                            
+                    st.success("Calendar Synced!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Update failed: {e}")
+    else:
+        st.info("No promotions registered yet.")
 
 # --- TAB 4: ENGINE CONTROL (CALIBRATION) ---
 with tab4:
