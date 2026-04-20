@@ -729,7 +729,7 @@ with tab5:
         st.session_state.messages = []
         st.rerun()
 
-# --- TAB 6: MASTER REPORT (The Kitchen Sink + Reactive Math) ---
+# --- TAB 6: MASTER REPORT (Zero-Proof Fix) ---
 with tab6:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
@@ -742,88 +742,83 @@ with tab6:
         st.warning("Vault is empty. No data available for reporting.")
         st.stop()
 
-    # 1. RUN ENGINE & SYNC WEIGHTS
-    metrics = get_forensic_metrics(ledger_data, st.session_state.coeffs)
+    # 1. RE-SYNC ENGINE DATA
+    # Ensure st.session_state.coeffs is used directly to catch slider changes
+    current_weights = st.session_state.get('coeffs', {})
+    metrics = get_forensic_metrics(ledger_data, current_weights)
+    
     df_rep = pd.DataFrame(ledger_data).copy()
     df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
     df_rep = df_rep.sort_values('entry_date')
 
-    # Pull active sliders from session state
+    # 2. CAPTURE LIVE SLIDER VALUES
+    # We use .get() with defaults to prevent the 'Zero' issue
     ooh_daily = metrics.get('ooh_total_daily', 0)
-    c_clicks = st.session_state.coeffs.get('Clicks', 0.02)
-    c_social = st.session_state.coeffs.get('Impressions', 0.0002)
-    c_snow = st.session_state.coeffs.get('Snow_cm', -45.0)
-    c_rain = st.session_state.coeffs.get('Rain_mm', -12.0)
-    avg_spend = st.session_state.coeffs.get('Avg_Coin_In', 112.50)
+    c_clicks = current_weights.get('Clicks', 0.02)
+    c_social = current_weights.get('Impressions', 0.0002)
+    c_snow = current_weights.get('Snow_cm', -45.0)
+    c_rain = current_weights.get('Rain_mm', -12.0)
+    avg_spend = current_weights.get('Avg_Coin_In', 112.50)
 
-    # 2. APPLY REACTIVE MATH (Creates the columns based on Tab 4 sliders)
+    # 3. FORCE COLUMN CALCULATION (Ensures no KeyError or Zero values)
     df_rep['day_name'] = df_rep['entry_date'].dt.day_name()
     df_rep['Historical Baseline'] = df_rep['day_name'].map(metrics.get('heartbeats', {}))
-    df_rep['OOH Inertia'] = ooh_daily
-    df_rep['Digital Impact'] = (df_rep.get('ad_clicks', 0) * c_clicks) + (df_rep.get('ad_impressions', 0) * c_social)
-    df_rep['Weather Penalty'] = (df_rep.get('snow_cm', 0) * c_snow) + (df_rep.get('rain_mm', 0) * c_rain)
+    
+    # Marketing & Inertia Columns
+    df_rep['OOH Inertia'] = float(ooh_daily)
+    df_rep['Digital Impact'] = (df_rep.get('ad_clicks', 0).fillna(0) * c_clicks) + \
+                               (df_rep.get('ad_impressions', 0).fillna(0) * c_social)
+    
+    # Weather Friction (Standardize column names to match Tab 2)
+    snow_col = 'snow_cm' if 'snow_cm' in df_rep.columns else 'Snow'
+    rain_col = 'rain_mm' if 'rain_mm' in df_rep.columns else 'Rain'
+    
+    df_rep['Weather Penalty'] = (df_rep.get(snow_col, 0).fillna(0) * c_snow) + \
+                                (df_rep.get(rain_col, 0).fillna(0) * c_rain)
 
-    # 3. CALCULATE POWER METRICS
+    # 4. AGGREGATE TOTALS
     total_traffic = df_rep['actual_traffic'].sum()
     total_revenue = total_traffic * avg_spend
     
-    # Net Marketing Impact (Ads + OOH + Weather Friction)
-    # This is the line that reacts to the -1000 snow slider
-    net_marketing_guests = df_rep['Digital Impact'].sum() + (ooh_daily * len(df_rep)) + df_rep['Weather Penalty'].sum()
-    mkt_revenue_impact = max(0, net_marketing_guests * avg_spend)
+    # The 'Reactive' Math
+    total_dig = df_rep['Digital Impact'].sum()
+    total_ooh = df_rep['OOH Inertia'].sum()
+    total_weather = df_rep['Weather Penalty'].sum()
+    
+    net_mkt_guests = total_dig + total_ooh + total_weather
+    mkt_revenue_impact = max(0, net_mkt_guests * avg_spend)
     rev_share_pct = (mkt_revenue_impact / total_revenue * 100) if total_revenue > 0 else 0
 
-    # 4. DISPLAY TOP-LINE TOTALS
+    # 5. DISPLAY POWER METRICS
     st.write("### 💎 Property Power Metrics")
     p1, p2, p3 = st.columns(3)
     p1.metric("Total Property Traffic", f"{total_traffic:,.0f}")
     p2.metric("Total Property Revenue", f"${total_revenue:,.2f}")
-    p3.metric("AI Predictability", metrics['predictability'])
+    p3.metric("AI Predictability", metrics.get('predictability', 'N/A'))
 
     st.divider()
 
-    # 5. ATTRIBUTION STACK (Visualized)
-    st.write("### 🧬 Multi-Touch Attribution Stack")
-    chart_data = df_rep.set_index('entry_date')[['Historical Baseline', 'OOH Inertia', 'Digital Impact', 'Weather Penalty']]
-    st.area_chart(chart_data)
-
-    # 6. FINANCIAL AUDIT (The "Kitchen Sink")
+    # 6. FINANCIAL AUDIT (The Reactivity Test)
     st.write("### 💰 Financial Forensic Audit")
-    
-    # Metrics Row
     m_col1, m_col2 = st.columns(2)
     with m_col1:
         st.metric("Marketing Revenue Impact", f"${mkt_revenue_impact:,.2f}", 
-                  delta=f"{net_marketing_guests:,.0f} Net Guests",
-                  help="Revenue from Ads and Billboards adjusted for Weather Friction.")
+                  delta=f"{net_mkt_guests:,.0f} Net Guests",
+                  help="Total impact from Digital + OOH + Weather Friction.")
     with m_col2:
-        st.metric("Marketing Revenue Share", f"{rev_share_pct:.1f}%",
-                  help="Percentage of total revenue attributed to marketing efforts.")
+        st.metric("Marketing Revenue Share", f"{rev_share_pct:.1f}%")
 
-    # Detailed Breakdown
-    f1, f2 = st.columns(2)
-    with f1:
-        st.write("**Guest Volume Attribution**")
-        st.write(f"* Historical Baseline: {df_rep['Historical Baseline'].sum():,.0f}")
-        st.write(f"* OOH Inertia: {(ooh_daily * len(df_rep)):,.0f}")
-        st.write(f"* Digital Ads: {df_rep['Digital Impact'].sum():,.0f}")
-        st.write(f"* Weather Friction: {df_rep['Weather Penalty'].sum():,.0f}")
-    
-    with f2:
-        st.write("**Revenue Breakdown**")
-        st.write(f"* Organic Base Revenue: ${(df_rep['Historical Baseline'].sum() * avg_spend):,.2f}")
-        st.success(f"**Marketing Driven Revenue: ${mkt_revenue_impact:,.2f}**")
-        st.write(f"---")
-        st.write(f"Confidence Level: **{metrics['predictability']}**")
+    # 7. VISUAL STACK
+    st.write("### 🧬 Multi-Touch Attribution Stack")
+    chart_cols = ['Historical Baseline', 'OOH Inertia', 'Digital Impact', 'Weather Penalty']
+    st.area_chart(df_rep.set_index('entry_date')[chart_cols])
 
-    # 7. AUDIT TRAIL
-    st.divider()
-    with st.expander("🔎 View Full Forensic Ledger (Audit Trail)"):
-        st.dataframe(df_rep[['entry_date', 'actual_traffic', 'Historical Baseline', 'OOH Inertia', 'Digital Impact', 'Weather Penalty']], use_container_width=True)
-
-    # 8. EXPORT
-    csv = df_rep.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download Executive Report", data=csv, file_name='HR_Forensic_Report.csv', use_container_width=True)
+    # 8. BREAKDOWN TABLE
+    with st.expander("🔎 View Breakdown Data"):
+        st.write(f"**Baseline:** {df_rep['Historical Baseline'].sum():,.0f} guests")
+        st.write(f"**OOH:** {total_ooh:,.0f} guests")
+        st.write(f"**Digital:** {total_dig:,.0f} guests")
+        st.write(f"**Weather Impact:** {total_weather:,.0f} guests")
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
 with tab7:
     st.markdown("""
