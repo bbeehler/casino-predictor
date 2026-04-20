@@ -314,107 +314,37 @@ with tab1:
             )
         else:
             st.info(f"No entries logged yet for {datetime.date.today().strftime('%B %Y')}.")
-# --- TAB 2: LEDGER MANAGEMENT (INTEGRATED) ---
+# --- TAB 2: LEDGER MANAGEMENT ---
 with tab2:
-    st.markdown("""
-        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">📑 Ledger Management</h2>
-            <p style="color: #888; margin: 0;">Data Integrity: Upload history or record daily performance manually.</p>
-        </div>
-    """, unsafe_allow_html=True)
-
-    col_upload, col_entry = st.columns([1, 1], gap="large")
-
-    # 1. BULK IMPORT CARD
-    with col_upload:
-        with st.container(border=True):
-            st.write("### 📤 Bulk Import")
+    st.markdown("### 📑 Add New Daily Record")
+    
+    with st.form("ledger_entry"):
+        col1, col2 = st.columns(2)
+        with col1:
+            date = st.date_input("Entry Date", datetime.date.today())
+            traffic = st.number_input("Actual Traffic (Footfall)", min_value=0)
+            coin_in = st.number_input("Actual Coin-In ($)", min_value=0.0)
+        with col2:
+            clicks = st.number_input("Digital Ad Clicks", min_value=0)
+            impressions = st.number_input("Social Impressions", min_value=0)
             
-            # --- INTEGRATED HELP GUIDE ---
-            with st.expander("❓ View Required CSV Columns"):
-                st.markdown("""
-                | Column Name | Description |
-                | :--- | :--- |
-                | `entry_date` | YYYY-MM-DD |
-                | `actual_traffic` | Daily Headcount |
-                | `actual_coin_in` | Daily Revenue ($) |
-                | `social_impressions` | Digital Reach |
-                | `social_engagement` | Digital Interactions |
-                | `active_promo` | 1 (Yes) or 0 (No) |
-                """)
-                st.caption("Note: Headers are case-sensitive. Use 'actual_traffic' for best results.")
-
-            uploaded_file = st.file_uploader("Upload Ledger CSV", type="csv", label_visibility="collapsed")
+        if st.form_submit_button("💾 Save to Property Ledger"):
+            entry_data = {
+                "entry_date": date.isoformat(),
+                "actual_traffic": traffic,
+                "actual_coin_in": coin_in,
+                "ad_clicks": clicks,
+                "social_impressions": impressions
+            }
             
-            if uploaded_file:
-                try:
-                    import_df = pd.read_csv(uploaded_file)
-                    # Normalize and Convert
-                    num_cols = ['actual_traffic', 'actual_coin_in', 'social_impressions', 'social_engagement']
-                    for col in num_cols:
-                        if col in import_df.columns:
-                            import_df[col] = pd.to_numeric(import_df[col], errors='coerce').fillna(0)
-                    
-                    data_to_insert = import_df.to_dict(orient='records')
-                    supabase.table("ledger_data").insert(data_to_insert).execute()
-                    st.success(f"Successfully imported {len(import_df)} records!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Import failed: {e}")
+            try:
+                # FIX: Changed "ledger_data" to "ledger" to match your DB
+                supabase.table("ledger").insert([entry_data]).execute()
+                st.success(f"Record for {date} successfully added to the Vault!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to sync with Vault: {e}")
 
-    # 2. MANUAL ENTRY CARD
-    with col_entry:
-        with st.container(border=True):
-            st.write("### ✍️ Manual Entry")
-            with st.popover("➕ Open Daily Entry Form", use_container_width=True):
-                with st.form("manual_entry_form", clear_on_submit=True):
-                    st.write("#### Performance Data")
-                    f_date = st.date_input("Entry Date", datetime.date.today())
-                    f_traffic = st.number_input("Actual Traffic", min_value=0)
-                    f_coin = st.number_input("Actual Coin-In ($)", min_value=0.0)
-                    
-                    st.divider()
-                    st.write("#### Marketing Metrics")
-                    m1, m2 = st.columns(2)
-                    f_imp = m1.number_input("Social Impressions", min_value=0)
-                    f_eng = m2.number_input("Social Engagement", min_value=0)
-                    f_promo = m1.checkbox("Active Promotion?")
-                    
-                    submitted = st.form_submit_button("🚀 Commit to Ledger", use_container_width=True)
-                    if submitted:
-                        entry_data = {
-                            "entry_date": str(f_date),
-                            "actual_traffic": f_traffic,
-                            "actual_coin_in": f_coin,
-                            "social_impressions": f_imp,
-                            "social_engagement": f_eng,
-                            "active_promo": 1 if f_promo else 0
-                        }
-                        supabase.table("ledger_data").insert([entry_data]).execute()
-                        st.success("Entry Saved!")
-                        st.rerun()
-
-    st.write("---")
-
-    # 3. DATA EXPLORER
-    st.write("### 🔍 Historical Records Explorer")
-    if ledger_data:
-        df_display = pd.DataFrame(ledger_data).copy()
-        df_display['entry_date'] = pd.to_datetime(df_display['entry_date'])
-        df_display = df_display.sort_values(by='entry_date', ascending=False)
-        
-        st.dataframe(
-            df_display.style.format({
-                "actual_traffic": "{:,.0f}",
-                "actual_coin_in": "${:,.2f}",
-                "social_impressions": "{:,.0f}",
-                "social_engagement": "{:,.0f}"
-            }),
-            use_container_width=True,
-            hide_index=True
-        )
-    else:
-        st.info("The ledger is currently empty. Use the tools above to add data.")
 # --- TAB 3: STRATEGY & ROI ---
 with tab3:
     st.markdown("""
