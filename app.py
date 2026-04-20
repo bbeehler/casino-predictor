@@ -45,23 +45,21 @@ def get_forensic_metrics(df, coeffs):
     c_clicks = coeffs.get('Clicks', 0.02)
     c_social = coeffs.get('Social_Imp', 0.0002)
 
-    # --- NEW OOH CALCULATIONS ---
-    c_ooh = coeffs.get('OOH_Weight', 0.0)  # Daily guests per board
-    n_ooh = coeffs.get('OOH_Count', 0)     # Number of active boards
+    # --- OOH CALCULATIONS ---
+    c_ooh = coeffs.get('OOH_Weight', 150.0)  # Daily guests per board
+    n_ooh = coeffs.get('OOH_Count', 0)       # Number of active boards
     total_ooh_lift = c_ooh * n_ooh         # Total constant daily pressure
-    # ----------------------------
     
     # Forensic 1: Digital Lift %
     total_traffic = df['actual_traffic'].sum()
     marketing_impact = (df['ad_clicks'].sum() * c_clicks) + (df['ad_impressions'].sum() * c_social)
     lift_val = (marketing_impact / total_traffic * 100) if total_traffic > 0 else 0
 
-    # Forensic 2: AI Predictability (1 - MAPE)
-    # UPDATED: We now add total_ooh_lift to the heartbeat and digital lift
+    # Forensic 2: AI Predictability (Including OOH Lift)
     df['expected'] = df.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
                                (x['ad_clicks'] * c_clicks) + 
                                (x['ad_impressions'] * c_social) +
-                               total_ooh_lift, axis=1) # <--- OOH Added Here
+                               total_ooh_lift, axis=1)
 
     df_filtered = df[df['actual_traffic'] > 0].copy()
     if df_filtered.empty:
@@ -75,7 +73,6 @@ def get_forensic_metrics(df, coeffs):
         "digital_lift": f"{lift_val:.1f}%",
         "heartbeats": heartbeats
     }
-
 # 3. INITIALIZE CLIENTS
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
@@ -133,19 +130,37 @@ if 'coeffs' not in st.session_state:
         response = supabase.table("coefficients").select("*").eq("id", 1).execute()
         if response.data:
             st.session_state.coeffs = response.data[0]
-            # Ensure OOH keys exist even if table hasn't been updated yet
-            if 'OOH_Weight' not in st.session_state.coeffs:
-                st.session_state.coeffs['OOH_Weight'] = 125.0 # Default: 125 guests/day per board
-            if 'OOH_Count' not in st.session_state.coeffs:
-                st.session_state.coeffs['OOH_Count'] = 0
+            # Safety Fallbacks: If these columns don't exist in Supabase yet, create them in memory
+            if 'OOH_Weight' not in st.session_state.coeffs: st.session_state.coeffs['OOH_Weight'] = 150.0
+            if 'OOH_Count' not in st.session_state.coeffs: st.session_state.coeffs['OOH_Count'] = 0
         else:
             st.session_state.coeffs = {
                 "id": 1, "Intercept": 3250, "Avg_Coin_In": 112.50, 
                 "Clicks": 0.02, "Social_Imp": 0.0002, 
-                "OOH_Weight": 125.0, "OOH_Count": 0
+                "OOH_Weight": 150.0, "OOH_Count": 0
             }
     except:
-        st.session_state.coeffs = {"Intercept": 3250, "Avg_Coin_In": 112.50, "OOH_Weight": 0}
+        st.session_state.coeffs = {"Intercept": 3250, "Avg_Coin_In": 450, "OOH_Weight": 150.0, "OOH_Count": 0}
+
+# Fetch the Ledger (Defining it here prevents the NameError)
+def fetch_ledger_data():
+    try:
+        res = supabase.table("ledger").select("*").execute()
+        return res.data if res.data else []
+    except:
+        return []
+
+ledger_data = fetch_ledger_data()
+
+# Ensure ledger_data is defined BEFORE any logic checks it
+def fetch_ledger_data():
+    try:
+        res = supabase.table("ledger").select("*").execute()
+        return res.data if res.data else []
+    except:
+        return []
+
+ledger_data = fetch_ledger_data()
 
 # 7. MODERN UI STYLING (Minimalist Executive Theme)
 st.markdown("""
@@ -505,103 +520,86 @@ with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Calibration</h2>
-            <p style="color: #888; margin: 0;">Adjust marketing multipliers based on industry benchmarks and forensic reality.</p>
+            <p style="color: #888; margin: 0;">Adjust marketing multipliers and OOH campaign pressure.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. INITIALIZATION & SYNC CHECK
     if 'coeffs' not in st.session_state:
         st.error("Engine coefficients not found. Please refresh the app.")
         st.stop()
 
-    # 2. INDUSTRY BENCHMARK REFERENCE
-    # We use a helper variable to ensure we are looking at the CORRECT key
-    current_social_weight = st.session_state.coeffs.get('Impressions') or st.session_state.coeffs.get('Social_Imp', 0.0002)
-    
+    # 1. INDUSTRY BENCHMARK REFERENCE
     with st.expander("📊 View Casino Industry Benchmarks"):
         st.write(f"""
-        | Metric | Industry Average (Gaming) | Your Current Weight |
+        | Metric | Industry Average | Your Current Weight |
         | :--- | :--- | :--- |
-        | **Social Impressions** | 0.0001 - 0.0005 | {current_social_weight:.4f} |
+        | **Social Impressions** | 0.0001 - 0.0005 | {st.session_state.coeffs.get('Social_Imp', 0.0002):.4f} |
         | **Ad Clicks** | 0.02 - 0.08 | {st.session_state.coeffs.get('Clicks', 0.02):.2f} |
-        | **Major Promo** | 1,000 - 5,000 | {st.session_state.coeffs.get('Promo', 450.0):,.0f} |
-        | **Weather Friction** | -20 to -60 | {st.session_state.coeffs.get('Snow_cm', -45.0):,.0f} |
+        | **Billboard Lift** | 50 - 300 Guests/Day | {st.session_state.coeffs.get('OOH_Weight', 150.0):.0f} |
         """)
 
-    # 3. MANUAL CALIBRATION FORM
-    with st.form("engine_settings_v2"):
+    # 2. MANUAL CALIBRATION FORM
+    with st.form("engine_settings_ooh"):
         col1, col2 = st.columns(2)
         
         with col1:
             st.write("### 📣 Marketing Multipliers")
-            
-            # Click Weight
             c_clicks = float(st.session_state.coeffs.get('Clicks', 0.02))
-            new_clicks = st.slider("Click Conversion (Weight)", 0.00, 0.20, value=float(max(min(c_clicks, 0.20), 0.00)), step=0.01)
+            new_clicks = st.slider("Click Conversion (Weight)", 0.00, 0.20, value=float(max(min(c_clicks, 0.20), 0.00)))
             
-            # Social Weight (Matched to your Impressions column)
-            c_social = float(current_social_weight)
+            c_social = float(st.session_state.coeffs.get('Social_Imp', 0.0002))
             new_social = st.number_input("Social Impression Weight", 0.0000, 0.0100, value=float(max(min(c_social, 0.0100), 0.0000)), format="%.4f")
             
-            # Promo Lift
-            c_promo = int(st.session_state.coeffs.get('Promo', 450))
-            new_promo = st.number_input("Promo Lift (Flat Guest Count)", 0, 10000, value=int(max(min(c_promo, 10000), 0)))
+            st.write("---")
+            st.write("### 📍 OOH / Billboard Attribution")
+            c_ooh = float(st.session_state.coeffs.get('OOH_Weight', 150.0))
+            new_ooh_weight = st.slider("Daily Lift per Board", 0, 500, value=int(c_ooh))
+            
+            n_ooh = int(st.session_state.coeffs.get('OOH_Count', 0))
+            new_ooh_count = st.number_input("Active Billboard Count", 0, 50, value=n_ooh)
 
         with col2:
             st.write("### ❄️ Environmental Friction")
-            
             c_snow = int(st.session_state.coeffs.get('Snow_cm', -45))
-            new_snow = st.slider("Snow Friction (Guests lost per cm)", -1000, 0, value=int(max(min(c_snow, 0), -1000)))
+            new_snow = st.slider("Snow Friction (Guests/cm)", -1000, 0, value=int(max(min(c_snow, 0), -1000)))
             
             c_rain = int(st.session_state.coeffs.get('Rain_mm', -12))
-            new_rain = st.slider("Rain Friction (Guests lost per mm)", -500, 0, value=int(max(min(c_rain, 0), -500)))
+            new_rain = st.slider("Rain Friction (Guests/mm)", -500, 0, value=int(max(min(c_rain, 0), -500)))
             
+            st.write("---")
+            st.write("### 💰 Financial Anchor")
             c_coin = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
             new_coin = st.number_input("Avg Spend Per Head ($)", 0.0, 5000.0, value=float(max(min(c_coin, 5000.0), 0.0)))
 
-        # 4. DATA VAULT SYNC
+        # 3. DATA VAULT SYNC
         if st.form_submit_button("💾 Save Calibration to Vault"):
-            # Update Session State with both common names to ensure all tabs stay synced
-            st.session_state.coeffs.update({
-                'Clicks': new_clicks,
-                'Social_Imp': new_social,
-                'Impressions': new_social,
-                'Promo': new_promo,
-                'Snow_cm': new_snow,
-                'Rain_mm': new_rain,
-                'Avg_Coin_In': new_coin
-            })
-            
-            # Map exactly to Supabase Columns
             sync_payload = {
                 'Avg_Coin_In': new_coin,
                 'Snow_cm': new_snow,
                 'Rain_mm': new_rain,
-                'Promo': new_promo,
                 'Clicks': new_clicks,
-                'Impressions': new_social 
+                'Impressions': new_social,
+                'OOH_Weight': new_ooh_weight,
+                'OOH_Count': new_ooh_count
             }
 
             try:
                 supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
-                st.success("✅ Engine Calibrated! Data synced to Vault.")
+                # Update session state immediately
+                st.session_state.coeffs.update(sync_payload)
+                st.success("✅ Engine Calibrated! OOH Data synced.")
                 import time
                 time.sleep(1)
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Sync failed: {e}")
 
-    # 5. INTEGRITY CHECK (Visual Warnings)
+    # 4. INTEGRITY CHECK
     st.divider()
     st.write("### 🔍 Engine Integrity Check")
-    
-    # Check Click Weight against industry standard
-    if st.session_state.coeffs.get('Clicks', 0) < 0.015:
-        st.warning("⚠️ **Low Attribution Warning:** Click Weight is below 1.5%. This may lead to under-reporting Digital Lift.")
-    
-    # Check if Spend is realistic for Hard Rock Ottawa
-    if st.session_state.coeffs.get('Avg_Coin_In', 0) > 400:
-        st.info("ℹ️ **High Roller Profile:** Avg. Spend is set high. Verify if this includes F&B revenue or just Gaming Coin-In.")
+    if st.session_state.coeffs.get('OOH_Count', 0) > 0:
+        total_lift = st.session_state.coeffs['OOH_Count'] * st.session_state.coeffs['OOH_Weight']
+        st.info(f"ℹ️ **OOH Attribution Active:** Your billboards are currently adding an estimated **{total_lift:,}** guests to your daily baseline.")
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
