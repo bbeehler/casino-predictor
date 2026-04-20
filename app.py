@@ -37,30 +37,26 @@ def get_forensic_metrics(df, coeffs):
     df['entry_date'] = pd.to_datetime(df['entry_date'])
     df['day_name'] = df['entry_date'].dt.day_name()
     
-    # Calculate DOW Heartbeats (Historical Baseline)
+    # Historical Baseline
     heartbeats = df.groupby('day_name')['actual_traffic'].mean().to_dict()
     
-    # 1. Marketing Weights (Online Only)
+    # Weights from Engine
     c_clicks = coeffs.get('Clicks', 0.02)
     c_social = coeffs.get('Impressions', 0.0002)
 
-    # 2. OOH Weights (Offline Baseline Pressure)
-    # We use .get() with defaults to ensure the app never sees 'None'
+    # --- THE OOH BRIDGE (Must match Tab 4 exactly) ---
     c_static = coeffs.get('Static_Weight', 0.0)
     n_static = coeffs.get('Static_Count', 0)
     c_dig_ooh = coeffs.get('Digital_OOH_Weight', 0.0)
     n_dig_ooh = coeffs.get('Digital_OOH_Count', 0)
-    
     total_ooh_lift = (c_static * n_static) + (c_dig_ooh * n_dig_ooh)
     
-    # 3. PURE DIGITAL LIFT (Online Attribution Only)
-    # This remains untouched by OOH to show pure Digital ROI
+    # 1. Digital Lift (Online Ads Only)
     total_traffic = df['actual_traffic'].sum()
     digital_impact = (df['ad_clicks'].sum() * c_clicks) + (df['ad_impressions'].sum() * c_social)
     lift_val = (digital_impact / total_traffic * 100) if total_traffic > 0 else 0
 
-    # 4. AI PREDICTABILITY (The Full Picture)
-    # We add OOH here because the model needs it to explain the "Unattributed" traffic
+    # 2. AI Predictability (Full Model including Billboards)
     df['expected'] = df.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
                                (x['ad_clicks'] * c_clicks) + 
                                (x['ad_impressions'] * c_social) +
@@ -75,7 +71,7 @@ def get_forensic_metrics(df, coeffs):
 
     return {
         "predictability": f"{pred_val:.1f}%",
-        "digital_lift": f"{lift_val:.1f}%", # Remains pure online lift
+        "digital_lift": f"{lift_val:.1f}%",
         "heartbeats": heartbeats,
         "ooh_total_daily": total_ooh_lift
     }
@@ -515,65 +511,67 @@ with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Calibration</h2>
-            <p style="color: #888; margin: 0;">Calibrate all multipliers: Marketing, Environmental Friction, and OOH Pressure.</p>
+            <p style="color: #888; margin: 0;">Calibrate Marketing Multipliers, Environmental Friction, and OOH Pressure.</p>
         </div>
     """, unsafe_allow_html=True)
 
+    # Safety check: Ensure the app has coefficients loaded
     if 'coeffs' not in st.session_state:
-        st.error("Engine coefficients not found. Please refresh.")
+        st.error("Engine coefficients not found. Please refresh the app.")
         st.stop()
 
-    with st.form("engine_settings_full_v4"):
+    with st.form("engine_settings_master_v5"):
         col1, col2 = st.columns(2)
         
         with col1:
             st.write("### 📣 Marketing Multipliers")
-            # RESTORED: Ad Clicks Weight
+            # Ad Clicks (Pure Digital)
             c_clicks = float(st.session_state.coeffs.get('Clicks', 0.02))
             new_clicks = st.slider("Click Conversion Weight", 0.00, 0.50, value=c_clicks, step=0.01)
             
-            # Social Impressions (mapping to 'Impressions' column)
+            # Social Impressions (Mapped to 'Impressions' column)
             c_social = float(st.session_state.coeffs.get('Impressions', 0.0002))
             new_social = st.number_input("Social Impression Weight", 0.0000, 0.0100, value=c_social, format="%.4f")
             
-            # Major Promos
+            # Major Promos (Flat Guest Lift)
             c_promo = int(st.session_state.coeffs.get('Promo', 450))
             new_promo = st.number_input("Promo Lift (Guest Count)", 0, 10000, value=c_promo)
 
             st.write("---")
             st.write("### 📍 OOH / Billboard Attribution")
-            # Static Boards
+            # Static Anchor Boards (Vinyl/Permanent)
             s_weight = float(st.session_state.coeffs.get('Static_Weight', 50.0))
             new_static_w = st.slider("Lift per Static Board", 0.0, 500.0, value=s_weight)
             new_static_c = st.number_input("Active Static Boards", 0, 20, value=int(st.session_state.coeffs.get('Static_Count', 2)))
             
-            # Digital Boards
+            # Shared Digital Boards (Accounting for SOV/Loop)
             d_weight = float(st.session_state.coeffs.get('Digital_OOH_Weight', 10.0))
             new_digital_w = st.slider("Lift per Digital Board (Shared)", 0.0, 200.0, value=d_weight)
             new_digital_c = st.number_input("Active Digital Boards", 0, 50, value=int(st.session_state.coeffs.get('Digital_OOH_Count', 4)))
 
         with col2:
             st.write("### ❄️ Environmental Friction")
-            # Snow
+            # Snow Impact (guests lost per cm)
             c_snow = float(st.session_state.coeffs.get('Snow_cm', -45.0))
             new_snow = st.slider("Snow Friction (Guests/cm)", -1000.0, 0.0, value=c_snow)
             
-            # Rain
+            # Rain Impact (guests lost per mm)
             c_rain = float(st.session_state.coeffs.get('Rain_mm', -12.0))
             new_rain = st.slider("Rain Friction (Guests/mm)", -500.0, 0.0, value=c_rain)
             
             st.write("---")
             st.write("### 💰 Financial Anchor")
-            # Avg Spend (Fixed at $5000 limit to prevent app crash)
+            # Avg Spend (Used to calculate Total Revenue in Tab 6)
             c_coin = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
             new_coin = st.number_input("Avg Spend Per Head ($)", 0.0, 5000.0, value=c_coin)
 
         st.divider()
         
-        # SUBMIT BUTTON
+        # SUBMIT BUTTON: The "Handshake" with the Database
         submit_all = st.form_submit_button("💾 Save All Calibration to Vault", use_container_width=True)
 
         if submit_all:
+            # 1. Prepare the Payload (Must match Section 2 keys exactly)
             sync_payload = {
                 'Avg_Coin_In': new_coin,
                 'Snow_cm': new_snow,
@@ -581,31 +579,38 @@ with tab4:
                 'Promo': new_promo,
                 'Clicks': new_clicks,
                 'Impressions': new_social,
-                'Static_Weight': new_static_w,     # Match these exactly
-                'Static_Count': new_static_c,      # to your logic below
+                'Static_Weight': new_static_w,
+                'Static_Count': new_static_c,
                 'Digital_OOH_Weight': new_digital_w,
                 'Digital_OOH_Count': new_digital_c
             }
+            
             try:
-                # Update Supabase Vault
+                # 2. Update Supabase
                 supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
-                # Update local session state for instant calculation
+                
+                # 3. Update Session State (Immediate memory update)
                 st.session_state.coeffs.update(sync_payload)
-                st.success("✅ Full Engine Calibration Synced to Vault!")
+                
+                st.success("✅ Engine Calibrated! All Tab math updated.")
                 import time
                 time.sleep(1)
-                st.rerun()
+                st.rerun() # Forces Tab 1 and Tab 6 to reload with the new math
+                
             except Exception as e:
-                st.error(f"Sync failed: {e}")
+                # If this fails, the columns probably don't exist in Supabase yet
+                st.error(f"❌ Vault Sync failed: {e}")
+                st.info("Check if 'Static_Weight', 'Static_Count', 'Digital_OOH_Weight', and 'Digital_OOH_Count' exist in your Supabase table.")
 
-    # 2. INTEGRITY SUMMARY
+    # 4. LIVE FORENSIC PREVIEW
+    st.divider()
     st.write("### 🔍 Live Forensic Baseline")
     total_ooh = (new_static_w * new_static_c) + (new_digital_w * new_digital_c)
     
     m1, m2, m3 = st.columns(3)
-    m1.metric("OOH Daily Lift", f"{total_ooh:,.0f}")
-    m2.metric("Rain Friction/mm", f"{new_rain:,.0f}")
-    m3.metric("Click Multiplier", f"{new_clicks:.2f}")
+    m1.metric("Total OOH Lift", f"{total_ooh:,.0f} Guests", help="Total daily inertia from billboards.")
+    m2.metric("Digital SOV", f"{new_digital_w:.1f} / board", help="Impact per shared digital board.")
+    m3.metric("Rain Friction", f"{new_rain:,.0f} / mm", help="Estimated guest loss per mm of rain.")
 
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
