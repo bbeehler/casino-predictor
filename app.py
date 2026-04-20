@@ -319,7 +319,7 @@ with tab2:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">📑 Ledger Management</h2>
-            <p style="color: #888; margin: 0;">Manual entry and bulk CSV uploads for property performance.</p>
+            <p style="color: #888; margin: 0;">Update property performance and sync with the Vault.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -338,12 +338,13 @@ with tab2:
             impressions = st.number_input("Social Impressions", min_value=0)
             
             if st.form_submit_button("💾 Save to Vault"):
+                # MAP TO DATABASE SCHEMA
                 new_row = {
                     "entry_date": entry_date.isoformat(),
                     "actual_traffic": traffic,
                     "actual_coin_in": coin_in,
                     "ad_clicks": clicks,
-                    "social_impressions": impressions
+                    "Impressions": impressions  # FIXED: Matches your Supabase column name
                 }
                 try:
                     supabase.table("ledger").insert([new_row]).execute()
@@ -363,8 +364,15 @@ with tab2:
             
             if st.button("🚀 Push to Vault", use_container_width=True):
                 try:
-                    # Rename columns to match Supabase if necessary
-                    # df_upload.rename(columns={'Your_CSV_Name': 'actual_traffic'}, inplace=True)
+                    # RENAME CSV COLUMNS TO MATCH DATABASE
+                    # This ensures the upload doesn't crash if your CSV uses different names
+                    rename_map = {
+                        'social_impressions': 'Impressions',
+                        'impressions': 'Impressions',
+                        'Clicks': 'ad_clicks'
+                    }
+                    df_upload.rename(columns=rename_map, inplace=True)
+                    
                     data_dict = df_upload.to_dict(orient='records')
                     supabase.table("ledger").insert(data_dict).execute()
                     st.success(f"Bulk upload of {len(data_dict)} rows complete!")
@@ -372,62 +380,46 @@ with tab2:
                 except Exception as e:
                     st.error(f"Upload failed: {e}")
 
-   # --- RECENT LEDGER HISTORY & INLINE EDITING ---
+    # --- LEDGER EDITOR SECTION ---
     st.divider()
     st.write("### 📜 Ledger Editor")
-    st.info("💡 **Tip:** Double-click any cell to edit. Click 'Confirm Changes' below the table to sync with the Vault.")
     
     if ledger_data:
         df_history = pd.DataFrame(ledger_data)
         
-        # 1. Clean up dates and sort
+        # Standardize for the UI
         if 'entry_date' in df_history.columns:
             df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
             df_history = df_history.sort_values(by='entry_date', ascending=False)
         
-        # 2. The Data Editor (Inline Editing)
-        # We define which columns are actually editable (we lock 'id' and 'entry_date')
+        # Display name mapping for the Editor
+        editor_cols = {
+            "id": None,
+            "entry_date": st.column_config.DateColumn("Date", disabled=True),
+            "actual_traffic": st.column_config.NumberColumn("Traffic"),
+            "actual_coin_in": st.column_config.NumberColumn("Coin-In", format="$%.2f"),
+            "ad_clicks": st.column_config.NumberColumn("Clicks"),
+            "Impressions": st.column_config.NumberColumn("Impressions") # FIXED
+        }
+
         edited_df = st.data_editor(
             df_history,
-            column_config={
-                "id": None, # Hide the ID from the user
-                "entry_date": st.column_config.DateColumn("Date", disabled=True),
-                "actual_traffic": st.column_config.NumberColumn("Traffic", min_value=0),
-                "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)", min_value=0, format="$%.2f"),
-                "ad_clicks": st.column_config.NumberColumn("Clicks", min_value=0),
-                "social_impressions": st.column_config.NumberColumn("Impressions", min_value=0),
-            },
+            column_config=editor_cols,
             use_container_width=True,
-            hide_index=True,
-            num_rows="dynamic" # Allows you to add/delete rows directly in the table
+            hide_index=True
         )
 
-        # 3. Sync Changes Button
-        if st.button("✅ Confirm & Sync Changes to Vault", use_container_width=True):
+        if st.button("✅ Confirm & Sync Changes"):
             try:
-                # We iterate through the edited dataframe and update Supabase
-                # In a high-volume app, we'd batch this, but for a daily ledger, this is safe.
-                for index, row in edited_df.iterrows():
-                    # Standardize the row back to a dictionary
-                    update_data = row.to_dict()
-                    # Convert Timestamp back to string for Supabase
-                    update_data['entry_date'] = update_data['entry_date'].strftime('%Y-%m-%d')
-                    
-                    # Update the record where the ID matches
-                    supabase.table("ledger").update(update_data).eq("id", update_data['id']).execute()
-                
-                st.success("Vault Updated Successfully!")
+                for _, row in edited_df.iterrows():
+                    up_data = row.to_dict()
+                    up_data['entry_date'] = up_data['entry_date'].strftime('%Y-%m-%d')
+                    # Sync to DB
+                    supabase.table("ledger").update(up_data).eq("id", up_data['id']).execute()
+                st.success("Vault Updated!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Sync failed: {e}")
-        
-        # --- DANGER ZONE ---
-        with st.expander("⚠️ Danger Zone"):
-            st.write("Wiping the ledger is permanent.")
-            confirm_wipe = st.text_input("Type 'DELETE' to wipe all records")
-            if st.button("🔥 Execute Wipe") and confirm_wipe == "DELETE":
-                supabase.table("ledger").delete().neq("id", 0).execute()
-                st.rerun()
     else:
         st.info("No records found in the Vault.")
 
