@@ -319,7 +319,7 @@ with tab2:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">📑 Ledger Management</h2>
-            <p style="color: #888; margin: 0;">Update property performance. Perfect for backfilling weekend results or partial daily updates.</p>
+            <p style="color: #888; margin: 0;">Update property performance. Sync past weekend results or partial daily updates using Date-based logic.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -328,7 +328,7 @@ with tab2:
     with col_a:
         st.write("### ✍️ Manual Results Entry")
         with st.form("manual_entry", clear_on_submit=True):
-            # Allows backdating for weekend results
+            # Allows backdating for weekend results (e.g., Saturday/Sunday)
             entry_date = st.date_input("Select Date", datetime.date.today())
             
             col_traffic, col_coin = st.columns(2)
@@ -350,7 +350,7 @@ with tab2:
             if st.form_submit_button("💾 Sync Results to Vault"):
                 date_str = entry_date.isoformat()
                 
-                # 1. Build payload (Only include non-zero values to prevent overwriting blanks)
+                # 1. Build payload (Only include non-zero values to preserve existing data)
                 new_row = {"entry_date": date_str}
                 if traffic > 0: new_row["actual_traffic"] = traffic
                 if coin_in > 0: new_row["actual_coin_in"] = coin_in
@@ -359,17 +359,17 @@ with tab2:
                 if social > 0: new_row["social_engagements"] = social
 
                 try:
-                    # 2. Check if this date already exists (Historical Check)
-                    check = supabase.table("ledger").select("id").eq("entry_date", date_str).execute()
+                    # 2. Check if date exists to decide between UPDATE or INSERT
+                    check = supabase.table("ledger").select("entry_date").eq("entry_date", date_str).execute()
                     
                     if check.data:
-                        # UPDATE: Merges data into the existing record
+                        # UPDATE: Uses entry_date as the key since 'id' column is missing
                         supabase.table("ledger").update(new_row).eq("entry_date", date_str).execute()
-                        st.success(f"✅ Record for {date_str} updated and merged.")
+                        st.success(f"✅ Merged data for {date_str}.")
                     else:
-                        # INSERT: Creates a brand new record for a new date
+                        # INSERT: Brand new record
                         supabase.table("ledger").insert([new_row]).execute()
-                        st.success(f"✨ New historical record created for {date_str}!")
+                        st.success(f"✨ New record created for {date_str}!")
                     
                     st.rerun()
                 except Exception as e:
@@ -385,7 +385,7 @@ with tab2:
             
             if st.button("🚀 Push to Vault", use_container_width=True):
                 try:
-                    # Map common names to finalized DB schema
+                    # Map CSV headers to finalized DB schema
                     df_upload.rename(columns={
                         'clicks': 'ad_clicks',
                         'impressions': 'ad_impressions',
@@ -395,17 +395,17 @@ with tab2:
                     }, inplace=True)
                     
                     data_dict = df_upload.to_dict(orient='records')
-                    # Upsert handles mixed new/existing dates in the CSV
+                    # Upsert uses 'entry_date' as the conflict target
                     supabase.table("ledger").upsert(data_dict, on_conflict="entry_date").execute()
                     st.success("Bulk sync complete!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Upload failed: {e}")
 
-    # --- 3. THE LEDGER EDITOR ---
+    # --- 3. THE LEDGER EDITOR (DATE-KEYED) ---
     st.divider()
-    st.write("### 📜 Ledger Editor (Verify & Correct)")
-    st.caption("Double-click cells to finish entries or correct Friday/Saturday/Sunday results.")
+    st.write("### 📜 Ledger Editor")
+    st.caption("Double-click cells to correct weekend numbers. Changes are synced via Date.")
     
     if ledger_data:
         df_history = pd.DataFrame(ledger_data)
@@ -414,8 +414,8 @@ with tab2:
             df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
             df_history = df_history.sort_values(by='entry_date', ascending=False)
         
+        # Configuration - We disable 'entry_date' editing as it is our Primary Key
         editor_config = {
-            "id": None,
             "entry_date": st.column_config.DateColumn("Date", disabled=True),
             "actual_traffic": st.column_config.NumberColumn("Traffic"),
             "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)", format="$%.2f"),
@@ -423,6 +423,11 @@ with tab2:
             "ad_impressions": st.column_config.NumberColumn("Ad Impressions"),
             "social_engagements": st.column_config.NumberColumn("Social Engagements")
         }
+
+        # Display any other columns (like id) as hidden if they exist
+        for col in df_history.columns:
+            if col not in editor_config:
+                editor_config[col] = None
 
         edited_df = st.data_editor(
             df_history, 
@@ -435,8 +440,17 @@ with tab2:
             try:
                 for _, row in edited_df.iterrows():
                     up_data = row.to_dict()
-                    up_data['entry_date'] = pd.to_datetime(up_data['entry_date']).strftime('%Y-%m-%d')
-                    supabase.table("ledger").update(up_data).eq("id", up_data['id']).execute()
+                    
+                    # Formatting Date for DB match
+                    date_key = pd.to_datetime(up_data['entry_date']).strftime('%Y-%m-%d')
+                    up_data['entry_date'] = date_key
+                    
+                    # Clean the payload of any null IDs that might cause errors
+                    if 'id' in up_data: del up_data['id']
+                    
+                    # Perform the update using entry_date as the unique anchor
+                    supabase.table("ledger").update(up_data).eq("entry_date", date_key).execute()
+                
                 st.success("Vault Updated!")
                 st.rerun()
             except Exception as e:
