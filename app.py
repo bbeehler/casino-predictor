@@ -11,11 +11,11 @@ from supabase import create_client
 # 1. PAGE CONFIG (Must be the very first Streamlit command)
 st.set_page_config(page_title="FloorCast | Hard Rock Ottawa", layout="wide", page_icon="🎰")
 
-# 2. THE UNIFIED FORENSIC ENGINE (Single Source of Truth)
+# 2. THE UNIFIED FORENSIC ENGINE
 def get_forensic_metrics(df, coeffs):
     """Calculates KPIs once for the entire app. Safely handles missing columns."""
     if df is None or len(df) == 0:
-        return {"predictability": "0.0%", "digital_lift": "0.0%", "heartbeats": {}}
+        return {"predictability": "0.0%", "digital_lift": "0.0%", "heartbeats": {}, "ooh_total_daily": 0}
 
     df = pd.DataFrame(df).copy()
     
@@ -37,26 +37,25 @@ def get_forensic_metrics(df, coeffs):
     df['entry_date'] = pd.to_datetime(df['entry_date'])
     df['day_name'] = df['entry_date'].dt.day_name()
     
-    # Historical Baseline
     heartbeats = df.groupby('day_name')['actual_traffic'].mean().to_dict()
     
     # Weights from Engine
     c_clicks = coeffs.get('Clicks', 0.02)
     c_social = coeffs.get('Impressions', 0.0002)
 
-    # --- THE OOH BRIDGE (Must match Tab 4 exactly) ---
-    c_static = coeffs.get('Static_Weight', 0.0)
-    n_static = coeffs.get('Static_Count', 0)
-    c_dig_ooh = coeffs.get('Digital_OOH_Weight', 0.0)
-    n_dig_ooh = coeffs.get('Digital_OOH_Count', 0)
+    # OOH Weights
+    c_static = coeffs.get('Static_Weight', 50.0)
+    n_static = coeffs.get('Static_Count', 2)
+    c_dig_ooh = coeffs.get('Digital_OOH_Weight', 10.0)
+    n_dig_ooh = coeffs.get('Digital_OOH_Count', 4)
     total_ooh_lift = (c_static * n_static) + (c_dig_ooh * n_dig_ooh)
     
-    # 1. Digital Lift (Online Ads Only)
+    # Digital Lift %
     total_traffic = df['actual_traffic'].sum()
     digital_impact = (df['ad_clicks'].sum() * c_clicks) + (df['ad_impressions'].sum() * c_social)
     lift_val = (digital_impact / total_traffic * 100) if total_traffic > 0 else 0
 
-    # 2. AI Predictability (Full Model including Billboards)
+    # AI Predictability
     df['expected'] = df.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
                                (x['ad_clicks'] * c_clicks) + 
                                (x['ad_impressions'] * c_social) +
@@ -64,7 +63,7 @@ def get_forensic_metrics(df, coeffs):
 
     df_filtered = df[df['actual_traffic'] > 0].copy()
     if df_filtered.empty:
-        return {"predictability": "0.0%", "digital_lift": f"{lift_val:.1f}%", "heartbeats": heartbeats}
+        return {"predictability": "0.0%", "digital_lift": f"{lift_val:.1f}%", "heartbeats": heartbeats, "ooh_total_daily": total_ooh_lift}
         
     mape = (np.abs(df_filtered['actual_traffic'] - df_filtered['expected']) / df_filtered['actual_traffic']).mean()
     pred_val = (1 - mape) * 100 if not np.isnan(mape) else 0
@@ -75,6 +74,7 @@ def get_forensic_metrics(df, coeffs):
         "heartbeats": heartbeats,
         "ooh_total_daily": total_ooh_lift
     }
+
 # 3. INITIALIZE CLIENTS
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
@@ -83,10 +83,9 @@ supabase = create_client(url, key)
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# 4. WEATHER LOGIC (Environment Canada Sync)
+# 4. WEATHER LOGIC
 async def fetch_live_ec_data():
     try:
-        # Coordinates for Hard Rock Ottawa area
         ec = ECWeather(coordinates=(45.33, -75.71))
         await ec.update()
         return {"current": ec.conditions, "forecast": ec.daily_forecasts, "alerts": ec.alerts}
@@ -99,56 +98,49 @@ if 'weather_data' not in st.session_state:
 if 'user_authenticated' not in st.session_state:
     st.session_state.user_authenticated = False
 
-# 5. GATEKEEPER (Secure Login UI)
+# 5. GATEKEEPER
 if not st.session_state.user_authenticated:
     st.markdown("<div style='text-align:center; padding:50px;'><h1 style='color:#FFCC00;'>🎰 FloorCast</h1><h3>Hard Rock Ottawa | Strategic Engine</h3></div>", unsafe_allow_html=True)
-    
     with st.container(border=True):
         email = st.text_input("Email")
         pw = st.text_input("Password", type="password")
-        
-        # Use a unique key for the button to avoid state collisions
         if st.button("Access Engine", use_container_width=True, key="login_btn"):
             try:
-                # 1. Check with Supabase
                 res = supabase.auth.sign_in_with_password({"email": email, "password": pw})
-                
                 if res.user:
-                    # 2. Update status
                     st.session_state.user_authenticated = True
-                    # 3. FORCE REFRESH: This bypasses the st.stop() on the next lines
                     st.rerun() 
                 else:
                     st.error("Authentication failed.")
-            except Exception as e:
-                st.error("Invalid credentials or connection error.")
-    
-    # This is the line that causes the double-click if st.rerun() isn't called above
+            except:
+                st.error("Invalid credentials.")
     st.stop()
 
-# --- 6. GLOBAL HYDRATION (The Data Bridge) ---
-def load_coefficients():
-    try:
-        # We query ID 1 (your calibration row)
-        response = supabase.table("coefficients").select("*").eq("id", 1).execute()
-        if response.data:
-            # We save the data directly into session_state
-            st.session_state.coeffs = response.data[0]
-            return response.data[0]
-    except Exception as e:
-        st.error(f"Vault Sync Error: {e}")
-    return {}
+# --- 6. CRITICAL DATA HYDRATION (NEW FIX) ---
+# This must happen before we call the engine
 
-# CRITICAL: This ensures the app ALWAYS has the latest data on every rerun
-coeffs = load_coefficients()
+# A. Load Coefficients first
+try:
+    c_res = supabase.table("coefficients").select("*").eq("id", 1).execute()
+    if c_res.data:
+        st.session_state.coeffs = c_res.data[0]
+        # Safety injection for missing OOH columns
+        defaults = {'Static_Weight': 50.0, 'Static_Count': 2, 'Digital_OOH_Weight': 10.0, 'Digital_OOH_Count': 4}
+        for k, v in defaults.items():
+            if k not in st.session_state.coeffs:
+                st.session_state.coeffs[k] = v
+except:
+    st.session_state.coeffs = {}
 
-# If the database is missing our new OOH columns, we manually inject 
-# defaults so the math in Tab 1 and 6 doesn't return 0.
-if 'Static_Weight' not in st.session_state.coeffs:
-    st.session_state.coeffs['Static_Weight'] = 50.0
-    st.session_state.coeffs['Static_Count'] = 2
-    st.session_state.coeffs['Digital_OOH_Weight'] = 10.0
-    st.session_state.coeffs['Digital_OOH_Count'] = 4
+# B. Load Ledger Data next (fixes the NameError)
+try:
+    l_res = supabase.table("ledger").select("*").execute()
+    ledger_data = l_res.data if l_res.data else []
+except:
+    ledger_data = []
+
+# C. Calculate Metrics once for all Tabs
+metrics = get_forensic_metrics(ledger_data, st.session_state.coeffs)
 
 # 7. MODERN UI STYLING (Minimalist Executive Theme)
 st.markdown("""
