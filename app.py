@@ -14,7 +14,7 @@ st.set_page_config(page_title="FloorCast | Hard Rock Ottawa", layout="wide", pag
 # 2. THE UNIFIED FORENSIC ENGINE (Single Source of Truth)
 def get_forensic_metrics(df, coeffs):
     """Calculates KPIs once for the entire app. Safely handles missing columns."""
-    if df is None or not df:
+    if df is None or len(df) == 0:
         return {"predictability": "0.0%", "digital_lift": "0.0%", "heartbeats": {}}
 
     df = pd.DataFrame(df).copy()
