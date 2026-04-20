@@ -339,21 +339,22 @@ with tab2:
             social = st.number_input("Social Engagements", min_value=0)
             
             if st.form_submit_button("💾 Save to Vault"):
-                # MATCHING YOUR EXACT SUPABASE SCHEMA:
+                # MATCHING YOUR FINALIZED NAMES
                 new_row = {
                     "entry_date": entry_date.isoformat(),
                     "actual_traffic": traffic,
                     "actual_coin_in": coin_in,
-                    "ad-clicks": clicks,           # FIXED: Uses the dash
-                    "ad_impressions": impressions, # FIXED: Specific name
-                    "social_engagements": social   # FIXED: Specific name
+                    "ad_clicks": clicks,           
+                    "ad_impressions": impressions, 
+                    "social_engagements": social   
                 }
                 try:
                     supabase.table("ledger").insert([new_row]).execute()
-                    st.success(f"Success! Data for {entry_date} saved.")
+                    st.success(f"Success! Record for {entry_date} saved.")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Sync failed. Check your column names: {e}")
+                    st.error(f"Sync failed. Check Supabase schema for: {list(new_row.keys())}")
+                    st.info(f"Details: {e}")
 
     with col_b:
         st.write("### 📤 Bulk CSV Upload")
@@ -363,11 +364,13 @@ with tab2:
             df_upload = pd.read_csv(uploaded_file)
             if st.button("🚀 Push to Vault", use_container_width=True):
                 try:
-                    # Rename CSV columns to match the specific DB naming
+                    # Map common variations to your exact DB names
                     df_upload.rename(columns={
-                        'clicks': 'ad-clicks',
+                        'clicks': 'ad_clicks',
                         'impressions': 'ad_impressions',
-                        'social': 'social_engagements'
+                        'social': 'social_engagements',
+                        'traffic': 'actual_traffic',
+                        'revenue': 'actual_coin_in'
                     }, inplace=True)
                     
                     data_dict = df_upload.to_dict(orient='records')
@@ -388,13 +391,13 @@ with tab2:
             df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
             df_history = df_history.sort_values(by='entry_date', ascending=False)
         
-        # Display Mapping
+        # Display Mapping for the Table
         editor_config = {
             "id": None,
             "entry_date": st.column_config.DateColumn("Date", disabled=True),
             "actual_traffic": st.column_config.NumberColumn("Traffic"),
             "actual_coin_in": st.column_config.NumberColumn("Coin-In", format="$%.2f"),
-            "ad-clicks": st.column_config.NumberColumn("Ad Clicks"),
+            "ad_clicks": st.column_config.NumberColumn("Ad Clicks"),
             "ad_impressions": st.column_config.NumberColumn("Ad Impressions"),
             "social_engagements": st.column_config.NumberColumn("Social Engagements")
         }
