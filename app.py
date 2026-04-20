@@ -45,10 +45,12 @@ def get_forensic_metrics(df, coeffs):
     c_social = coeffs.get('Impressions', 0.0002)
 
     # 2. OOH Weights (Offline Baseline Pressure)
-    c_static = coeffs.get('Static_Weight', 50.0)
-    n_static = coeffs.get('Static_Count', 2)
-    c_dig_ooh = coeffs.get('Digital_OOH_Weight', 10.0)
-    n_dig_ooh = coeffs.get('Digital_OOH_Count', 4)
+    # We use .get() with defaults to ensure the app never sees 'None'
+    c_static = coeffs.get('Static_Weight', 0.0)
+    n_static = coeffs.get('Static_Count', 0)
+    c_dig_ooh = coeffs.get('Digital_OOH_Weight', 0.0)
+    n_dig_ooh = coeffs.get('Digital_OOH_Count', 0)
+    
     total_ooh_lift = (c_static * n_static) + (c_dig_ooh * n_dig_ooh)
     
     # 3. PURE DIGITAL LIFT (Online Attribution Only)
@@ -577,10 +579,10 @@ with tab4:
                 'Snow_cm': new_snow,
                 'Rain_mm': new_rain,
                 'Promo': new_promo,
-                'Clicks': new_clicks, # RESTORED
+                'Clicks': new_clicks,
                 'Impressions': new_social,
-                'Static_Weight': new_static_w,
-                'Static_Count': new_static_c,
+                'Static_Weight': new_static_w,     # Match these exactly
+                'Static_Count': new_static_c,      # to your logic below
                 'Digital_OOH_Weight': new_digital_w,
                 'Digital_OOH_Count': new_digital_c
             }
