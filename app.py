@@ -490,7 +490,8 @@ with tab2:
                 editor_config[col] = None
 
         edited_df = st.data_editor(
-            df_history, 
+            df_history,
+            key="ledger_editor_v1",
             column_config=editor_config, 
             use_container_width=True, 
             hide_index=True
@@ -521,71 +522,49 @@ with tab3:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">📊 Property Performance Analytics</h2>
-            <p style="color: #888; margin: 0;">Correlating digital marketing spend with physical property results.</p>
+            <p style="color: #888; margin: 0;">Forensic correlation of digital KPIs to physical property traffic.</p>
         </div>
     """, unsafe_allow_html=True)
 
     if ledger_data:
+        # 1. Prepare Data
         df_analysis = pd.DataFrame(ledger_data)
         df_analysis['entry_date'] = pd.to_datetime(df_analysis['entry_date'])
         df_analysis = df_analysis.sort_values('entry_date')
 
-        # 1. TOP-LINE KPI TILES
-        col1, col2, col3, col4 = st.columns(4)
+        # 2. Executive Metric Tiles
+        m1, m2, m3 = st.columns(3)
+        avg_traffic = int(df_analysis['actual_traffic'].mean())
+        total_clicks = int(df_analysis['ad_clicks'].sum())
+        avg_coin = df_analysis['actual_coin_in'].mean()
         
-        latest_traffic = df_analysis['actual_traffic'].iloc[-1] if not df_analysis.empty else 0
-        avg_coin = df_analysis['actual_coin_in'].mean() if not df_analysis.empty else 0
-        total_clicks = df_analysis['ad_clicks'].sum() if not df_analysis.empty else 0
+        m1.metric("Avg Daily Traffic", f"{avg_traffic:,}")
+        m2.metric("Total Ad Clicks", f"{total_clicks:,}")
+        m3.metric("Avg Daily Coin-In", f"${avg_coin:,.2f}")
+
+        # 3. Trends (Using Plotly or Streamlit Charts)
+        st.write("### 📈 Performance Trends")
         
-        col1.metric("Latest Traffic", f"{latest_traffic:,} guests")
-        col2.metric("Avg. Daily Coin-In", f"${avg_coin:,.2f}")
-        col3.metric("Total Ad Clicks", f"{total_clicks:,}")
-        col4.metric("Digital Conversion", f"{(total_clicks/latest_traffic*100 if latest_traffic > 0 else 0):.1f}%")
-
-        # 2. TREND CORRELATION CHART (The Forensic View)
-        st.write("### 📈 Traffic vs. Digital Engagement")
+        # We use a selection box so you can toggle what you want to see
+        analysis_view = st.radio("Select Metric to View Trend", 
+                                ["Foot Traffic", "Ad Clicks", "Coin-In"], 
+                                horizontal=True)
         
-        import plotly.graph_objects as go
-        from plotly.subplots import make_subplots
+        if analysis_view == "Foot Traffic":
+            st.area_chart(df_analysis.set_index('entry_date')['actual_traffic'], color="#FFCC00")
+        elif analysis_view == "Ad Clicks":
+            st.line_chart(df_analysis.set_index('entry_date')['ad_clicks'], color="#00CCFF")
+        else:
+            st.bar_chart(df_analysis.set_index('entry_date')['actual_coin_in'], color="#2ecc71")
 
-        fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-        # Physical Traffic (Bar)
-        fig.add_trace(
-            go.Bar(x=df_analysis['entry_date'], y=df_analysis['actual_traffic'], name="Foot Traffic", marker_color='#FFCC00', opacity=0.6),
-            secondary_y=False,
-        )
-
-        # Digital Clicks (Line)
-        fig.add_trace(
-            go.Scatter(x=df_analysis['entry_date'], y=df_analysis['ad_clicks'], name="Ad Clicks", line=dict(color='#00CCFF', width=3)),
-            secondary_y=True,
-        )
-
-        fig.update_layout(
-            title_text="Digital-to-Physical Correlation",
-            template="plotly_dark",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-
-        # 3. STATISTICAL BREAKDOWN
+        # 4. Correlation Insight (Clicks vs Traffic)
         st.divider()
-        st.write("### 🔍 Statistical Insights")
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            st.write("**Traffic Distribution**")
-            st.area_chart(df_analysis.set_index('entry_date')['actual_traffic'])
-        
-        with c2:
-            st.write("**Coin-In vs. Ad Impressions**")
-            # Creating a simple scatter to see if higher spend correlates with social volume
-            st.scatter_chart(df_analysis, x='ad_impressions', y='actual_coin_in', color="#FFCC00")
+        st.write("### 🔍 Forensic Correlation")
+        st.scatter_chart(df_analysis, x='ad_clicks', y='actual_traffic', color="#FFCC00")
+        st.caption("This scatter chart shows if higher digital clicks actually resulted in more bodies on the floor.")
 
     else:
-        st.info("No data available in the Vault. Please add entries in the Ledger (Tab 2) to unlock analytics.")
+        st.info("The Vault is currently empty. Add data in the Ledger (Tab 2) to unlock these analytics.")
 # --- TAB 4: ENGINE CONTROL (CALIBRATION) ---
 with tab4:
     st.markdown("""
