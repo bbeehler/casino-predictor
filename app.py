@@ -497,7 +497,7 @@ with tab2:
             hide_index=True
         )
 
-        if st.button("✅ Confirm & Sync Edits", key="sync_ledger"):
+if st.button("✅ Confirm & Sync Edits", key="sync_ledger_primary"):
             try:
                 for _, row in edited_df.iterrows():
                     up_data = row.to_dict()
