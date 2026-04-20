@@ -323,6 +323,24 @@ with tab2:
         </div>
     """, unsafe_allow_html=True)
 
+    # 1. DYNAMIC COLUMN DETECTION (Prevents PGRST204 Errors)
+    try:
+        # Check the first row of the ledger to see what names Supabase is using
+        db_check = supabase.table("ledger").select("*").limit(1).execute()
+        db_cols = db_check.data[0].keys() if db_check.data else []
+    except:
+        db_cols = []
+
+    # Helper to find the correct column name variation
+    def detect_col(options, default):
+        return next((c for c in options if c in db_cols), default)
+
+    # Determine which names the database actually uses
+    target_imp = detect_col(["social_impressions", "Impressions", "impressions", "social_imp"], "social_impressions")
+    target_clicks = detect_col(["ad_clicks", "Clicks", "clicks", "ad_click"], "ad_clicks")
+    target_traffic = detect_col(["actual_traffic", "Traffic", "traffic"], "actual_traffic")
+    target_coin = detect_col(["actual_coin_in", "Revenue", "Coin_In", "actual_coin"], "actual_coin_in")
+
     col_a, col_b = st.columns([1, 1])
 
     with col_a:
@@ -338,20 +356,21 @@ with tab2:
             impressions = st.number_input("Social Impressions", min_value=0)
             
             if st.form_submit_button("💾 Save to Vault"):
-                # MAP TO DATABASE SCHEMA
+                # Construct the row using detected DB column names
                 new_row = {
                     "entry_date": entry_date.isoformat(),
-                    "actual_traffic": traffic,
-                    "actual_coin_in": coin_in,
-                    "ad_clicks": clicks,
-                    "Impressions": impressions  # FIXED: Matches your Supabase column name
+                    target_traffic: traffic,
+                    target_coin: coin_in,
+                    target_clicks: clicks,
+                    target_imp: impressions 
                 }
                 try:
                     supabase.table("ledger").insert([new_row]).execute()
-                    st.success(f"Success! Data for {entry_date} is now in the Vault.")
+                    st.success(f"Success! Data for {entry_date} saved.")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Error saving to database: {e}")
+                    st.error(f"Error: {e}")
+                    st.info(f"DB Columns Detected: {list(db_cols)}")
 
     with col_b:
         st.write("### 📤 Bulk CSV Upload")
@@ -359,19 +378,20 @@ with tab2:
         
         if uploaded_file is not None:
             df_upload = pd.read_csv(uploaded_file)
-            st.write("Preview of Upload:")
+            st.write("Preview:")
             st.dataframe(df_upload.head(3), use_container_width=True)
             
             if st.button("🚀 Push to Vault", use_container_width=True):
                 try:
-                    # RENAME CSV COLUMNS TO MATCH DATABASE
-                    # This ensures the upload doesn't crash if your CSV uses different names
-                    rename_map = {
-                        'social_impressions': 'Impressions',
-                        'impressions': 'Impressions',
-                        'Clicks': 'ad_clicks'
-                    }
-                    df_upload.rename(columns=rename_map, inplace=True)
+                    # Rename CSV columns to match DB columns
+                    df_upload.rename(columns={
+                        'social_impressions': target_imp, 
+                        'impressions': target_imp,
+                        'Clicks': target_clicks,
+                        'ad_clicks': target_clicks,
+                        'Traffic': target_traffic,
+                        'Revenue': target_coin
+                    }, inplace=True)
                     
                     data_dict = df_upload.to_dict(orient='records')
                     supabase.table("ledger").insert(data_dict).execute()
@@ -380,31 +400,30 @@ with tab2:
                 except Exception as e:
                     st.error(f"Upload failed: {e}")
 
-    # --- LEDGER EDITOR SECTION ---
+    # --- 3. THE LEDGER EDITOR ---
     st.divider()
     st.write("### 📜 Ledger Editor")
     
     if ledger_data:
         df_history = pd.DataFrame(ledger_data)
         
-        # Standardize for the UI
         if 'entry_date' in df_history.columns:
             df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
             df_history = df_history.sort_values(by='entry_date', ascending=False)
         
-        # Display name mapping for the Editor
-        editor_cols = {
+        # Configure the Editor columns based on detected names
+        editor_config = {
             "id": None,
             "entry_date": st.column_config.DateColumn("Date", disabled=True),
-            "actual_traffic": st.column_config.NumberColumn("Traffic"),
-            "actual_coin_in": st.column_config.NumberColumn("Coin-In", format="$%.2f"),
-            "ad_clicks": st.column_config.NumberColumn("Clicks"),
-            "Impressions": st.column_config.NumberColumn("Impressions") # FIXED
+            target_traffic: st.column_config.NumberColumn("Traffic"),
+            target_coin: st.column_config.NumberColumn("Coin-In", format="$%.2f"),
+            target_clicks: st.column_config.NumberColumn("Clicks"),
+            target_imp: st.column_config.NumberColumn("Impressions")
         }
 
         edited_df = st.data_editor(
             df_history,
-            column_config=editor_cols,
+            column_config=editor_config,
             use_container_width=True,
             hide_index=True
         )
@@ -414,7 +433,6 @@ with tab2:
                 for _, row in edited_df.iterrows():
                     up_data = row.to_dict()
                     up_data['entry_date'] = up_data['entry_date'].strftime('%Y-%m-%d')
-                    # Sync to DB
                     supabase.table("ledger").update(up_data).eq("id", up_data['id']).execute()
                 st.success("Vault Updated!")
                 st.rerun()
