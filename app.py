@@ -11,6 +11,9 @@ from supabase import create_client
 # 1. PAGE CONFIG (Must be the very first Streamlit command)
 st.set_page_config(page_title="FloorCast | Hard Rock Ottawa", layout="wide", page_icon="🎰")
 
+# --- AUTH LIST ---
+ADMIN_USERS = ["bjbeehler@gmail.com]
+
 # 2. THE UNIFIED FORENSIC ENGINE
 def get_forensic_metrics(df, coeffs):
     """Calculates KPIs once for the entire app. Safely handles missing columns."""
@@ -108,23 +111,31 @@ if 'weather_data' not in st.session_state:
 if 'user_authenticated' not in st.session_state:
     st.session_state.user_authenticated = False
 
-# 5. GATEKEEPER
+# 5. GATEKEEPER (Secure Login UI with Identity Capture)
 if not st.session_state.user_authenticated:
     st.markdown("<div style='text-align:center; padding:50px;'><h1 style='color:#FFCC00;'>🎰 FloorCast</h1><h3>Hard Rock Ottawa | Strategic Engine</h3></div>", unsafe_allow_html=True)
+    
     with st.container(border=True):
-        email = st.text_input("Email")
-        pw = st.text_input("Password", type="password")
+        email_input = st.text_input("Email")
+        pw_input = st.text_input("Password", type="password")
+        
         if st.button("Access Engine", use_container_width=True, key="login_btn"):
             try:
-                res = supabase.auth.sign_in_with_password({"email": email, "password": pw})
+                # 1. Authenticate with Supabase
+                res = supabase.auth.sign_in_with_password({"email": email_input, "password": pw_input})
+                
                 if res.user:
+                    # 2. Store identity and status
                     st.session_state.user_authenticated = True
+                    st.session_state.user_email = res.user.email  # CRITICAL for permissions
+                    st.success(f"Welcome, {res.user.email}")
                     st.rerun() 
                 else:
                     st.error("Authentication failed.")
-            except:
-                st.error("Invalid credentials.")
-    st.stop()
+            except Exception as e:
+                st.error("Invalid credentials or connection error.")
+    
+    st.stop() # Prevents unauthorized users from seeing the rest of the script
 
 # --- 6. CRITICAL DATA HYDRATION (NEW FIX) ---
 # This must happen before we call the engine
@@ -496,110 +507,75 @@ with tab3:
         st.info("No data found in the Vault. Please backfill results in Tab 2 to see analytics.")
 # --- TAB 4: ENGINE CONTROL (CALIBRATION) ---
 with tab4:
-    st.markdown("""
-        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Calibration</h2>
-            <p style="color: #888; margin: 0;">Calibrate Marketing Multipliers, Environmental Friction, and OOH Pressure.</p>
-        </div>
-    """, unsafe_allow_html=True)
+    # 1. PERMISSION CHECK
+    # This looks at the email captured during login
+    current_user = st.session_state.get('user_email', "unauthorized")
+    
+    if current_user not in ADMIN_USERS:
+        st.warning("### 🔒 Access Restricted")
+        st.info(f"Identity: **{current_user}** does not have permission to calibrate the forensic engine.")
+        st.write("Please contact Brian Beehler for administrative access.")
+    else:
+        # --- AUTHORIZED VIEW ---
+        st.markdown("""
+            <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
+                <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Calibration</h2>
+                <p style="color: #888; margin: 0;">Admin Mode: {current_user}</p>
+            </div>
+        """, unsafe_allow_html=True)
 
-    # Safety check: Ensure the app has coefficients loaded
-    if 'coeffs' not in st.session_state:
-        st.error("Engine coefficients not found. Please refresh the app.")
-        st.stop()
+        # Ensure local session state has the OOH keys
+        for key, val in {'Static_Weight': 50.0, 'Static_Count': 2, 'Digital_OOH_Weight': 10.0, 'Digital_OOH_Count': 4}.items():
+            if key not in st.session_state.coeffs:
+                st.session_state.coeffs[key] = val
 
-    with st.form("engine_settings_master_v5"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write("### 📣 Marketing Multipliers")
-            # Ad Clicks (Pure Digital)
-            c_clicks = float(st.session_state.coeffs.get('Clicks', 0.02))
-            new_clicks = st.slider("Click Conversion Weight", 0.00, 0.50, value=c_clicks, step=0.01)
+        with st.form("engine_settings_v6"):
+            col1, col2 = st.columns(2)
             
-            # Social Impressions (Mapped to 'Impressions' column)
-            c_social = float(st.session_state.coeffs.get('Impressions', 0.0002))
-            new_social = st.number_input("Social Impression Weight", 0.0000, 0.0100, value=c_social, format="%.4f")
-            
-            # Major Promos (Flat Guest Lift)
-            c_promo = int(st.session_state.coeffs.get('Promo', 450))
-            new_promo = st.number_input("Promo Lift (Guest Count)", 0, 10000, value=c_promo)
-
-            st.write("---")
-            st.write("### 📍 OOH / Billboard Attribution")
-            # Static Anchor Boards (Vinyl/Permanent)
-            s_weight = float(st.session_state.coeffs.get('Static_Weight', 50.0))
-            new_static_w = st.slider("Lift per Static Board", 0.0, 500.0, value=s_weight)
-            new_static_c = st.number_input("Active Static Boards", 0, 20, value=int(st.session_state.coeffs.get('Static_Count', 2)))
-            
-            # Shared Digital Boards (Accounting for SOV/Loop)
-            d_weight = float(st.session_state.coeffs.get('Digital_OOH_Weight', 10.0))
-            new_digital_w = st.slider("Lift per Digital Board (Shared)", 0.0, 200.0, value=d_weight)
-            new_digital_c = st.number_input("Active Digital Boards", 0, 50, value=int(st.session_state.coeffs.get('Digital_OOH_Count', 4)))
-
-        with col2:
-            st.write("### ❄️ Environmental Friction")
-            # Snow Impact (guests lost per cm)
-            c_snow = float(st.session_state.coeffs.get('Snow_cm', -45.0))
-            new_snow = st.slider("Snow Friction (Guests/cm)", -1000.0, 0.0, value=c_snow)
-            
-            # Rain Impact (guests lost per mm)
-            c_rain = float(st.session_state.coeffs.get('Rain_mm', -12.0))
-            new_rain = st.slider("Rain Friction (Guests/mm)", -500.0, 0.0, value=c_rain)
-            
-            st.write("---")
-            st.write("### 💰 Financial Anchor")
-            # Avg Spend (Used to calculate Total Revenue in Tab 6)
-            c_coin = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
-            new_coin = st.number_input("Avg Spend Per Head ($)", 0.0, 5000.0, value=c_coin)
-
-        st.divider()
-        
-        # SUBMIT BUTTON: The "Handshake" with the Database
-        submit_all = st.form_submit_button("💾 Save All Calibration to Vault", use_container_width=True)
-
-        if submit_all:
-            # 1. Prepare the Payload (Must match Section 2 keys exactly)
-            sync_payload = {
-                'Avg_Coin_In': new_coin,
-                'Snow_cm': new_snow,
-                'Rain_mm': new_rain,
-                'Promo': new_promo,
-                'Clicks': new_clicks,
-                'Impressions': new_social,
-                'Static_Weight': new_static_w,
-                'Static_Count': new_static_c,
-                'Digital_OOH_Weight': new_digital_w,
-                'Digital_OOH_Count': new_digital_c
-            }
-            
-            try:
-                # 2. Update Supabase
-                supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
+            with col1:
+                st.write("### 📣 Marketing Multipliers")
+                new_clicks = st.slider("Click Weight", 0.0, 0.5, value=float(st.session_state.coeffs.get('Clicks', 0.02)))
+                new_social = st.number_input("Social Weight", 0.0, 0.01, value=float(st.session_state.coeffs.get('Impressions', 0.0002)), format="%.4f")
                 
-                # 3. Update Session State (Immediate memory update)
+                st.write("### 📍 OOH / Billboards")
+                new_static_w = st.slider("Static Board Lift", 0.0, 500.0, value=float(st.session_state.coeffs['Static_Weight']))
+                new_static_c = st.number_input("Static Count", 0, 10, value=int(st.session_state.coeffs['Static_Count']))
+                new_digital_w = st.slider("Digital Board Lift", 0.0, 200.0, value=float(st.session_state.coeffs['Digital_OOH_Weight']))
+                new_digital_c = st.number_input("Digital Count", 0, 20, value=int(st.session_state.coeffs['Digital_OOH_Count']))
+
+            with col2:
+                st.write("### ❄️ Environmental Friction")
+                new_snow = st.slider("Snow Friction (Guests/cm)", -1000.0, 0.0, value=float(st.session_state.coeffs.get('Snow_cm', -45.0)))
+                new_rain = st.slider("Rain Friction (Guests/mm)", -500.0, 0.0, value=float(st.session_state.coeffs.get('Rain_mm', -12.0)))
+                
+                st.write("### 💰 Financials")
+                new_coin = st.number_input("Avg Spend ($)", 0.0, 5000.0, value=float(st.session_state.coeffs.get('Avg_Coin_In', 112.50)))
+
+            st.divider()
+            submit_v6 = st.form_submit_button("💾 Save All Calibration & Apply Math", use_container_width=True)
+
+            if submit_v6:
+                sync_payload = {
+                    'Clicks': new_clicks, 'Impressions': new_social, 'Avg_Coin_In': new_coin,
+                    'Snow_cm': new_snow, 'Rain_mm': new_rain,
+                    'Static_Weight': new_static_w, 'Static_Count': new_static_c,
+                    'Digital_OOH_Weight': new_digital_w, 'Digital_OOH_Count': new_digital_c
+                }
+                
+                # Update memory immediately
                 st.session_state.coeffs.update(sync_payload)
                 
-                st.success("✅ Engine Calibrated! All Tab math updated.")
-                import time
-                time.sleep(1)
-                st.rerun() # Forces Tab 1 and Tab 6 to reload with the new math
+                try:
+                    supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
+                    st.success("✅ Database Synced & Math Applied!")
+                except Exception as e:
+                    st.warning(f"⚠️ App updated locally, but Database Sync failed: {e}")
                 
-            except Exception as e:
-                # If this fails, the columns probably don't exist in Supabase yet
-                st.error(f"❌ Vault Sync failed: {e}")
-                st.info("Check if 'Static_Weight', 'Static_Count', 'Digital_OOH_Weight', and 'Digital_OOH_Count' exist in your Supabase table.")
-
-    # 4. LIVE FORENSIC PREVIEW
-    st.divider()
-    st.write("### 🔍 Live Forensic Baseline")
-    total_ooh = (new_static_w * new_static_c) + (new_digital_w * new_digital_c)
-    
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Total OOH Lift", f"{total_ooh:,.0f} Guests", help="Total daily inertia from billboards.")
-    m2.metric("Digital SOV", f"{new_digital_w:.1f} / board", help="Impact per shared digital board.")
-    m3.metric("Rain Friction", f"{new_rain:,.0f} / mm", help="Estimated guest loss per mm of rain.")
-
+                # Recalculate metrics global object
+                metrics = get_forensic_metrics(ledger_data, st.session_state.coeffs)
+                import time
+                time.sleep(0.5)
+                st.rerun()
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
