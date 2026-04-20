@@ -126,43 +126,29 @@ if not st.session_state.user_authenticated:
     # This is the line that causes the double-click if st.rerun() isn't called above
     st.stop()
 
-# 6. HYDRATE ENGINE WEIGHTS & DATA
-if 'coeffs' not in st.session_state:
+# --- 6. GLOBAL HYDRATION (The Data Bridge) ---
+def load_coefficients():
     try:
+        # We query ID 1 (your calibration row)
         response = supabase.table("coefficients").select("*").eq("id", 1).execute()
         if response.data:
+            # We save the data directly into session_state
             st.session_state.coeffs = response.data[0]
-            # Safety Fallbacks: If these columns don't exist in Supabase yet, create them in memory
-            if 'OOH_Weight' not in st.session_state.coeffs: st.session_state.coeffs['OOH_Weight'] = 150.0
-            if 'OOH_Count' not in st.session_state.coeffs: st.session_state.coeffs['OOH_Count'] = 0
-        else:
-            st.session_state.coeffs = {
-                "id": 1, "Intercept": 3250, "Avg_Coin_In": 112.50, 
-                "Clicks": 0.02, "Social_Imp": 0.0002, 
-                "OOH_Weight": 150.0, "OOH_Count": 0
-            }
-    except:
-        st.session_state.coeffs = {"Intercept": 3250, "Avg_Coin_In": 450, "OOH_Weight": 150.0, "OOH_Count": 0}
+            return response.data[0]
+    except Exception as e:
+        st.error(f"Vault Sync Error: {e}")
+    return {}
 
-# Fetch the Ledger (Defining it here prevents the NameError)
-def fetch_ledger_data():
-    try:
-        res = supabase.table("ledger").select("*").execute()
-        return res.data if res.data else []
-    except:
-        return []
+# CRITICAL: This ensures the app ALWAYS has the latest data on every rerun
+coeffs = load_coefficients()
 
-ledger_data = fetch_ledger_data()
-
-# Ensure ledger_data is defined BEFORE any logic checks it
-def fetch_ledger_data():
-    try:
-        res = supabase.table("ledger").select("*").execute()
-        return res.data if res.data else []
-    except:
-        return []
-
-ledger_data = fetch_ledger_data()
+# If the database is missing our new OOH columns, we manually inject 
+# defaults so the math in Tab 1 and 6 doesn't return 0.
+if 'Static_Weight' not in st.session_state.coeffs:
+    st.session_state.coeffs['Static_Weight'] = 50.0
+    st.session_state.coeffs['Static_Count'] = 2
+    st.session_state.coeffs['Digital_OOH_Weight'] = 10.0
+    st.session_state.coeffs['Digital_OOH_Count'] = 4
 
 # 7. MODERN UI STYLING (Minimalist Executive Theme)
 st.markdown("""
@@ -508,6 +494,7 @@ with tab3:
         st.info("No data found in the Vault. Please backfill results in Tab 2 to see analytics.")
 # --- TAB 4: ENGINE CONTROL (CALIBRATION) ---
 with tab4:
+    st.write(f"DEBUG: Current Static Weight is {st.session_state.coeffs.get('Static_Weight')}")
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Calibration</h2>
