@@ -19,11 +19,13 @@ def get_forensic_metrics(df, coeffs):
 
     df = pd.DataFrame(df).copy()
     
-    # Standardize columns
+    # 1. Standardize columns
     cols_to_ensure = {
-        'ad_clicks': ['ad_clicks', 'Clicks', 'Ad_Clicks'],
-        'ad_impressions': ['ad_impressions', 'Impressions', 'Social_Imp'],
-        'actual_traffic': ['actual_traffic', 'Traffic']
+        'ad_clicks': ['ad_clicks', 'Clicks'],
+        'ad_impressions': ['ad_impressions', 'Impressions'],
+        'actual_traffic': ['actual_traffic', 'Traffic'],
+        'snow_cm': ['snow_cm', 'Snow', 'snow'],
+        'rain_mm': ['rain_mm', 'Rain', 'rain']
     }
 
     for target, aliases in cols_to_ensure.items():
@@ -37,11 +39,14 @@ def get_forensic_metrics(df, coeffs):
     df['entry_date'] = pd.to_datetime(df['entry_date'])
     df['day_name'] = df['entry_date'].dt.day_name()
     
+    # 2. Pull Weights from Coeffs
     heartbeats = df.groupby('day_name')['actual_traffic'].mean().to_dict()
-    
-    # Weights from Engine
     c_clicks = coeffs.get('Clicks', 0.02)
     c_social = coeffs.get('Impressions', 0.0002)
+    
+    # Environmental Weights (THE MISSING LINK)
+    c_snow = coeffs.get('Snow_cm', -45.0)
+    c_rain = coeffs.get('Rain_mm', -12.0)
 
     # OOH Weights
     c_static = coeffs.get('Static_Weight', 50.0)
@@ -50,16 +55,22 @@ def get_forensic_metrics(df, coeffs):
     n_dig_ooh = coeffs.get('Digital_OOH_Count', 4)
     total_ooh_lift = (c_static * n_static) + (c_dig_ooh * n_dig_ooh)
     
-    # Digital Lift %
+    # 3. THE MASTER CALCULATION
+    # Expected = Baseline + Marketing + OOH + (Weather * Friction)
+    df['expected'] = df.apply(lambda x: 
+        heartbeats.get(x['day_name'], 0) + 
+        (x['ad_clicks'] * c_clicks) + 
+        (x['ad_impressions'] * c_social) +
+        total_ooh_lift + 
+        (x['snow_cm'] * c_snow) +  # Now it subtracts guests for snow
+        (x['rain_mm'] * c_rain),   # Now it subtracts guests for rain
+        axis=1
+    )
+
+    # 4. FINAL METRICS
     total_traffic = df['actual_traffic'].sum()
     digital_impact = (df['ad_clicks'].sum() * c_clicks) + (df['ad_impressions'].sum() * c_social)
     lift_val = (digital_impact / total_traffic * 100) if total_traffic > 0 else 0
-
-    # AI Predictability
-    df['expected'] = df.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
-                               (x['ad_clicks'] * c_clicks) + 
-                               (x['ad_impressions'] * c_social) +
-                               total_ooh_lift, axis=1)
 
     df_filtered = df[df['actual_traffic'] > 0].copy()
     if df_filtered.empty:
@@ -74,7 +85,6 @@ def get_forensic_metrics(df, coeffs):
         "heartbeats": heartbeats,
         "ooh_total_daily": total_ooh_lift
     }
-
 # 3. INITIALIZE CLIENTS
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
