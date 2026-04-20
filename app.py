@@ -130,56 +130,49 @@ def fetch_ledger_data():
 
 ledger_data = fetch_ledger_data()
 
-# 7. MODERN UI STYLING (Professional Light Theme)
+# 7. MODERN UI STYLING (Minimalist Executive Theme)
 st.markdown("""
     <style>
-    /* Main Background - Clean Professional Grey */
+    /* Clean Page Background */
     .stApp {
         background-color: #f4f7f9;
         color: #111111;
     }
     
-    /* Bento Box / Card Effect for Tab Content */
+    /* Remove the 'Bento Box' borders and shadows */
     div[data-testid="stVerticalBlock"] > div {
-        border: 1px solid #e6e9ef;
-        border-radius: 12px;
-        padding: 25px;
-        background-color: #ffffff;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        margin-bottom: 20px;
+        border: none !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+        margin-bottom: 0px !important;
+        padding: 0px !important;
     }
 
-    /* Tab Navigation Styling */
+    /* Keep the Tabs professional */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-        background-color: transparent;
+        gap: 8px;
     }
     
     .stTabs [data-baseweb="tab"] {
-        background-color: #ffffff;
-        border: 1px solid #e6e9ef;
-        border-radius: 8px 8px 0px 0px;
-        padding: 12px 24px;
-        font-weight: 600;
-        color: #666;
+        background-color: #e6e9ef;
+        border-radius: 4px 4px 0px 0px;
+        padding: 10px 20px;
+        color: #333;
     }
 
     /* Active Tab - Hard Rock Gold */
     .stTabs [aria-selected="true"] {
         background-color: #FFCC00 !important; 
         color: #000000 !important;
-        border-bottom: 3px solid #000000;
+        font-weight: bold;
     }
 
-    /* Sidebar / Sidebar Text */
-    section[data-testid="stSidebar"] {
+    /* Standardize Metric spacing */
+    [data-testid="stMetric"] {
         background-color: #ffffff;
-    }
-
-    /* Metric Styling */
-    [data-testid="stMetricValue"] {
-        color: #111;
-        font-weight: 700;
+        padding: 15px;
+        border-radius: 8px;
+        border: 1px solid #e6e9ef;
     }
     </style>
     """, unsafe_allow_html=True)
