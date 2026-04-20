@@ -604,6 +604,7 @@ with tab4:
     m1.metric("OOH Daily Lift", f"{total_ooh:,.0f}")
     m2.metric("Rain Friction/mm", f"{new_rain:,.0f}")
     m3.metric("Click Multiplier", f"{new_clicks:.2f}")
+
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
@@ -623,7 +624,6 @@ with tab5:
         df_vault['entry_date'] = pd.to_datetime(df_vault['entry_date'])
         
         # --- DYNAMIC COLUMN NORMALIZATION ---
-        # Updated to match: ad_clicks, ad_impressions, social_engagements
         col_map = {
             'ad_impressions': ['ad_impressions', 'Impressions', 'social_impressions'],
             'ad_clicks': ['ad_clicks', 'Clicks'],
@@ -643,34 +643,43 @@ with tab5:
         df_vault['day_name'] = df_vault['entry_date'].dt.day_name()
         heartbeats = df_vault.groupby('day_name')['actual_traffic'].mean().to_dict()
         
-        # Pull weights from Tab 4 settings
+        # --- OOH & DIGITAL WEIGHTS ---
         w_clicks = st.session_state.coeffs.get('Clicks', 0.02)
-        w_social = st.session_state.coeffs.get('Social_Imp', 0.0002)
+        w_social = st.session_state.coeffs.get('Impressions', 0.0002)
         
-        # Calculate Digital Lift (How much of your traffic is marketing-driven?)
+        # Split OOH logic
+        c_static = st.session_state.coeffs.get('Static_Weight', 50.0)
+        n_static = st.session_state.coeffs.get('Static_Count', 2)
+        c_dig_ooh = st.session_state.coeffs.get('Digital_OOH_Weight', 10.0)
+        n_dig_ooh = st.session_state.coeffs.get('Digital_OOH_Count', 4)
+        total_ooh_lift = (c_static * n_static) + (c_dig_ooh * n_dig_ooh)
+        
+        # Calculate Pure Digital Lift
         total_traffic = df_vault['actual_traffic'].sum()
         marketing_impact = (df_vault['ad_clicks'].sum() * w_clicks) + \
                            (df_vault['ad_impressions'].sum() * w_social)
         digital_lift_pct = (marketing_impact / total_traffic) * 100 if total_traffic > 0 else 0
 
-        # AI Predictability
+        # AI Predictability (Now accounts for OOH baseline shift)
         df_vault['expected'] = df_vault.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
                                             (x['ad_clicks'] * w_clicks) + 
-                                            (x['ad_impressions'] * w_social), axis=1)
+                                            (x['ad_impressions'] * w_social) +
+                                            total_ooh_lift, axis=1)
         
         import numpy as np
         mape = (np.abs(df_vault['actual_traffic'] - df_vault['expected']) / df_vault['actual_traffic']).replace([np.inf, -np.inf], np.nan).dropna().mean()
-        predictability_score = (1 - mape) * 100 if not np.isnan(mape) else 85.0 # Default fallback
+        predictability_score = (1 - mape) * 100 if not np.isnan(mape) else 85.0
 
         vault_metrics = {
             "heartbeats": heartbeats,
             "digital_lift": f"{digital_lift_pct:.1f}%",
+            "ooh_lift": f"{total_ooh_lift:.0f} guests/day",
             "predictability": f"{predictability_score:.1f}%",
             "avg_spend": f"${df_vault['actual_coin_in'].mean():,.2f}"
         }
 
     # 2. CHAT INPUT
-    prompt = st.chat_input("Ask about your Digital Lift, weekend results, or how to use Tab 3...")
+    prompt = st.chat_input("Ask about Digital Lift, Billboard ROI, or weekend predictions...")
 
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -678,36 +687,33 @@ with tab5:
         try:
             import google.generativeai as genai
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            # FIXED: Changed model to 2.5-flash
-            model = genai.GenerativeModel('gemini-2.5-flash')
+            model = genai.GenerativeModel('gemini-2.0-flash') # Using the latest flash model
             
             history_payload = []
             for m in st.session_state.messages[:-1]:
                 role = "model" if m["role"] == "assistant" else "user"
                 history_payload.append({"role": role, "parts": [m["content"]]})
             
-            # THE FORENSIC BRAIN CONTEXT
+            # THE FORENSIC BRAIN CONTEXT (Now with OOH Knowledge)
             sys_context = f"""
             SYSTEM ROLE: Chief Strategy Officer at Hard Rock Ottawa. 
             TONE: Professional, Data-Driven, Strategic.
 
             LIVE KPI VAULT:
-            - AI Predictability (Model Accuracy): {vault_metrics.get('predictability', 'N/A')}
-            - Digital Lift (Marketing Impact): {vault_metrics.get('digital_lift', 'N/A')}
+            - AI Predictability: {vault_metrics.get('predictability', 'N/A')}
+            - Pure Digital Lift (Ads): {vault_metrics.get('digital_lift', 'N/A')}
+            - OOH Baseline Lift (Billboards): {vault_metrics.get('ooh_lift', 'N/A')}
             - Avg. Property Spend: {vault_metrics.get('avg_spend', 'N/A')}
             - Baseline DOW Heartbeats: {vault_metrics.get('heartbeats', {})}
 
-            PRODUCT GUIDE:
-            - Tab 1: Executive Overview (The Big Picture)
-            - Tab 2: Ledger Management (Where you enter Friday-Sunday data)
-            - Tab 3: Property Analytics (Trend charts & Correlations)
-            - Tab 4: Engine Control (Calibration of multipliers)
-            - Tab 5: This Consultant Tab
+            CAMPAIGN CONTEXT:
+            - You are running the 'Your Turn to Hit' campaign.
+            - You have a mix of Static (24/7) and Digital (Shared Loop) billboards.
+            - OOH is treated as an 'Inertia Lifter' that raises the property floor.
 
             STRATEGY RULE: 
-            If Predictability is < 80%, suggest the user check their multipliers in Tab 4 or check for missed Promos in Tab 2.
-            
-            Always end with one sharp strategic question.
+            If Predictability is < 80%, suggest checking if the OOH Weights or Digital Multipliers in Tab 4 need calibration.
+            Always end with one sharp strategic question regarding revenue or attribution.
             """
 
             chat = model.start_chat(history=history_payload)
@@ -719,7 +725,7 @@ with tab5:
         except Exception as e:
             st.error(f"Consultation Error: {e}")
 
-    # 3. DISPLAY FEED (Reversed for modern chat feel)
+    # 3. DISPLAY FEED
     for message in reversed(st.session_state.messages):
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
@@ -727,6 +733,7 @@ with tab5:
     if st.button("🗑️ Reset Forensic Session", key="reset_chat_t5"):
         st.session_state.messages = []
         st.rerun()
+
 # --- TAB 6: MASTER REPORT (The Kitchen Sink + Power Metrics) ---
 with tab6:
     st.markdown("""
