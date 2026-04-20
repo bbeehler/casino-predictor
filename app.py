@@ -372,64 +372,64 @@ with tab2:
                 except Exception as e:
                     st.error(f"Upload failed: {e}")
 
-   # --- RECENT LEDGER HISTORY (Defensive Version) ---
+   # --- RECENT LEDGER HISTORY & INLINE EDITING ---
     st.divider()
-    st.write("### 📜 Recent Ledger Entries")
+    st.write("### 📜 Ledger Editor")
+    st.info("💡 **Tip:** Double-click any cell to edit. Click 'Confirm Changes' below the table to sync with the Vault.")
     
     if ledger_data:
         df_history = pd.DataFrame(ledger_data)
         
-        # 1. Clean up dates
+        # 1. Clean up dates and sort
         if 'entry_date' in df_history.columns:
             df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
             df_history = df_history.sort_values(by='entry_date', ascending=False)
         
-        # 2. Defensive Column Mapping
-        # This prevents the KeyError by only picking columns that exist in your DB
-        potential_cols = {
-            'entry_date': 'Date',
-            'actual_traffic': 'Traffic',
-            'Traffic': 'Traffic',
-            'actual_coin_in': 'Coin-In',
-            'Revenue': 'Coin-In',
-            'ad_clicks': 'Clicks',
-            'Clicks': 'Clicks',
-            'social_impressions': 'Impressions',
-            'Impressions': 'Impressions'
-        }
-        
-        # Find which of our target columns actually exist in the dataframe
-        existing_cols = [col for col in potential_cols.keys() if col in df_history.columns]
-        
-        if existing_cols:
-            # Create a clean display version
-            df_display = df_history[existing_cols].copy()
-            
-            # Optional: Rename for the UI to look cleaner
-            # df_display.columns = [potential_cols[c] for c in df_display.columns]
+        # 2. The Data Editor (Inline Editing)
+        # We define which columns are actually editable (we lock 'id' and 'entry_date')
+        edited_df = st.data_editor(
+            df_history,
+            column_config={
+                "id": None, # Hide the ID from the user
+                "entry_date": st.column_config.DateColumn("Date", disabled=True),
+                "actual_traffic": st.column_config.NumberColumn("Traffic", min_value=0),
+                "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)", min_value=0, format="$%.2f"),
+                "ad_clicks": st.column_config.NumberColumn("Clicks", min_value=0),
+                "social_impressions": st.column_config.NumberColumn("Impressions", min_value=0),
+            },
+            use_container_width=True,
+            hide_index=True,
+            num_rows="dynamic" # Allows you to add/delete rows directly in the table
+        )
 
-            st.dataframe(
-                df_display.head(15),
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.warning("Ledger columns not recognized. Check your Supabase schema.")
+        # 3. Sync Changes Button
+        if st.button("✅ Confirm & Sync Changes to Vault", use_container_width=True):
+            try:
+                # We iterate through the edited dataframe and update Supabase
+                # In a high-volume app, we'd batch this, but for a daily ledger, this is safe.
+                for index, row in edited_df.iterrows():
+                    # Standardize the row back to a dictionary
+                    update_data = row.to_dict()
+                    # Convert Timestamp back to string for Supabase
+                    update_data['entry_date'] = update_data['entry_date'].strftime('%Y-%m-%d')
+                    
+                    # Update the record where the ID matches
+                    supabase.table("ledger").update(update_data).eq("id", update_data['id']).execute()
+                
+                st.success("Vault Updated Successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Sync failed: {e}")
         
         # --- DANGER ZONE ---
         with st.expander("⚠️ Danger Zone"):
-            if st.button("🗑️ Wipe Ledger History"):
-                # Use a text input for a simple "password" to prevent accidental clicks
-                confirm = st.text_input("Type 'DELETE' to confirm")
-                if confirm == "DELETE":
-                    try:
-                        supabase.table("ledger").delete().neq("id", 0).execute()
-                        st.success("Ledger wiped. Refreshing...")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Wipe failed: {e}")
+            st.write("Wiping the ledger is permanent.")
+            confirm_wipe = st.text_input("Type 'DELETE' to wipe all records")
+            if st.button("🔥 Execute Wipe") and confirm_wipe == "DELETE":
+                supabase.table("ledger").delete().neq("id", 0).execute()
+                st.rerun()
     else:
-        st.info("No data found in the Vault. Use the form above to add your first record.")
+        st.info("No records found in the Vault.")
 
 # --- TAB 3: STRATEGY & ROI ---
 with tab3:
