@@ -130,32 +130,56 @@ def fetch_ledger_data():
 
 ledger_data = fetch_ledger_data()
 
-# 7. MODERN UI STYLING (Bento Box CSS)
+# 7. MODERN UI STYLING (Professional Light Theme)
 st.markdown("""
     <style>
-    .stApp { background-color: #0e1117; color: #ffffff; }
+    /* Main Background - Clean Professional Grey */
+    .stApp {
+        background-color: #f4f7f9;
+        color: #111111;
+    }
     
-    /* Bento Box Effect */
+    /* Bento Box / Card Effect for Tab Content */
     div[data-testid="stVerticalBlock"] > div {
-        border: 1px solid #333;
+        border: 1px solid #e6e9ef;
         border-radius: 12px;
-        padding: 20px;
-        background-color: #161b22;
-        margin-bottom: 15px;
+        padding: 25px;
+        background-color: #ffffff;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
     }
 
-    /* Tab Styling */
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #21262d;
-        border-radius: 8px 8px 0 0;
-        padding: 10px 20px;
-        color: #8b949e;
+    /* Tab Navigation Styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+        background-color: transparent;
     }
+    
+    .stTabs [data-baseweb="tab"] {
+        background-color: #ffffff;
+        border: 1px solid #e6e9ef;
+        border-radius: 8px 8px 0px 0px;
+        padding: 12px 24px;
+        font-weight: 600;
+        color: #666;
+    }
+
+    /* Active Tab - Hard Rock Gold */
     .stTabs [aria-selected="true"] {
-        background-color: #FFCC00 !important;
+        background-color: #FFCC00 !important; 
         color: #000000 !important;
-        font-weight: bold;
+        border-bottom: 3px solid #000000;
+    }
+
+    /* Sidebar / Sidebar Text */
+    section[data-testid="stSidebar"] {
+        background-color: #ffffff;
+    }
+
+    /* Metric Styling */
+    [data-testid="stMetricValue"] {
+        color: #111;
+        font-weight: 700;
     }
     </style>
     """, unsafe_allow_html=True)
