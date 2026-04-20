@@ -319,7 +319,7 @@ with tab2:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">📑 Ledger Management</h2>
-            <p style="color: #888; margin: 0;">Update property performance. Click 'Sync Results' to finalize weekend backfills or partial daily data.</p>
+            <p style="color: #888; margin: 0;">Update property performance. Data entered here is isolated to this tab.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -327,8 +327,7 @@ with tab2:
 
     with col_a:
         st.write("### ✍️ Manual Results Entry")
-        # Removed clear_on_submit to ensure you see a confirmation before data clears
-        with st.form("manual_entry"):
+        with st.form("manual_entry_v2"):
             entry_date = st.date_input("Select Date", datetime.date.today())
             
             col_traffic, col_coin = st.columns(2)
@@ -347,14 +346,11 @@ with tab2:
             with col_s:
                 social = st.number_input("Social Engagements", min_value=0)
             
-            # MANDATORY: Click this button to save. "Enter" will not trigger the DB sync.
             submit_button = st.form_submit_button("💾 Sync Results to Vault", use_container_width=True)
             
             if submit_button:
-                with st.spinner("Connecting to Vault..."):
+                with st.spinner("Connecting..."):
                     date_str = entry_date.isoformat()
-                    
-                    # 1. Build payload (Only include non-zero values to preserve existing data)
                     new_row = {"entry_date": date_str}
                     if traffic > 0: new_row["actual_traffic"] = traffic
                     if coin_in > 0: new_row["actual_coin_in"] = coin_in
@@ -363,21 +359,15 @@ with tab2:
                     if social > 0: new_row["social_engagements"] = social
 
                     try:
-                        # 2. Check if date exists (Since 'id' is missing, we use entry_date as key)
                         check = supabase.table("ledger").select("entry_date").eq("entry_date", date_str).execute()
-                        
                         if check.data:
-                            # UPDATE: Merges data into existing record
                             supabase.table("ledger").update(new_row).eq("entry_date", date_str).execute()
-                            st.success(f"✅ Record for {date_str} updated.")
+                            st.success(f"✅ Merged data for {date_str}.")
                         else:
-                            # INSERT: Creates new record (Perfect for Saturday/Sunday backfills)
                             supabase.table("ledger").insert([new_row]).execute()
-                            st.success(f"✨ New record created for {date_str}.")
-                        
-                        # Brief pause so you can actually see the green success box
+                            st.success(f"✨ Created record for {date_str}.")
                         import time
-                        time.sleep(1.2)
+                        time.sleep(1)
                         st.rerun()
                     except Exception as e:
                         st.error(f"Sync failed: {e}")
@@ -385,42 +375,28 @@ with tab2:
     with col_b:
         st.write("### 📤 Bulk CSV Upload")
         uploaded_file = st.file_uploader("Upload Ledger CSV", type="csv")
-        
         if uploaded_file is not None:
             df_upload = pd.read_csv(uploaded_file)
-            st.dataframe(df_upload.head(3), use_container_width=True)
-            
-            if st.button("🚀 Push to Vault", use_container_width=True):
+            if st.button("🚀 Push to Vault", use_container_width=True, key="btn_bulk_push"):
                 try:
-                    df_upload.rename(columns={
-                        'clicks': 'ad_clicks',
-                        'impressions': 'ad_impressions',
-                        'social': 'social_engagements',
-                        'traffic': 'actual_traffic',
-                        'revenue': 'actual_coin_in'
-                    }, inplace=True)
-                    
+                    df_upload.rename(columns={'clicks': 'ad_clicks', 'impressions': 'ad_impressions', 'social': 'social_engagements'}, inplace=True)
                     data_dict = df_upload.to_dict(orient='records')
-                    # Upsert handles mixed new/existing dates in the CSV
                     supabase.table("ledger").upsert(data_dict, on_conflict="entry_date").execute()
                     st.success("Bulk sync complete!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Upload failed: {e}")
 
-    # --- 3. THE LEDGER EDITOR (DATE-KEYED) ---
+    # --- THE LEDGER EDITOR (MUST BE INDENTED INSIDE TAB 2) ---
     st.divider()
     st.write("### 📜 Ledger Editor")
-    st.caption("Double-click cells to correct values. Changes are synced via Date.")
     
     if ledger_data:
         df_history = pd.DataFrame(ledger_data)
-        
         if 'entry_date' in df_history.columns:
             df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
             df_history = df_history.sort_values(by='entry_date', ascending=False)
         
-        # Primary Key (Date) is disabled for editing to maintain integrity
         editor_config = {
             "entry_date": st.column_config.DateColumn("Date", disabled=True),
             "actual_traffic": st.column_config.NumberColumn("Traffic"),
@@ -430,92 +406,29 @@ with tab2:
             "social_engagements": st.column_config.NumberColumn("Social Engagements")
         }
 
-        # Hide internal DB columns if they exist (like id)
-        for col in df_history.columns:
-            if col not in editor_config:
-                editor_config[col] = None
-
+        # Unique key for this tab's editor
         edited_df = st.data_editor(
             df_history, 
             column_config=editor_config, 
             use_container_width=True, 
-            hide_index=True
+            hide_index=True,
+            key="ledger_editor_v1" 
         )
 
-        if st.button("✅ Confirm & Sync Edits", key="sync_ledger"):
+        # IMPORTANT: This button is INDENTED so it stays in Tab 2
+        if st.button("✅ Confirm & Sync Edits", key="btn_sync_ledger_v1"):
             with st.spinner("Updating records..."):
                 try:
                     for _, row in edited_df.iterrows():
                         up_data = row.to_dict()
-                        # Formatting Date for DB match
-                        date_key = pd.to_datetime(up_data['entry_date']).strftime('%Y-%m-%d')
-                        up_data['entry_date'] = date_key
-                        
-                        # Clean the payload of any null IDs or extra columns
+                        d_key = pd.to_datetime(up_data['entry_date']).strftime('%Y-%m-%d')
+                        up_data['entry_date'] = d_key
                         if 'id' in up_data: del up_data['id']
-                        
-                        # Syncing using entry_date as the unique anchor
-                        supabase.table("ledger").update(up_data).eq("entry_date", date_key).execute()
-                    
+                        supabase.table("ledger").update(up_data).eq("entry_date", d_key).execute()
                     st.success("Vault Updated!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Sync failed: {e}")
-
-    # --- 3. THE LEDGER EDITOR (DATE-KEYED) ---
-    st.divider()
-    st.write("### 📜 Ledger Editor")
-    st.caption("Double-click cells to correct weekend numbers. Changes are synced via Date.")
-    
-    if ledger_data:
-        df_history = pd.DataFrame(ledger_data)
-        
-        if 'entry_date' in df_history.columns:
-            df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
-            df_history = df_history.sort_values(by='entry_date', ascending=False)
-        
-        # Configuration - We disable 'entry_date' editing as it is our Primary Key
-        editor_config = {
-            "entry_date": st.column_config.DateColumn("Date", disabled=True),
-            "actual_traffic": st.column_config.NumberColumn("Traffic"),
-            "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)", format="$%.2f"),
-            "ad_clicks": st.column_config.NumberColumn("Ad Clicks"),
-            "ad_impressions": st.column_config.NumberColumn("Ad Impressions"),
-            "social_engagements": st.column_config.NumberColumn("Social Engagements")
-        }
-
-        # Display any other columns (like id) as hidden if they exist
-        for col in df_history.columns:
-            if col not in editor_config:
-                editor_config[col] = None
-
-        edited_df = st.data_editor(
-            df_history,
-            key="ledger_editor_v1",
-            column_config=editor_config, 
-            use_container_width=True, 
-            hide_index=True
-        )
-
-if st.button("✅ Confirm & Sync Edits", key="sync_ledger_primary"):
-            try:
-                for _, row in edited_df.iterrows():
-                    up_data = row.to_dict()
-                    
-                    # Formatting Date for DB match
-                    date_key = pd.to_datetime(up_data['entry_date']).strftime('%Y-%m-%d')
-                    up_data['entry_date'] = date_key
-                    
-                    # Clean the payload of any null IDs that might cause errors
-                    if 'id' in up_data: del up_data['id']
-                    
-                    # Perform the update using entry_date as the unique anchor
-                    supabase.table("ledger").update(up_data).eq("entry_date", date_key).execute()
-                
-                st.success("Vault Updated!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Sync failed: {e}")
 
 # --- TAB 3: PROPERTY ANALYTICS ---
 with tab3:
