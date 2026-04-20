@@ -323,24 +323,6 @@ with tab2:
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. DYNAMIC COLUMN DETECTION (Prevents PGRST204 Errors)
-    try:
-        # Check the first row of the ledger to see what names Supabase is using
-        db_check = supabase.table("ledger").select("*").limit(1).execute()
-        db_cols = db_check.data[0].keys() if db_check.data else []
-    except:
-        db_cols = []
-
-    # Helper to find the correct column name variation
-    def detect_col(options, default):
-        return next((c for c in options if c in db_cols), default)
-
-    # Determine which names the database actually uses
-    target_imp = detect_col(["social_impressions", "Impressions", "impressions", "social_imp"], "social_impressions")
-    target_clicks = detect_col(["ad_clicks", "Clicks", "clicks", "ad_click"], "ad_clicks")
-    target_traffic = detect_col(["actual_traffic", "Traffic", "traffic"], "actual_traffic")
-    target_coin = detect_col(["actual_coin_in", "Revenue", "Coin_In", "actual_coin"], "actual_coin_in")
-
     col_a, col_b = st.columns([1, 1])
 
     with col_a:
@@ -351,26 +333,27 @@ with tab2:
             coin_in = st.number_input("Total Coin-In ($)", min_value=0.0, format="%.2f")
             
             st.divider()
-            st.write("**Digital Attribution**")
+            st.write("**Marketing Metrics**")
             clicks = st.number_input("Ad Clicks", min_value=0)
-            impressions = st.number_input("Social Impressions", min_value=0)
+            impressions = st.number_input("Ad Impressions", min_value=0)
+            social = st.number_input("Social Engagements", min_value=0)
             
             if st.form_submit_button("💾 Save to Vault"):
-                # Construct the row using detected DB column names
+                # MATCHING YOUR EXACT SUPABASE SCHEMA:
                 new_row = {
                     "entry_date": entry_date.isoformat(),
-                    target_traffic: traffic,
-                    target_coin: coin_in,
-                    target_clicks: clicks,
-                    target_imp: impressions 
+                    "actual_traffic": traffic,
+                    "actual_coin_in": coin_in,
+                    "ad-clicks": clicks,           # FIXED: Uses the dash
+                    "ad_impressions": impressions, # FIXED: Specific name
+                    "social_engagements": social   # FIXED: Specific name
                 }
                 try:
                     supabase.table("ledger").insert([new_row]).execute()
                     st.success(f"Success! Data for {entry_date} saved.")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Error: {e}")
-                    st.info(f"DB Columns Detected: {list(db_cols)}")
+                    st.error(f"Sync failed. Check your column names: {e}")
 
     with col_b:
         st.write("### 📤 Bulk CSV Upload")
@@ -378,29 +361,23 @@ with tab2:
         
         if uploaded_file is not None:
             df_upload = pd.read_csv(uploaded_file)
-            st.write("Preview:")
-            st.dataframe(df_upload.head(3), use_container_width=True)
-            
             if st.button("🚀 Push to Vault", use_container_width=True):
                 try:
-                    # Rename CSV columns to match DB columns
+                    # Rename CSV columns to match the specific DB naming
                     df_upload.rename(columns={
-                        'social_impressions': target_imp, 
-                        'impressions': target_imp,
-                        'Clicks': target_clicks,
-                        'ad_clicks': target_clicks,
-                        'Traffic': target_traffic,
-                        'Revenue': target_coin
+                        'clicks': 'ad-clicks',
+                        'impressions': 'ad_impressions',
+                        'social': 'social_engagements'
                     }, inplace=True)
                     
                     data_dict = df_upload.to_dict(orient='records')
                     supabase.table("ledger").insert(data_dict).execute()
-                    st.success(f"Bulk upload of {len(data_dict)} rows complete!")
+                    st.success("Bulk upload complete!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Upload failed: {e}")
 
-    # --- 3. THE LEDGER EDITOR ---
+    # --- LEDGER EDITOR ---
     st.divider()
     st.write("### 📜 Ledger Editor")
     
@@ -411,22 +388,18 @@ with tab2:
             df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
             df_history = df_history.sort_values(by='entry_date', ascending=False)
         
-        # Configure the Editor columns based on detected names
+        # Display Mapping
         editor_config = {
             "id": None,
             "entry_date": st.column_config.DateColumn("Date", disabled=True),
-            target_traffic: st.column_config.NumberColumn("Traffic"),
-            target_coin: st.column_config.NumberColumn("Coin-In", format="$%.2f"),
-            target_clicks: st.column_config.NumberColumn("Clicks"),
-            target_imp: st.column_config.NumberColumn("Impressions")
+            "actual_traffic": st.column_config.NumberColumn("Traffic"),
+            "actual_coin_in": st.column_config.NumberColumn("Coin-In", format="$%.2f"),
+            "ad-clicks": st.column_config.NumberColumn("Ad Clicks"),
+            "ad_impressions": st.column_config.NumberColumn("Ad Impressions"),
+            "social_engagements": st.column_config.NumberColumn("Social Engagements")
         }
 
-        edited_df = st.data_editor(
-            df_history,
-            column_config=editor_config,
-            use_container_width=True,
-            hide_index=True
-        )
+        edited_df = st.data_editor(df_history, column_config=editor_config, use_container_width=True, hide_index=True)
 
         if st.button("✅ Confirm & Sync Changes"):
             try:
@@ -438,8 +411,6 @@ with tab2:
                 st.rerun()
             except Exception as e:
                 st.error(f"Sync failed: {e}")
-    else:
-        st.info("No records found in the Vault.")
 
 # --- TAB 3: STRATEGY & ROI ---
 with tab3:
