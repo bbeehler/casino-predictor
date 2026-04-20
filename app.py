@@ -729,100 +729,75 @@ with tab5:
         st.session_state.messages = []
         st.rerun()
 
-# --- TAB 6: MASTER REPORT (The Kitchen Sink + Power Metrics) ---
+# --- TAB 6: MASTER REPORT (Connected Logic) ---
 with tab6:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">📋 Master Forensic Report</h2>
-            <p style="color: #888; margin: 0;">Comprehensive property performance audit: Revenue, Traffic, and Attribution.</p>
+            <p style="color: #888; margin: 0;">Live attribution audit synced with Engine Calibration.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    if not ledger_data:
-        st.warning("Vault is empty. No data available for reporting.")
-        st.stop()
-
-    # 1. RUN ENGINE & DATA PREP
+    # 1. RE-SYNC DATA (The Fix)
+    # This ensures Tab 6 uses the EXACT same math as Tab 1
     metrics = get_forensic_metrics(ledger_data, st.session_state.coeffs)
     df_rep = pd.DataFrame(ledger_data).copy()
     df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
     df_rep = df_rep.sort_values('entry_date')
 
-    # 2. THE POWER METRICS (Total Property Impact)
+    # 2. EXTRACT LIVE WEIGHTS
+    ooh_daily = metrics.get('ooh_total_daily', 0)
+    c_clicks = st.session_state.coeffs.get('Clicks', 0.02)
+    c_social = st.session_state.coeffs.get('Impressions', 0.0002)
+    c_snow = st.session_state.coeffs.get('Snow_cm', -45.0)
+    c_rain = st.session_state.coeffs.get('Rain_mm', -12.0)
     avg_spend = st.session_state.coeffs.get('Avg_Coin_In', 112.50)
+
+    # 3. APPLY LIVE MATH TO DATASET
+    # This is what makes the totals change when you move sliders!
+    df_rep['day_name'] = df_rep['entry_date'].dt.day_name()
+    df_rep['Historical Baseline'] = df_rep['day_name'].map(metrics.get('heartbeats', {}))
+    df_rep['OOH Inertia'] = ooh_daily
+    df_rep['Digital Impact'] = (df_rep.get('ad_clicks', 0) * c_clicks) + (df_rep.get('ad_impressions', 0) * c_social)
+    df_rep['Weather Friction'] = (df_rep.get('snow_cm', 0) * c_snow) + (df_rep.get('rain_mm', 0) * c_rain)
+
+    # 4. POWER METRICS (These will now move with your sliders)
     total_traffic = df_rep['actual_traffic'].sum()
     total_revenue = total_traffic * avg_spend
     
-    st.write("### 💎 Property Power Metrics")
+    # Calculate attributed traffic (The 'Marketing' slice)
+    # We subtract friction to show net impact
+    total_mkt_guests = df_rep['Digital Impact'].sum() + (ooh_daily * len(df_rep))
+    mkt_revenue = total_mkt_guests * avg_spend
+
     p1, p2, p3 = st.columns(3)
-    with p1:
-        st.metric("Total Property Traffic", f"{total_traffic:,.0f} Guests", delta=f"{len(df_rep)} Days Tracked")
-    with p2:
-        st.metric("Total Property Revenue", f"${total_revenue:,.2f}", help="Calculated based on calibrated Avg Spend per head.")
-    with p3:
-        st.metric("AI Model Predictability", metrics['predictability'], help="Level of confidence in the attribution math.")
+    p1.metric("Total Property Traffic", f"{total_traffic:,.0f}")
+    p2.metric("Total Property Revenue", f"${total_revenue:,.2f}")
+    p3.metric("Marketing Revenue Impact", f"${mkt_revenue:,.2f}")
 
     st.divider()
 
-    # 3. ATTRIBUTION OVERVIEW (Digital vs OOH)
-    st.write("### 🧬 The Multi-Touch Attribution Stack")
-    
-    # Calculate the forensic layers
-    ooh_daily = metrics.get('ooh_total_daily', 0)
-    heartbeats = metrics.get('heartbeats', {})
-    c_clicks = st.session_state.coeffs.get('Clicks', 0.02)
-    c_social = st.session_state.coeffs.get('Impressions', 0.0002)
-    
-    df_rep['day_name'] = df_rep['entry_date'].dt.day_name()
-    df_rep['Historical Baseline'] = df_rep['day_name'].map(heartbeats)
-    df_rep['OOH Inertia'] = ooh_daily
-    df_rep['Digital Impact'] = (df_rep.get('ad_clicks', 0) * c_clicks) + (df_rep.get('ad_impressions', 0) * c_social)
-    
-    # Visual Stacked Area Chart
-    chart_data = df_rep.set_index('entry_date')[['Historical Baseline', 'OOH Inertia', 'Digital Impact']]
+    # 5. THE LIVE CHART
+    st.write("### 🧬 Live Attribution Stack")
+    # We include 'Weather Friction' here so you can see the "negative" pull on the chart
+    chart_data = df_rep.set_index('entry_date')[['Historical Baseline', 'OOH Inertia', 'Digital Impact', 'Weather Friction']]
     st.area_chart(chart_data)
-    st.caption("Visual breakdown of property traffic: Baseline Demand, Billboard Pressure, and Digital Marketing Spikes.")
 
-    # 4. REVENUE & MARKETING ROI AUDIT
-    st.write("### 💰 Financial Forensic Audit")
-    
-    total_marketing_guests = df_rep['Digital Impact'].sum() + (ooh_daily * len(df_rep))
-    marketing_revenue = total_marketing_guests * avg_spend
-    
+    # 6. REVENUE AUDIT SUMMARY
+    st.write("### 💰 Financial Audit Summary")
     f1, f2 = st.columns(2)
     with f1:
-        st.write("#### Guest Volume Breakdown")
-        st.write(f"* **Historical Baseline Guests:** {df_rep['Historical Baseline'].sum():,.0f}")
-        st.write(f"* **Attributed OOH Guests:** {ooh_daily * len(df_rep):,.0f}")
-        st.write(f"* **Attributed Digital Guests:** {df_rep['Digital Impact'].sum():,.0f}")
-        st.write(f"**Total Marketing-Driven Traffic:** {total_marketing_guests:,.0f}")
+        st.write("**Volume Contribution**")
+        st.write(f"* Baseline: {df_rep['Historical Baseline'].sum():,.0f}")
+        st.write(f"* OOH: {ooh_daily * len(df_rep):,.0f}")
+        st.write(f"* Digital: {df_rep['Digital_Impact'].sum():,.0f}")
+        st.write(f"* Weather Penalty: {df_rep['Weather Friction'].sum():,.0f}")
     
     with f2:
-        st.write("#### Revenue Impact Breakdown")
-        st.write(f"* **Organic Base Revenue:** ${(df_rep['Historical Baseline'].sum() * avg_spend):,.2f}")
-        st.success(f"**Marketing-Driven Revenue: ${marketing_revenue:,.2f}**")
-        st.write(f"---")
-        # Pure Marketing ROI Percentage of total
-        mkt_share = (marketing_revenue / total_revenue * 100) if total_revenue > 0 else 0
-        st.write(f"**Marketing Contribution to Total Revenue:** {mkt_share:.1f}%")
-
-    # 5. THE AUDIT TRAIL
-    st.divider()
-    with st.expander("🔎 View Full Forensic Ledger (Audit Trail)"):
-        # Format dates for cleaner viewing in the table
-        df_display = df_rep.copy()
-        df_display['entry_date'] = df_display['entry_date'].dt.strftime('%Y-%m-%d')
-        st.dataframe(df_display[['entry_date', 'actual_traffic', 'Historical Baseline', 'OOH Inertia', 'Digital Impact']], use_container_width=True)
-    
-    # 6. DOWNLOAD FOR EXECUTIVE TEAM
-    csv = df_rep.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Download Full Report for Executive Review",
-        data=csv,
-        file_name=f'HR_Ottawa_Master_Forensic_{pd.Timestamp.now().strftime("%Y-%m-%d")}.csv',
-        mime='text/csv',
-        use_container_width=True
-    )
+        mkt_share = (mkt_revenue / total_revenue * 100) if total_revenue > 0 else 0
+        st.write("**Revenue Share**")
+        st.success(f"**Marketing Contribution: {mkt_share:.1f}%**")
+        st.write(f"This model is currently explaining **{metrics['predictability']}** of traffic.")
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
 with tab7:
     st.markdown("""
