@@ -9,20 +9,20 @@ import google.generativeai as genai
 from supabase import create_client
 
 # 1. PAGE CONFIG (Must be the very first Streamlit command)
-st.set_page_config(page_title="FloorCast", layout="wide")
+st.set_page_config(page_title="FloorCast | Hard Rock Ottawa", layout="wide", page_icon="🎰")
 
 # 2. THE UNIFIED FORENSIC ENGINE (Single Source of Truth)
 def get_forensic_metrics(df, coeffs):
     """Calculates KPIs once for the entire app. Safely handles missing columns."""
-    if df is None or df.empty:
+    if df is None or not df:
         return {"predictability": "0.0%", "digital_lift": "0.0%", "heartbeats": {}}
 
-    df = df.copy()
+    df = pd.DataFrame(df).copy()
     
     # Standardize and protect against missing columns
     cols_to_ensure = {
         'ad_clicks': ['ad_clicks', 'Clicks', 'Ad_Clicks'],
-        'social_impressions': ['social_impressions', 'Impressions', 'Social_Imp'],
+        'ad_impressions': ['ad_impressions', 'Impressions', 'Social_Imp'],
         'actual_traffic': ['actual_traffic', 'Traffic'],
         'actual_coin_in': ['actual_coin_in', 'Revenue', 'Coin_In']
     }
@@ -38,7 +38,7 @@ def get_forensic_metrics(df, coeffs):
     df['entry_date'] = pd.to_datetime(df['entry_date'])
     df['day_name'] = df['entry_date'].dt.day_name()
     
-    # Calculate DOW Heartbeats
+    # Calculate DOW Heartbeats (Historical Baseline)
     heartbeats = df.groupby('day_name')['actual_traffic'].mean().to_dict()
     
     # Weights from Engine
@@ -47,13 +47,13 @@ def get_forensic_metrics(df, coeffs):
     
     # Forensic 1: Digital Lift %
     total_traffic = df['actual_traffic'].sum()
-    marketing_impact = (df['ad_clicks'].sum() * c_clicks) + (df['social_impressions'].sum() * c_social)
+    marketing_impact = (df['ad_clicks'].sum() * c_clicks) + (df['ad_impressions'].sum() * c_social)
     lift_val = (marketing_impact / total_traffic * 100) if total_traffic > 0 else 0
 
     # Forensic 2: AI Predictability (1 - MAPE)
     df['expected'] = df.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
-                             (x['ad_clicks'] * c_clicks) + 
-                             (x['social_impressions'] * c_social), axis=1)
+                               (x['ad_clicks'] * c_clicks) + 
+                               (x['ad_impressions'] * c_social), axis=1)
 
     df_filtered = df[df['actual_traffic'] > 0].copy()
     if df_filtered.empty:
@@ -76,9 +76,10 @@ supabase = create_client(url, key)
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# 4. WEATHER & AUTH LOGIC
+# 4. WEATHER LOGIC (Environment Canada Sync)
 async def fetch_live_ec_data():
     try:
+        # Coordinates for Hard Rock Ottawa area
         ec = ECWeather(coordinates=(45.33, -75.71))
         await ec.update()
         return {"current": ec.conditions, "forecast": ec.daily_forecasts, "alerts": ec.alerts}
@@ -91,13 +92,13 @@ if 'weather_data' not in st.session_state:
 if 'user_authenticated' not in st.session_state:
     st.session_state.user_authenticated = False
 
-# 5. GATEKEEPER (Login UI)
+# 5. GATEKEEPER (Secure Login UI)
 if not st.session_state.user_authenticated:
-    st.markdown("<div style='text-align:center; padding:50px;'><h1 style='color:#FFCC00;'>🎰 FloorCast</h1><h3>Digital Lift & Predictor Login</h3></div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align:center; padding:50px;'><h1 style='color:#FFCC00;'>🎰 FloorCast</h1><h3>Hard Rock Ottawa | Strategic Engine</h3></div>", unsafe_allow_html=True)
     with st.container(border=True):
         email = st.text_input("Email")
         pw = st.text_input("Password", type="password")
-        if st.button("Login", use_container_width=True):
+        if st.button("Access Engine", use_container_width=True):
             try:
                 res = supabase.auth.sign_in_with_password({"email": email, "password": pw})
                 if res.user:
@@ -107,7 +108,7 @@ if not st.session_state.user_authenticated:
                 st.error("Invalid credentials.")
     st.stop()
 
-# 6. HYDRATE ENGINE WEIGHTS & DATA
+# 6. DATA HYDRATION (Pulling from Supabase)
 if 'coeffs' not in st.session_state:
     try:
         response = supabase.table("coefficients").select("*").eq("id", 1).execute()
@@ -118,9 +119,10 @@ if 'coeffs' not in st.session_state:
     except:
         st.session_state.coeffs = {"Intercept": 3250, "Avg_Coin_In": 112.50}
 
-@st.cache_data(ttl=600)
+# Fetching the Ledger (The source for the entire app)
 def fetch_ledger_data():
     try:
+        # We don't cache here to ensure Tab 2 updates immediately
         res = supabase.table("ledger").select("*").execute()
         return res.data if res.data else []
     except:
@@ -128,73 +130,49 @@ def fetch_ledger_data():
 
 ledger_data = fetch_ledger_data()
 
-# --- MODERN UI STYLING (The CSS) ---
+# 7. MODERN UI STYLING (Bento Box CSS)
 st.markdown("""
     <style>
-    /* Main Background - Clean Professional Grey */
-    .stApp {
-        background-color: #f4f7f9;
-    }
+    .stApp { background-color: #0e1117; color: #ffffff; }
     
-    /* Bento Box / Card Effect for Tab Content */
-    div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column;"] > div[data-testid="stVerticalBlock"] {
-        border: 1px solid #e6e9ef;
+    /* Bento Box Effect */
+    div[data-testid="stVerticalBlock"] > div {
+        border: 1px solid #333;
         border-radius: 12px;
-        padding: 25px;
-        background-color: #ffffff;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        margin-bottom: 20px;
+        padding: 20px;
+        background-color: #161b22;
+        margin-bottom: 15px;
     }
 
-    /* Tab Navigation Styling */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-        background-color: transparent;
-    }
-    
+    /* Tab Styling */
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
     .stTabs [data-baseweb="tab"] {
-        background-color: #ffffff;
-        border: 1px solid #e6e9ef;
-        border-radius: 8px 8px 0px 0px;
-        padding: 12px 24px;
-        font-weight: 600;
-        transition: all 0.3s ease;
+        background-color: #21262d;
+        border-radius: 8px 8px 0 0;
+        padding: 10px 20px;
+        color: #8b949e;
     }
-
-    /* Active Tab - Hard Rock Gold */
     .stTabs [aria-selected="true"] {
-        background-color: #FFCC00 !important; 
+        background-color: #FFCC00 !important;
         color: #000000 !important;
-        border-bottom: 3px solid #000000;
-    }
-
-    /* Metric Styling */
-    [data-testid="stMetricValue"] {
-        color: #111;
-        font-weight: 700;
+        font-weight: bold;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- HEADER & NAVIGATION LOGOUT ---
-header_col1, header_col2 = st.columns([4, 1])
-
-with header_col1:
+# 8. TOP NAVIGATION BAR
+h1, h2 = st.columns([4, 1])
+with h1:
     st.markdown("<h1 style='color: #FFCC00; margin:0;'>🎰 FloorCast</h1>", unsafe_allow_html=True)
-
-with header_col2:
-    # A small, clean logout button aligned to the right
+with h2:
     if st.button("🔓 Logout", use_container_width=True):
         supabase.auth.sign_out()
         st.session_state.user_authenticated = False
-        # Clear sensitive chat history on logout
-        if 'messages' in st.session_state:
-            st.session_state.messages = [] 
         st.rerun()
 
-st.divider() # Creates the visual 'NAV bar' line
+st.divider()
 
-# 8. MAIN NAVIGATION
+# 9. MAIN TAB NAVIGATION
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📈 Executive Overview", "📑 Ledger Management", "📊 Property Analytics", 
     "⚙️ Engine Control", "🧠 FloorCast Analyst", "📋 Master Report", "🧪 Forecast Sandbox"
@@ -319,116 +297,121 @@ with tab2:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">📑 Ledger Management</h2>
-            <p style="color: #888; margin: 0;">Update property performance. Data entered here is isolated to this tab.</p>
+            <p style="color: #888; margin: 0;">Update property performance. Newest entries will appear at the top of the editor below.</p>
         </div>
     """, unsafe_allow_html=True)
 
     col_a, col_b = st.columns([1, 1])
 
+    # --- SECTION A: MANUAL FORM ---
     with col_a:
         st.write("### ✍️ Manual Results Entry")
-        with st.form("manual_entry_v2"):
+        with st.form("manual_entry_v3"):
             entry_date = st.date_input("Select Date", datetime.date.today())
             
-            col_traffic, col_coin = st.columns(2)
-            with col_traffic:
-                traffic = st.number_input("Traffic (Headcount)", min_value=0)
-            with col_coin:
-                coin_in = st.number_input("Coin-In ($)", min_value=0.0, format="%.2f")
+            c1, c2 = st.columns(2)
+            with c1: traffic = st.number_input("Traffic (Headcount)", min_value=0)
+            with c2: coin_in = st.number_input("Coin-In ($)", min_value=0.0, format="%.2f")
             
             st.divider()
             st.write("**Marketing Metrics**")
-            col_c, col_i, col_s = st.columns(3)
-            with col_c:
-                clicks = st.number_input("Ad Clicks", min_value=0)
-            with col_i:
-                impressions = st.number_input("Ad Impressions", min_value=0)
-            with col_s:
-                social = st.number_input("Social Engagements", min_value=0)
+            m1, m2, m3 = st.columns(3)
+            with m1: clicks = st.number_input("Ad Clicks", min_value=0)
+            with m2: imps = st.number_input("Ad Impressions", min_value=0)
+            with m3: social = st.number_input("Social Engagements", min_value=0)
             
-            submit_button = st.form_submit_button("💾 Sync Results to Vault", use_container_width=True)
+            # This button is inside the form, so it's safe from duplicate ID errors
+            submit_form = st.form_submit_button("💾 Sync Results to Vault", use_container_width=True)
             
-            if submit_button:
-                with st.spinner("Connecting..."):
+            if submit_form:
+                with st.spinner("Writing to Vault..."):
                     date_str = entry_date.isoformat()
-                    new_row = {"entry_date": date_str}
-                    if traffic > 0: new_row["actual_traffic"] = traffic
-                    if coin_in > 0: new_row["actual_coin_in"] = coin_in
-                    if clicks > 0: new_row["ad_clicks"] = clicks
-                    if impressions > 0: new_row["ad_impressions"] = impressions
-                    if social > 0: new_row["social_engagements"] = social
-
+                    new_row = {
+                        "entry_date": date_str,
+                        "actual_traffic": traffic,
+                        "actual_coin_in": coin_in,
+                        "ad_clicks": clicks,
+                        "ad_impressions": imps,
+                        "social_engagements": social
+                    }
                     try:
-                        check = supabase.table("ledger").select("entry_date").eq("entry_date", date_str).execute()
-                        if check.data:
-                            supabase.table("ledger").update(new_row).eq("entry_date", date_str).execute()
-                            st.success(f"✅ Merged data for {date_str}.")
-                        else:
-                            supabase.table("ledger").insert([new_row]).execute()
-                            st.success(f"✨ Created record for {date_str}.")
+                        # UPSERT handles backfilling missed weekend dates or updating existing ones
+                        supabase.table("ledger").upsert(new_row, on_conflict="entry_date").execute()
+                        st.success(f"✅ Data for {date_str} is now in the Vault.")
+                        
+                        # FORCE REFRESH: This clears the cache and re-fetches the latest data
                         import time
                         time.sleep(1)
-                        st.rerun()
+                        st.rerun() 
                     except Exception as e:
                         st.error(f"Sync failed: {e}")
 
+    # --- SECTION B: BULK UPLOAD ---
     with col_b:
         st.write("### 📤 Bulk CSV Upload")
-        uploaded_file = st.file_uploader("Upload Ledger CSV", type="csv")
+        uploaded_file = st.file_uploader("Upload Ledger CSV", type="csv", key="csv_uploader_t2")
         if uploaded_file is not None:
             df_upload = pd.read_csv(uploaded_file)
-            if st.button("🚀 Push to Vault", use_container_width=True, key="btn_bulk_push"):
+            st.dataframe(df_upload.head(3), use_container_width=True)
+            
+            if st.button("🚀 Push CSV to Vault", use_container_width=True, key="btn_csv_push_t2"):
                 try:
-                    df_upload.rename(columns={'clicks': 'ad_clicks', 'impressions': 'ad_impressions', 'social': 'social_engagements'}, inplace=True)
                     data_dict = df_upload.to_dict(orient='records')
                     supabase.table("ledger").upsert(data_dict, on_conflict="entry_date").execute()
-                    st.success("Bulk sync complete!")
+                    st.success("Bulk upload complete!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Upload failed: {e}")
 
-    # --- THE LEDGER EDITOR (MUST BE INDENTED INSIDE TAB 2) ---
+    # --- SECTION C: THE LEDGER EDITOR (Indented correctly) ---
     st.divider()
     st.write("### 📜 Ledger Editor")
+    st.caption("Newest entries are forced to the top. Double-click cells to edit directly.")
     
     if ledger_data:
+        # 1. Convert to DataFrame
         df_history = pd.DataFrame(ledger_data)
+        
+        # 2. FORCE SORTING: This solves the "where is my data" problem
         if 'entry_date' in df_history.columns:
             df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
             df_history = df_history.sort_values(by='entry_date', ascending=False)
         
-        editor_config = {
-            "entry_date": st.column_config.DateColumn("Date", disabled=True),
-            "actual_traffic": st.column_config.NumberColumn("Traffic"),
-            "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)", format="$%.2f"),
-            "ad_clicks": st.column_config.NumberColumn("Ad Clicks"),
-            "ad_impressions": st.column_config.NumberColumn("Ad Impressions"),
-            "social_engagements": st.column_config.NumberColumn("Social Engagements")
-        }
-
-        # Unique key for this tab's editor
+        # 3. RENDER THE EDITOR
+        # key="ledger_editor_unique_t2" prevents the 'Duplicate ID' error
         edited_df = st.data_editor(
             df_history, 
-            column_config=editor_config, 
+            key="ledger_editor_unique_t2", 
             use_container_width=True, 
             hide_index=True,
-            key="ledger_editor_v1" 
+            column_config={
+                "entry_date": st.column_config.DateColumn("Date", disabled=True),
+                "actual_traffic": st.column_config.NumberColumn("Traffic", format="%d"),
+                "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)", format="$%.2f")
+            }
         )
 
-        # IMPORTANT: This button is INDENTED so it stays in Tab 2
-        if st.button("✅ Confirm & Sync Edits", key="btn_sync_ledger_v1"):
-            with st.spinner("Updating records..."):
+        # 4. SYNC BUTTON (Indented so it stays in Tab 2 only)
+        if st.button("✅ Confirm & Sync Edits", key="btn_sync_ledger_t2", use_container_width=True):
+            with st.spinner("Updating Vault records..."):
                 try:
                     for _, row in edited_df.iterrows():
                         up_data = row.to_dict()
+                        # Format date for Supabase match
                         d_key = pd.to_datetime(up_data['entry_date']).strftime('%Y-%m-%d')
                         up_data['entry_date'] = d_key
+                        
+                        # Clean payload
                         if 'id' in up_data: del up_data['id']
+                        
                         supabase.table("ledger").update(up_data).eq("entry_date", d_key).execute()
-                    st.success("Vault Updated!")
-                    st.rerun()
+                    
+                    st.success("Vault Successfully Updated!")
+                    st.rerun() # Refresh the view
                 except Exception as e:
-                    st.error(f"Sync failed: {e}")
+                    st.error(f"Manual sync failed: {e}")
+    else:
+        st.info("The Vault is currently empty. Use the form above to add your first entry.")
 
 # --- TAB 3: PROPERTY ANALYTICS ---
 with tab3:
