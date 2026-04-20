@@ -44,6 +44,12 @@ def get_forensic_metrics(df, coeffs):
     # Weights from Engine
     c_clicks = coeffs.get('Clicks', 0.02)
     c_social = coeffs.get('Social_Imp', 0.0002)
+
+    # --- NEW OOH CALCULATIONS ---
+    c_ooh = coeffs.get('OOH_Weight', 0.0)  # Daily guests per board
+    n_ooh = coeffs.get('OOH_Count', 0)     # Number of active boards
+    total_ooh_lift = c_ooh * n_ooh         # Total constant daily pressure
+    # ----------------------------
     
     # Forensic 1: Digital Lift %
     total_traffic = df['actual_traffic'].sum()
@@ -51,9 +57,11 @@ def get_forensic_metrics(df, coeffs):
     lift_val = (marketing_impact / total_traffic * 100) if total_traffic > 0 else 0
 
     # Forensic 2: AI Predictability (1 - MAPE)
+    # UPDATED: We now add total_ooh_lift to the heartbeat and digital lift
     df['expected'] = df.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
                                (x['ad_clicks'] * c_clicks) + 
-                               (x['ad_impressions'] * c_social), axis=1)
+                               (x['ad_impressions'] * c_social) +
+                               total_ooh_lift, axis=1) # <--- OOH Added Here
 
     df_filtered = df[df['actual_traffic'] > 0].copy()
     if df_filtered.empty:
@@ -119,27 +127,25 @@ if not st.session_state.user_authenticated:
     # This is the line that causes the double-click if st.rerun() isn't called above
     st.stop()
 
-# 6. DATA HYDRATION (Pulling from Supabase)
+# 6. HYDRATE ENGINE WEIGHTS & DATA
 if 'coeffs' not in st.session_state:
     try:
         response = supabase.table("coefficients").select("*").eq("id", 1).execute()
         if response.data:
             st.session_state.coeffs = response.data[0]
+            # Ensure OOH keys exist even if table hasn't been updated yet
+            if 'OOH_Weight' not in st.session_state.coeffs:
+                st.session_state.coeffs['OOH_Weight'] = 125.0 # Default: 125 guests/day per board
+            if 'OOH_Count' not in st.session_state.coeffs:
+                st.session_state.coeffs['OOH_Count'] = 0
         else:
-            st.session_state.coeffs = {"id": 1, "Intercept": 3250, "Avg_Coin_In": 112.50, "Clicks": 0.02, "Social_Imp": 0.0002}
+            st.session_state.coeffs = {
+                "id": 1, "Intercept": 3250, "Avg_Coin_In": 112.50, 
+                "Clicks": 0.02, "Social_Imp": 0.0002, 
+                "OOH_Weight": 125.0, "OOH_Count": 0
+            }
     except:
-        st.session_state.coeffs = {"Intercept": 3250, "Avg_Coin_In": 112.50}
-
-# Fetching the Ledger (The source for the entire app)
-def fetch_ledger_data():
-    try:
-        # We don't cache here to ensure Tab 2 updates immediately
-        res = supabase.table("ledger").select("*").execute()
-        return res.data if res.data else []
-    except:
-        return []
-
-ledger_data = fetch_ledger_data()
+        st.session_state.coeffs = {"Intercept": 3250, "Avg_Coin_In": 112.50, "OOH_Weight": 0}
 
 # 7. MODERN UI STYLING (Minimalist Executive Theme)
 st.markdown("""
