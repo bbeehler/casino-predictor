@@ -319,7 +319,7 @@ with tab2:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">📑 Ledger Management</h2>
-            <p style="color: #888; margin: 0;">Update property performance. Sync past weekend results or partial daily updates using Date-based logic.</p>
+            <p style="color: #888; margin: 0;">Update property performance. Click 'Sync Results' to finalize weekend backfills or partial daily data.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -327,8 +327,8 @@ with tab2:
 
     with col_a:
         st.write("### ✍️ Manual Results Entry")
-        with st.form("manual_entry", clear_on_submit=True):
-            # Allows backdating for weekend results (e.g., Saturday/Sunday)
+        # Removed clear_on_submit to ensure you see a confirmation before data clears
+        with st.form("manual_entry"):
             entry_date = st.date_input("Select Date", datetime.date.today())
             
             col_traffic, col_coin = st.columns(2)
@@ -347,33 +347,40 @@ with tab2:
             with col_s:
                 social = st.number_input("Social Engagements", min_value=0)
             
-            if st.form_submit_button("💾 Sync Results to Vault"):
-                date_str = entry_date.isoformat()
-                
-                # 1. Build payload (Only include non-zero values to preserve existing data)
-                new_row = {"entry_date": date_str}
-                if traffic > 0: new_row["actual_traffic"] = traffic
-                if coin_in > 0: new_row["actual_coin_in"] = coin_in
-                if clicks > 0: new_row["ad_clicks"] = clicks
-                if impressions > 0: new_row["ad_impressions"] = impressions
-                if social > 0: new_row["social_engagements"] = social
+            # MANDATORY: Click this button to save. "Enter" will not trigger the DB sync.
+            submit_button = st.form_submit_button("💾 Sync Results to Vault", use_container_width=True)
+            
+            if submit_button:
+                with st.spinner("Connecting to Vault..."):
+                    date_str = entry_date.isoformat()
+                    
+                    # 1. Build payload (Only include non-zero values to preserve existing data)
+                    new_row = {"entry_date": date_str}
+                    if traffic > 0: new_row["actual_traffic"] = traffic
+                    if coin_in > 0: new_row["actual_coin_in"] = coin_in
+                    if clicks > 0: new_row["ad_clicks"] = clicks
+                    if impressions > 0: new_row["ad_impressions"] = impressions
+                    if social > 0: new_row["social_engagements"] = social
 
-                try:
-                    # 2. Check if date exists to decide between UPDATE or INSERT
-                    check = supabase.table("ledger").select("entry_date").eq("entry_date", date_str).execute()
-                    
-                    if check.data:
-                        # UPDATE: Uses entry_date as the key since 'id' column is missing
-                        supabase.table("ledger").update(new_row).eq("entry_date", date_str).execute()
-                        st.success(f"✅ Merged data for {date_str}.")
-                    else:
-                        # INSERT: Brand new record
-                        supabase.table("ledger").insert([new_row]).execute()
-                        st.success(f"✨ New record created for {date_str}!")
-                    
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Sync failed: {e}")
+                    try:
+                        # 2. Check if date exists (Since 'id' is missing, we use entry_date as key)
+                        check = supabase.table("ledger").select("entry_date").eq("entry_date", date_str).execute()
+                        
+                        if check.data:
+                            # UPDATE: Merges data into existing record
+                            supabase.table("ledger").update(new_row).eq("entry_date", date_str).execute()
+                            st.success(f"✅ Record for {date_str} updated.")
+                        else:
+                            # INSERT: Creates new record (Perfect for Saturday/Sunday backfills)
+                            supabase.table("ledger").insert([new_row]).execute()
+                            st.success(f"✨ New record created for {date_str}.")
+                        
+                        # Brief pause so you can actually see the green success box
+                        import time
+                        time.sleep(1.2)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Sync failed: {e}")
 
     with col_b:
         st.write("### 📤 Bulk CSV Upload")
@@ -385,7 +392,6 @@ with tab2:
             
             if st.button("🚀 Push to Vault", use_container_width=True):
                 try:
-                    # Map CSV headers to finalized DB schema
                     df_upload.rename(columns={
                         'clicks': 'ad_clicks',
                         'impressions': 'ad_impressions',
@@ -395,12 +401,66 @@ with tab2:
                     }, inplace=True)
                     
                     data_dict = df_upload.to_dict(orient='records')
-                    # Upsert uses 'entry_date' as the conflict target
+                    # Upsert handles mixed new/existing dates in the CSV
                     supabase.table("ledger").upsert(data_dict, on_conflict="entry_date").execute()
                     st.success("Bulk sync complete!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Upload failed: {e}")
+
+    # --- 3. THE LEDGER EDITOR (DATE-KEYED) ---
+    st.divider()
+    st.write("### 📜 Ledger Editor")
+    st.caption("Double-click cells to correct values. Changes are synced via Date.")
+    
+    if ledger_data:
+        df_history = pd.DataFrame(ledger_data)
+        
+        if 'entry_date' in df_history.columns:
+            df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
+            df_history = df_history.sort_values(by='entry_date', ascending=False)
+        
+        # Primary Key (Date) is disabled for editing to maintain integrity
+        editor_config = {
+            "entry_date": st.column_config.DateColumn("Date", disabled=True),
+            "actual_traffic": st.column_config.NumberColumn("Traffic"),
+            "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)", format="$%.2f"),
+            "ad_clicks": st.column_config.NumberColumn("Ad Clicks"),
+            "ad_impressions": st.column_config.NumberColumn("Ad Impressions"),
+            "social_engagements": st.column_config.NumberColumn("Social Engagements")
+        }
+
+        # Hide internal DB columns if they exist (like id)
+        for col in df_history.columns:
+            if col not in editor_config:
+                editor_config[col] = None
+
+        edited_df = st.data_editor(
+            df_history, 
+            column_config=editor_config, 
+            use_container_width=True, 
+            hide_index=True
+        )
+
+        if st.button("✅ Confirm & Sync Edits"):
+            with st.spinner("Updating records..."):
+                try:
+                    for _, row in edited_df.iterrows():
+                        up_data = row.to_dict()
+                        # Formatting Date for DB match
+                        date_key = pd.to_datetime(up_data['entry_date']).strftime('%Y-%m-%d')
+                        up_data['entry_date'] = date_key
+                        
+                        # Clean the payload of any null IDs or extra columns
+                        if 'id' in up_data: del up_data['id']
+                        
+                        # Syncing using entry_date as the unique anchor
+                        supabase.table("ledger").update(up_data).eq("entry_date", date_key).execute()
+                    
+                    st.success("Vault Updated!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Sync failed: {e}")
 
     # --- 3. THE LEDGER EDITOR (DATE-KEYED) ---
     st.divider()
