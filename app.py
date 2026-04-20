@@ -45,10 +45,16 @@ def get_forensic_metrics(df, coeffs):
     c_clicks = coeffs.get('Clicks', 0.02)
     c_social = coeffs.get('Social_Imp', 0.0002)
 
-    # --- OOH CALCULATIONS ---
-    c_ooh = coeffs.get('OOH_Weight', 150.0)  # Daily guests per board
-    n_ooh = coeffs.get('OOH_Count', 0)       # Number of active boards
-    total_ooh_lift = c_ooh * n_ooh         # Total constant daily pressure
+    # --- UPDATED OOH LOGIC ---
+    # Static boards own 100% of the time
+    c_static = coeffs.get('Static_Weight', 50.0)
+    n_static = coeffs.get('Static_Count', 2)
+    
+    # Digital boards are shared (usually 10% Share of Voice)
+    c_digital_ooh = coeffs.get('Digital_OOH_Weight', 10.0) 
+    n_digital_ooh = coeffs.get('Digital_OOH_Count', 4)
+    
+    total_ooh_lift = (c_static * n_static) + (c_digital_ooh * n_digital_ooh)
     
     # Forensic 1: Digital Lift %
     total_traffic = df['actual_traffic'].sum()
@@ -520,86 +526,54 @@ with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Calibration</h2>
-            <p style="color: #888; margin: 0;">Adjust marketing multipliers and OOH campaign pressure.</p>
+            <p style="color: #888; margin: 0;">Calibrate Static vs. Shared Digital OOH impact.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    if 'coeffs' not in st.session_state:
-        st.error("Engine coefficients not found. Please refresh the app.")
-        st.stop()
-
-    # 1. INDUSTRY BENCHMARK REFERENCE
-    with st.expander("📊 View Casino Industry Benchmarks"):
-        st.write(f"""
-        | Metric | Industry Average | Your Current Weight |
-        | :--- | :--- | :--- |
-        | **Social Impressions** | 0.0001 - 0.0005 | {st.session_state.coeffs.get('Social_Imp', 0.0002):.4f} |
-        | **Ad Clicks** | 0.02 - 0.08 | {st.session_state.coeffs.get('Clicks', 0.02):.2f} |
-        | **Billboard Lift** | 50 - 300 Guests/Day | {st.session_state.coeffs.get('OOH_Weight', 150.0):.0f} |
-        """)
-
-    # 2. MANUAL CALIBRATION FORM
-    with st.form("engine_settings_ooh"):
+    with st.form("engine_settings_refined_ooh"):
         col1, col2 = st.columns(2)
         
         with col1:
-            st.write("### 📣 Marketing Multipliers")
-            c_clicks = float(st.session_state.coeffs.get('Clicks', 0.02))
-            new_clicks = st.slider("Click Conversion (Weight)", 0.00, 0.20, value=float(max(min(c_clicks, 0.20), 0.00)))
-            
-            c_social = float(st.session_state.coeffs.get('Social_Imp', 0.0002))
-            new_social = st.number_input("Social Impression Weight", 0.0000, 0.0100, value=float(max(min(c_social, 0.0100), 0.0000)), format="%.4f")
-            
-            st.write("---")
-            st.write("### 📍 OOH / Billboard Attribution")
-            c_ooh = float(st.session_state.coeffs.get('OOH_Weight', 150.0))
-            new_ooh_weight = st.slider("Daily Lift per Board", 0, 500, value=int(c_ooh))
-            
-            n_ooh = int(st.session_state.coeffs.get('OOH_Count', 0))
-            new_ooh_count = st.number_input("Active Billboard Count", 0, 50, value=n_ooh)
+            st.write("### 🖼️ Static Billboards (24/7)")
+            # Static vinyl boards
+            s_weight = float(st.session_state.coeffs.get('Static_Weight', 50.0))
+            new_static_w = st.slider("Lift per Static Board", 0, 200, value=int(s_weight))
+            new_static_c = st.number_input("Active Static Boards", 0, 10, value=2)
+
+            st.write("### 📺 Digital OOH (Shared Loop)")
+            # Shared digital boards (accounting for Loop SOV)
+            d_weight = float(st.session_state.coeffs.get('Digital_OOH_Weight', 10.0))
+            new_digital_w = st.slider("Lift per Digital Board (Shared)", 0, 100, value=int(d_weight))
+            new_digital_c = st.number_input("Active Digital Boards", 0, 20, value=4)
 
         with col2:
-            st.write("### ❄️ Environmental Friction")
-            c_snow = int(st.session_state.coeffs.get('Snow_cm', -45))
-            new_snow = st.slider("Snow Friction (Guests/cm)", -1000, 0, value=int(max(min(c_snow, 0), -1000)))
-            
-            c_rain = int(st.session_state.coeffs.get('Rain_mm', -12))
-            new_rain = st.slider("Rain Friction (Guests/mm)", -500, 0, value=int(max(min(c_rain, 0), -500)))
-            
-            st.write("---")
-            st.write("### 💰 Financial Anchor")
-            c_coin = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
-            new_coin = st.number_input("Avg Spend Per Head ($)", 0.0, 5000.0, value=float(max(min(c_coin, 5000.0), 0.0)))
+            st.write("### 📣 Marketing & Environment")
+            new_clicks = st.slider("Click Weight", 0.00, 0.20, value=float(st.session_state.coeffs.get('Clicks', 0.02)))
+            new_snow = st.slider("Snow Friction", -500, 0, value=int(st.session_state.coeffs.get('Snow_cm', -45)))
+            new_coin = st.number_input("Avg Spend ($)", 0.0, 500.0, value=float(st.session_state.coeffs.get('Avg_Coin_In', 112.50)))
 
-        # 3. DATA VAULT SYNC
         if st.form_submit_button("💾 Save Calibration to Vault"):
             sync_payload = {
-                'Avg_Coin_In': new_coin,
-                'Snow_cm': new_snow,
-                'Rain_mm': new_rain,
+                'Static_Weight': new_static_w,
+                'Static_Count': new_static_c,
+                'Digital_OOH_Weight': new_digital_w,
+                'Digital_OOH_Count': new_digital_c,
                 'Clicks': new_clicks,
-                'Impressions': new_social,
-                'OOH_Weight': new_ooh_weight,
-                'OOH_Count': new_ooh_count
+                'Snow_cm': new_snow,
+                'Avg_Coin_In': new_coin
             }
-
             try:
                 supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
-                # Update session state immediately
                 st.session_state.coeffs.update(sync_payload)
-                st.success("✅ Engine Calibrated! OOH Data synced.")
-                import time
-                time.sleep(1)
+                st.success("✅ OOH Calibration Updated!")
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ Sync failed: {e}")
+                st.error(f"Sync failed: {e}")
 
-    # 4. INTEGRITY CHECK
-    st.divider()
-    st.write("### 🔍 Engine Integrity Check")
-    if st.session_state.coeffs.get('OOH_Count', 0) > 0:
-        total_lift = st.session_state.coeffs['OOH_Count'] * st.session_state.coeffs['OOH_Weight']
-        st.info(f"ℹ️ **OOH Attribution Active:** Your billboards are currently adding an estimated **{total_lift:,}** guests to your daily baseline.")
+    # 4. FORENSIC INSIGHT
+    total_ooh = (new_static_w * new_static_c) + (new_digital_w * new_digital_c)
+    st.info(f"🔍 **Forensic Summary:** Your OOH mix is contributing an estimated **{total_ooh} guests per day.** "
+            f"({(new_static_w * new_static_c)} from Static, {(new_digital_w * new_digital_c)} from Digital).")
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
