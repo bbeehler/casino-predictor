@@ -19,12 +19,11 @@ def get_forensic_metrics(df, coeffs):
 
     df = pd.DataFrame(df).copy()
     
-    # Standardize and protect against missing columns
+    # Standardize columns
     cols_to_ensure = {
         'ad_clicks': ['ad_clicks', 'Clicks', 'Ad_Clicks'],
         'ad_impressions': ['ad_impressions', 'Impressions', 'Social_Imp'],
-        'actual_traffic': ['actual_traffic', 'Traffic'],
-        'actual_coin_in': ['actual_coin_in', 'Revenue', 'Coin_In']
+        'actual_traffic': ['actual_traffic', 'Traffic']
     }
 
     for target, aliases in cols_to_ensure.items():
@@ -41,27 +40,25 @@ def get_forensic_metrics(df, coeffs):
     # Calculate DOW Heartbeats (Historical Baseline)
     heartbeats = df.groupby('day_name')['actual_traffic'].mean().to_dict()
     
-    # Weights from Engine
+    # 1. Marketing Weights (Online Only)
     c_clicks = coeffs.get('Clicks', 0.02)
-    c_social = coeffs.get('Social_Imp', 0.0002)
+    c_social = coeffs.get('Impressions', 0.0002)
 
-    # --- UPDATED OOH LOGIC ---
-    # Static boards own 100% of the time
+    # 2. OOH Weights (Offline Baseline Pressure)
     c_static = coeffs.get('Static_Weight', 50.0)
     n_static = coeffs.get('Static_Count', 2)
+    c_dig_ooh = coeffs.get('Digital_OOH_Weight', 10.0)
+    n_dig_ooh = coeffs.get('Digital_OOH_Count', 4)
+    total_ooh_lift = (c_static * n_static) + (c_dig_ooh * n_dig_ooh)
     
-    # Digital boards are shared (usually 10% Share of Voice)
-    c_digital_ooh = coeffs.get('Digital_OOH_Weight', 10.0) 
-    n_digital_ooh = coeffs.get('Digital_OOH_Count', 4)
-    
-    total_ooh_lift = (c_static * n_static) + (c_digital_ooh * n_digital_ooh)
-    
-    # Forensic 1: Digital Lift %
+    # 3. PURE DIGITAL LIFT (Online Attribution Only)
+    # This remains untouched by OOH to show pure Digital ROI
     total_traffic = df['actual_traffic'].sum()
-    marketing_impact = (df['ad_clicks'].sum() * c_clicks) + (df['ad_impressions'].sum() * c_social)
-    lift_val = (marketing_impact / total_traffic * 100) if total_traffic > 0 else 0
+    digital_impact = (df['ad_clicks'].sum() * c_clicks) + (df['ad_impressions'].sum() * c_social)
+    lift_val = (digital_impact / total_traffic * 100) if total_traffic > 0 else 0
 
-    # Forensic 2: AI Predictability (Including OOH Lift)
+    # 4. AI PREDICTABILITY (The Full Picture)
+    # We add OOH here because the model needs it to explain the "Unattributed" traffic
     df['expected'] = df.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
                                (x['ad_clicks'] * c_clicks) + 
                                (x['ad_impressions'] * c_social) +
@@ -76,8 +73,9 @@ def get_forensic_metrics(df, coeffs):
 
     return {
         "predictability": f"{pred_val:.1f}%",
-        "digital_lift": f"{lift_val:.1f}%",
-        "heartbeats": heartbeats
+        "digital_lift": f"{lift_val:.1f}%", # Remains pure online lift
+        "heartbeats": heartbeats,
+        "ooh_total_daily": total_ooh_lift
     }
 # 3. INITIALIZE CLIENTS
 url = st.secrets["SUPABASE_URL"]
