@@ -319,7 +319,7 @@ with tab2:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">📑 Ledger Management</h2>
-            <p style="color: #888; margin: 0;">Update property performance. Enter partial data now and finish later.</p>
+            <p style="color: #888; margin: 0;">Update property performance. Perfect for backfilling weekend results or partial daily updates.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -328,20 +328,30 @@ with tab2:
     with col_a:
         st.write("### ✍️ Manual Results Entry")
         with st.form("manual_entry", clear_on_submit=True):
-            entry_date = st.date_input("Date", datetime.date.today())
-            traffic = st.number_input("Total Traffic (Headcount)", min_value=0)
-            coin_in = st.number_input("Total Coin-In ($)", min_value=0.0, format="%.2f")
+            # Allows backdating for weekend results
+            entry_date = st.date_input("Select Date", datetime.date.today())
+            
+            col_traffic, col_coin = st.columns(2)
+            with col_traffic:
+                traffic = st.number_input("Traffic (Headcount)", min_value=0)
+            with col_coin:
+                coin_in = st.number_input("Coin-In ($)", min_value=0.0, format="%.2f")
             
             st.divider()
             st.write("**Marketing Metrics**")
-            clicks = st.number_input("Ad Clicks", min_value=0)
-            impressions = st.number_input("Ad Impressions", min_value=0)
-            social = st.number_input("Social Engagements", min_value=0)
+            col_c, col_i, col_s = st.columns(3)
+            with col_c:
+                clicks = st.number_input("Ad Clicks", min_value=0)
+            with col_i:
+                impressions = st.number_input("Ad Impressions", min_value=0)
+            with col_s:
+                social = st.number_input("Social Engagements", min_value=0)
             
             if st.form_submit_button("💾 Sync Results to Vault"):
-                # 1. Build the update payload (Only include non-zero values to prevent overwriting)
-                new_row = {"entry_date": entry_date.isoformat()}
+                date_str = entry_date.isoformat()
                 
+                # 1. Build payload (Only include non-zero values to prevent overwriting blanks)
+                new_row = {"entry_date": date_str}
                 if traffic > 0: new_row["actual_traffic"] = traffic
                 if coin_in > 0: new_row["actual_coin_in"] = coin_in
                 if clicks > 0: new_row["ad_clicks"] = clicks
@@ -349,17 +359,17 @@ with tab2:
                 if social > 0: new_row["social_engagements"] = social
 
                 try:
-                    # Check if a record already exists for this date to perform a merge
-                    check = supabase.table("ledger").select("*").eq("entry_date", entry_date.isoformat()).execute()
+                    # 2. Check if this date already exists (Historical Check)
+                    check = supabase.table("ledger").select("id").eq("entry_date", date_str).execute()
                     
                     if check.data:
-                        # UPDATE: Merge new numbers into the existing row
-                        supabase.table("ledger").update(new_row).eq("entry_date", entry_date.isoformat()).execute()
-                        st.success(f"Updated {entry_date}. Partial data merged successfully!")
+                        # UPDATE: Merges data into the existing record
+                        supabase.table("ledger").update(new_row).eq("entry_date", date_str).execute()
+                        st.success(f"✅ Record for {date_str} updated and merged.")
                     else:
-                        # INSERT: Create a fresh row if this is a brand new day
+                        # INSERT: Creates a brand new record for a new date
                         supabase.table("ledger").insert([new_row]).execute()
-                        st.success(f"New record created for {entry_date}!")
+                        st.success(f"✨ New historical record created for {date_str}!")
                     
                     st.rerun()
                 except Exception as e:
@@ -367,13 +377,15 @@ with tab2:
 
     with col_b:
         st.write("### 📤 Bulk CSV Upload")
-        uploaded_file = st.file_uploader("Drop your ledger CSV here", type="csv")
+        uploaded_file = st.file_uploader("Upload Ledger CSV", type="csv")
         
         if uploaded_file is not None:
             df_upload = pd.read_csv(uploaded_file)
+            st.dataframe(df_upload.head(3), use_container_width=True)
+            
             if st.button("🚀 Push to Vault", use_container_width=True):
                 try:
-                    # Rename CSV columns to match your exact DB schema
+                    # Map common names to finalized DB schema
                     df_upload.rename(columns={
                         'clicks': 'ad_clicks',
                         'impressions': 'ad_impressions',
@@ -383,16 +395,17 @@ with tab2:
                     }, inplace=True)
                     
                     data_dict = df_upload.to_dict(orient='records')
+                    # Upsert handles mixed new/existing dates in the CSV
                     supabase.table("ledger").upsert(data_dict, on_conflict="entry_date").execute()
-                    st.success("Bulk upload/update complete!")
+                    st.success("Bulk sync complete!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Upload failed: {e}")
 
-    # --- LEDGER EDITOR ---
+    # --- 3. THE LEDGER EDITOR ---
     st.divider()
-    st.write("### 📜 Ledger Editor (Quick Fixes)")
-    st.caption("Double-click any cell to finish entries or correct typos.")
+    st.write("### 📜 Ledger Editor (Verify & Correct)")
+    st.caption("Double-click cells to finish entries or correct Friday/Saturday/Sunday results.")
     
     if ledger_data:
         df_history = pd.DataFrame(ledger_data)
@@ -401,24 +414,27 @@ with tab2:
             df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
             df_history = df_history.sort_values(by='entry_date', ascending=False)
         
-        # Display Mapping for the Editor
         editor_config = {
             "id": None,
             "entry_date": st.column_config.DateColumn("Date", disabled=True),
             "actual_traffic": st.column_config.NumberColumn("Traffic"),
-            "actual_coin_in": st.column_config.NumberColumn("Coin-In", format="$%.2f"),
+            "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)", format="$%.2f"),
             "ad_clicks": st.column_config.NumberColumn("Ad Clicks"),
             "ad_impressions": st.column_config.NumberColumn("Ad Impressions"),
             "social_engagements": st.column_config.NumberColumn("Social Engagements")
         }
 
-        edited_df = st.data_editor(df_history, column_config=editor_config, use_container_width=True, hide_index=True)
+        edited_df = st.data_editor(
+            df_history, 
+            column_config=editor_config, 
+            use_container_width=True, 
+            hide_index=True
+        )
 
-        if st.button("✅ Confirm & Sync Changes"):
+        if st.button("✅ Confirm & Sync Edits"):
             try:
                 for _, row in edited_df.iterrows():
                     up_data = row.to_dict()
-                    # Keep ID for matching, convert date back for DB
                     up_data['entry_date'] = pd.to_datetime(up_data['entry_date']).strftime('%Y-%m-%d')
                     supabase.table("ledger").update(up_data).eq("id", up_data['id']).execute()
                 st.success("Vault Updated!")
