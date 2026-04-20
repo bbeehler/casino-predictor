@@ -727,12 +727,12 @@ with tab5:
     if st.button("🗑️ Reset Forensic Session", key="reset_chat_t5"):
         st.session_state.messages = []
         st.rerun()
-# --- TAB 6: MASTER REPORT (The Kitchen Sink) ---
+# --- TAB 6: MASTER REPORT (The Kitchen Sink + Power Metrics) ---
 with tab6:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">📋 Forensic Master Report</h2>
-            <p style="color: #888; margin: 0;">Comprehensive attribution analysis and property performance audit.</p>
+            <h2 style="color: #FFCC00; margin: 0;">📋 Master Forensic Report</h2>
+            <p style="color: #888; margin: 0;">Comprehensive property performance audit: Revenue, Traffic, and Attribution.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -746,22 +746,27 @@ with tab6:
     df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
     df_rep = df_rep.sort_values('entry_date')
 
-    # 2. EXECUTIVE SUMMARY (The Big 3)
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.metric("AI Predictability", metrics['predictability'], help="Confidence level in the current attribution model.")
-    with c2:
-        st.metric("Pure Digital Lift", metrics['digital_lift'], help="Incremental traffic from Online Ads only.")
-    with c3:
-        ooh_daily = metrics.get('ooh_total_daily', 0)
-        st.metric("OOH Baseline Pressure", f"{ooh_daily:.0f} Guests", help="Constant daily lift from Static & Digital boards.")
+    # 2. THE POWER METRICS (Total Property Impact)
+    avg_spend = st.session_state.coeffs.get('Avg_Coin_In', 112.50)
+    total_traffic = df_rep['actual_traffic'].sum()
+    total_revenue = total_traffic * avg_spend
+    
+    st.write("### 💎 Property Power Metrics")
+    p1, p2, p3 = st.columns(3)
+    with p1:
+        st.metric("Total Property Traffic", f"{total_traffic:,.0f} Guests", delta=f"{len(df_rep)} Days Tracked")
+    with p2:
+        st.metric("Total Property Revenue", f"${total_revenue:,.2f}", help="Calculated based on calibrated Avg Spend per head.")
+    with p3:
+        st.metric("AI Model Predictability", metrics['predictability'], help="Level of confidence in the attribution math.")
 
     st.divider()
 
-    # 3. THE ATTRIBUTION STACK (Visualizing the 'Why')
+    # 3. ATTRIBUTION OVERVIEW (Digital vs OOH)
     st.write("### 🧬 The Multi-Touch Attribution Stack")
     
-    # Calculate the layers
+    # Calculate the forensic layers
+    ooh_daily = metrics.get('ooh_total_daily', 0)
     heartbeats = metrics.get('heartbeats', {})
     c_clicks = st.session_state.coeffs.get('Clicks', 0.02)
     c_social = st.session_state.coeffs.get('Impressions', 0.0002)
@@ -771,42 +776,50 @@ with tab6:
     df_rep['OOH Inertia'] = ooh_daily
     df_rep['Digital Impact'] = (df_rep.get('ad_clicks', 0) * c_clicks) + (df_rep.get('ad_impressions', 0) * c_social)
     
-    # Create the Stacked Area Chart
+    # Visual Stacked Area Chart
     chart_data = df_rep.set_index('entry_date')[['Historical Baseline', 'OOH Inertia', 'Digital Impact']]
     st.area_chart(chart_data)
-    st.caption("This chart visualizes the layers of property traffic: Natural Demand (Bottom), Billboard Pressure (Middle), and Digital Marketing Spikes (Top).")
+    st.caption("Visual breakdown of property traffic: Baseline Demand, Billboard Pressure, and Digital Marketing Spikes.")
 
-    # 4. REVENUE & ROI FORENSICS
+    # 4. REVENUE & MARKETING ROI AUDIT
     st.write("### 💰 Financial Forensic Audit")
     
-    avg_spend = st.session_state.coeffs.get('Avg_Coin_In', 112.50)
     total_marketing_guests = df_rep['Digital Impact'].sum() + (ooh_daily * len(df_rep))
-    estimated_revenue = total_marketing_guests * avg_spend
+    marketing_revenue = total_marketing_guests * avg_spend
     
     f1, f2 = st.columns(2)
     with f1:
-        st.write("#### Attribution Volume")
-        st.write(f"* **Attributed Digital Guests:** {df_rep['Digital Impact'].sum():,.0f}")
+        st.write("#### Guest Volume Breakdown")
+        st.write(f"* **Historical Baseline Guests:** {df_rep['Historical Baseline'].sum():,.0f}")
         st.write(f"* **Attributed OOH Guests:** {ooh_daily * len(df_rep):,.0f}")
-        st.write(f"* **Total Marketing Guests:** {total_marketing_guests:,.0f}")
+        st.write(f"* **Attributed Digital Guests:** {df_rep['Digital Impact'].sum():,.0f}")
+        st.write(f"**Total Marketing-Driven Traffic:** {total_marketing_guests:,.0f}")
     
     with f2:
-        st.write("#### Revenue Impact")
-        st.success(f"**Est. Marketing-Driven Revenue: ${estimated_revenue:,.2f}**")
-        st.write(f"Based on ${avg_spend} average spend per head.")
+        st.write("#### Revenue Impact Breakdown")
+        st.write(f"* **Organic Base Revenue:** ${(df_rep['Historical Baseline'].sum() * avg_spend):,.2f}")
+        st.success(f"**Marketing-Driven Revenue: ${marketing_revenue:,.2f}**")
+        st.write(f"---")
+        # Pure Marketing ROI Percentage of total
+        mkt_share = (marketing_revenue / total_revenue * 100) if total_revenue > 0 else 0
+        st.write(f"**Marketing Contribution to Total Revenue:** {mkt_share:.1f}%")
 
-    # 5. THE RAW AUDIT TRAIL (The Evidence)
+    # 5. THE AUDIT TRAIL
     st.divider()
-    with st.expander("🔎 View Raw Forensic Ledger (Audit Trail)"):
-        st.dataframe(df_rep[['entry_date', 'actual_traffic', 'Historical Baseline', 'OOH Inertia', 'Digital Impact']], use_container_width=True)
+    with st.expander("🔎 View Full Forensic Ledger (Audit Trail)"):
+        # Format dates for cleaner viewing in the table
+        df_display = df_rep.copy()
+        df_display['entry_date'] = df_display['entry_date'].dt.strftime('%Y-%m-%d')
+        st.dataframe(df_display[['entry_date', 'actual_traffic', 'Historical Baseline', 'OOH Inertia', 'Digital Impact']], use_container_width=True)
     
     # 6. DOWNLOAD FOR EXECUTIVE TEAM
     csv = df_rep.to_csv(index=False).encode('utf-8')
     st.download_button(
         label="📥 Download Full Report for Executive Review",
         data=csv,
-        file_name=f'Hard_Rock_Forensic_Report_{pd.Timestamp.now().strftime("%Y-%m-%d")}.csv',
+        file_name=f'HR_Ottawa_Master_Forensic_{pd.Timestamp.now().strftime("%Y-%m-%d")}.csv',
         mime='text/csv',
+        use_container_width=True
     )
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
 with tab7:
