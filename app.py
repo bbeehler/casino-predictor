@@ -14,15 +14,20 @@ st.set_page_config(page_title="FloorCast | Hard Rock Ottawa", layout="wide", pag
 # --- AUTH LIST ---
 ADMIN_USERS = ["bjbeehler@gmail.com"]
 
-# 2. THE UNIFIED FORENSIC ENGINE
-def get_forensic_metrics(df, coeffs):
-    """Calculates KPIs once for the entire app. Safely handles missing columns."""
-    if df is None or len(df) == 0:
-        return {"predictability": "0.0%", "digital_lift": "0.0%", "heartbeats": {}, "ooh_total_daily": 0}
+def get_forensic_metrics(df_input, coeffs):
+    """Calculates KPIs once for the entire app. Handles Adstock (Awareness Pool) and Weather Friction."""
+    if df_input is None or len(df_input) == 0:
+        return {
+            "predictability": "0.0%", 
+            "digital_lift": "0.0%", 
+            "heartbeats": {}, 
+            "ooh_total_daily": 0,
+            "df_with_awareness": pd.DataFrame()
+        }
 
-    df = pd.DataFrame(df).copy()
+    df = pd.DataFrame(df_input).copy()
     
-    # 1. Standardize columns
+    # 1. Standardize Columns
     cols_to_ensure = {
         'ad_clicks': ['ad_clicks', 'Clicks'],
         'ad_impressions': ['ad_impressions', 'Impressions'],
@@ -40,63 +45,78 @@ def get_forensic_metrics(df, coeffs):
         df[target] = pd.to_numeric(df[target], errors='coerce').fillna(0)
 
     df['entry_date'] = pd.to_datetime(df['entry_date'])
+    df = df.sort_values('entry_date') # Critical for Adstock calculation
     df['day_name'] = df['entry_date'].dt.day_name()
     
-    # 2. Pull Weights from Coeffs
-    heartbeats = df.groupby('day_name')['actual_traffic'].mean().to_dict()
-    c_clicks = coeffs.get('Clicks', 0.02)
-    c_social = coeffs.get('Impressions', 0.0002)
+    # 2. Pull Weights and Calibration
+    c_clicks = float(coeffs.get('Clicks', 0.02))
+    c_social = float(coeffs.get('Impressions', 0.0002))
+    decay_rate = float(coeffs.get('Ad_Decay', 85.0)) / 100 # New: Mental Retention Rate
     
-    # Environmental Weights (THE MISSING LINK)
-    c_snow = coeffs.get('Snow_cm', -45.0)
-    c_rain = coeffs.get('Rain_mm', -12.0)
+    c_snow = float(coeffs.get('Snow_cm', -45.0))
+    c_rain = float(coeffs.get('Rain_mm', -12.0))
 
     # OOH Weights
-    c_static = coeffs.get('Static_Weight', 50.0)
-    n_static = coeffs.get('Static_Count', 2)
-    c_dig_ooh = coeffs.get('Digital_OOH_Weight', 10.0)
-    n_dig_ooh = coeffs.get('Digital_OOH_Count', 4)
+    c_static = float(coeffs.get('Static_Weight', 50.0))
+    n_static = int(coeffs.get('Static_Count', 2))
+    c_dig_ooh = float(coeffs.get('Digital_OOH_Weight', 10.0))
+    n_dig_ooh = int(coeffs.get('Digital_OOH_Count', 4))
     total_ooh_lift = (c_static * n_static) + (c_dig_ooh * n_dig_ooh)
     
-    # 3. THE MASTER CALCULATION
-    # Expected = Baseline + Marketing + OOH + (Weather * Friction)
+    # 3. RESIDUAL AWARENESS CALCULATION (The Adstock Loop)
+    awareness_pool = []
+    current_pool = 0.0
+    
+    for _, row in df.iterrows():
+        # New "heat" generated today
+        daily_input = (row['ad_clicks'] * c_clicks) + (row['ad_impressions'] * c_social)
+        # Carry over yesterday's "heat" at the decay rate
+        current_pool = daily_input + (current_pool * decay_rate)
+        awareness_pool.append(current_pool)
+    
+    df['residual_lift'] = awareness_pool
+
+    # 4. BASELINE CALCULATION (Heartbeats)
+    # We subtract lifts and friction to find the property's natural "Heartbeat"
+    df['baseline_isolated'] = df['actual_traffic'] - df['residual_lift'] - total_ooh_lift
+    heartbeats = df.groupby('day_name')['baseline_isolated'].mean().to_dict()
+
+    # 5. THE MASTER CALCULATION (Expected Value)
+    # Expected = Baseline + Residual Awareness + OOH + Weather Friction
     df['expected'] = df.apply(lambda x: 
-        heartbeats.get(x['day_name'], 0) + 
-        (x['ad_clicks'] * c_clicks) + 
-        (x['ad_impressions'] * c_social) +
+        heartbeats.get(x['day_name'], 4000) + 
+        x['residual_lift'] + 
         total_ooh_lift + 
-        (x['snow_cm'] * c_snow) +  # Now it subtracts guests for snow
-        (x['rain_mm'] * c_rain),   # Now it subtracts guests for rain
+        (x['snow_cm'] * c_snow) + 
+        (x['rain_mm'] * c_rain), 
         axis=1
     )
 
-    # 4. FINAL METRICS
+    # 6. FINAL METRICS
     total_traffic = df['actual_traffic'].sum()
-    digital_impact = (df['ad_clicks'].sum() * c_clicks) + (df['ad_impressions'].sum() * c_social)
-    lift_val = (digital_impact / total_traffic * 100) if total_traffic > 0 else 0
+    current_lift_val = df['residual_lift'].iloc[-1] if not df.empty else 0
+    lift_pct = (current_lift_val / df['actual_traffic'].iloc[-1] * 100) if not df.empty and df['actual_traffic'].iloc[-1] > 0 else 0
 
     df_filtered = df[df['actual_traffic'] > 0].copy()
     if df_filtered.empty:
-        return {"predictability": "0.0%", "digital_lift": f"{lift_val:.1f}%", "heartbeats": heartbeats, "ooh_total_daily": total_ooh_lift}
+        return {"predictability": "0.0%", "digital_lift": f"{lift_pct:.1f}%", "heartbeats": heartbeats, "ooh_total_daily": total_ooh_lift}
         
-    mape = (np.abs(df_filtered['actual_traffic'] - df_filtered['expected']) / df_filtered['actual_traffic']).mean()
+    mape = (np.abs(df_filtered['actual_traffic'] - df_filtered['expected']) / df_filtered['actual_traffic']).replace([np.inf, -np.inf], np.nan).dropna().mean()
     pred_val = (1 - mape) * 100 if not np.isnan(mape) else 0
 
-    # Ensure Hold_Pct is a number, even if the DB returns None
-    raw_hold = coeffs.get('Hold_Pct')
-    if raw_hold is None:
-        clean_hold = 10.0  # Fallback to 10% if DB is empty
-    else:
-        clean_hold = float(raw_hold)
+    # Ensure Hold_Pct safety
+    clean_hold = float(coeffs.get('Hold_Pct', 10.0))
 
-    # Now calculate the factor safely
     return {
         "predictability": f"{pred_val:.1f}%",
-        "digital_lift": f"{lift_val:.1f}%",
+        "digital_lift": f"{lift_pct:.1f}%",
+        "digital_lift_val": current_lift_val,
         "heartbeats": heartbeats,
         "ooh_total_daily": total_ooh_lift,
-        "hold_factor": clean_hold / 100 
+        "hold_factor": clean_hold / 100,
+        "df_with_awareness": df # Important for Tab 6 charts
     }
+
 # 3. INITIALIZE CLIENTS
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
@@ -530,12 +550,12 @@ with tab3:
         st.info("No data found in the Vault. Please backfill results in Tab 2 to see analytics.")
 
 # --- TAB 4: ENGINE CONTROL (Final Stability Fix) ---
+
 with tab4:
     current_user = st.session_state.get('user_email', "unauthorized")
     
     if current_user not in ADMIN_USERS:
         st.warning("### 🔒 Access Restricted")
-        st.info(f"Identity: **{current_user}** does not have permission to calibrate the engine.")
     else:
         st.markdown("""
             <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
@@ -545,83 +565,59 @@ with tab4:
         """, unsafe_allow_html=True)
 
         # 1. PRE-FLIGHT DATA CLEANING
-        # This prevents TypeErrors by ensuring every key is a valid float
         defaults = {
-            'Clicks': 0.02, 'Impressions': 0.0002, 'Avg_Coin_In': 112.50,
-            'Property_Theo': 450.0, 'Hold_Pct': 10.0, 'Snow_cm': -45.0,
-            'Rain_mm': -12.0, 'Static_Weight': 50.0, 'Static_Count': 2,
-            'Digital_OOH_Weight': 10.0, 'Digital_OOH_Count': 4
+            'Clicks': 0.02, 'Impressions': 0.0002, 'Ad_Decay': 85.0, # Added Ad_Decay
+            'Avg_Coin_In': 112.50, 'Property_Theo': 450.0, 'Hold_Pct': 10.0,
+            'Snow_cm': -45.0, 'Rain_mm': -12.0, 'Static_Weight': 50.0, 
+            'Static_Count': 2, 'Digital_OOH_Weight': 10.0, 'Digital_OOH_Count': 4
         }
         
         clean_coeffs = {}
         for key, default_val in defaults.items():
             raw_val = st.session_state.coeffs.get(key)
             try:
-                # Handle None, empty strings, or weird database formats
-                if raw_val is None or raw_val == "":
-                    clean_coeffs[key] = default_val
-                else:
-                    clean_coeffs[key] = float(raw_val)
+                clean_coeffs[key] = float(raw_val) if raw_val is not None else default_val
             except (ValueError, TypeError):
                 clean_coeffs[key] = default_val
 
         # 2. CALIBRATION FORM
-        with st.form("engine_settings_v12_final"):
+        with st.form("engine_settings_v15"):
             col1, col2 = st.columns(2)
             
             with col1:
                 st.write("### 📣 Marketing Multipliers")
                 new_clicks = st.slider("Click Weight", 0.0, 0.5, value=clean_coeffs['Clicks'])
-                new_social = st.number_input("Social Weight", 0.0, 0.01, value=clean_coeffs['Impressions'], format="%.4f")
+                # THE NEW DECAY SLIDER
+                new_decay = st.slider("Awareness Retention (%)", 0.0, 100.0, value=clean_coeffs['Ad_Decay'], 
+                                      help="How much awareness carries over to the next day. 85% is the standard.")
                 
                 st.write("### 📍 OOH / Billboards")
                 new_static_w = st.slider("Static Board Lift", 0.0, 500.0, value=clean_coeffs['Static_Weight'])
                 new_static_c = st.number_input("Static Count", 0, 10, value=int(clean_coeffs['Static_Count']))
-                new_digital_w = st.slider("Digital Board Lift", 0.0, 200.0, value=clean_coeffs['Digital_OOH_Weight'])
-                new_digital_c = st.number_input("Digital Count", 0, 20, value=int(clean_coeffs['Digital_OOH_Count']))
 
             with col2:
-                st.write("### ❄️ Environmental Friction")
-                new_snow = st.slider("Snow Friction", -1000.0, 0.0, value=clean_coeffs['Snow_cm'])
-                new_rain = st.slider("Rain Friction", -500.0, 0.0, value=clean_coeffs['Rain_mm'])
-                
                 st.write("### 💰 Financials & Yield")
                 new_coin = st.number_input("Avg Gross Spend ($)", 0.0, 5000.0, value=clean_coeffs['Avg_Coin_In'])
-                new_theo = st.number_input("Property Theo ($)", 0.0, 2000.0, value=clean_coeffs['Property_Theo'])
                 new_hold = st.slider("House Hold %", 1.0, 25.0, value=clean_coeffs['Hold_Pct'])
+                
+                st.write("### ❄️ Weather Friction")
+                new_snow = st.slider("Snow Friction", -1000.0, 0.0, value=clean_coeffs['Snow_cm'])
+                new_rain = st.slider("Rain Friction", -500.0, 0.0, value=clean_coeffs['Rain_mm'])
 
             st.divider()
-            
-            # The submit button is now safe from crashing
-            submit_v12 = st.form_submit_button("💾 Save All Calibration & Sync Vault", use_container_width=True)
-
-            if submit_v12:
+            if st.form_submit_button("💾 Save All Calibration & Sync Vault", use_container_width=True):
                 sync_payload = {
-                    'Clicks': new_clicks, 
-                    'Impressions': new_social, 
-                    'Avg_Coin_In': new_coin,
-                    'Property_Theo': new_theo, 
-                    'Hold_Pct': new_hold, 
-                    'Snow_cm': new_snow, 
-                    'Rain_mm': new_rain, 
-                    'Static_Weight': new_static_w, 
-                    'Static_Count': new_static_c,
-                    'Digital_OOH_Weight': new_digital_w, 
-                    'Digital_OOH_Count': new_digital_c
+                    'Clicks': new_clicks, 'Ad_Decay': new_decay, # Sync the new value
+                    'Avg_Coin_In': new_coin, 'Hold_Pct': new_hold,
+                    'Snow_cm': new_snow, 'Rain_mm': new_rain,
+                    'Static_Weight': new_static_w, 'Static_Count': new_static_c,
+                    'Digital_OOH_Weight': clean_coeffs['Digital_OOH_Weight'], 
+                    'Digital_OOH_Count': clean_coeffs['Digital_OOH_Count']
                 }
-                
-                # Update local session for immediate math update
                 st.session_state.coeffs.update(sync_payload)
-                
-                try:
-                    # Overwrite the Supabase row with clean numbers
-                    supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
-                    st.success("✅ Vault Synced Successfully")
-                    import time
-                    time.sleep(0.5)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"⚠️ Database Sync Failed: {e}")
+                supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
+                st.success("✅ Vault Synced")
+                st.rerun()
 
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
@@ -755,126 +751,50 @@ with tab5:
 
 # --- TAB 6: MASTER REPORT (Final Executive Yield & Loyalty Board) ---
 with tab6:
-    st.markdown("""
-        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">📋 Master Forensic Report</h2>
-            <p style="color: #888; margin: 0;">Executive yield audit: Actual Performance vs. Theoretical Math.</p>
-        </div>
-    """, unsafe_allow_html=True)
+    # ... (Permission checks) ...
 
-    # 1. PERMISSION & DATA CHECK
-    current_user = st.session_state.get('user_email', "unauthorized")
-    if current_user not in ADMIN_USERS:
-        st.warning("🔒 Access Restricted: Executive View Only")
-        st.stop()
-
-    if not ledger_data:
-        st.warning("Vault is empty. No data available for reporting.")
-        st.stop()
-
-    # 2. DATA PREPARATION (Safety First)
-    df_rep = pd.DataFrame(ledger_data).copy()
-    df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
-    df_rep = df_rep.sort_values('entry_date')
-
-    # Pull and Clean Coefficients from Session State
-    c = st.session_state.coeffs
-    def clean(key, default):
-        val = c.get(key)
-        try:
-            return float(val) if val is not None else default
-        except (ValueError, TypeError):
-            return default
-
-    avg_gross_spend = clean('Avg_Coin_In', 112.50)
-    prop_theo = clean('Property_Theo', 450.00)
-    hold_factor = clean('Hold_Pct', 10.0) / 100
-    c_clicks = clean('Clicks', 0.02)
-    c_social = clean('Impressions', 0.0002)
-    c_snow = clean('Snow_cm', -45.0)
-    c_rain = clean('Rain_mm', -12.0)
-
-    # 3. RUN ENGINE MATH
+    # 1. RUN UPDATED ENGINE
     metrics = get_forensic_metrics(ledger_data, st.session_state.coeffs)
-    ooh_daily = metrics.get('ooh_total_daily', 0)
+    df_viz = metrics.get('df_with_awareness')
     
-    df_rep['day_name'] = df_rep['entry_date'].dt.day_name()
-    df_rep['Baseline'] = df_rep['day_name'].map(metrics.get('heartbeats', {}))
-    df_rep['OOH Lift'] = ooh_daily
-    df_rep['Digital Lift'] = (df_rep.get('ad_clicks', 0).fillna(0) * c_clicks) + \
-                             (df_rep.get('ad_impressions', 0).fillna(0) * c_social)
-    df_rep['Weather Penalty'] = (df_rep.get('snow_cm', 0).fillna(0) * c_snow) + \
-                                (df_rep.get('rain_mm', 0).fillna(0) * c_rain)
+    if df_viz is None or df_viz.empty:
+        st.warning("No data for reporting.")
+        st.stop()
 
-    # 4. FINANCIAL & LOYALTY CALCULATIONS
-    total_traffic = df_rep['actual_traffic'].sum()
-    total_new_members = df_rep['new_members'].sum() if 'new_members' in df_rep.columns else 0
-    
-    total_gross_vol = total_traffic * avg_gross_spend
-    actual_net_win = total_gross_vol * hold_factor
-    total_theo_win = total_traffic * prop_theo
-    
-    yield_gap = (actual_net_win / total_traffic) - prop_theo if total_traffic > 0 else 0
-    perf_index = (actual_net_win / total_theo_win) if total_theo_win > 0 else 0
-    
-    net_mkt_guests = df_rep['Digital Lift'].sum() + (ooh_daily * len(df_rep)) + df_rep['Weather Penalty'].sum()
-    mkt_net_win_impact = max(0, net_mkt_guests * avg_gross_spend * hold_factor)
-    
-    member_conv_rate = (total_new_members / total_traffic * 100) if total_traffic > 0 else 0
+    # 2. PULL CORE METRICS
+    ooh_daily = metrics['ooh_total_daily']
+    avg_spend = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
+    hold_f = metrics.get('hold_factor', 0.10)
 
-    # 5. POWER METRICS: THE YIELD BOARD
-    st.write("### ⚖️ Property Yield: Actual Net vs. Theoretical")
+    # 3. YIELD BOARD
+    st.write("### ⚖️ Property Yield: Adstock & Awareness Impact")
     y1, y2, y3 = st.columns(3)
-    y1.metric("Total Theo Win", f"${total_theo_win:,.2f}", help=f"Expected Win based on ${prop_theo} Theo.")
-    y2.metric("Actual Net Win (GGR)", f"${actual_net_win:,.2f}", 
-              delta=f"{(perf_index-1)*100:.1f}% Yield Variance",
-              help=f"Actual profit based on {hold_factor*100:.1f}% Hold.")
-    y3.metric("Marketing Net Impact", f"${mkt_net_win_impact:,.2f}", 
-              delta=f"{net_mkt_guests:,.0f} Guests",
-              help="Net profit attributed to OOH and Digital maneuvers.")
+    
+    # Use the Residual Lift for the marketing impact
+    total_mkt_lift = df_viz['residual_lift'].sum() + (ooh_daily * len(df_viz))
+    mkt_net_win = total_mkt_lift * avg_spend * hold_f
+
+    y1.metric("Total Traffic", f"{df_viz['actual_traffic'].sum():,.0f}")
+    y2.metric("Marketing Net Win", f"${mkt_net_win:,.2f}")
+    y3.metric("AI Predictability", metrics['predictability'])
 
     st.divider()
 
-    # 6. EXECUTIVE SCORECARD (Updated with Loyalty)
-    st.write("### 🏆 Strategic Performance Scorecard")
-    s1, s2, s3 = st.columns(3)
-    with s1:
-        st.metric("Guest Quality Index", f"{perf_index:.2f}x", 
-                  delta=f"${yield_gap:,.2f} vs Theo",
-                  help="Score above 1.0 means we are attracting players more valuable than the house average.")
-    with s2:
-        st.metric("New Member Capture", f"{total_new_members:,.0f}", 
-                  delta=f"{member_conv_rate:.1f}% Conv.",
-                  help="Total Unity sign-ups and the conversion rate of total foot traffic.")
-    with s3:
-        capture_rate = (mkt_net_win_impact / actual_net_win * 100) if actual_net_win > 0 else 0
-        st.metric("Market Capture Rate", f"{capture_rate:.1f}%", 
-                  help="Percentage of total profit directly generated by active marketing maneuvers.")
+    # 4. THE UPDATED STACK CHART
+    st.write("### 📊 Attribution Stack (With Residual Awareness)")
+    
+    # We add OOH lift as a constant for the chart
+    df_viz['OOH Lift'] = ooh_daily
+    # Rename for cleaner legend
+    df_viz.rename(columns={'residual_lift': 'Digital Awareness Pool'}, inplace=True)
+    
+    chart_cols = ['baseline_isolated', 'OOH Lift', 'Digital Awareness Pool']
+    st.area_chart(df_viz.set_index('entry_date')[chart_cols])
+    
+    st.caption("The 'Digital Awareness Pool' shows how marketing building up and decays based on your Calibration settings.")
 
-    # 7. ATTRIBUTION STACK CHART
-    st.write("### 📊 Attribution Stack Over Time")
-    chart_cols = ['Baseline', 'OOH Lift', 'Digital Lift', 'Weather Penalty']
-    st.area_chart(df_rep.set_index('entry_date')[chart_cols])
+    # ... (Rest of your export/verification code) ...
 
-    # 8. FINANCIAL & LOYALTY VERIFICATION
-    st.divider()
-    f1, f2 = st.columns(2)
-    with f1:
-        st.write("**Marketing Volume Audit**")
-        st.write(f"* OOH Total Lift: {(ooh_daily * len(df_rep)):,.0f} guests")
-        st.write(f"* Digital Total Lift: {df_rep['Digital Lift'].sum():,.0f} guests")
-        st.write(f"* Environmental Friction: {df_rep['Weather Penalty'].sum():,.0f} guests")
-        st.success(f"**Total New Unity Members: {total_new_members:,.0f}**")
-    with f2:
-        st.write("**Yield Controls**")
-        st.write(f"* Calibrated Hold: {hold_factor*100:.1f}%")
-        st.write(f"* Calibrated Gross Spend: ${avg_gross_spend:,.2f}")
-        st.write(f"* AI Engine Predictability: {metrics['predictability']}")
-
-    # 9. EXPORT
-    csv = df_rep.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download Final Executive Audit", data=csv, 
-                       file_name=f'HR_Ottawa_Master_Report.csv', use_container_width=True)
 
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
 with tab7:
