@@ -759,7 +759,7 @@ with tab6:
     # Financial Inputs from Tab 4
     avg_gross_spend = st.session_state.coeffs.get('Avg_Coin_In', 112.50)
     prop_theo = st.session_state.coeffs.get('Property_Theo', 450.00)
-    hold_factor = st.session_state.coeffs.get('Hold_Pct', 10.0) / 100
+    hold_factor = float(st.session_state.coeffs.get('Hold_Pct', 10.0) or 10.0) / 100
 
     # 4. APPLY REACTIVE MATH
     df_rep['day_name'] = df_rep['entry_date'].dt.day_name()
