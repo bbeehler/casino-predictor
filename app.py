@@ -771,6 +771,7 @@ with tab6:
     y2.metric("Actual Property Revenue", f"${actual_revenue:,.2f}", delta=f"{variance_pct:.1f}% Yield Var")
     y3.metric("Actual Win Per Head", f"${actual_per_head:,.2f}", delta=f"${actual_per_head - prop_theo:.2f} vs Theo")
 
+    # This is the line that was likely pushed too far to the right
     st.divider()
 
     # 5. MARKETING PERFORMANCE METRICS
