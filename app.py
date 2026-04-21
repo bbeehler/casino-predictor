@@ -348,6 +348,7 @@ with tab1:
         st.line_chart(df_chart.set_index('entry_date')[['Actual Traffic', 'Expected Traffic']])
         
         st.caption("The 'Expected' line accounts for historical baselines, weather friction, digital spend, and OOH inertia.")
+
 # --- TAB 2: LEDGER MANAGEMENT ---
 with tab2:
     st.markdown("""
@@ -365,10 +366,10 @@ with tab2:
         with st.form("manual_entry_v3"):
             entry_date = st.date_input("Select Date", datetime.date.today())
             
-            c1, c2 = st.columns(2)
+            c1, c2, c3 = st.columns(3) # Added c3 here to prevent the crash
             with c1: traffic = st.number_input("Traffic (Headcount)", min_value=0)
             with c2: coin_in = st.number_input("Coin-In ($)", min_value=0.0, format="%.2f")
-            with c3: new_members = st.number_input("New Members Signed Up", min_value=0, step=1)
+            with c3: new_mems = st.number_input("New Members", min_value=0, step=1)
             
             st.divider()
             st.write("**Marketing Metrics**")
@@ -377,27 +378,25 @@ with tab2:
             with m2: imps = st.number_input("Ad Impressions", min_value=0)
             with m3: social = st.number_input("Social Engagements", min_value=0)
             
-            # This button is inside the form, so it's safe from duplicate ID errors
             submit_form = st.form_submit_button("💾 Sync Results to Vault", use_container_width=True)
             
             if submit_form:
                 with st.spinner("Writing to Vault..."):
                     date_str = entry_date.isoformat()
+                    # Fixed: Added commas and correctly mapped the new_members variable
                     new_row = {
                         "entry_date": date_str,
-                        "actual_traffic": traffic,
-                        "actual_coin_in": coin_in,
-                        "ad_clicks": clicks,
-                        "ad_impressions": imps,
-                        "social_engagements": social
-                        "new_members": new_members
+                        "actual_traffic": int(traffic),
+                        "actual_coin_in": float(coin_in),
+                        "ad_clicks": int(clicks),
+                        "ad_impressions": int(imps),
+                        "social_engagements": int(social),
+                        "new_members": int(new_mems)
                     }
                     try:
-                        # UPSERT handles backfilling missed weekend dates or updating existing ones
                         supabase.table("ledger").upsert(new_row, on_conflict="entry_date").execute()
                         st.success(f"✅ Data for {date_str} is now in the Vault.")
                         
-                        # FORCE REFRESH: This clears the cache and re-fetches the latest data
                         import time
                         time.sleep(1)
                         st.rerun() 
@@ -421,22 +420,19 @@ with tab2:
                 except Exception as e:
                     st.error(f"Upload failed: {e}")
 
-    # --- SECTION C: THE LEDGER EDITOR (Indented correctly) ---
+    # --- SECTION C: THE LEDGER EDITOR ---
     st.divider()
     st.write("### 📜 Ledger Editor")
-    st.caption("Newest entries are forced to the top. Double-click cells to edit directly.")
+    st.caption("Newest entries are at the top. Edit cells directly and hit Sync below.")
     
     if ledger_data:
-        # 1. Convert to DataFrame
         df_history = pd.DataFrame(ledger_data)
         
-        # 2. FORCE SORTING: This solves the "where is my data" problem
         if 'entry_date' in df_history.columns:
             df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
             df_history = df_history.sort_values(by='entry_date', ascending=False)
         
-        # 3. RENDER THE EDITOR
-        # key="ledger_editor_unique_t2" prevents the 'Duplicate ID' error
+        # Updated Column Config to include New Members
         edited_df = st.data_editor(
             df_history, 
             key="ledger_editor_unique_t2", 
@@ -445,31 +441,29 @@ with tab2:
             column_config={
                 "entry_date": st.column_config.DateColumn("Date", disabled=True),
                 "actual_traffic": st.column_config.NumberColumn("Traffic", format="%d"),
-                "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)", format="$%.2f")
+                "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)", format="$%.2f"),
+                "new_members": st.column_config.NumberColumn("New Members", format="%d")
             }
         )
 
-        # 4. SYNC BUTTON (Indented so it stays in Tab 2 only)
         if st.button("✅ Confirm & Sync Edits", key="btn_sync_ledger_t2", use_container_width=True):
             with st.spinner("Updating Vault records..."):
                 try:
                     for _, row in edited_df.iterrows():
                         up_data = row.to_dict()
-                        # Format date for Supabase match
                         d_key = pd.to_datetime(up_data['entry_date']).strftime('%Y-%m-%d')
                         up_data['entry_date'] = d_key
                         
-                        # Clean payload
                         if 'id' in up_data: del up_data['id']
                         
                         supabase.table("ledger").update(up_data).eq("entry_date", d_key).execute()
                     
                     st.success("Vault Successfully Updated!")
-                    st.rerun() # Refresh the view
+                    st.rerun() 
                 except Exception as e:
                     st.error(f"Manual sync failed: {e}")
     else:
-        st.info("The Vault is currently empty. Use the form above to add your first entry.")
+        st.info("The Vault is currently empty.")
 
 # --- TAB 3: PROPERTY ANALYTICS ---
 with tab3:
