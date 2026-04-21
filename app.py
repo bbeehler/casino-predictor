@@ -622,6 +622,7 @@ with tab4:
                     st.rerun()
                 except Exception as e:
                     st.error(f"⚠️ Database Sync Failed: {e}")
+
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
@@ -634,7 +635,7 @@ with tab5:
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 1. THE FORENSIC DATA VAULT (Synced to Tab 2 Schema)
+    # 1. THE FORENSIC DATA VAULT (Synced to Latest Schema)
     vault_metrics = {}
     if ledger_data:
         df_vault = pd.DataFrame(ledger_data).copy()
@@ -642,10 +643,11 @@ with tab5:
         
         # --- DYNAMIC COLUMN NORMALIZATION ---
         col_map = {
-            'ad_impressions': ['ad_impressions', 'Impressions', 'social_impressions'],
+            'ad_impressions': ['ad_impressions', 'Impressions'],
             'ad_clicks': ['ad_clicks', 'Clicks'],
             'actual_traffic': ['actual_traffic', 'Traffic'],
-            'actual_coin_in': ['actual_coin_in', 'Revenue']
+            'actual_coin_in': ['actual_coin_in', 'Revenue', 'actual_coin_in'],
+            'new_members': ['new_members', 'Signups', 'Members'] # Added New Members mapping
         }
         
         for target, aliases in col_map.items():
@@ -660,24 +662,22 @@ with tab5:
         df_vault['day_name'] = df_vault['entry_date'].dt.day_name()
         heartbeats = df_vault.groupby('day_name')['actual_traffic'].mean().to_dict()
         
-        # --- OOH & DIGITAL WEIGHTS ---
+        # Pull Weights
         w_clicks = st.session_state.coeffs.get('Clicks', 0.02)
         w_social = st.session_state.coeffs.get('Impressions', 0.0002)
-        
-        # Split OOH logic
         c_static = st.session_state.coeffs.get('Static_Weight', 50.0)
         n_static = st.session_state.coeffs.get('Static_Count', 2)
         c_dig_ooh = st.session_state.coeffs.get('Digital_OOH_Weight', 10.0)
         n_dig_ooh = st.session_state.coeffs.get('Digital_OOH_Count', 4)
         total_ooh_lift = (c_static * n_static) + (c_dig_ooh * n_dig_ooh)
         
-        # Calculate Pure Digital Lift
         total_traffic = df_vault['actual_traffic'].sum()
+        total_members = df_vault['new_members'].sum() # New Calculation
         marketing_impact = (df_vault['ad_clicks'].sum() * w_clicks) + \
                            (df_vault['ad_impressions'].sum() * w_social)
         digital_lift_pct = (marketing_impact / total_traffic) * 100 if total_traffic > 0 else 0
 
-        # AI Predictability (Now accounts for OOH baseline shift)
+        # AI Predictability
         df_vault['expected'] = df_vault.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
                                             (x['ad_clicks'] * w_clicks) + 
                                             (x['ad_impressions'] * w_social) +
@@ -692,11 +692,12 @@ with tab5:
             "digital_lift": f"{digital_lift_pct:.1f}%",
             "ooh_lift": f"{total_ooh_lift:.0f} guests/day",
             "predictability": f"{predictability_score:.1f}%",
-            "avg_spend": f"${df_vault['actual_coin_in'].mean():,.2f}"
+            "avg_spend": f"${df_vault['actual_coin_in'].mean():,.2f}",
+            "total_new_members": f"{total_members:,.0f} sign-ups" # New Metric for AI
         }
 
     # 2. CHAT INPUT
-    prompt = st.chat_input("Ask about Digital Lift, Billboard ROI, or weekend predictions...")
+    prompt = st.chat_input("Ask about Digital Lift, Member Sign-ups, or Billboard ROI...")
 
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -704,33 +705,34 @@ with tab5:
         try:
             import google.generativeai as genai
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model = genai.GenerativeModel('gemini-2.5-flash') # Using the latest flash model
+            model = genai.GenerativeModel('gemini-1.5-flash') 
             
             history_payload = []
             for m in st.session_state.messages[:-1]:
                 role = "model" if m["role"] == "assistant" else "user"
                 history_payload.append({"role": role, "parts": [m["content"]]})
             
-            # THE FORENSIC BRAIN CONTEXT (Now with OOH Knowledge)
+            # THE FORENSIC BRAIN CONTEXT (Now includes Loyalty Data)
             sys_context = f"""
             SYSTEM ROLE: Chief Strategy Officer at Hard Rock Ottawa. 
-            TONE: Professional, Data-Driven, Strategic.
+            TONE: Professional, Data-Driven, Wit/Sharp.
 
             LIVE KPI VAULT:
             - AI Predictability: {vault_metrics.get('predictability', 'N/A')}
             - Pure Digital Lift (Ads): {vault_metrics.get('digital_lift', 'N/A')}
             - OOH Baseline Lift (Billboards): {vault_metrics.get('ooh_lift', 'N/A')}
+            - Total New Members (Loyalty): {vault_metrics.get('total_new_members', 'N/A')}
             - Avg. Property Spend: {vault_metrics.get('avg_spend', 'N/A')}
             - Baseline DOW Heartbeats: {vault_metrics.get('heartbeats', {})}
 
             CAMPAIGN CONTEXT:
-            - You are running the 'Your Turn to Hit' campaign.
-            - You have a mix of Static (24/7) and Digital (Shared Loop) billboards.
-            - OOH is treated as an 'Inertia Lifter' that raises the property floor.
+            - Campaign: 'Your Turn to Hit'.
+            - Goal: Drive foot traffic and Unity card sign-ups (New Members).
+            - OOH is an 'Inertia Lifter' while Digital is 'Reactive Pressure'.
 
             STRATEGY RULE: 
-            If Predictability is < 80%, suggest checking if the OOH Weights or Digital Multipliers in Tab 4 need calibration.
-            Always end with one sharp strategic question regarding revenue or attribution.
+            If New Members are low relative to traffic, suggest a 'Unity-specific' digital ad push.
+            Always end with one sharp strategic question regarding ROI or demographic capture.
             """
 
             chat = model.start_chat(history=history_payload)
