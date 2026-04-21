@@ -714,7 +714,7 @@ with tab5:
         st.session_state.messages = []
         st.rerun()
 
-# --- TAB 6: MASTER REPORT (Yield Analysis & Theo Edition) ---
+# --- TAB 6: MASTER REPORT (Fixed Indentation & Theo Integration) ---
 with tab6:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
@@ -752,8 +752,6 @@ with tab6:
     # 3. FINANCIAL & YIELD CALCULATIONS
     total_traffic = df_rep['actual_traffic'].sum()
     actual_revenue = total_traffic * avg_spend
-    
-    # Theo vs Actual Logic
     total_theo_revenue = total_traffic * prop_theo
     yield_variance = actual_revenue - total_theo_revenue
     variance_pct = (yield_variance / total_theo_revenue * 100) if total_theo_revenue > 0 else 0
@@ -771,7 +769,6 @@ with tab6:
     y2.metric("Actual Property Revenue", f"${actual_revenue:,.2f}", delta=f"{variance_pct:.1f}% Yield Var")
     y3.metric("Actual Win Per Head", f"${actual_per_head:,.2f}", delta=f"${actual_per_head - prop_theo:.2f} vs Theo")
 
-    # This is the line that was likely pushed too far to the right
     st.divider()
 
     # 5. MARKETING PERFORMANCE METRICS
@@ -808,7 +805,8 @@ with tab6:
         st.dataframe(df_rep[['entry_date', 'actual_traffic', 'Baseline Traffic', 'OOH Lift', 'Digital Lift', 'Weather Penalty']], use_container_width=True)
 
     csv = df_rep.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download Final Executive Report", data=csv, file_name=f'HR_Ottawa_Forensic_Audit_{pd.Timestamp.now().strftime("%Y-%m-%d")}.csv', use_container_width=True)
+    st.download_button("📥 Download Final Executive Report", data=csv, file_name=f'HR_Ottawa_Forensic_Audit.csv', use_container_width=True)
+
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
 with tab7:
     st.markdown("""
