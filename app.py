@@ -514,7 +514,7 @@ with tab3:
 
     else:
         st.info("No data found in the Vault. Please backfill results in Tab 2 to see analytics.")
-# --- TAB 4: ENGINE CONTROL (CALIBRATION) ---
+# --- TAB 4: ENGINE CONTROL (Fixed Logic & Submit Button) ---
 with tab4:
     current_user = st.session_state.get('user_email', "unauthorized")
     
@@ -529,51 +529,45 @@ with tab4:
             </div>
         """, unsafe_allow_html=True)
 
-        # 1. Initialize Default Values in Session State
-        defaults = {
-            'Static_Weight': 50.0, 
-            'Static_Count': 2, 
-            'Digital_OOH_Weight': 10.0, 
-            'Digital_OOH_Count': 4, 
-            'Property_Theo': 450.0,
-            'Hold_Pct': 10.0,
-            'Avg_Coin_In': 112.50
-        }
-        for key, val in defaults.items():
-            if key not in st.session_state.coeffs:
-                st.session_state.coeffs[key] = val
-
-        # 2. Calibration Form
-        with st.form("engine_settings_final_v1"):
+        # 1. HARD-CODED SAFETY CHECK
+        # This ensures the app ALWAYS has numbers to work with, even if Supabase fails
+        if 'coeffs' not in st.session_state:
+            st.session_state.coeffs = {}
+            
+        safe_coeffs = st.session_state.coeffs
+        
+        # 2. CALIBRATION FORM
+        with st.form("engine_settings_final_v10"):
             col1, col2 = st.columns(2)
             
             with col1:
                 st.write("### 📣 Marketing Multipliers")
-                new_clicks = st.slider("Click Weight", 0.0, 0.5, value=float(st.session_state.coeffs.get('Clicks', 0.02)))
-                new_social = st.number_input("Social Weight", 0.0, 0.01, value=float(st.session_state.coeffs.get('Impressions', 0.0002)), format="%.4f")
+                # Using .get() with a default value prevents the KeyError/TypeError
+                new_clicks = st.slider("Click Weight", 0.0, 0.5, value=float(safe_coeffs.get('Clicks', 0.02)))
+                new_social = st.number_input("Social Weight", 0.0, 0.01, value=float(safe_coeffs.get('Impressions', 0.0002)), format="%.4f")
                 
                 st.write("### 📍 OOH / Billboards")
-                new_static_w = st.slider("Static Board Lift", 0.0, 500.0, value=float(st.session_state.coeffs['Static_Weight']))
-                new_static_c = st.number_input("Static Count", 0, 10, value=int(st.session_state.coeffs['Static_Count']))
-                new_digital_w = st.slider("Digital Board Lift", 0.0, 200.0, value=float(st.session_state.coeffs['Digital_OOH_Weight']))
-                new_digital_c = st.number_input("Digital Count", 0, 20, value=int(st.session_state.coeffs['Digital_OOH_Count']))
+                new_static_w = st.slider("Static Board Lift", 0.0, 500.0, value=float(safe_coeffs.get('Static_Weight', 50.0)))
+                new_static_c = st.number_input("Static Count", 0, 10, value=int(safe_coeffs.get('Static_Count', 2)))
+                new_digital_w = st.slider("Digital Board Lift", 0.0, 200.0, value=float(safe_coeffs.get('Digital_OOH_Weight', 10.0)))
+                new_digital_c = st.number_input("Digital Count", 0, 20, value=int(safe_coeffs.get('Digital_OOH_Count', 4)))
 
             with col2:
                 st.write("### ❄️ Environmental Friction")
-                new_snow = st.slider("Snow Friction", -1000.0, 0.0, value=float(st.session_state.coeffs.get('Snow_cm', -45.0)))
-                new_rain = st.slider("Rain Friction", -500.0, 0.0, value=float(st.session_state.coeffs.get('Rain_mm', -12.0)))
+                new_snow = st.slider("Snow Friction", -1000.0, 0.0, value=float(safe_coeffs.get('Snow_cm', -45.0)))
+                new_rain = st.slider("Rain Friction", -500.0, 0.0, value=float(safe_coeffs.get('Rain_mm', -12.0)))
                 
                 st.write("### 💰 Financials & Yield")
-                new_coin = st.number_input("Avg Gross Spend ($)", 0.0, 5000.0, value=float(st.session_state.coeffs['Avg_Coin_In']))
-                new_theo = st.number_input("Property Theo ($)", 0.0, 2000.0, value=float(st.session_state.coeffs['Property_Theo']))
-                new_hold = st.slider("House Hold %", 1.0, 25.0, value=float(st.session_state.coeffs['Hold_Pct']), help="Average net percentage the house keeps after wins.")
+                new_coin = st.number_input("Avg Gross Spend ($)", 0.0, 5000.0, value=float(safe_coeffs.get('Avg_Coin_In', 112.50)))
+                new_theo = st.number_input("Property Theo ($)", 0.0, 2000.0, value=float(safe_coeffs.get('Property_Theo', 450.0)))
+                new_hold = st.slider("House Hold %", 1.0, 25.0, value=float(safe_coeffs.get('Hold_Pct', 10.0)))
 
+            # --- THE SUBMIT BUTTON ---
+            # Placing it here ensures it stays inside the form block
             st.divider()
-            
-            submit_v8 = st.form_submit_button("💾 Save All Calibration & Sync Vault", use_container_width=True)
+            submit_final = st.form_submit_button("💾 Save All Calibration & Sync Vault", use_container_width=True)
 
-            if submit_v8:
-                # 3. Create Payload for Supabase
+            if submit_final:
                 sync_payload = {
                     'Clicks': new_clicks, 
                     'Impressions': new_social, 
@@ -588,15 +582,11 @@ with tab4:
                     'Digital_OOH_Count': new_digital_c
                 }
                 
-                # Update local memory
                 st.session_state.coeffs.update(sync_payload)
                 
                 try:
-                    # Sync to Database
                     supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
                     st.success("✅ Vault Synced Successfully")
-                    
-                    # Force metrics to refresh with new data
                     import time
                     time.sleep(0.5)
                     st.rerun()
