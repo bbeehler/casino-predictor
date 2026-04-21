@@ -82,12 +82,20 @@ def get_forensic_metrics(df, coeffs):
     mape = (np.abs(df_filtered['actual_traffic'] - df_filtered['expected']) / df_filtered['actual_traffic']).mean()
     pred_val = (1 - mape) * 100 if not np.isnan(mape) else 0
 
+    # Ensure Hold_Pct is a number, even if the DB returns None
+    raw_hold = coeffs.get('Hold_Pct')
+    if raw_hold is None:
+        clean_hold = 10.0  # Fallback to 10% if DB is empty
+    else:
+        clean_hold = float(raw_hold)
+
+    # Now calculate the factor safely
     return {
         "predictability": f"{pred_val:.1f}%",
         "digital_lift": f"{lift_val:.1f}%",
         "heartbeats": heartbeats,
         "ooh_total_daily": total_ooh_lift,
-        "hold_factor": float(coeffs.get('Hold_Pct', 10.0)) / 100
+        "hold_factor": clean_hold / 100 
     }
 # 3. INITIALIZE CLIENTS
 url = st.secrets["SUPABASE_URL"]
