@@ -554,19 +554,21 @@ with tab3:
 with tab4:
     current_user = st.session_state.get('user_email', "unauthorized")
     
+    # 1. PERMISSION GATEKEEPER
     if current_user not in ADMIN_USERS:
         st.warning("### 🔒 Access Restricted")
+        st.info("This tab is reserved for Executive Management to calibrate the Forensic Engine.")
     else:
-        st.markdown("""
+        st.markdown(f"""
             <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
                 <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Calibration</h2>
-                <p style="color: #888; margin: 0;">Admin Mode: {current_user}</p>
+                <p style="color: #888; margin: 0;">Admin Identity: <b>{current_user}</b></p>
             </div>
         """, unsafe_allow_html=True)
 
-        # 1. PRE-FLIGHT DATA CLEANING
+        # 2. PRE-FLIGHT DATA CLEANING (Fallback to Defaults if DB is empty)
         defaults = {
-            'Clicks': 0.02, 'Impressions': 0.0002, 'Ad_Decay': 85.0, # Added Ad_Decay
+            'Clicks': 0.02, 'Impressions': 0.0002, 'Ad_Decay': 85.0,
             'Avg_Coin_In': 112.50, 'Property_Theo': 450.0, 'Hold_Pct': 10.0,
             'Snow_cm': -45.0, 'Rain_mm': -12.0, 'Static_Weight': 50.0, 
             'Static_Count': 2, 'Digital_OOH_Weight': 10.0, 'Digital_OOH_Count': 4
@@ -576,22 +578,22 @@ with tab4:
         for key, default_val in defaults.items():
             raw_val = st.session_state.coeffs.get(key)
             try:
+                # Ensure we are working with floats to avoid type-mismatch errors
                 clean_coeffs[key] = float(raw_val) if raw_val is not None else default_val
             except (ValueError, TypeError):
                 clean_coeffs[key] = default_val
 
-        # 2. CALIBRATION FORM
-        with st.form("engine_settings_v15"):
+        # 3. CALIBRATION FORM
+        with st.form("engine_settings_v16"):
             col1, col2 = st.columns(2)
             
             with col1:
-                st.write("### 📣 Marketing Multipliers")
-                new_clicks = st.slider("Click Weight", 0.0, 0.5, value=clean_coeffs['Clicks'])
-                # THE NEW DECAY SLIDER
+                st.write("### 📣 Marketing & Awareness")
+                new_clicks = st.slider("Click Weight", 0.0, 0.5, value=clean_coeffs['Clicks'], format="%.3f")
                 new_decay = st.slider("Awareness Retention (%)", 0.0, 100.0, value=clean_coeffs['Ad_Decay'], 
-                                      help="How much awareness carries over to the next day. 85% is the standard.")
+                                      help="Adstock Decay: 85% is the standard for retail/gaming half-life.")
                 
-                st.write("### 📍 OOH / Billboards")
+                st.write("### 📍 OOH / Billboard Pressure")
                 new_static_w = st.slider("Static Board Lift", 0.0, 500.0, value=clean_coeffs['Static_Weight'])
                 new_static_c = st.number_input("Static Count", 0, 10, value=int(clean_coeffs['Static_Count']))
 
@@ -601,24 +603,50 @@ with tab4:
                 new_hold = st.slider("House Hold %", 1.0, 25.0, value=clean_coeffs['Hold_Pct'])
                 
                 st.write("### ❄️ Weather Friction")
-                new_snow = st.slider("Snow Friction", -1000.0, 0.0, value=clean_coeffs['Snow_cm'])
-                new_rain = st.slider("Rain Friction", -500.0, 0.0, value=clean_coeffs['Rain_mm'])
+                new_snow = st.slider("Snow Friction (Guests/cm)", -1000.0, 0.0, value=clean_coeffs['Snow_cm'])
+                new_rain = st.slider("Rain Friction (Guests/mm)", -500.0, 0.0, value=clean_coeffs['Rain_mm'])
 
             st.divider()
-            if st.form_submit_button("💾 Save All Calibration & Sync Vault", use_container_width=True):
-                sync_payload = {
-                    'Clicks': new_clicks, 'Ad_Decay': new_decay, # Sync the new value
-                    'Avg_Coin_In': new_coin, 'Hold_Pct': new_hold,
-                    'Snow_cm': new_snow, 'Rain_mm': new_rain,
-                    'Static_Weight': new_static_w, 'Static_Count': new_static_c,
-                    'Digital_OOH_Weight': clean_coeffs['Digital_OOH_Weight'], 
-                    'Digital_OOH_Count': clean_coeffs['Digital_OOH_Count']
-                }
-                st.session_state.coeffs.update(sync_payload)
-                supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
-                st.success("✅ Vault Synced")
-                st.rerun()
+            submit_btn = st.form_submit_button("💾 Save All Calibration & Sync Vault", use_container_width=True)
 
+            if submit_btn:
+                # 4. PREPARE THE SYNC PAYLOAD (Strict Type Casting)
+                sync_payload = {
+                    'Clicks': float(new_clicks),
+                    'Ad_Decay': float(new_decay),
+                    'Avg_Coin_In': float(new_coin),
+                    'Hold_Pct': float(new_hold),
+                    'Snow_cm': float(new_snow),
+                    'Rain_mm': float(new_rain),
+                    'Static_Weight': float(new_static_w),
+                    'Static_Count': int(new_static_c),
+                    # Keeping existing values for OOH Digital to avoid blanking them
+                    'Digital_OOH_Weight': clean_coeffs['Digital_OOH_Weight'], 
+                    'Digital_OOH_Count': int(clean_coeffs['Digital_OOH_Count'])
+                }
+                
+                try:
+                    # 5. EXECUTE SUPABASE UPDATE
+                    # Targeting row ID 1 (The Master Coefficients row)
+                    response = supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
+                    
+                    # 6. VERIFY SUCCESS
+                    if hasattr(response, 'data') and len(response.data) > 0:
+                        st.session_state.coeffs.update(sync_payload)
+                        st.success("✅ Vault Successfully Synced. Engine Calibrated.")
+                        import time
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("### 🚨 Sync Failed: Row ID 1 not found.")
+                        st.info("Check your 'coefficients' table in Supabase to ensure a row with id=1 exists.")
+                
+                except Exception as e:
+                    # 7. EXPOSE THE REAL ERROR
+                    st.error("### 🚨 Database Error")
+                    st.write(f"**The Vault rejected the update:** {e}")
+                    st.write("**Verify your Supabase column names match exactly:**")
+                    st.code(list(sync_payload.keys()))
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
