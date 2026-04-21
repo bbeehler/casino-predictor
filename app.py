@@ -701,12 +701,12 @@ with tab5:
         st.session_state.messages = []
         st.rerun()
 
-# --- TAB 6: MASTER REPORT (Fixed Indentation & Theo Integration) ---
+# --- TAB 6: MASTER REPORT (Corrected Terminology Fix) ---
 with tab6:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">📋 Master Forensic Report</h2>
-            <p style="color: #888; margin: 0;">Executive yield audit: Actual Performance vs. Theoretical Baseline.</p>
+            <p style="color: #888; margin: 0;">Executive yield audit: Actual Guest Spend vs. Theoretical Win (Theo).</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -736,31 +736,50 @@ with tab6:
     df_rep['Digital Lift'] = (df_rep.get('ad_clicks', 0) * c_clicks) + (df_rep.get('ad_impressions', 0) * c_social)
     df_rep['Weather Penalty'] = (df_rep.get('snow_cm', 0) * c_snow) + (df_rep.get('rain_mm', 0) * c_rain)
 
-    # 3. FINANCIAL & YIELD CALCULATIONS
+    # 3. FINANCIAL & YIELD CALCULATIONS (The Corrected Logic)
     total_traffic = df_rep['actual_traffic'].sum()
     actual_revenue = total_traffic * avg_spend
+    
+    # Theo vs Actual Comparison
+    # Total Theo is what the math says they SHOULD spend
     total_theo_revenue = total_traffic * prop_theo
-    yield_variance = actual_revenue - total_theo_revenue
-    variance_pct = (yield_variance / total_theo_revenue * 100) if total_theo_revenue > 0 else 0
-    actual_per_head = actual_revenue / total_traffic if total_traffic > 0 else 0
+    
+    # Actual Spend Per Head is what they ARE spending (Avg Spend slider)
+    actual_spend_per_head = avg_spend 
+    
+    # Variance shows the gap between actual spend and the theoretical potential
+    yield_gap = actual_spend_per_head - prop_theo
+    variance_pct = (yield_gap / prop_theo * 100) if prop_theo > 0 else 0
 
-    # Marketing Impact Logic
-    net_mkt_guests = df_rep['Digital Lift'].sum() + (ooh_daily * len(df_rep)) + df_rep['Weather Penalty'].sum()
-    mkt_revenue_impact = max(0, net_mkt_guests * avg_spend)
-    mkt_share_pct = (mkt_revenue_impact / actual_revenue * 100) if actual_revenue > 0 else 0
-
-    # 4. POWER METRICS (THEO VS ACTUAL)
-    st.write("### ⚖️ Yield Analysis: Actual vs. Theoretical")
+    # 4. POWER METRICS (Corrected Labels)
+    st.write("### ⚖️ Yield Analysis: Actual Spend vs. Theoretical Potential")
     y1, y2, y3 = st.columns(3)
-    y1.metric("Total Theo Revenue", f"${total_theo_revenue:,.2f}", help=f"Based on ${prop_theo} baseline.")
-    y2.metric("Actual Property Revenue", f"${actual_revenue:,.2f}", delta=f"{variance_pct:.1f}% Yield Var")
-    y3.metric("Actual Win Per Head", f"${actual_per_head:,.2f}", delta=f"${actual_per_head - prop_theo:.2f} vs Theo")
+    
+    with y1:
+        st.metric("Total Theo Revenue", f"${total_theo_revenue:,.2f}", help=f"Expected win based on ${prop_theo} Theo.")
+    
+    with y2:
+        st.metric("Actual Property Revenue", f"${actual_revenue:,.2f}", help="Total spend based on foot traffic and Avg Spend slider.")
+    
+    with y3:
+        # Renamed from Win Per Head to Actual Spend Per Head
+        st.metric(
+            label="Actual Spend Per Head", 
+            value=f"${actual_spend_per_head:,.2f}", 
+            delta=f"${yield_gap:.2f} vs Theo",
+            help="This is the gross spend per guest based on your engine calibration."
+        )
 
     st.divider()
 
     # 5. MARKETING PERFORMANCE METRICS
     st.write("### 🧬 Marketing Attribution Audit")
     m1, m2, m3 = st.columns(3)
+    
+    net_mkt_guests = df_rep['Digital Lift'].sum() + (ooh_daily * len(df_rep)) + df_rep['Weather Penalty'].sum()
+    mkt_revenue_impact = max(0, net_mkt_guests * avg_spend)
+    mkt_share_pct = (mkt_revenue_impact / actual_revenue * 100) if actual_revenue > 0 else 0
+
     m1.metric("Marketing Revenue Impact", f"${mkt_revenue_impact:,.2f}", delta=f"{net_mkt_guests:,.0f} Net Guests")
     m2.metric("Marketing Revenue Share", f"{mkt_share_pct:.1f}%")
     m3.metric("AI Predictability", metrics['predictability'])
@@ -770,7 +789,7 @@ with tab6:
     chart_cols = ['Baseline Traffic', 'OOH Lift', 'Digital Lift', 'Weather Penalty']
     st.area_chart(df_rep.set_index('entry_date')[chart_cols])
 
-    # 7. THE BREAKDOWN
+    # 7. EXECUTIVE BREAKDOWN
     st.divider()
     f1, f2 = st.columns(2)
     with f1:
@@ -781,18 +800,18 @@ with tab6:
         st.error(f"* Weather Friction Loss: {df_rep['Weather Penalty'].sum():,.0f} guests")
     
     with f2:
-        st.write("**Executive Financial Audit**")
-        st.write(f"* Total Attributed Guests: {net_mkt_guests:,.0f}")
-        st.write(f"* Applied Theo Value: ${prop_theo:,.2f}")
-        st.write(f"* Applied Actual Value: ${avg_spend:,.2f}")
-        st.success(f"**Net Marketing Revenue: ${mkt_revenue_impact:,.2f}**")
+        st.write("**Financial Verification**")
+        st.write(f"* Property Theo Baseline: ${prop_theo:,.2f}")
+        st.write(f"* Actual Spend Calibrated: ${avg_spend:,.2f}")
+        st.write(f"---")
+        if yield_gap < 0:
+            st.warning(f"Yield Gap: We are performing -${abs(yield_gap):,.2f} below Theo per guest.")
+        else:
+            st.success(f"Yield Gap: We are performing +${yield_gap:,.2f} above Theo per guest!")
 
-    # 8. AUDIT TRAIL
-    with st.expander("🔎 View Raw Forensic Ledger"):
-        st.dataframe(df_rep[['entry_date', 'actual_traffic', 'Baseline Traffic', 'OOH Lift', 'Digital Lift', 'Weather Penalty']], use_container_width=True)
-
+    # 8. EXPORT
     csv = df_rep.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download Executive Report", data=csv, file_name='HR_Ottawa_Forensic_Audit.csv', use_container_width=True)
+    st.download_button("📥 Download Final Executive Report", data=csv, file_name='HR_Ottawa_Forensic_Audit.csv', use_container_width=True)
 
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
 with tab7:
