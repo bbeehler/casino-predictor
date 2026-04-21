@@ -723,44 +723,99 @@ with tab5:
         st.session_state.messages = []
         st.rerun()
 
-# --- TAB 6: MASTER REPORT (Net Win vs Theo Edition) ---
+# --- TAB 6: MASTER REPORT (Net Win vs Theo Final) ---
 with tab6:
-    # ... [Standard Header] ...
+    st.markdown("""
+        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
+            <h2 style="color: #FFCC00; margin: 0;">📋 Master Forensic Report</h2>
+            <p style="color: #888; margin: 0;">Executive yield audit: Actual Net Win vs. Theoretical Potential.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # 1. SECURITY & DATA CHECK
+    current_user = st.session_state.get('user_email', "unauthorized")
+    if current_user not in ADMIN_USERS:
+        st.warning("🔒 Access Restricted: Executive View Only")
+        st.stop()
+
+    if not ledger_data:
+        st.warning("Vault is empty. No data available.")
+        st.stop()
+
+    # 2. DATA PREPARATION (Fixes the NameError)
+    metrics = get_forensic_metrics(ledger_data, st.session_state.coeffs)
+    df_rep = pd.DataFrame(ledger_data).copy()
+    df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
+    df_rep = df_rep.sort_values('entry_date')
+
+    # 3. SYNC CALIBRATION
+    ooh_daily = metrics.get('ooh_total_daily', 0)
+    c_clicks = st.session_state.coeffs.get('Clicks', 0.02)
+    c_social = st.session_state.coeffs.get('Impressions', 0.0002)
+    c_snow = st.session_state.coeffs.get('Snow_cm', -45.0)
+    c_rain = st.session_state.coeffs.get('Rain_mm', -12.0)
     
-    # 1. SETUP PARAMETERS
-    avg_spend = st.session_state.coeffs.get('Avg_Coin_In', 112.50)
+    # Financial Inputs from Tab 4
+    avg_gross_spend = st.session_state.coeffs.get('Avg_Coin_In', 112.50)
     prop_theo = st.session_state.coeffs.get('Property_Theo', 450.00)
-    hold_pct = 0.10  # Standard 10% Hold for GGR calculation
-    
-    # 2. CALCULATE REVENUE STAGES
+    hold_factor = st.session_state.coeffs.get('Hold_Pct', 10.0) / 100
+
+    # 4. APPLY REACTIVE MATH
+    df_rep['day_name'] = df_rep['entry_date'].dt.day_name()
+    df_rep['Baseline'] = df_rep['day_name'].map(metrics.get('heartbeats', {}))
+    df_rep['OOH Lift'] = ooh_daily
+    df_rep['Digital Lift'] = (df_rep.get('ad_clicks', 0) * c_clicks) + (df_rep.get('ad_impressions', 0) * c_social)
+    df_rep['Weather Penalty'] = (df_rep.get('snow_cm', 0) * c_snow) + (df_rep.get('rain_mm', 0) * c_rain)
+
+    # 5. FINANCIAL AUDIT (Actual Net vs Theo)
     total_traffic = df_rep['actual_traffic'].sum()
     
-    # GROSS: Total volume of play
-    gross_volume = total_traffic * avg_spend 
+    # GROSS: Total volume of play (Coin-in)
+    total_gross_volume = total_traffic * avg_gross_spend
     
-    # NET WIN (Actual GGR): What the casino actually keeps (Avg Spend * 10% Hold)
-    actual_net_win = gross_volume * hold_pct 
+    # NET WIN: What the casino actually kept (GGR)
+    actual_net_win = total_gross_volume * hold_factor
     
     # THEO: What the math says you should have kept
     total_theo_win = total_traffic * prop_theo
     
-    # 3. YIELD ANALYSIS
     yield_variance = actual_net_win - total_theo_win
-    performance_index = (actual_net_win / total_theo_win) if total_theo_win > 0 else 0
+    variance_pct = (yield_variance / total_theo_win * 100) if total_theo_win > 0 else 0
 
-    # 4. POWER METRICS
+    # 6. POWER METRICS
     st.write("### ⚖️ Yield Analysis: Net Win vs. Theoretical")
     y1, y2, y3 = st.columns(3)
+    y1.metric("Total Theo Win", f"${total_theo_win:,.2f}", help=f"Based on ${prop_theo} Theo.")
+    y2.metric("Actual Net Win (GGR)", f"${actual_net_win:,.2f}", delta=f"{variance_pct:.1f}% vs Theo")
     
-    with y1:
-        st.metric("Total Theo Win", f"${total_theo_win:,.2f}", help="Expected win based on Theo per head.")
-    with y2:
-        st.metric("Actual Net Win (GGR)", f"${actual_net_win:,.2f}", 
-                  delta=f"{yield_variance:,.2f}",
-                  help="Estimated Net Win using a standard 10% Hold.")
-    with y3:
-        st.metric("Performance Index", f"{performance_index:.2f}x", 
-                  help="Above 1.0 means we are outperforming the theoretical math.")
+    # Marketing Impact Calculation
+    net_mkt_guests = df_rep['Digital Lift'].sum() + (ooh_daily * len(df_rep)) + df_rep['Weather Penalty'].sum()
+    mkt_net_win_impact = max(0, net_mkt_guests * avg_gross_spend * hold_factor)
+    y3.metric("Marketing Net Impact", f"${mkt_net_win_impact:,.2f}", delta=f"{net_mkt_guests:,.0f} Guests")
+
+    st.divider()
+
+    # 7. VISUAL STACK & BREAKDOWN
+    st.write("### 📊 Attribution Stack")
+    chart_cols = ['Baseline', 'OOH Lift', 'Digital Lift', 'Weather Penalty']
+    st.area_chart(df_rep.set_index('entry_date')[chart_cols])
+
+    f1, f2 = st.columns(2)
+    with f1:
+        st.write("**Forensic Volume**")
+        st.write(f"* OOH Campaign: {(ooh_daily * len(df_rep)):,.0f} guests")
+        st.write(f"* Digital Ads: {df_rep['Digital Lift'].sum():,.0f} guests")
+        st.error(f"* Weather Friction: {df_rep['Weather Penalty'].sum():,.0f} guests")
+    
+    with f2:
+        st.write("**Yield Verification**")
+        st.write(f"* Actual Hold Applied: {hold_factor*100:.1f}%")
+        st.write(f"* Total Gross Volume: ${total_gross_volume:,.2f}")
+        st.write(f"* Property Predicability: {metrics['predictability']}")
+
+    # 8. EXPORT
+    csv = df_rep.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Download Final Executive Report", data=csv, file_name='HR_Ottawa_Master_Report.csv', use_container_width=True)
 
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
 with tab7:
