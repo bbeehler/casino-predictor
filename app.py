@@ -765,7 +765,7 @@ with tab6:
     # 4. POWER METRICS (THEO VS ACTUAL)
     st.write("### ⚖️ Yield Analysis: Actual vs. Theoretical")
     y1, y2, y3 = st.columns(3)
-    y1.metric("Total Theo Revenue", f"${total_theo_revenue:,.2f}", help=f"Based on ${prop_theo} baseline Theo.")
+    y1.metric("Total Theo Revenue", f"${total_theo_revenue:,.2f}", help=f"Based on ${prop_theo} baseline.")
     y2.metric("Actual Property Revenue", f"${actual_revenue:,.2f}", delta=f"{variance_pct:.1f}% Yield Var")
     y3.metric("Actual Win Per Head", f"${actual_per_head:,.2f}", delta=f"${actual_per_head - prop_theo:.2f} vs Theo")
 
@@ -783,7 +783,7 @@ with tab6:
     chart_cols = ['Baseline Traffic', 'OOH Lift', 'Digital Lift', 'Weather Penalty']
     st.area_chart(df_rep.set_index('entry_date')[chart_cols])
 
-    # 7. THE "KITCHEN SINK" BREAKDOWN
+    # 7. THE BREAKDOWN
     st.divider()
     f1, f2 = st.columns(2)
     with f1:
@@ -800,12 +800,12 @@ with tab6:
         st.write(f"* Applied Actual Value: ${avg_spend:,.2f}")
         st.success(f"**Net Marketing Revenue: ${mkt_revenue_impact:,.2f}**")
 
-    # 8. AUDIT TRAIL & EXPORT
+    # 8. AUDIT TRAIL
     with st.expander("🔎 View Raw Forensic Ledger"):
         st.dataframe(df_rep[['entry_date', 'actual_traffic', 'Baseline Traffic', 'OOH Lift', 'Digital Lift', 'Weather Penalty']], use_container_width=True)
 
     csv = df_rep.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download Final Executive Report", data=csv, file_name=f'HR_Ottawa_Forensic_Audit.csv', use_container_width=True)
+    st.download_button("📥 Download Executive Report", data=csv, file_name='HR_Ottawa_Forensic_Audit.csv', use_container_width=True)
 
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
 with tab7:
