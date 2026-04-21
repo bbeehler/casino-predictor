@@ -481,9 +481,10 @@ with tab3:
 
         # 1. VISUAL TREND SELECTION
         st.write("### 📈 Performance Trends")
-        # Added _t3 to the key to prevent collisions
+        
+        # Added "New Members" to the selector
         metric_choice = st.pills("Select Metric to Analyze", 
-                                ["Traffic", "Coin-In", "Ad Clicks"], 
+                                ["Traffic", "Coin-In", "New Members", "Ad Clicks"], 
                                 selection_mode="single",
                                 default="Traffic",
                                 key="analysis_pills_t3") 
@@ -492,20 +493,29 @@ with tab3:
             st.area_chart(df_analysis.set_index('entry_date')['actual_traffic'], color="#FFCC00")
         elif metric_choice == "Coin-In":
             st.line_chart(df_analysis.set_index('entry_date')['actual_coin_in'], color="#2ecc71")
+        elif metric_choice == "New Members":
+            # Using a bar chart for members as it's a discrete daily count
+            st.bar_chart(df_analysis.set_index('entry_date')['new_members'], color="#E74C3C")
         else:
             st.bar_chart(df_analysis.set_index('entry_date')['ad_clicks'], color="#00CCFF")
 
-        # 2. READ-ONLY DATA VIEW (Safer & Faster)
+        # 2. READ-ONLY DATA VIEW
         st.divider()
         st.write("### 📜 Detailed Analytics View")
         
-        # We use a standard dataframe here instead of an editor to prevent ID errors
+        # Expanded columns to include new_members
+        cols_to_show = [
+            'entry_date', 'actual_traffic', 'actual_coin_in', 
+            'new_members', 'ad_clicks', 'ad_impressions', 'social_engagements'
+        ]
+        
         st.dataframe(
-            df_analysis[['entry_date', 'actual_traffic', 'actual_coin_in', 'ad_clicks', 'ad_impressions', 'social_engagements']],
+            df_analysis[cols_to_show],
             column_config={
                 "entry_date": st.column_config.DateColumn("Date"),
                 "actual_traffic": st.column_config.NumberColumn("Traffic"),
                 "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)", format="$%.2f"),
+                "new_members": st.column_config.NumberColumn("New Members"),
                 "ad_clicks": st.column_config.NumberColumn("Ad Clicks"),
                 "ad_impressions": st.column_config.NumberColumn("Ad Impressions"),
                 "social_engagements": st.column_config.NumberColumn("Social Engagements")
@@ -518,6 +528,7 @@ with tab3:
 
     else:
         st.info("No data found in the Vault. Please backfill results in Tab 2 to see analytics.")
+
 # --- TAB 4: ENGINE CONTROL (Final Stability Fix) ---
 with tab4:
     current_user = st.session_state.get('user_email', "unauthorized")
