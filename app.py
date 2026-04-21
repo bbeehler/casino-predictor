@@ -777,51 +777,115 @@ with tab5:
         st.session_state.messages = []
         st.rerun()
 
-# --- TAB 6: MASTER REPORT (Final Executive Yield & Loyalty Board) ---
+# --- TAB 6: MASTER REPORT (The Comprehensive Executive Board) ---
 with tab6:
-    # ... (Permission checks) ...
+    st.markdown("""
+        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
+            <h2 style="color: #FFCC00; margin: 0;">📋 Master Forensic Report</h2>
+            <p style="color: #888; margin: 0;">Comprehensive Yield Audit: Performance, Marketing Equity, and Loyalty Conversion.</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-    # 1. RUN UPDATED ENGINE
-    metrics = get_forensic_metrics(ledger_data, st.session_state.coeffs)
-    df_viz = metrics.get('df_with_awareness')
-    
-    if df_viz is None or df_viz.empty:
-        st.warning("No data for reporting.")
+    # 1. PERMISSION CHECK
+    current_user = st.session_state.get('user_email', "unauthorized")
+    if current_user not in ADMIN_USERS:
+        st.warning("🔒 Access Restricted: Executive View Only")
         st.stop()
 
-    # 2. PULL CORE METRICS
-    ooh_daily = metrics['ooh_total_daily']
-    avg_spend = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
-    hold_f = metrics.get('hold_factor', 0.10)
+    if not ledger_data:
+        st.warning("Vault is empty. No data available for analysis.")
+        st.stop()
 
-    # 3. YIELD BOARD
-    st.write("### ⚖️ Property Yield: Adstock & Awareness Impact")
-    y1, y2, y3 = st.columns(3)
+    # 2. RUN ENGINE & GET DATA
+    # This pulls the synced dataframe with 'residual_lift' and 'baseline_isolated'
+    metrics = get_forensic_metrics(ledger_data, st.session_state.coeffs)
+    df_rep = metrics.get('df_with_awareness').copy()
     
-    # Use the Residual Lift for the marketing impact
-    total_mkt_lift = df_viz['residual_lift'].sum() + (ooh_daily * len(df_viz))
-    mkt_net_win = total_mkt_lift * avg_spend * hold_f
+    # Financial Controls from Calibration
+    c = st.session_state.coeffs
+    avg_spend = float(c.get('Avg_Coin_In', 112.50))
+    prop_theo = float(c.get('Property_Theo', 450.00))
+    hold_factor = float(c.get('Hold_Pct', 10.0)) / 100
+    ooh_daily = metrics.get('ooh_total_daily', 0)
 
-    y1.metric("Total Traffic", f"{df_viz['actual_traffic'].sum():,.0f}")
-    y2.metric("Marketing Net Win", f"${mkt_net_win:,.2f}")
-    y3.metric("AI Predictability", metrics['predictability'])
+    # 3. TOP ROW: THE FINANCIAL CORE (THE "MONEY" ROW)
+    st.write("### 💰 Property Yield & GGR")
+    f1, f2, f3, f4 = st.columns(4)
+    
+    total_traffic = df_rep['actual_traffic'].sum()
+    actual_ggr = (total_traffic * avg_spend) * hold_factor
+    total_theo_win = total_traffic * prop_theo
+    yield_variance = ((actual_ggr / total_theo_win) - 1) * 100 if total_theo_win > 0 else 0
+    
+    f1.metric("Total Traffic", f"{total_traffic:,.0f}")
+    f2.metric("Total Theo Win", f"${total_theo_win:,.2f}")
+    f3.metric("Actual GGR (Net Win)", f"${actual_ggr:,.2f}", delta=f"{yield_variance:.1f}% vs Theo")
+    f4.metric("Avg Spend/Head", f"${avg_spend:.2f}")
 
     st.divider()
 
-    # 4. THE UPDATED STACK CHART
-    st.write("### 📊 Attribution Stack (With Residual Awareness)")
+    # 4. SECOND ROW: THE MARKETING MANEUVER BOARD
+    st.write("### 📣 Marketing Contribution (Adstock & OOH)")
+    m1, m2, m3, m4 = st.columns(4)
     
-    # We add OOH lift as a constant for the chart
-    df_viz['OOH Lift'] = ooh_daily
-    # Rename for cleaner legend
-    df_viz.rename(columns={'residual_lift': 'Digital Awareness Pool'}, inplace=True)
-    
-    chart_cols = ['baseline_isolated', 'OOH Lift', 'Digital Awareness Pool']
-    st.area_chart(df_viz.set_index('entry_date')[chart_cols])
-    
-    st.caption("The 'Digital Awareness Pool' shows how marketing building up and decays based on your Calibration settings.")
+    # Calculate Impact
+    total_digital_lift_guests = df_rep['residual_lift'].sum()
+    total_ooh_lift_guests = ooh_daily * len(df_rep)
+    total_mkt_guests = total_digital_lift_guests + total_ooh_lift_guests
+    mkt_revenue_impact = (total_mkt_guests * avg_spend) * hold_factor
+    capture_rate = (mkt_revenue_impact / actual_ggr * 100) if actual_ggr > 0 else 0
 
-    # ... (Rest of your export/verification code) ...
+    m1.metric("Marketing Guests", f"{total_mkt_guests:,.0f}", help="Total guests attributed to Digital Awareness Pool + OOH.")
+    m2.metric("Mkt. Revenue Impact", f"${mkt_revenue_impact:,.2f}")
+    m3.metric("Market Capture Rate", f"{capture_rate:.1f}%")
+    m4.metric("AI Predictability", metrics['predictability'])
+
+    st.divider()
+
+    # 5. THIRD ROW: LOYALTY & ENVIRONMENT
+    st.write("### 💎 Loyalty & Environmental Friction")
+    l1, l2, l3, l4 = st.columns(4)
+    
+    total_new_members = df_rep['new_members'].sum() if 'new_members' in df_rep.columns else 0
+    member_conv_rate = (total_new_members / total_traffic * 100) if total_traffic > 0 else 0
+    
+    # Weather Friction Calculation
+    total_snow_loss = (df_rep['snow_cm'].sum() * float(c.get('Snow_cm', -45)))
+    total_rain_loss = (df_rep['rain_mm'].sum() * float(c.get('Rain_mm', -12)))
+    total_env_friction = total_snow_loss + total_rain_loss
+
+    l1.metric("New Unity Members", f"{total_new_members:,.0f}")
+    l2.metric("Member Conv. Rate", f"{member_conv_rate:.2f}%")
+    l3.metric("Weather Friction", f"{total_env_friction:,.0f}", delta="Guests Lost", delta_color="inverse")
+    l4.metric("Guest Quality Index", f"{(actual_ggr / total_theo_win):.2f}x")
+
+    # 6. ATTRIBUTION STACK CHART (WITH AWARENESS CURVE)
+    st.write("### 📊 Comprehensive Attribution Stack")
+    # Clean up the dataframe for charting
+    df_rep['OOH Lift'] = ooh_daily
+    df_rep['Weather Impact'] = (df_rep['snow_cm'] * float(c.get('Snow_cm', -45))) + (df_rep['rain_mm'] * float(c.get('Rain_mm', -12)))
+    
+    chart_cols = {
+        'baseline_isolated': 'Baseline (Organic)',
+        'OOH Lift': 'OOH Pressure',
+        'residual_lift': 'Digital Awareness Pool',
+        'Weather Impact': 'Environmental Friction'
+    }
+    
+    chart_df = df_rep.rename(columns=chart_cols)
+    st.area_chart(chart_df.set_index('entry_date')[list(chart_cols.values())])
+
+    # 7. FINANCIAL VERIFICATION TABLE
+    with st.expander("🔍 View Detailed Forensic Audit"):
+        st.dataframe(
+            df_rep[['entry_date', 'actual_traffic', 'new_members', 'residual_lift', 'baseline_isolated']],
+            use_container_width=True,
+            hide_index=True
+        )
+
+    # 8. EXPORT
+    csv = df_rep.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Export Master Audit CSV", csv, "HR_Ottawa_Forensic_Report.csv", "text/csv", use_container_width=True)
 
 
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
