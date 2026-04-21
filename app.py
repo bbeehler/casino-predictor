@@ -881,7 +881,7 @@ with tab7:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🧪 Forecast Sandbox</h2>
-            <p style="color: #888; margin: 0;">Fully Synchronized: Triangulating Historical Baselines & Live Weather Forecasts.</p>
+            <p style="color: #888; margin: 0;">Fully Synchronized: Triangulating Historical Baselines, Weather, & Loyalty Conversion.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -890,7 +890,7 @@ with tab7:
     date_range = st.date_input(
         "Select Simulation Window:",
         value=(today, today + datetime.timedelta(days=2)),
-        help="The Sandbox will pull specific daily forecasts for this entire window.",
+        help="The Sandbox pulls specific daily forecasts for this entire window.",
         key="sb_date_range"
     )
 
@@ -898,7 +898,6 @@ with tab7:
         start_date, end_date = date_range
         num_days = (end_date - start_date).days + 1
         
-        # Pull live data from session state
         live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
 
         # 2. SCENARIO INPUTS
@@ -922,73 +921,83 @@ with tab7:
             st.write("**Engine Baseline**")
             c = st.session_state.coeffs
             st.metric("Spend Anchor", f"${c.get('Avg_Coin_In', 112.50):,.2f}")
-            st.info("Simulation pulls baseline 'Heartbeats' from your Ledger history.")
+            st.info("Simulation pulls baseline 'Heartbeats' and 'Member Ratios' from history.")
 
         # 3. UNIFIED CALCULATION LOOP
         total_range_traffic = 0
         total_range_revenue = 0
+        total_range_members = 0
         
-        # Calculate DOW Averages from Ledger for the "Heartbeat"
+        # --- NEW: CALCULATE HISTORICAL CONVERSION RATIO ---
         if ledger_data:
             df_sb = pd.DataFrame(ledger_data)
             df_sb['entry_date'] = pd.to_datetime(df_sb['entry_date'])
             df_sb['day_name'] = df_sb['entry_date'].dt.day_name()
+            
+            # Heartbeats
             dow_profiles = df_sb.groupby('day_name')['actual_traffic'].mean().to_dict()
+            
+            # Loyalty Ratio
+            tot_h_traffic = df_sb['actual_traffic'].sum()
+            tot_h_members = df_sb['new_members'].sum() if 'new_members' in df_sb.columns else 0
+            member_ratio = (tot_h_members / tot_h_traffic) if tot_h_traffic > 0 else 0.02
         else:
             dow_profiles = {}
+            member_ratio = 0.02
 
         current_date = start_date
         while current_date <= end_date:
             day_str = current_date.strftime("%Y-%m-%d")
             day_name = current_date.strftime("%A")
             
-            # --- WEATHER ATTRIBUTION ---
+            # Weather logic
             if weather_mode == "Live EC Forecast" and live_forecast:
-                # Find weather matching the date
                 ec_day = next((item for item in live_forecast if str(item.get('datetime')).startswith(day_str)), None)
                 day_temp = ec_day.get('temperature', 15.0) if ec_day else m_temp
-                # Use overrides for precip if not in current EC feed
                 day_rain = m_rain 
                 day_snow = m_snow
             else:
                 day_temp, day_rain, day_snow = m_temp, m_rain, m_snow
 
             # --- THE FORENSIC MATH ---
-            # 1. Start with the historical DOW heartbeat or the global intercept
             base_traffic = dow_profiles.get(day_name, c.get('Intercept', 4365))
-            
-            # 2. Add Marketing Lifts from Tab 4 Coefficients
             p_lift = c.get('Promo', 450.0) if s_promo else 0
             m_lift = (s_clicks * c.get('Clicks', 0.02)) + (s_imp * c.get('Social_Imp', 0.0002))
-            
-            # 3. Apply Weather Friction
             w_friction = (day_rain * c.get('Rain_mm', -12.0)) + (day_snow * c.get('Snow_cm', -45.0))
             
-            # 4. Final Aggregation for the Day
-            daily_total = base_traffic + p_lift + m_lift + w_friction
+            daily_total = max(0, base_traffic + p_lift + m_lift + w_friction)
+            
+            # --- NEW: LOYALTY PROJECTION ---
+            daily_members = daily_total * member_ratio
             
             total_range_traffic += daily_total
             total_range_revenue += (daily_total * c.get('Avg_Coin_In', 112.50))
+            total_range_members += daily_members
             
             current_date += datetime.timedelta(days=1)
 
-        # 4. RESULTS DISPLAY
+        # 4. RESULTS DISPLAY (Updated to 4 Columns)
         st.divider()
-        res1, res2, res3 = st.columns(3)
+        res1, res2, res3, res4 = st.columns(4)
         
         with res1:
-            st.metric("Predicted Total Traffic", f"{int(total_range_traffic):,} Guests")
+            st.metric("Predicted Traffic", f"{int(total_range_traffic):,} Guests")
         with res2:
-            st.metric("Projected Window Revenue", f"${total_range_revenue:,.2f}")
+            st.metric("Projected Net Win", f"${(total_range_revenue * (c.get('Hold_Pct', 10)/100)):,.2f}")
         with res3:
-            st.metric("Daily Avg Volume", f"{int(total_range_traffic / num_days)} / day")
+            st.metric("Predicted New Members", f"{int(total_range_members):,}")
+        with res4:
+            st.metric("Daily Avg Sign-ups", f"{int(total_range_members / num_days)} / day")
 
         # 5. STRATEGIC INSIGHT
         st.write("---")
+        if total_range_members / num_days > 50:
+            st.success(f"💎 **Loyalty Alert:** This scenario predicts high member acquisition ({int(total_range_members / num_days)}/day). Recommend additional Unity Card inventory.")
+        
         if total_range_traffic / num_days > (c.get('Intercept', 4365) * 1.2):
-            st.success("🔥 **High Volume Scenario:** This configuration suggests a 20%+ lift over baseline. Ensure floor staffing is optimized.")
+            st.success("🔥 **High Volume Scenario:** Configuration suggests a 20%+ lift over baseline.")
         elif total_range_traffic / num_days < (c.get('Intercept', 4365) * 0.8):
-            st.warning("📉 **Low Volume Warning:** Forecast is significantly below average. Consider boosting digital ad spend.")
+            st.warning("📉 **Low Volume Warning:** Forecast is significantly below average.")
 
     else:
         st.info("Please select a valid date range to start the simulation.")
