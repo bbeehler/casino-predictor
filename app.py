@@ -87,7 +87,7 @@ def get_forensic_metrics(df, coeffs):
         "digital_lift": f"{lift_val:.1f}%",
         "heartbeats": heartbeats,
         "ooh_total_daily": total_ooh_lift,
-        "hold_factor": coeffs.get('Hold_Pct', 10.0) / 100 # Converts 10 to 0.10
+        "hold_factor": float(coeffs.get('Hold_Pct', 10.0)) / 100
     }
 # 3. INITIALIZE CLIENTS
 url = st.secrets["SUPABASE_URL"]
