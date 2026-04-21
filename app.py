@@ -507,16 +507,12 @@ with tab3:
         st.info("No data found in the Vault. Please backfill results in Tab 2 to see analytics.")
 # --- TAB 4: ENGINE CONTROL (CALIBRATION) ---
 with tab4:
-    # 1. PERMISSION CHECK
-    # This looks at the email captured during login
     current_user = st.session_state.get('user_email', "unauthorized")
     
     if current_user not in ADMIN_USERS:
         st.warning("### 🔒 Access Restricted")
-        st.info(f"Identity: **{current_user}** does not have permission to calibrate the forensic engine.")
-        st.write("Please contact Brian Beehler for administrative access.")
+        st.info(f"Identity: **{current_user}** does not have permission to calibrate the engine.")
     else:
-        # --- AUTHORIZED VIEW ---
         st.markdown("""
             <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
                 <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Calibration</h2>
@@ -525,11 +521,11 @@ with tab4:
         """, unsafe_allow_html=True)
 
         # Ensure local session state has the OOH keys
-        for key, val in {'Static_Weight': 50.0, 'Static_Count': 2, 'Digital_OOH_Weight': 10.0, 'Digital_OOH_Count': 4}.items():
+        for key, val in {'Static_Weight': 50.0, 'Static_Count': 2, 'Digital_OOH_Weight': 10.0, 'Digital_OOH_Count': 4, 'Property_Theo': 450.0}.items():
             if key not in st.session_state.coeffs:
                 st.session_state.coeffs[key] = val
 
-        with st.form("engine_settings_v6"):
+        with st.form("engine_settings_v7"):
             col1, col2 = st.columns(2)
             
             with col1:
@@ -545,43 +541,34 @@ with tab4:
 
             with col2:
                 st.write("### ❄️ Environmental Friction")
-                new_snow = st.slider("Snow Friction (Guests/cm)", -1000.0, 0.0, value=float(st.session_state.coeffs.get('Snow_cm', -45.0)))
-                new_rain = st.slider("Rain Friction (Guests/mm)", -500.0, 0.0, value=float(st.session_state.coeffs.get('Rain_mm', -12.0)))
+                new_snow = st.slider("Snow Friction", -1000.0, 0.0, value=float(st.session_state.coeffs.get('Snow_cm', -45.0)))
+                new_rain = st.slider("Rain Friction", -500.0, 0.0, value=float(st.session_state.coeffs.get('Rain_mm', -12.0)))
                 
                 st.write("### 💰 Financials")
                 new_coin = st.number_input("Avg Spend ($)", 0.0, 5000.0, value=float(st.session_state.coeffs.get('Avg_Coin_In', 112.50)))
-                c_theo = float(st.session_state.coeffs.get('Property_Theo', 450.00))
-                new_theo = st.number_input("Property Theo Baseline ($)", 0.0, 2000.0, value=c_theo, help="The theoretical win per player based on floor math.")
+                new_theo = st.number_input("Property Theo ($)", 0.0, 2000.0, value=float(st.session_state.coeffs.get('Property_Theo', 450.0)))
 
-# Update your sync_payload to include it:
-sync_payload = {
-    # ... your other keys ...
-    'Property_Theo': new_theo,
-    'Avg_Coin_In': new_coin, 
-}
-
+            # --- LINE 563 AREA: This must be aligned with 'col1, col2 = st.columns(2)' ---
             st.divider()
-            submit_v6 = st.form_submit_button("💾 Save All Calibration & Apply Math", use_container_width=True)
+            
+            submit_v7 = st.form_submit_button("💾 Save All Calibration & Apply Math", use_container_width=True)
 
-            if submit_v6:
+            if submit_v7:
                 sync_payload = {
                     'Clicks': new_clicks, 'Impressions': new_social, 'Avg_Coin_In': new_coin,
-                    'Snow_cm': new_snow, 'Rain_mm': new_rain,
+                    'Property_Theo': new_theo, 'Snow_cm': new_snow, 'Rain_mm': new_rain,
                     'Static_Weight': new_static_w, 'Static_Count': new_static_c,
                     'Digital_OOH_Weight': new_digital_w, 'Digital_OOH_Count': new_digital_c
                 }
                 
-                # Update memory immediately
                 st.session_state.coeffs.update(sync_payload)
                 
                 try:
                     supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
-                    st.success("✅ Database Synced & Math Applied!")
+                    st.success("✅ Vault Updated Successfully")
                 except Exception as e:
-                    st.warning(f"⚠️ App updated locally, but Database Sync failed: {e}")
+                    st.warning(f"⚠️ Local Update Only: {e}")
                 
-                # Recalculate metrics global object
-                metrics = get_forensic_metrics(ledger_data, st.session_state.coeffs)
                 import time
                 time.sleep(0.5)
                 st.rerun()
