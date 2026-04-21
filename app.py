@@ -368,6 +368,7 @@ with tab2:
             c1, c2 = st.columns(2)
             with c1: traffic = st.number_input("Traffic (Headcount)", min_value=0)
             with c2: coin_in = st.number_input("Coin-In ($)", min_value=0.0, format="%.2f")
+            with c3: new_members = st.number_input("New Members Signed Up", min_value=0, step=1)
             
             st.divider()
             st.write("**Marketing Metrics**")
@@ -389,6 +390,7 @@ with tab2:
                         "ad_clicks": clicks,
                         "ad_impressions": imps,
                         "social_engagements": social
+                        "new_members": new_members
                     }
                     try:
                         # UPSERT handles backfilling missed weekend dates or updating existing ones
