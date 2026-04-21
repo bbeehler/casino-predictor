@@ -514,7 +514,7 @@ with tab3:
 
     else:
         st.info("No data found in the Vault. Please backfill results in Tab 2 to see analytics.")
-# --- TAB 4: ENGINE CONTROL (The Ironclad Version) ---
+# --- TAB 4: ENGINE CONTROL (Final Stability Fix) ---
 with tab4:
     current_user = st.session_state.get('user_email', "unauthorized")
     
@@ -529,8 +529,8 @@ with tab4:
             </div>
         """, unsafe_allow_html=True)
 
-        # 1. DATA CLEANING STEP (Prevents the TypeError before the form starts)
-        # We ensure every key exists and is a float
+        # 1. PRE-FLIGHT DATA CLEANING
+        # This prevents TypeErrors by ensuring every key is a valid float
         defaults = {
             'Clicks': 0.02, 'Impressions': 0.0002, 'Avg_Coin_In': 112.50,
             'Property_Theo': 450.0, 'Hold_Pct': 10.0, 'Snow_cm': -45.0,
@@ -542,13 +542,16 @@ with tab4:
         for key, default_val in defaults.items():
             raw_val = st.session_state.coeffs.get(key)
             try:
-                # If it's None or empty, use the default. Otherwise, force to float.
-                clean_coeffs[key] = float(raw_val) if raw_val is not None else default_val
+                # Handle None, empty strings, or weird database formats
+                if raw_val is None or raw_val == "":
+                    clean_coeffs[key] = default_val
+                else:
+                    clean_coeffs[key] = float(raw_val)
             except (ValueError, TypeError):
                 clean_coeffs[key] = default_val
 
         # 2. CALIBRATION FORM
-        with st.form("engine_settings_final_v11"):
+        with st.form("engine_settings_v12_final"):
             col1, col2 = st.columns(2)
             
             with col1:
@@ -574,20 +577,29 @@ with tab4:
 
             st.divider()
             
-            # This button will now appear because the math above is "pre-cleaned"
-            submit_v11 = st.form_submit_button("💾 Save All Calibration & Sync Vault", use_container_width=True)
+            # The submit button is now safe from crashing
+            submit_v12 = st.form_submit_button("💾 Save All Calibration & Sync Vault", use_container_width=True)
 
-            if submit_v11:
+            if submit_v12:
                 sync_payload = {
-                    'Clicks': new_clicks, 'Impressions': new_social, 'Avg_Coin_In': new_coin,
-                    'Property_Theo': new_theo, 'Hold_Pct': new_hold, 'Snow_cm': new_snow, 
-                    'Rain_mm': new_rain, 'Static_Weight': new_static_w, 'Static_Count': new_static_c,
-                    'Digital_OOH_Weight': new_digital_w, 'Digital_OOH_Count': new_digital_c
+                    'Clicks': new_clicks, 
+                    'Impressions': new_social, 
+                    'Avg_Coin_In': new_coin,
+                    'Property_Theo': new_theo, 
+                    'Hold_Pct': new_hold, 
+                    'Snow_cm': new_snow, 
+                    'Rain_mm': new_rain, 
+                    'Static_Weight': new_static_w, 
+                    'Static_Count': new_static_c,
+                    'Digital_OOH_Weight': new_digital_w, 
+                    'Digital_OOH_Count': new_digital_c
                 }
                 
+                # Update local session for immediate math update
                 st.session_state.coeffs.update(sync_payload)
                 
                 try:
+                    # Overwrite the Supabase row with clean numbers
                     supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
                     st.success("✅ Vault Synced Successfully")
                     import time
