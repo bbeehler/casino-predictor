@@ -86,7 +86,8 @@ def get_forensic_metrics(df, coeffs):
         "predictability": f"{pred_val:.1f}%",
         "digital_lift": f"{lift_val:.1f}%",
         "heartbeats": heartbeats,
-        "ooh_total_daily": total_ooh_lift
+        "ooh_total_daily": total_ooh_lift,
+        "hold_factor": coeffs.get('Hold_Pct', 10.0) / 100 # Converts 10 to 0.10
     }
 # 3. INITIALIZE CLIENTS
 url = st.secrets["SUPABASE_URL"]
@@ -520,12 +521,22 @@ with tab4:
             </div>
         """, unsafe_allow_html=True)
 
-        # Ensure local session state has the OOH keys
-        for key, val in {'Static_Weight': 50.0, 'Static_Count': 2, 'Digital_OOH_Weight': 10.0, 'Digital_OOH_Count': 4, 'Property_Theo': 450.0}.items():
+        # 1. Initialize Default Values in Session State
+        defaults = {
+            'Static_Weight': 50.0, 
+            'Static_Count': 2, 
+            'Digital_OOH_Weight': 10.0, 
+            'Digital_OOH_Count': 4, 
+            'Property_Theo': 450.0,
+            'Hold_Pct': 10.0,
+            'Avg_Coin_In': 112.50
+        }
+        for key, val in defaults.items():
             if key not in st.session_state.coeffs:
                 st.session_state.coeffs[key] = val
 
-        with st.form("engine_settings_v7"):
+        # 2. Calibration Form
+        with st.form("engine_settings_final_v1"):
             col1, col2 = st.columns(2)
             
             with col1:
@@ -544,34 +555,45 @@ with tab4:
                 new_snow = st.slider("Snow Friction", -1000.0, 0.0, value=float(st.session_state.coeffs.get('Snow_cm', -45.0)))
                 new_rain = st.slider("Rain Friction", -500.0, 0.0, value=float(st.session_state.coeffs.get('Rain_mm', -12.0)))
                 
-                st.write("### 💰 Financials")
-                new_coin = st.number_input("Avg Spend ($)", 0.0, 5000.0, value=float(st.session_state.coeffs.get('Avg_Coin_In', 112.50)))
-                new_theo = st.number_input("Property Theo ($)", 0.0, 2000.0, value=float(st.session_state.coeffs.get('Property_Theo', 450.0)))
+                st.write("### 💰 Financials & Yield")
+                new_coin = st.number_input("Avg Gross Spend ($)", 0.0, 5000.0, value=float(st.session_state.coeffs['Avg_Coin_In']))
+                new_theo = st.number_input("Property Theo ($)", 0.0, 2000.0, value=float(st.session_state.coeffs['Property_Theo']))
+                new_hold = st.slider("House Hold %", 1.0, 25.0, value=float(st.session_state.coeffs['Hold_Pct']), help="Average net percentage the house keeps after wins.")
 
-            # --- LINE 563 AREA: This must be aligned with 'col1, col2 = st.columns(2)' ---
             st.divider()
             
-            submit_v7 = st.form_submit_button("💾 Save All Calibration & Apply Math", use_container_width=True)
+            submit_v8 = st.form_submit_button("💾 Save All Calibration & Sync Vault", use_container_width=True)
 
-            if submit_v7:
+            if submit_v8:
+                # 3. Create Payload for Supabase
                 sync_payload = {
-                    'Clicks': new_clicks, 'Impressions': new_social, 'Avg_Coin_In': new_coin,
-                    'Property_Theo': new_theo, 'Snow_cm': new_snow, 'Rain_mm': new_rain,
-                    'Static_Weight': new_static_w, 'Static_Count': new_static_c,
-                    'Digital_OOH_Weight': new_digital_w, 'Digital_OOH_Count': new_digital_c
+                    'Clicks': new_clicks, 
+                    'Impressions': new_social, 
+                    'Avg_Coin_In': new_coin,
+                    'Property_Theo': new_theo, 
+                    'Hold_Pct': new_hold,
+                    'Snow_cm': new_snow, 
+                    'Rain_mm': new_rain,
+                    'Static_Weight': new_static_w, 
+                    'Static_Count': new_static_c,
+                    'Digital_OOH_Weight': new_digital_w, 
+                    'Digital_OOH_Count': new_digital_c
                 }
                 
+                # Update local memory
                 st.session_state.coeffs.update(sync_payload)
                 
                 try:
+                    # Sync to Database
                     supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
-                    st.success("✅ Vault Updated Successfully")
+                    st.success("✅ Vault Synced Successfully")
+                    
+                    # Force metrics to refresh with new data
+                    import time
+                    time.sleep(0.5)
+                    st.rerun()
                 except Exception as e:
-                    st.warning(f"⚠️ Local Update Only: {e}")
-                
-                import time
-                time.sleep(0.5)
-                st.rerun()
+                    st.warning(f"⚠️ App updated locally, but Database failed: {e}")
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
@@ -701,117 +723,44 @@ with tab5:
         st.session_state.messages = []
         st.rerun()
 
-# --- TAB 6: MASTER REPORT (Corrected Terminology Fix) ---
+# --- TAB 6: MASTER REPORT (Net Win vs Theo Edition) ---
 with tab6:
-    st.markdown("""
-        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">📋 Master Forensic Report</h2>
-            <p style="color: #888; margin: 0;">Executive yield audit: Actual Guest Spend vs. Theoretical Win (Theo).</p>
-        </div>
-    """, unsafe_allow_html=True)
-
-    if not ledger_data:
-        st.warning("Vault is empty. No data available for reporting.")
-        st.stop()
-
-    # 1. RUN ENGINE & SYNC WEIGHTS
-    metrics = get_forensic_metrics(ledger_data, st.session_state.coeffs)
-    df_rep = pd.DataFrame(ledger_data).copy()
-    df_rep['entry_date'] = pd.to_datetime(df_rep['entry_date'])
-    df_rep = df_rep.sort_values('entry_date')
-
-    # Pull active coefficients
-    ooh_daily = metrics.get('ooh_total_daily', 0)
-    c_clicks = st.session_state.coeffs.get('Clicks', 0.02)
-    c_social = st.session_state.coeffs.get('Impressions', 0.0002)
-    c_snow = st.session_state.coeffs.get('Snow_cm', -45.0)
-    c_rain = st.session_state.coeffs.get('Rain_mm', -12.0)
+    # ... [Standard Header] ...
+    
+    # 1. SETUP PARAMETERS
     avg_spend = st.session_state.coeffs.get('Avg_Coin_In', 112.50)
     prop_theo = st.session_state.coeffs.get('Property_Theo', 450.00)
-
-    # 2. APPLY REACTIVE MATH
-    df_rep['day_name'] = df_rep['entry_date'].dt.day_name()
-    df_rep['Baseline Traffic'] = df_rep['day_name'].map(metrics.get('heartbeats', {}))
-    df_rep['OOH Lift'] = ooh_daily
-    df_rep['Digital Lift'] = (df_rep.get('ad_clicks', 0) * c_clicks) + (df_rep.get('ad_impressions', 0) * c_social)
-    df_rep['Weather Penalty'] = (df_rep.get('snow_cm', 0) * c_snow) + (df_rep.get('rain_mm', 0) * c_rain)
-
-    # 3. FINANCIAL & YIELD CALCULATIONS (The Corrected Logic)
+    hold_pct = 0.10  # Standard 10% Hold for GGR calculation
+    
+    # 2. CALCULATE REVENUE STAGES
     total_traffic = df_rep['actual_traffic'].sum()
-    actual_revenue = total_traffic * avg_spend
     
-    # Theo vs Actual Comparison
-    # Total Theo is what the math says they SHOULD spend
-    total_theo_revenue = total_traffic * prop_theo
+    # GROSS: Total volume of play
+    gross_volume = total_traffic * avg_spend 
     
-    # Actual Spend Per Head is what they ARE spending (Avg Spend slider)
-    actual_spend_per_head = avg_spend 
+    # NET WIN (Actual GGR): What the casino actually keeps (Avg Spend * 10% Hold)
+    actual_net_win = gross_volume * hold_pct 
     
-    # Variance shows the gap between actual spend and the theoretical potential
-    yield_gap = actual_spend_per_head - prop_theo
-    variance_pct = (yield_gap / prop_theo * 100) if prop_theo > 0 else 0
+    # THEO: What the math says you should have kept
+    total_theo_win = total_traffic * prop_theo
+    
+    # 3. YIELD ANALYSIS
+    yield_variance = actual_net_win - total_theo_win
+    performance_index = (actual_net_win / total_theo_win) if total_theo_win > 0 else 0
 
-    # 4. POWER METRICS (Corrected Labels)
-    st.write("### ⚖️ Yield Analysis: Actual Spend vs. Theoretical Potential")
+    # 4. POWER METRICS
+    st.write("### ⚖️ Yield Analysis: Net Win vs. Theoretical")
     y1, y2, y3 = st.columns(3)
     
     with y1:
-        st.metric("Total Theo Revenue", f"${total_theo_revenue:,.2f}", help=f"Expected win based on ${prop_theo} Theo.")
-    
+        st.metric("Total Theo Win", f"${total_theo_win:,.2f}", help="Expected win based on Theo per head.")
     with y2:
-        st.metric("Actual Property Revenue", f"${actual_revenue:,.2f}", help="Total spend based on foot traffic and Avg Spend slider.")
-    
+        st.metric("Actual Net Win (GGR)", f"${actual_net_win:,.2f}", 
+                  delta=f"{yield_variance:,.2f}",
+                  help="Estimated Net Win using a standard 10% Hold.")
     with y3:
-        # Renamed from Win Per Head to Actual Spend Per Head
-        st.metric(
-            label="Actual Spend Per Head", 
-            value=f"${actual_spend_per_head:,.2f}", 
-            delta=f"${yield_gap:.2f} vs Theo",
-            help="This is the gross spend per guest based on your engine calibration."
-        )
-
-    st.divider()
-
-    # 5. MARKETING PERFORMANCE METRICS
-    st.write("### 🧬 Marketing Attribution Audit")
-    m1, m2, m3 = st.columns(3)
-    
-    net_mkt_guests = df_rep['Digital Lift'].sum() + (ooh_daily * len(df_rep)) + df_rep['Weather Penalty'].sum()
-    mkt_revenue_impact = max(0, net_mkt_guests * avg_spend)
-    mkt_share_pct = (mkt_revenue_impact / actual_revenue * 100) if actual_revenue > 0 else 0
-
-    m1.metric("Marketing Revenue Impact", f"${mkt_revenue_impact:,.2f}", delta=f"{net_mkt_guests:,.0f} Net Guests")
-    m2.metric("Marketing Revenue Share", f"{mkt_share_pct:.1f}%")
-    m3.metric("AI Predictability", metrics['predictability'])
-
-    # 6. ATTRIBUTION STACK CHART
-    st.write("### 📊 Attribution Stack Over Time")
-    chart_cols = ['Baseline Traffic', 'OOH Lift', 'Digital Lift', 'Weather Penalty']
-    st.area_chart(df_rep.set_index('entry_date')[chart_cols])
-
-    # 7. EXECUTIVE BREAKDOWN
-    st.divider()
-    f1, f2 = st.columns(2)
-    with f1:
-        st.write("**Forensic Volume Attribution**")
-        st.write(f"* Historical Baseline: {df_rep['Baseline Traffic'].sum():,.0f} guests")
-        st.write(f"* OOH Campaign Lift: {(ooh_daily * len(df_rep)):,.0f} guests")
-        st.write(f"* Digital Ad Lift: {df_rep['Digital Lift'].sum():,.0f} guests")
-        st.error(f"* Weather Friction Loss: {df_rep['Weather Penalty'].sum():,.0f} guests")
-    
-    with f2:
-        st.write("**Financial Verification**")
-        st.write(f"* Property Theo Baseline: ${prop_theo:,.2f}")
-        st.write(f"* Actual Spend Calibrated: ${avg_spend:,.2f}")
-        st.write(f"---")
-        if yield_gap < 0:
-            st.warning(f"Yield Gap: We are performing -${abs(yield_gap):,.2f} below Theo per guest.")
-        else:
-            st.success(f"Yield Gap: We are performing +${yield_gap:,.2f} above Theo per guest!")
-
-    # 8. EXPORT
-    csv = df_rep.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download Final Executive Report", data=csv, file_name='HR_Ottawa_Forensic_Audit.csv', use_container_width=True)
+        st.metric("Performance Index", f"{performance_index:.2f}x", 
+                  help="Above 1.0 means we are outperforming the theoretical math.")
 
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
 with tab7:
