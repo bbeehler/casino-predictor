@@ -510,31 +510,31 @@ with tab2:
         )
 
         if st.button("✅ Confirm & Sync Edits", key="btn_sync_v6", use_container_width=True):
-            with st.spinner("Sanitizing & Updating Vault..."):
+            with st.spinner("Sanitizing Types & Updating Vault..."):
                 try:
                     # 1. Prepare the data
                     sync_ready = edited_df.copy()
                     
-                    # 2. THE FIX: Replace 'NaN' with 0 for numbers and "None" for text
-                    # This ensures JSON compliance
-                    sync_ready['temp_c'] = sync_ready['temp_c'].fillna(15.0)
-                    sync_ready['snow_cm'] = sync_ready['snow_cm'].fillna(0.0)
-                    sync_ready['rain_mm'] = sync_ready['rain_mm'].fillna(0.0)
-                    sync_ready['attendance'] = sync_ready['attendance'].fillna(0)
-                    sync_ready['event_type'] = sync_ready['event_type'].fillna("None")
+                    # 2. THE FIX: Explicitly cast to whole numbers to avoid '22P02' error
+                    # Fill NaNs first to avoid conversion errors
+                    sync_ready['attendance'] = sync_ready['attendance'].fillna(0).astype(int)
+                    sync_ready['actual_traffic'] = sync_ready['actual_traffic'].fillna(0).astype(int)
+                    sync_ready['new_members'] = sync_ready['new_members'].fillna(0).astype(int)
                     
-                    # Also fill any empty Marketing/Financial cells
-                    num_cols = sync_ready.select_dtypes(include=[np.number]).columns
-                    sync_ready[num_cols] = sync_ready[num_cols].fillna(0)
+                    # 3. Sanitize the rest
+                    sync_ready['temp_c'] = sync_ready['temp_c'].fillna(15.0).astype(float)
+                    sync_ready['snow_cm'] = sync_ready['snow_cm'].fillna(0.0).astype(float)
+                    sync_ready['rain_mm'] = sync_ready['rain_mm'].fillna(0.0).astype(float)
+                    sync_ready['event_type'] = sync_ready['event_type'].fillna("None").astype(str)
 
-                    # 3. Format Date
+                    # 4. Format Date
                     sync_ready['entry_date'] = sync_ready['entry_date'].dt.strftime('%Y-%m-%d')
                     
-                    # 4. Push to Supabase
+                    # 5. Push to Supabase
                     payload = sync_ready.to_dict(orient='records')
                     supabase.table("ledger").upsert(payload, on_conflict="entry_date").execute()
                     
-                    st.success("✅ Vault Successfully Sanitized & Updated.")
+                    st.success("✅ Vault Successfully Updated with Whole Numbers.")
                     st.rerun() 
                 except Exception as e:
                     st.error(f"Manual sync failed: {e}")
