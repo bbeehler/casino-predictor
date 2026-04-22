@@ -441,7 +441,7 @@ with tab2:
                         "new_members": int(new_mems),
                         "snow_cm": float(snow),
                         "rain_mm": float(rain),
-                        "promo_flag": bool(promo),
+                        "active_promo": bool(promo),
                         "event_type": event_type,
                         "attendance": int(attendance)
                     }
@@ -479,7 +479,7 @@ with tab2:
         
         # Ensure all columns exist locally for the editor
         expected_cols = {
-            'snow_cm': 0.0, 'rain_mm': 0.0, 'promo_flag': False, 
+            'snow_cm': 0.0, 'rain_mm': 0.0, 'active_promo': False, 
             'event_type': "None", 'attendance': 0
         }
         for col, default in expected_cols.items():
@@ -500,7 +500,7 @@ with tab2:
                 "actual_traffic": st.column_config.NumberColumn("Traffic"),
                 "snow_cm": st.column_config.NumberColumn("Snow (cm)"),
                 "rain_mm": st.column_config.NumberColumn("Rain (mm)"),
-                "promo_flag": st.column_config.CheckboxColumn("Promo?"),
+                "active_promo": st.column_config.CheckboxColumn("Promo?"),
                 "event_type": st.column_config.SelectboxColumn("Live Setup", options=["None", "GA (2,200)", "Seated (1,900)"]),
                 "attendance": st.column_config.NumberColumn("Attendance")
             }
