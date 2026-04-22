@@ -363,27 +363,48 @@ with tab1:
             else:
                 st.warning("Weather sync unavailable.")
 
-        # 5. TREND VISUALIZATION
+        # 5. TREND VISUALIZATION (Full Forensic Attribution)
         st.write("---")
-        st.write("### 📊 Performance vs. Prediction")
+        st.write("### 📊 Performance vs. Forensic Attribution")
         
-        # --- SAFETY CHECK: Find the correct 'expected' column ---
-        # Different engine versions use different casing. This finds either one.
-        if 'expected_traffic' in df_chart.columns:
-            df_chart = df_chart.rename(columns={'expected_traffic': 'Expected Traffic'})
-        elif 'Expected Traffic' not in df_chart.columns:
-            # Fallback: if the column is missing entirely, we create it to prevent crash
-            df_chart['Expected Traffic'] = df_chart['actual_traffic'] 
+        # We use the 'df_chart' (df_with_awareness) from the engine call earlier
+        # Ensure we have the necessary layers for the comparison
+        df_plot = df_chart.copy()
 
-        # Ensure actual traffic is also named correctly for the legend
-        df_plot = df_chart.rename(columns={'actual_traffic': 'Actual Traffic'})
-        
-        # Sort by date to ensure the line doesn't zig-zag
-        df_plot = df_plot.sort_values('entry_date')
-        
-        # Now plot using the standardized names
-        st.line_chart(df_plot.set_index('entry_date')[['Actual Traffic', 'Expected Traffic']])
-        st.caption("The 'Expected' line accounts for historical baselines, weather friction, digital spend, and OOH inertia.")
+        # Rename Actual Traffic for the legend
+        df_plot = df_plot.rename(columns={'actual_traffic': 'Actual Traffic'})
+
+        # Identify the correct Expected column (Handling casing variants)
+        expected_col = 'expected_traffic' if 'expected_traffic' in df_plot.columns else 'Expected Traffic'
+
+        if expected_col in df_plot.columns:
+            # Create a clean dataframe for the line chart
+            # This plots BOTH the Actual headcount and the AI's Expected headcount
+            chart_data = df_plot.set_index('entry_date')[['Actual Traffic', expected_col]]
+            
+            # Sort to ensure chronological flow
+            chart_data = chart_data.sort_index()
+
+            st.line_chart(chart_data)
+        else:
+            st.error("Forensic Engine Error: Expected Traffic column not found. Check Tab 4 Calibration.")
+
+        # --- OPTIONAL: THE ATTRIBUTION STACK (Mini-View) ---
+        with st.expander("🔍 View Volume Attribution Stack"):
+            # This shows the 'Why' behind the prediction line
+            stack_cols = {
+                'baseline_isolated': 'Organic Baseline', 
+                'residual_lift': 'Digital ROI',
+                'gravity_lift': 'Entertainment Gravity'
+            }
+            # Only include columns that exist in the dataframe
+            available_cols = [c for c in stack_cols.keys() if c in df_plot.columns]
+            
+            if available_cols:
+                df_stack_mini = df_plot.rename(columns=stack_cols)
+                st.area_chart(df_stack_mini.set_index('entry_date')[[stack_cols[c] for c in available_cols]])
+            
+        st.caption("The line chart compares Actual property entries vs. the Model's prediction. The area chart breaks down the Marketing & Entertainment components of that prediction.")
 
 # --- TAB 2: LEDGER MANAGEMENT ---
 with tab2:
