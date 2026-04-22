@@ -965,9 +965,9 @@ with tab6:
         ai_briefing_text = "No AI analysis generated for this period."
 
         try:
-            api_key = st.secrets["GOOGLE_API_KEY"]
+            api_key = st.secrets["GEMINI_API_KEY"]
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash')
             
             forensic_dossier = f"""
             Hard Rock Hotel & Casino Ottawa - Strategic Performance Audit
