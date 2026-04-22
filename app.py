@@ -947,6 +947,55 @@ with tab6:
         chart_df = df_rep.rename(columns=chart_cols)
         st.area_chart(chart_df.set_index('entry_date')[list(chart_cols.values())])
 
+        # --- 📂 EXCEL EXPORT SYSTEM ---
+        st.divider()
+        import io
+
+        def to_excel(df_metrics, df_stack, ai_text):
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                # Sheet 1: Executive Summary (Financials)
+                df_metrics.to_excel(writer, sheet_name='Financial Summary', index=False)
+                
+                # Sheet 2: Attribution Stack (Daily Breakdown)
+                df_stack.to_excel(writer, sheet_name='Attribution Stack', index=False)
+                
+                # Sheet 3: AI Intelligence (The Briefing)
+                df_ai = pd.DataFrame({"Gemini Strategic Directive": [ai_text]})
+                df_ai.to_excel(writer, sheet_name='Gemini Briefing', index=False)
+                
+                # Formatting the Excel sheets
+                workbook = writer.book
+                header_format = workbook.add_format({'bold': True, 'bg_color': '#FFCC00', 'border': 1})
+                
+                for sheet in writer.sheets.values():
+                    sheet.set_column('A:Z', 20) # Set column width
+            
+            return output.getvalue()
+
+        # Prepare the Summary Dataframe for Export
+        export_summary = pd.DataFrame({
+            "Metric": ["Total Traffic", "Total Revenue", "Actual GGR", "Yield Variance", "Marketing Capture", "LIVE Gravity", "New Members", "Weather Friction"],
+            "Value": [total_traffic, total_revenue, actual_ggr, f"{yield_variance:.2f}%", f"{capture_rate:.2f}%", total_live_gravity_guests, total_new_members, total_env_friction]
+        })
+
+        # The Attribution Stack Data (using df_rep from previous logic)
+        export_stack = df_rep[['entry_date', 'actual_traffic', 'baseline_isolated', 'residual_lift', 'gravity_lift']].copy()
+        
+        # Get AI Text (if it exists)
+        final_ai_text = response.text if 'response' in locals() else "AI Briefing not generated for this export."
+
+        # Create the Download Button
+        excel_data = to_excel(export_summary, export_stack, final_ai_text)
+        
+        st.download_button(
+            label="📥 Export Master Report to Excel",
+            data=excel_data,
+            file_name=f"HR_Ottawa_Forensic_Report_{start_date}_to_{end_date}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
         # 6. --- 🤖 THE FULL AI STRATEGIC ANALYST ---
         st.divider()
         import google.generativeai as genai
