@@ -364,47 +364,63 @@ with tab1:
                 st.warning("Weather sync unavailable.")
 
         # 5. TREND VISUALIZATION (Full Forensic Attribution)
-        st.write("---")
-        st.write("### 📊 Performance vs. Forensic Attribution")
-        
-        # We use the 'df_chart' (df_with_awareness) from the engine call earlier
-        # Ensure we have the necessary layers for the comparison
+    st.write("---")
+    st.write("### 📊 Performance vs. Forensic Attribution")
+    
+    if ledger_data:
+        # We ensure df_chart is a fresh copy of the engine's output
         df_plot = df_chart.copy()
+
+        # --- THE FIX: MANUAL COLUMN MAPPING ---
+        # If the engine didn't provide the column, we calculate it on the fly
+        if 'expected_traffic' not in df_plot.columns and 'Expected Traffic' not in df_plot.columns:
+            # We pull the components from the engine results to rebuild the line
+            c_clicks = float(st.session_state.coeffs.get('Clicks', 0.02))
+            c_social = float(st.session_state.coeffs.get('Impressions', 0.0002))
+            ooh_daily = metrics.get('ooh_total_daily', 0)
+            heartbeats = metrics.get('heartbeats', {})
+            
+            df_plot['day_name'] = df_plot['entry_date'].dt.day_name()
+            
+            # Rebuild the Expected line: Baseline + Digital + OOH + Gravity
+            df_plot['Expected Traffic'] = df_plot.apply(lambda x: 
+                heartbeats.get(x['day_name'], 0) + 
+                (float(x.get('ad_clicks', 0)) * c_clicks) + 
+                (float(x.get('ad_impressions', 0)) * c_social) + 
+                ooh_daily + 
+                float(x.get('gravity_lift', 0)), axis=1)
+        else:
+            # Standardize the name if it already exists
+            df_plot = df_plot.rename(columns={'expected_traffic': 'Expected Traffic'})
 
         # Rename Actual Traffic for the legend
         df_plot = df_plot.rename(columns={'actual_traffic': 'Actual Traffic'})
-
-        # Identify the correct Expected column (Handling casing variants)
-        expected_col = 'expected_traffic' if 'expected_traffic' in df_plot.columns else 'Expected Traffic'
-
-        if expected_col in df_plot.columns:
-            # Create a clean dataframe for the line chart
-            # This plots BOTH the Actual headcount and the AI's Expected headcount
-            chart_data = df_plot.set_index('entry_date')[['Actual Traffic', expected_col]]
-            
-            # Sort to ensure chronological flow
-            chart_data = chart_data.sort_index()
-
-            st.line_chart(chart_data)
+        
+        # Sort and Settle
+        df_plot = df_plot.sort_values('entry_date')
+        
+        # Final Verification before plotting
+        if 'Expected Traffic' in df_plot.columns:
+            st.line_chart(df_plot.set_index('entry_date')[['Actual Traffic', 'Expected Traffic']])
         else:
-            st.error("Forensic Engine Error: Expected Traffic column not found. Check Tab 4 Calibration.")
+            st.error("🚨 Critical Error: The Forensic Engine is failing to produce an 'Expected' value. Check Tab 4 for missing coefficients.")
 
-        # --- OPTIONAL: THE ATTRIBUTION STACK (Mini-View) ---
-        with st.expander("🔍 View Volume Attribution Stack"):
-            # This shows the 'Why' behind the prediction line
-            stack_cols = {
+        # --- THE 'WHY' STACK ---
+        with st.expander("🔍 View Attribution Component Stack"):
+            # This shows the specific layers building that 'Expected' line
+            stack_map = {
                 'baseline_isolated': 'Organic Baseline', 
                 'residual_lift': 'Digital ROI',
                 'gravity_lift': 'Entertainment Gravity'
             }
-            # Only include columns that exist in the dataframe
-            available_cols = [c for c in stack_cols.keys() if c in df_plot.columns]
+            # Only map what actually exists in the data
+            cols_to_plot = [stack_map[c] for c in stack_cols.keys() if c in df_plot.columns]
             
-            if available_cols:
-                df_stack_mini = df_plot.rename(columns=stack_cols)
-                st.area_chart(df_stack_mini.set_index('entry_date')[[stack_cols[c] for c in available_cols]])
-            
-        st.caption("The line chart compares Actual property entries vs. the Model's prediction. The area chart breaks down the Marketing & Entertainment components of that prediction.")
+            if cols_to_plot:
+                df_stack_view = df_plot.rename(columns=stack_map)
+                st.area_chart(df_stack_view.set_index('entry_date')[cols_to_plot])
+    else:
+        st.info("Waiting for Vault data to populate trends...")
 
 # --- TAB 2: LEDGER MANAGEMENT ---
 with tab2:
