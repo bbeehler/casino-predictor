@@ -952,7 +952,7 @@ with tab6:
         import google.generativeai as genai
 
         try:
-            api_key = st.secrets["GOOGLE_API_KEY"]
+            api_key = st.secrets["GEMINI_API_KEY"]
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             
