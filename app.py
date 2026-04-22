@@ -389,7 +389,7 @@ with tab2:
     # --- SECTION A: MANUAL FORM ---
     with col_a:
         st.write("### ✍️ Manual Results Entry")
-        with st.form("manual_entry_v3"):
+        with st.form("manual_entry_v4"):
             entry_date = st.date_input("Select Date", datetime.date.today())
             
             c1, c2, c3 = st.columns(3)
@@ -401,6 +401,7 @@ with tab2:
             st.write("**🎸 Hard Rock LIVE Event Data**")
             e1, e2 = st.columns(2)
             with e1: 
+                # Ensuring options match the Selectbox exactly
                 event_type = st.selectbox("Event Setup", ["None", "GA (2,200)", "Seated (1,900)"])
             with e2: 
                 attendance = st.number_input("Actual Attendance", min_value=0, max_value=2200)
@@ -417,6 +418,7 @@ with tab2:
             if submit_form:
                 with st.spinner("Writing to Vault..."):
                     date_str = entry_date.isoformat()
+                    # CRITICAL: Payload must match Supabase column names EXACTLY (lowercase)
                     new_row = {
                         "entry_date": date_str,
                         "actual_traffic": int(traffic),
@@ -425,17 +427,24 @@ with tab2:
                         "ad_impressions": int(imps),
                         "social_engagements": int(social),
                         "new_members": int(new_mems),
-                        "event_type": event_type,
-                        "attendance": int(attendance)
+                        "event_type": event_type,   # Must exist in Supabase ledger table
+                        "attendance": int(attendance) # Must exist in Supabase ledger table
                     }
                     try:
-                        supabase.table("ledger").upsert(new_row, on_conflict="entry_date").execute()
-                        st.success(f"✅ Data for {date_str} is now in the Vault.")
-                        import time
-                        time.sleep(1)
-                        st.rerun() 
+                        response = supabase.table("ledger").upsert(new_row, on_conflict="entry_date").execute()
+                        
+                        # Verify the response has data
+                        if hasattr(response, 'data') and len(response.data) > 0:
+                            st.success(f"✅ Data for {date_str} is now in the Vault.")
+                            import time
+                            time.sleep(1)
+                            st.rerun() 
+                        else:
+                            st.error("🚨 Sync failed: The database accepted the call but didn't return a confirmation.")
                     except Exception as e:
-                        st.error(f"Sync failed: {e}")
+                        # This will expose the exact missing column or type error
+                        st.error("🚨 Database Error")
+                        st.write(f"**Error Details:** {e}")
 
     # --- SECTION B: BULK UPLOAD ---
     with col_b:
@@ -457,14 +466,14 @@ with tab2:
     # --- SECTION C: THE LEDGER EDITOR ---
     st.divider()
     st.write("### 📜 Ledger Editor")
-    st.caption("Newest entries are at the top. Edit cells directly and hit Sync below.")
     
     if ledger_data:
         df_history = pd.DataFrame(ledger_data)
         
-        # Ensure event columns exist in the dataframe before display
-        if 'event_type' not in df_history.columns: df_history['event_type'] = "None"
-        if 'attendance' not in df_history.columns: df_history['attendance'] = 0
+        # Ensure new columns exist locally before rendering editor
+        for col in ['event_type', 'attendance']:
+            if col not in df_history.columns:
+                df_history[col] = "None" if col == 'event_type' else 0
 
         if 'entry_date' in df_history.columns:
             df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
@@ -488,21 +497,19 @@ with tab2:
         if st.button("✅ Confirm & Sync Edits", key="btn_sync_ledger_t2", use_container_width=True):
             with st.spinner("Updating Vault records..."):
                 try:
-                    for _, row in edited_df.iterrows():
-                        up_data = row.to_dict()
-                        d_key = pd.to_datetime(up_data['entry_date']).strftime('%Y-%m-%d')
-                        up_data['entry_date'] = d_key
-                        
-                        if 'id' in up_data: del up_data['id']
-                        
-                        supabase.table("ledger").upsert(up_data, on_conflict="entry_date").execute()
+                    # Clean the dates back to strings before syncing
+                    sync_ready_df = edited_df.copy()
+                    sync_ready_df['entry_date'] = sync_ready_df['entry_date'].dt.strftime('%Y-%m-%d')
+                    
+                    sync_data = sync_ready_df.to_dict(orient='records')
+                    
+                    # Mass upsert for efficiency
+                    supabase.table("ledger").upsert(sync_data, on_conflict="entry_date").execute()
                     
                     st.success("Vault Successfully Updated!")
                     st.rerun() 
                 except Exception as e:
                     st.error(f"Manual sync failed: {e}")
-    else:
-        st.info("The Vault is currently empty.")
 
 # --- TAB 3: PROPERTY ANALYTICS ---
 with tab3:
