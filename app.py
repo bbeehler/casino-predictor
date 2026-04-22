@@ -870,7 +870,7 @@ with tab6:
         selected_range = st.date_input(
             "Select Audit Period:", 
             value=(min_date, max_date), 
-            key="master_report_final_filter_v7"
+            key="master_report_forensic_range_unique"
         )
 
     # Proceed only if a full range is selected
