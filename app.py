@@ -620,108 +620,68 @@ with tab3:
     else:
         st.info("No data found in the Vault. Please backfill results in Tab 2 to see analytics.")
 
-# --- TAB 4: ENGINE CONTROL (Entertainment Integrated) ---
-
+# --- TAB 4: CALIBRATION & WEIGHTS ---
 with tab4:
-    current_user = st.session_state.get('user_email', "unauthorized")
-    
-    # 1. PERMISSION GATEKEEPER
-    if current_user not in ADMIN_USERS:
-        st.warning("### 🔒 Access Restricted")
-        st.info("This tab is reserved for Executive Management to calibrate the Forensic Engine.")
-    else:
-        st.markdown(f"""
-            <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-                <h2 style="color: #FFCC00; margin: 0;">⚙️ Engine Calibration</h2>
-                <p style="color: #888; margin: 0;">Admin Identity: <b>{current_user}</b></p>
-            </div>
-        """, unsafe_allow_html=True)
+    st.markdown("""
+        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
+            <h2 style="color: #FFCC00; margin: 0;">⚙️ Model Calibration</h2>
+            <p style="color: #888; margin: 0;">Adjust the weights that drive the Forensic Engine's attribution.</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-        # 2. PRE-FLIGHT DATA CLEANING
-        defaults = {
-            'Clicks': 0.04, 'Impressions': 0.0002, 'Ad_Decay': 85.0,
-            'Avg_Coin_In': 112.50, 'Property_Theo': 450.0, 'Hold_Pct': 10.0,
-            'Snow_cm': -45.0, 'Rain_mm': -12.0, 'Static_Weight': 50.0, 
-            'Static_Count': 2, 'Digital_OOH_Weight': 10.0, 'Digital_OOH_Count': 4,
-            'Event_Gravity': 20.0  # New Default: 20% Capture Rate
-        }
+    # We use a form to ensure all weights save at once
+    with st.form("calibration_form"):
+        st.write("### 📣 Marketing & Gravity Multipliers")
+        col_m1, col_m2 = st.columns(2)
         
-        clean_coeffs = {}
-        for key, default_val in defaults.items():
-            raw_val = st.session_state.coeffs.get(key)
-            try:
-                clean_coeffs[key] = float(raw_val) if raw_val is not None else default_val
-            except (ValueError, TypeError):
-                clean_coeffs[key] = default_val
+        with col_m1:
+            new_clicks = st.slider("Ad Click Multiplier", 0.00, 1.00, float(st.session_state.coeffs.get('Clicks', 0.05)), 0.01)
+            new_impressions = st.slider("Social Impression Weight", 0.0000, 0.0010, float(st.session_state.coeffs.get('Impressions', 0.0002)), 0.0001, format="%.4f")
+        
+        with col_m2:
+            new_ooh = st.number_input("OOH Daily Guest Pressure", 0, 1000, int(st.session_state.coeffs.get('OOH_Daily', 150)))
+            new_gravity = st.slider("HR LIVE Gravity (%)", 0.0, 100.0, float(st.session_state.coeffs.get('event_gravity', 25.0)), 0.5)
 
-        # 3. CALIBRATION FORM
-        with st.form("engine_settings_v17"):
-            col1, col2 = st.columns(2)
+        st.divider()
+        
+        st.write("### 💰 Financial Anchors")
+        col_f1, col_f2, col_f3 = st.columns(3)
+        with col_f1:
+            new_avg_spend = st.number_input("Avg. Spend / Head ($)", 50.0, 500.0, float(st.session_state.coeffs.get('Avg_Coin_In', 112.50)))
+        with col_f2:
+            new_theo = st.number_input("Property Theo ($)", 100.0, 1000.0, float(st.session_state.coeffs.get('Property_Theo', 450.00)))
+        with col_f3:
+            new_hold = st.slider("House Hold %", 5.0, 20.0, float(st.session_state.coeffs.get('Hold_Pct', 10.0)), 0.1)
+
+        st.divider()
+        
+        st.write("### ❄️ Environmental Friction")
+        col_e1, col_e2 = st.columns(2)
+        with col_e1:
+            new_snow = st.number_input("Snow Friction (Guests/cm)", -200, 0, int(st.session_state.coeffs.get('Snow_cm', -45)))
+        with col_e2:
+            new_rain = st.number_input("Rain Friction (Guests/mm)", -100, 0, int(st.session_state.coeffs.get('Rain_mm', -12)))
+
+        # THE SAVE BUTTON
+        submit_button = st.form_submit_button("🚀 Update Engine Weights", use_container_width=True)
+
+        if submit_button:
+            # Commit the new values to Session State
+            st.session_state.coeffs = {
+                'Clicks': new_clicks,
+                'Impressions': new_impressions,
+                'OOH_Daily': new_ooh,
+                'event_gravity': new_gravity,
+                'Avg_Coin_In': new_avg_spend,
+                'Property_Theo': new_theo,
+                'Hold_Pct': new_hold,
+                'Snow_cm': new_snow,
+                'Rain_mm': new_rain
+            }
             
-            with col1:
-                st.write("### 📣 Marketing & Awareness")
-                new_clicks = st.slider("Click Weight", 0.0, 0.5, value=clean_coeffs['Clicks'], format="%.3f")
-                new_decay = st.slider("Awareness Retention (%)", 0.0, 100.0, value=clean_coeffs['Ad_Decay'], 
-                                      help="Adstock Decay: 85% is the standard for retail/gaming half-life.")
-                
-                # --- NEW: HARD ROCK LIVE CALIBRATION ---
-                st.write("### 🎸 Hard Rock LIVE Gravity")
-                new_event_grav = st.slider("Event Capture Rate (%)", 0.0, 50.0, value=clean_coeffs['Event_Gravity'], 
-                                           help="The % of show attendees expected to visit the gaming floor. Industry standard is 15-22%.")
-
-                st.write("### 📍 OOH / Billboard Pressure")
-                new_static_w = st.slider("Static Board Lift", 0.0, 500.0, value=clean_coeffs['Static_Weight'])
-                new_static_c = st.number_input("Static Count", 0, 10, value=int(clean_coeffs['Static_Count']))
-
-            with col2:
-                st.write("### 💰 Financials & Yield")
-                new_coin = st.number_input("Avg Gross Spend ($)", 0.0, 5000.0, value=clean_coeffs['Avg_Coin_In'])
-                new_hold = st.slider("House Hold %", 1.0, 25.0, value=clean_coeffs['Hold_Pct'])
-                
-                st.write("### ❄️ Weather Friction")
-                new_snow = st.slider("Snow Friction (Guests/cm)", -1000.0, 0.0, value=clean_coeffs['Snow_cm'])
-                new_rain = st.slider("Rain Friction (Guests/mm)", -500.0, 0.0, value=clean_coeffs['Rain_mm'])
-
-            st.divider()
-            submit_btn = st.form_submit_button("💾 Save All Calibration & Sync Vault", use_container_width=True)
-
-            if submit_btn:
-                # 4. PREPARE THE SYNC PAYLOAD
-                sync_payload = {
-                    'Clicks': float(new_clicks),
-                    'Ad_Decay': float(new_decay),
-                    'Avg_Coin_In': float(new_coin),
-                    'Hold_Pct': float(new_hold),
-                    'Snow_cm': float(new_snow),
-                    'Rain_mm': float(new_rain),
-                    'Static_Weight': float(new_static_w),
-                    'Static_Count': int(new_static_c),
-                    'Event_Gravity': float(new_event_grav), # Syncing the new feature
-                    'Digital_OOH_Weight': clean_coeffs['Digital_OOH_Weight'], 
-                    'Digital_OOH_Count': int(clean_coeffs['Digital_OOH_Count'])
-                }
-                
-                try:
-                    # 5. EXECUTE SUPABASE UPDATE
-                    response = supabase.table("coefficients").update(sync_payload).eq("id", 1).execute()
-                    
-                    # 6. VERIFY SUCCESS
-                    if hasattr(response, 'data') and len(response.data) > 0:
-                        st.session_state.coeffs.update(sync_payload)
-                        st.success("✅ Vault Successfully Synced. Entertainment Gravity Integrated.")
-                        import time
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("### 🚨 Sync Failed: Row ID 1 not found.")
-                
-                except Exception as e:
-                    # 7. EXPOSE THE REAL ERROR
-                    st.error("### 🚨 Database Error")
-                    st.write(f"**The Vault rejected the update:** {e}")
-                    st.write("**Verify your Supabase column names match exactly:**")
-                    st.code(list(sync_payload.keys()))
-
+            # SUCCESS FEEDBACK
+            st.success("✅ Engine Weights Updated! Tab 1 and Tab 6 have been recalibrated.")
+            st.balloons()
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
     st.markdown("""
