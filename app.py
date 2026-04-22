@@ -991,51 +991,66 @@ with tab6:
     else:
         st.info("Please select a valid start and end date to generate the Forensic Report.")
 
-# 7. AI STRATEGIC INTELLIGENCE LAYER
-        st.divider()
-        st.markdown("""
-            <div style="background-color: #000; padding: 20px; border-radius: 10px; border: 1px solid #FFCC00;">
-                <h3 style="color: #FFCC00; margin-top: 0;">🧠 AI Forensic Analysis & Strategy</h3>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        # Logic-Driven Insight Engine
-        insights = []
-        
-        # Variance Analysis
-        if yield_variance > 5:
-            insights.append(f"🔥 **Performance Overachieved:** Property yielded **{yield_variance:.1f}% above Theoretical**. This suggests a high-density 'Whale' presence or an underestimated crossover from Hard Rock LIVE.")
-        elif yield_variance < -5:
-            insights.append(f"⚠️ **Yield Leakage:** Property performed **{abs(yield_variance):.1f}% below Theoretical**. Potential causes: Low-limit table play dominance or high environmental friction discouraging floor dwell time.")
+# 7. THE AI STRATEGIC ANALYST (Visual Integration)
+    st.divider()
+    
+    # Calculate Forensic Deltas for the AI
+    lift_efficiency = (total_live_gravity_guests / attendance * 100) if attendance > 0 else 0
+    marketing_roi_factor = (mkt_revenue_impact / 500) # Placeholder: assumes $500 avg daily spend
+    
+    # Create the Visual AI Container
+    st.markdown(f"""
+        <div style="background-color: #0e1117; padding: 25px; border-radius: 15px; border: 2px solid #FFCC00; border-left: 10px solid #FFCC00;">
+            <h2 style="color: #FFCC00; margin-top: 0; display: flex; align-items: center;">
+                <span style="margin-right: 15px;">🧠</span> AI Strategic Diagnostic
+            </h2>
+            <p style="color: #ffffff; font-size: 1.1em; line-height: 1.6;">
+                <b>Period Narrative:</b> The Forensic Engine has detected a <b>{yield_variance:.1f}% variance</b> against property theoreticals. 
+                Analysis of the Attribution Stack suggests that <b>{"Entertainment Gravity" if total_live_gravity_guests > 0 else "Organic Baselines"}</b> 
+                acted as the primary revenue stabilizer for this period.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
 
-        # Entertainment Gravity Audit
-        if total_live_gravity_guests > 0:
-            gravity_contribution = (total_live_gravity_guests / total_traffic) * 100
-            insights.append(f"🎸 **Gravity Audit:** Hard Rock LIVE provided **{gravity_contribution:.1f}%** of total property traffic. At a **{c.get('Event_Gravity', 20.0)}% capture rate**, this entertainment pulse is your primary revenue stabilizer.")
+    # The Logic-Driven Strategic Directive Cards
+    st.write("### 🚀 Executive Directives")
+    d1, d2, d3 = st.columns(3)
 
-        # Weather Sensitivity
-        if abs(total_env_friction) > (total_traffic * 0.05):
-            insights.append(f"❄️ **Environmental Impact:** Weather friction removed an estimated **{abs(total_env_friction):,.0f}** potential guests. Your digital maneuvers were forced to work 2x harder to maintain the baseline.")
-
-        # Loyalty Momentum
-        if member_conv_rate > 3.0:
-            insights.append(f"💎 **Loyalty Sprint:** Conversion is at a high-performance **{member_conv_rate:.2f}%**. The current 'New Member' offer is resonating with the concert demographic.")
-
-        # Display Insights
-        for insight in insights:
-            st.write(insight)
-
-        # THE "KICK-ASS" STRATEGIC DIRECTIVE
-        st.markdown("---")
-        st.write("### 🚀 Strategic Directives for Tammy")
-        
-        if capture_rate < 25:
-            st.warning("🎯 **Directive:** Market Capture is low. Increase Digital Adstock 72 hours prior to the next show to prime the 'Awareness Pool' before guests arrive in Ottawa.")
+    with d1:
+        # Diagnostic: Entertainment Capture
+        if lift_efficiency > 40:
+            st.success("🎯 **High Capture Detected**")
+            st.write(f"The **{lift_efficiency:.1f}%** floor crossover is elite. The concert demographic has high 'Gaming DNA'. Replicate this talent profile for Q3.")
         else:
-            st.success("✅ **Directive:** Marketing is 'Owning the Room.' Maintain current Adstock levels but pivot social spend toward 'Day-of' engagement to drive even higher LIVE crossover.")
-            
-        if total_env_friction < -500:
-            st.info("🌦️ **Climate Hedge:** Significant weather loss detected. Recommend an 'Indoor-Only' mobile push notification to Unity members during the next storm front to protect the GGR floor.")
+            st.warning("🎯 **Capture Friction**")
+            st.write(f"Crossover is at **{lift_efficiency:.1f}%**. Guests are 'Leaking' post-show. Deploy mobile 'Unity Boost' offers 15 mins before show-end.")
+
+    with d2:
+        # Diagnostic: Marketing Efficiency
+        if capture_rate > 30:
+            st.success("📣 **Market Dominance**")
+            st.write("Marketing is driving nearly 1/3 of your floor traffic. Your 'Digital Awareness Pool' is saturated and yielding high-intent guests.")
+        else:
+            st.info("📣 **Awareness Gap**")
+            st.write("Capture is below 30%. Your digital maneuvers are reaching the crowd, but not converting to foot traffic. Check 'Call to Action' on social ads.")
+
+    with d3:
+        # Diagnostic: Environmental Resilience
+        if total_env_friction < -200:
+            st.error("🌦️ **Environmental Erosion**")
+            st.write(f"Weather friction cost you **{abs(total_env_friction):,.0f}** potential guests. GGR was defended solely by the **Entertainment Pulse**.")
+        else:
+            st.success("☀️ **Operational Runway**")
+            st.write("Weather friction is negligible. Current performance is a pure reflection of Marketing Strategy and Organic Baseline strength.")
+
+    # 8. THE KICK-ASS "WHY" ANALYSIS
+    with st.expander("🔍 Deep-Dive: Why did we perform this way?"):
+        st.markdown(f"""
+        ### Forensic Audit Log:
+        * **Baseline Integrity:** The 'Heartbeat' of the property was **{"Strong" if yield_variance > 0 else "Strained"}**.
+        * **Attribution Leakage:** The engine found **{total_mkt_guests:,.0f}** guests that would not have existed without your maneuvers.
+        * **The 'Why':** {"High Yield Crossover from LIVE" if lift_efficiency > 40 else "Weather patterns and Digital Adstock decay"} were the defining variables of this window.
+        """)
 
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
 with tab7:
