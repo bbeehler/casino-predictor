@@ -386,10 +386,10 @@ with tab2:
 
     col_a, col_b = st.columns([1, 1])
 
-    # --- SECTION A: MANUAL FORM (RESTORED) ---
+    # --- SECTION A: MANUAL FORM ---
     with col_a:
         st.write("### ✍️ Manual Results Entry")
-        with st.form("manual_entry_v5"):
+        with st.form("manual_entry_v6"):
             entry_date = st.date_input("Select Date", datetime.date.today())
             
             # Row 1: Core Financials
@@ -400,12 +400,13 @@ with tab2:
             
             st.divider()
             
-            # Row 2: Environment & Promo (RESTORED)
+            # Row 2: Environment & Promo (Temperature Restored)
             st.write("**🌦️ Environment & Promotion**")
-            w1, w2, w3 = st.columns(3)
-            with w1: snow = st.number_input("Snow (cm)", min_value=0.0, step=0.1)
-            with w2: rain = st.number_input("Rain (mm)", min_value=0.0, step=0.1)
-            with w3: promo = st.checkbox("Major Promo Active?")
+            w1, w2, w3, w4 = st.columns(4)
+            with w1: temp = st.number_input("Temp (°C)", value=15.0, step=0.5)
+            with w2: snow = st.number_input("Snow (cm)", min_value=0.0, step=0.1)
+            with w3: rain = st.number_input("Rain (mm)", min_value=0.0, step=0.1)
+            with w4: promo = st.checkbox("Major Promo?")
 
             st.divider()
 
@@ -439,6 +440,7 @@ with tab2:
                         "ad_impressions": int(imps),
                         "social_engagements": int(social),
                         "new_members": int(new_mems),
+                        "temp_c": float(temp),       # Added Temperature
                         "snow_cm": float(snow),
                         "rain_mm": float(rain),
                         "active_promo": bool(promo),
@@ -477,10 +479,10 @@ with tab2:
     if ledger_data:
         df_history = pd.DataFrame(ledger_data)
         
-        # Ensure all columns exist locally for the editor
+        # Ensure all columns exist locally for the editor including temp
         expected_cols = {
-            'snow_cm': 0.0, 'rain_mm': 0.0, 'active_promo': False, 
-            'event_type': "None", 'attendance': 0
+            'temp_c': 15.0, 'snow_cm': 0.0, 'rain_mm': 0.0, 
+            'active_promo': False, 'event_type': "None", 'attendance': 0
         }
         for col, default in expected_cols.items():
             if col not in df_history.columns:
@@ -492,12 +494,13 @@ with tab2:
         
         edited_df = st.data_editor(
             df_history, 
-            key="ledger_editor_v5", 
+            key="ledger_editor_v6", 
             use_container_width=True, 
             hide_index=True,
             column_config={
                 "entry_date": st.column_config.DateColumn("Date", disabled=True),
                 "actual_traffic": st.column_config.NumberColumn("Traffic"),
+                "temp_c": st.column_config.NumberColumn("Temp (°C)"),
                 "snow_cm": st.column_config.NumberColumn("Snow (cm)"),
                 "rain_mm": st.column_config.NumberColumn("Rain (mm)"),
                 "active_promo": st.column_config.CheckboxColumn("Promo?"),
@@ -506,7 +509,7 @@ with tab2:
             }
         )
 
-        if st.button("✅ Confirm & Sync Edits", key="btn_sync_v5", use_container_width=True):
+        if st.button("✅ Confirm & Sync Edits", key="btn_sync_v6", use_container_width=True):
             with st.spinner("Updating Vault..."):
                 try:
                     sync_ready = edited_df.copy()
