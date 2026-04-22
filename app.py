@@ -937,7 +937,7 @@ with tab7:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🧪 Forecast Sandbox</h2>
-            <p style="color: #888; margin: 0;">Fully Synchronized: Triangulating Historical Baselines, Weather, & Loyalty Conversion.</p>
+            <p style="color: #888; margin: 0;">Fully Synchronized: Triangulating Historical Baselines, Hard Rock LIVE, & Loyalty Conversion.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -953,7 +953,6 @@ with tab7:
     if len(date_range) == 2:
         start_date, end_date = date_range
         num_days = (end_date - start_date).days + 1
-        
         live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
 
         # 2. SCENARIO INPUTS
@@ -964,7 +963,13 @@ with tab7:
             st.write("**Marketing & Social**")
             s_promo = st.checkbox("Active Major Promotion?", value=False)
             s_clicks = st.number_input("Est. Daily Ad Clicks", value=500)
-            s_imp = st.number_input("Est. Daily Social Impressions", value=10000)
+            
+            st.divider()
+            st.write("**🎸 Hard Rock LIVE Simulation**")
+            # Added event simulation inputs
+            sim_event = st.checkbox("Include Show Night in window?", value=False)
+            sim_setup = st.selectbox("Simulated Setup", ["GA (2,200)", "Seated (1,900)"], disabled=not sim_event)
+            sim_attend = st.number_input("Projected Tickets Sold", 0, 2200, value=1800, disabled=not sim_event)
         
         with col2:
             st.write("**Environment**")
@@ -977,6 +982,7 @@ with tab7:
             st.write("**Engine Baseline**")
             c = st.session_state.coeffs
             st.metric("Spend Anchor", f"${c.get('Avg_Coin_In', 112.50):,.2f}")
+            st.metric("Event Gravity", f"{c.get('Event_Gravity', 20.0):,.1f}%")
             st.info("Simulation pulls baseline 'Heartbeats' and 'Member Ratios' from history.")
 
         # 3. UNIFIED CALCULATION LOOP
@@ -984,14 +990,14 @@ with tab7:
         total_range_revenue = 0
         total_range_members = 0
         
-        # --- NEW: CALCULATE HISTORICAL CONVERSION RATIO ---
         if ledger_data:
             df_sb = pd.DataFrame(ledger_data)
             df_sb['entry_date'] = pd.to_datetime(df_sb['entry_date'])
             df_sb['day_name'] = df_sb['entry_date'].dt.day_name()
             
-            # Heartbeats
-            dow_profiles = df_sb.groupby('day_name')['actual_traffic'].mean().to_dict()
+            # Heartbeats (Using purified baseline from engine)
+            sb_metrics = get_forensic_metrics(ledger_data, c)
+            dow_profiles = sb_metrics.get('heartbeats', {})
             
             # Loyalty Ratio
             tot_h_traffic = df_sb['actual_traffic'].sum()
@@ -1016,14 +1022,20 @@ with tab7:
                 day_temp, day_rain, day_snow = m_temp, m_rain, m_snow
 
             # --- THE FORENSIC MATH ---
-            base_traffic = dow_profiles.get(day_name, c.get('Intercept', 4365))
+            base_traffic = dow_profiles.get(day_name, 4365)
             p_lift = c.get('Promo', 450.0) if s_promo else 0
-            m_lift = (s_clicks * c.get('Clicks', 0.02)) + (s_imp * c.get('Social_Imp', 0.0002))
+            m_lift = (s_clicks * c.get('Clicks', 0.04))
+            
+            # NEW: Event Gravity Logic
+            # We apply the event lift only once if the user selected a window, 
+            # or we could logic it to only apply on Friday/Saturday of the window.
+            # For simplicity in a Sandbox: If sim_event is ON, it pulses the window.
+            e_lift = (sim_attend * (c.get('Event_Gravity', 20.0)/100)) if sim_event else 0
+            
             w_friction = (day_rain * c.get('Rain_mm', -12.0)) + (day_snow * c.get('Snow_cm', -45.0))
             
-            daily_total = max(0, base_traffic + p_lift + m_lift + w_friction)
+            daily_total = max(0, base_traffic + p_lift + m_lift + e_lift + w_friction)
             
-            # --- NEW: LOYALTY PROJECTION ---
             daily_members = daily_total * member_ratio
             
             total_range_traffic += daily_total
@@ -1032,7 +1044,7 @@ with tab7:
             
             current_date += datetime.timedelta(days=1)
 
-        # 4. RESULTS DISPLAY (Updated to 4 Columns)
+        # 4. RESULTS DISPLAY
         st.divider()
         res1, res2, res3, res4 = st.columns(4)
         
@@ -1043,17 +1055,19 @@ with tab7:
         with res3:
             st.metric("Predicted New Members", f"{int(total_range_members):,}")
         with res4:
-            st.metric("Daily Avg Sign-ups", f"{int(total_range_members / num_days)} / day")
+            st.metric("Gravity Impact", f"+{int(sim_attend * (c.get('Event_Gravity', 20.0)/100)) if sim_event else 0} / Show",
+                      help="The specific traffic lift provided by Hard Rock LIVE attendees.")
 
         # 5. STRATEGIC INSIGHT
         st.write("---")
+        if sim_event:
+            st.info(f"🎸 **Entertainment Insight:** Including a **{sim_setup}** event with **{sim_attend}** tickets sold provides a simulated lift of **{int(sim_attend * (c.get('Event_Gravity', 20.0)/100))}** guests to the gaming floor.")
+
         if total_range_members / num_days > 50:
-            st.success(f"💎 **Loyalty Alert:** This scenario predicts high member acquisition ({int(total_range_members / num_days)}/day). Recommend additional Unity Card inventory.")
+            st.success(f"💎 **Loyalty Alert:** This scenario predicts high member acquisition ({int(total_range_members / num_days)}/day).")
         
-        if total_range_traffic / num_days > (c.get('Intercept', 4365) * 1.2):
-            st.success("🔥 **High Volume Scenario:** Configuration suggests a 20%+ lift over baseline.")
-        elif total_range_traffic / num_days < (c.get('Intercept', 4365) * 0.8):
-            st.warning("📉 **Low Volume Warning:** Forecast is significantly below average.")
+        if total_range_traffic / num_days > 5000:
+            st.success("🔥 **High Volume Scenario:** Configuration suggests property is trending above average capacity.")
 
     else:
         st.info("Please select a valid date range to start the simulation.")
