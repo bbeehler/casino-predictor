@@ -620,33 +620,33 @@ with tab3:
     else:
         st.info("No data found in the Vault. Please backfill results in Tab 2 to see analytics.")
 
-# --- TAB 4: DATABASE-ALIGNED CALIBRATION ---
+# --- TAB 4: DATABASE-ALIGNED CALIBRATION (UNCAPPED) ---
 with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">⚙️ System Calibration (DB: coefficients)</h2>
-            <p style="color: #888; margin: 0;">Directly impacting the weighted attribution layers in the Forensic Engine.</p>
+            <p style="color: #888; margin: 0;">Uncapped financial anchors and weighted OOH logic.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # Bodyguard function to prevent 'Out of Range' slider errors
-    def safe_v(key, default, min_v, max_v):
+    # Bodyguard function to handle bounds (Max is set to None for financials)
+    def safe_v(key, default, min_v, max_v=None):
         val = float(st.session_state.coeffs.get(key, default))
-        return max(min(val, max_v), min_v)
+        if max_v is not None:
+            return max(min(val, max_v), min_v)
+        return max(val, min_v)
 
-    with st.form("db_calib_form_v13"):
-        # 1. THE OOH WEIGHTED STACK (Direct DB Mapping)
+    with st.form("db_calib_form_v14_uncapped"):
+        # 1. THE OOH WEIGHTED STACK
         st.write("### 🏢 Out-of-Home (OOH) Weighted Logic")
-        st.caption("Calculates total inertia using Static and Digital OOH counts vs. their respective impact weights.")
-        
         o1, o2 = st.columns(2)
         with o1:
-            n_static_count = st.number_input("Static_Count", 0, 100, int(safe_v('Static_Count', 10, 0, 100)), help="Mechanical count of physical boards.")
-            n_static_weight = st.slider("Static_Weight", 0.0, 50.0, safe_v('Static_Weight', 15.0, 0.0, 50.0), help="Weight per physical board.")
+            n_static_count = st.number_input("Static_Count", 0, None, int(safe_v('Static_Count', 10, 0)), help="Mechanical count of physical boards.")
+            n_static_weight = st.slider("Static_Weight", 0.0, 100.0, safe_v('Static_Weight', 15.0, 0.0, 100.0), help="Weight per physical board.")
         
         with o2:
-            n_dooh_count = st.number_input("Digital_OOH_Count", 0, 100, int(safe_v('Digital_OOH_Count', 5, 0, 100)), help="Mechanical count of digital screens.")
-            n_dooh_weight = st.slider("Digital_OOH_Weight", 0.0, 100.0, safe_v('Digital_OOH_Weight', 25.0, 0.0, 100.0), help="Weight per digital screen face.")
+            n_dooh_count = st.number_input("Digital_OOH_Count", 0, None, int(safe_v('Digital_OOH_Count', 5, 0)), help="Mechanical count of digital screens.")
+            n_dooh_weight = st.slider("Digital_OOH_Weight", 0.0, 200.0, safe_v('Digital_OOH_Weight', 25.0, 0.0, 200.0), help="Weight per digital screen face.")
 
         st.divider()
 
@@ -654,53 +654,50 @@ with tab4:
         st.write("### 📣 Awareness & Ad Persistence")
         d1, d2, d3 = st.columns(3)
         with d1:
-            n_clicks = st.slider("Clicks", 0.0, 1.0, safe_v('Clicks', 0.05, 0.0, 1.0), help="Direct conversion weight for ad clicks.")
+            n_clicks = st.slider("Clicks", 0.0, 2.0, safe_v('Clicks', 0.05, 0.0, 2.0), help="Direct conversion weight for ad clicks.")
         with d2:
-            n_social_imp = st.slider("Social_Imp", 0.0000, 0.0010, safe_v('Social_Imp', 0.0002, 0.0, 0.001), format="%.4f", help="Awareness weight per social impression.")
+            n_social_imp = st.slider("Social_Imp", 0.0000, 0.0100, safe_v('Social_Imp', 0.0002, 0.0, 0.010), format="%.4f")
         with d3:
-            n_decay = st.slider("Ad_Decay (%)", 50.0, 100.0, safe_v('Ad_Decay', 85.0, 50.0, 100.0), help="The percentage of ad impact carried over to the following day.")
+            n_decay = st.slider("Ad_Decay (%)", 0.0, 100.0, safe_v('Ad_Decay', 85.0, 0.0, 100.0), help="Ad impact persistence.")
 
         st.divider()
 
-        # 3. FINANCIAL DNA & EVENT GRAVITY
+        # 3. UNCAPPED FINANCIAL DNA & EVENT GRAVITY
         st.write("### 💰 Financial & Entertainment Weights")
         f1, f2, f3, f4 = st.columns(4)
         with f1:
-            n_spend = st.number_input("Avg_Coin_In", 0.0, 1000.0, safe_v('Avg_Coin_In', 112.50, 0.0, 1000.0))
+            # Removed the 1000.0 limit
+            n_spend = st.number_input("Avg_Coin_In", min_value=0.0, value=safe_v('Avg_Coin_In', 112.50, 0.0), help="Uncapped: Total volume per head.")
         with f2:
-            n_theo = st.number_input("Property_Theo", 0.0, 1000.0, safe_v('Property_Theo', 450.00, 0.0, 1000.0))
+            # Removed the 1000.0 limit
+            n_theo = st.number_input("Property_Theo", min_value=0.0, value=safe_v('Property_Theo', 450.00, 0.0), help="Uncapped: Theoretical property win target.")
         with f3:
-            n_hold = st.slider("Hold_Pct", 0.0, 30.0, safe_v('Hold_Pct', 10.0, 0.0, 30.0))
+            n_hold = st.slider("Hold_Pct", 0.0, 100.0, safe_v('Hold_Pct', 10.0, 0.0, 100.0))
         with f4:
-            n_gravity = st.slider("Event_Gravity", 0.0, 100.0, safe_v('Event_Gravity', 25.0, 0.0, 100.0), help="Concert-to-Floor crossover weight.")
+            n_gravity = st.slider("Event_Gravity", 0.0, 100.0, safe_v('Event_Gravity', 25.0, 0.0, 100.0))
 
         # THE COMMIT BUTTON
         submit_update = st.form_submit_button("🚀 Commit Weights to Vault", use_container_width=True)
 
         if submit_update:
-            # THE WEIGHTED INERTIA CALCULATION
-            # This 'OOH_Daily' result is what Tab 1 and Tab 6 will use for the 'Inertia' line
             calculated_ooh_daily = (n_static_count * n_static_weight) + (n_dooh_count * n_dooh_weight)
             
-            # Update Session State with exact DB mapping
-            st.session_state.coeffs = {
+            st.session_state.coeffs.update({
                 'Static_Count': n_static_count,
                 'Static_Weight': n_static_weight,
                 'Digital_OOH_Count': n_dooh_count,
                 'Digital_OOH_Weight': n_dooh_weight,
-                'OOH_Daily': calculated_ooh_daily, # Aggregated Inertia
+                'OOH_Daily': calculated_ooh_daily,
                 'Clicks': n_clicks,
                 'Social_Imp': n_social_imp,
                 'Ad_Decay': n_decay,
                 'Avg_Coin_In': n_spend,
                 'Property_Theo': n_theo,
                 'Hold_Pct': n_hold,
-                'Event_Gravity': n_gravity,
-                'Snow_cm': st.session_state.coeffs.get('Snow_cm', -45),
-                'Rain_mm': st.session_state.coeffs.get('Rain_mm', -12)
-            }
+                'Event_Gravity': n_gravity
+            })
             
-            st.success(f"✅ Recalibration Successful. Total OOH Pressure: {calculated_ooh_daily:,.0f} guests/day.")
+            st.success(f"✅ Vault Updated. GGR Anchors and OOH Inertia ({calculated_ooh_daily:,.0f}) successfully recalibrated.")
             st.balloons()
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
