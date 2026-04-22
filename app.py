@@ -854,112 +854,141 @@ with tab6:
         st.warning("Vault is empty. No data available.")
         st.stop()
 
-    # Pull data from the Upgraded Engine
-    metrics = get_forensic_metrics(ledger_data, st.session_state.coeffs)
-    df_rep = metrics.get('df_with_awareness').copy()
+    # --- NEW: DATE RANGE SELECTOR ---
+    df_raw = pd.DataFrame(ledger_data)
+    df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
     
-    c = st.session_state.coeffs
-    avg_spend = float(c.get('Avg_Coin_In', 112.50))
-    prop_theo = float(c.get('Property_Theo', 450.00))
-    hold_factor = float(c.get('Hold_Pct', 10.0)) / 100
-    ooh_daily = metrics.get('ooh_total_daily', 0)
+    min_date = df_raw['entry_date'].min().date()
+    max_date = df_raw['entry_date'].max().date()
 
-    # 2. TOP ROW: THE FINANCIAL CORE
-    st.write("### 💰 Property Yield & GGR")
-    f1, f2, f3, f4 = st.columns(4)
-    
-    total_traffic = df_rep['actual_traffic'].sum()
-    actual_ggr = (total_traffic * avg_spend) * hold_factor
-    total_theo_win = total_traffic * prop_theo
-    yield_variance = ((actual_ggr / total_theo_win) - 1) * 100 if total_theo_win > 0 else 0
-    
-    f1.metric("Total Traffic", f"{total_traffic:,.0f}", 
-              help="Total headcount recorded at all property turnstiles during this period.")
-    f2.metric("Total Theo Win", f"${total_theo_win:,.2f}", 
-              help=f"Theoretical revenue expected based on a property target of ${prop_theo} per guest.")
-    f3.metric("Actual GGR (Net Win)", f"${actual_ggr:,.2f}", delta=f"{yield_variance:.1f}% vs Theo", 
-              help=f"Estimated Net Gaming Revenue (GGR) based on your calibrated {hold_factor*100:.1f}% house hold.")
-    f4.metric("Avg Spend/Head", f"${avg_spend:.2f}", 
-              help="The average Coin-In per guest. This is your 'Financial Anchor' for the property.")
+    col_date_1, col_date_2 = st.columns([1, 2])
+    with col_date_1:
+        selected_range = st.date_input(
+            "Select Audit Period:",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date,
+            key="master_report_date_filter"
+        )
 
-    st.divider()
+    # Proceed only if a full range is selected
+    if isinstance(selected_range, tuple) and len(selected_range) == 2:
+        start_date, end_date = selected_range
+        mask = (df_raw['entry_date'].dt.date >= start_date) & (df_raw['entry_date'].dt.date <= end_date)
+        filtered_ledger = df_raw.loc[mask].to_dict(orient='records')
+        
+        if not filtered_ledger:
+            st.info("No data found for the selected range.")
+            st.stop()
 
-    # 3. SECOND ROW: THE ATTRIBUTION BOARD (MARKETING & LIVE)
-    st.write("### 📣 Attribution: Marketing & Hard Rock LIVE")
-    m1, m2, m3, m4 = st.columns(4)
-    
-    # Calculate Impact Layers
-    total_digital_lift_guests = df_rep['residual_lift'].sum()
-    total_ooh_lift_guests = ooh_daily * len(df_rep)
-    total_live_gravity_guests = df_rep['gravity_lift'].sum() # NEW
-    
-    # Combined Marketing Maneuver Total
-    total_mkt_guests = total_digital_lift_guests + total_ooh_lift_guests + total_live_gravity_guests
-    mkt_revenue_impact = (total_mkt_guests * avg_spend) * hold_factor
-    capture_rate = (mkt_revenue_impact / actual_ggr * 100) if actual_ggr > 0 else 0
+        # Pull data from the Upgraded Engine using the FILTERED slice
+        metrics = get_forensic_metrics(filtered_ledger, st.session_state.coeffs)
+        df_rep = metrics.get('df_with_awareness').copy()
+        
+        c = st.session_state.coeffs
+        avg_spend = float(c.get('Avg_Coin_In', 112.50))
+        prop_theo = float(c.get('Property_Theo', 450.00))
+        hold_factor = float(c.get('Hold_Pct', 10.0)) / 100
+        ooh_daily = metrics.get('ooh_total_daily', 0)
 
-    m1.metric("Marketing Guests", f"{total_mkt_guests:,.0f}", 
-              help="Combined lift from Digital Pool, OOH, and Hard Rock LIVE events.")
-    m2.metric("LIVE Gravity Lift", f"{total_live_gravity_guests:,.0f}", 
-              help="Total gaming floor traffic specifically attributed to concert and event attendance.")
-    m3.metric("Market Capture Rate", f"{capture_rate:.1f}%", 
-              help="The percentage of total property revenue driven by your Marketing and Entertainment maneuvers.")
-    m4.metric("AI Predictability", metrics['predictability'], 
-              help="The confidence score of the Forensic Engine based on how closely our model matches actual traffic.")
+        # 2. TOP ROW: THE FINANCIAL CORE
+        st.write("### 💰 Property Yield & GGR")
+        f1, f2, f3, f4 = st.columns(4)
+        
+        total_traffic = df_rep['actual_traffic'].sum()
+        actual_ggr = (total_traffic * avg_spend) * hold_factor
+        total_theo_win = total_traffic * prop_theo
+        yield_variance = ((actual_ggr / total_theo_win) - 1) * 100 if total_theo_win > 0 else 0
+        
+        f1.metric("Total Traffic", f"{total_traffic:,.0f}", 
+                  help="Total headcount recorded at all property turnstiles during this period.")
+        f2.metric("Total Theo Win", f"${total_theo_win:,.2f}", 
+                  help=f"Theoretical revenue expected based on a property target of ${prop_theo} per guest.")
+        f3.metric("Actual GGR (Net Win)", f"${actual_ggr:,.2f}", delta=f"{yield_variance:.1f}% vs Theo", 
+                  help=f"Estimated Net Gaming Revenue (GGR) based on your calibrated {hold_factor*100:.1f}% house hold.")
+        f4.metric("Avg Spend/Head", f"${avg_spend:.2f}", 
+                  help="The average Coin-In per guest. This is your 'Financial Anchor' for the property.")
 
-    st.divider()
+        st.divider()
 
-    # 4. THIRD ROW: LOYALTY & ENVIRONMENT
-    st.write("### 💎 Loyalty & Environmental Friction")
-    l1, l2, l3, l4 = st.columns(4)
-    
-    total_new_members = df_rep['new_members'].sum() if 'new_members' in df_rep.columns else 0
-    member_conv_rate = (total_new_members / total_traffic * 100) if total_traffic > 0 else 0
-    
-    total_snow_loss = (df_rep['snow_cm'].sum() * float(c.get('Snow_cm', -45)))
-    total_rain_loss = (df_rep['rain_mm'].sum() * float(c.get('Rain_mm', -12)))
-    total_env_friction = total_snow_loss + total_rain_loss
+        # 3. SECOND ROW: THE ATTRIBUTION BOARD (MARKETING & LIVE)
+        st.write("### 📣 Attribution: Marketing & Hard Rock LIVE")
+        m1, m2, m3, m4 = st.columns(4)
+        
+        # Calculate Impact Layers
+        total_digital_lift_guests = df_rep['residual_lift'].sum()
+        total_ooh_lift_guests = ooh_daily * len(df_rep)
+        total_live_gravity_guests = df_rep['gravity_lift'].sum()
+        
+        # Combined Marketing Maneuver Total
+        total_mkt_guests = total_digital_lift_guests + total_ooh_lift_guests + total_live_gravity_guests
+        mkt_revenue_impact = (total_mkt_guests * avg_spend) * hold_factor
+        capture_rate = (mkt_revenue_impact / actual_ggr * 100) if actual_ggr > 0 else 0
 
-    l1.metric("New Unity Members", f"{total_new_members:,.0f}", 
-              help="Total number of new Unity Card sign-ups recorded in the database.")
-    l2.metric("Member Conv. Rate", f"{member_conv_rate:.2f}%", 
-              help="The percentage of the total crowd that converted into a loyalist (New Member).")
-    l3.metric("Weather Friction", f"{total_env_friction:,.0f}", delta="Guests Lost", delta_color="inverse", 
-              help="The estimated number of guests lost due to Snow and Rain interference.")
-    l4.metric("Guest Quality Index", f"{(actual_ggr / total_theo_win):.2f}x", 
-              help="A score of 1.0 means guests spent exactly their Theo. >1.0 means you are attracting 'High Value' guests.")
+        m1.metric("Marketing Guests", f"{total_mkt_guests:,.0f}", 
+                  help="Combined lift from Digital Pool, OOH, and Hard Rock LIVE events.")
+        m2.metric("LIVE Gravity Lift", f"{total_live_gravity_guests:,.0f}", 
+                  help="Total gaming floor traffic specifically attributed to concert and event attendance.")
+        m3.metric("Market Capture Rate", f"{capture_rate:.1f}%", 
+                  help="The percentage of total property revenue driven by your Marketing and Entertainment maneuvers.")
+        m4.metric("AI Predictability", metrics['predictability'], 
+                  help="The confidence score of the Forensic Engine based on how closely our model matches actual traffic.")
 
-    # 5. THE UPDATED ATTRIBUTION STACK (Now with Gravity)
-    st.write("### 📊 Comprehensive Attribution Stack")
-    df_rep['OOH Lift'] = ooh_daily
-    df_rep['Weather Impact'] = (df_rep['snow_cm'] * float(c.get('Snow_cm', -45))) + (df_rep['rain_mm'] * float(c.get('Rain_mm', -12)))
-    
-    chart_cols = {
-        'baseline_isolated': 'Organic Baseline',
-        'OOH Lift': 'Billboard Lift',
-        'residual_lift': 'Digital Awareness Pool',
-        'gravity_lift': 'Entertainment Gravity', # NEW LAYER
-        'Weather Impact': 'Weather Friction'
-    }
-    
-    chart_df = df_rep.rename(columns=chart_cols)
-    st.area_chart(chart_df.set_index('entry_date')[list(chart_cols.values())])
+        st.divider()
 
-    # 6. OPTIONAL: SHOW AUDIT TABLE
-    if total_live_gravity_guests > 0:
-        with st.expander("🎸 View Hard Rock LIVE Impact Audit"):
-            event_days = df_rep[df_rep['attendance'] > 0].copy()
-            st.dataframe(
-                event_days[['entry_date', 'event_type', 'attendance', 'gravity_lift']],
-                column_config={
-                    "entry_date": "Show Date",
-                    "event_type": "Setup",
-                    "attendance": "Tickets Sold",
-                    "gravity_lift": "Gaming Floor Cross-over"
-                },
-                hide_index=True,
-                use_container_width=True
-            )
+        # 4. THIRD ROW: LOYALTY & ENVIRONMENT
+        st.write("### 💎 Loyalty & Environmental Friction")
+        l1, l2, l3, l4 = st.columns(4)
+        
+        total_new_members = df_rep['new_members'].sum() if 'new_members' in df_rep.columns else 0
+        member_conv_rate = (total_new_members / total_traffic * 100) if total_traffic > 0 else 0
+        
+        total_snow_loss = (df_rep['snow_cm'].sum() * float(c.get('Snow_cm', -45)))
+        total_rain_loss = (df_rep['rain_mm'].sum() * float(c.get('Rain_mm', -12)))
+        total_env_friction = total_snow_loss + total_rain_loss
+
+        l1.metric("New Unity Members", f"{total_new_members:,.0f}", 
+                  help="Total number of new Unity Card sign-ups recorded in the database.")
+        l2.metric("Member Conv. Rate", f"{member_conv_rate:.2f}%", 
+                  help="The percentage of the total crowd that converted into a loyalist (New Member).")
+        l3.metric("Weather Friction", f"{total_env_friction:,.0f}", delta="Guests Lost", delta_color="inverse", 
+                  help="The estimated number of guests lost due to Snow and Rain interference.")
+        l4.metric("Guest Quality Index", f"{(actual_ggr / total_theo_win):.2f}x", 
+                  help="A score of 1.0 means guests spent exactly their Theo. >1.0 means you are attracting 'High Value' guests.")
+
+        # 5. THE UPDATED ATTRIBUTION STACK (Now with Gravity)
+        st.write("### 📊 Comprehensive Attribution Stack")
+        df_rep['OOH Lift'] = ooh_daily
+        df_rep['Weather Impact'] = (df_rep['snow_cm'] * float(c.get('Snow_cm', -45))) + (df_rep['rain_mm'] * float(c.get('Rain_mm', -12)))
+        
+        chart_cols = {
+            'baseline_isolated': 'Organic Baseline',
+            'OOH Lift': 'Billboard Lift',
+            'residual_lift': 'Digital Awareness Pool',
+            'gravity_lift': 'Entertainment Gravity', 
+            'Weather Impact': 'Weather Friction'
+        }
+        
+        chart_df = df_rep.rename(columns=chart_cols)
+        st.area_chart(chart_df.set_index('entry_date')[list(chart_cols.values())])
+
+        # 6. OPTIONAL: SHOW AUDIT TABLE
+        if total_live_gravity_guests > 0:
+            with st.expander("🎸 View Hard Rock LIVE Impact Audit"):
+                event_days = df_rep[df_rep['attendance'] > 0].copy()
+                st.dataframe(
+                    event_days[['entry_date', 'event_type', 'attendance', 'gravity_lift']],
+                    column_config={
+                        "entry_date": "Show Date",
+                        "event_type": "Setup",
+                        "attendance": "Tickets Sold",
+                        "gravity_lift": "Gaming Floor Cross-over"
+                    },
+                    hide_index=True,
+                    use_container_width=True
+                )
+    else:
+        st.info("Please select a valid start and end date to generate the Forensic Report.")
 
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
 with tab7:
