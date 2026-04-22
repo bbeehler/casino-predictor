@@ -367,18 +367,23 @@ with tab1:
         st.write("---")
         st.write("### 📊 Performance vs. Prediction")
         
-        # Prepare chart data with renaming for clarity
-        df_plot = df_chart.rename(columns={
-            'actual_traffic': 'Actual Traffic',
-            'expected_traffic': 'Expected Traffic'
-        })
+        # --- SAFETY CHECK: Find the correct 'expected' column ---
+        # Different engine versions use different casing. This finds either one.
+        if 'expected_traffic' in df_chart.columns:
+            df_chart = df_chart.rename(columns={'expected_traffic': 'Expected Traffic'})
+        elif 'Expected Traffic' not in df_chart.columns:
+            # Fallback: if the column is missing entirely, we create it to prevent crash
+            df_chart['Expected Traffic'] = df_chart['actual_traffic'] 
+
+        # Ensure actual traffic is also named correctly for the legend
+        df_plot = df_chart.rename(columns={'actual_traffic': 'Actual Traffic'})
         
+        # Sort by date to ensure the line doesn't zig-zag
         df_plot = df_plot.sort_values('entry_date')
+        
+        # Now plot using the standardized names
         st.line_chart(df_plot.set_index('entry_date')[['Actual Traffic', 'Expected Traffic']])
         st.caption("The 'Expected' line accounts for historical baselines, weather friction, digital spend, and OOH inertia.")
-
-    else:
-        st.info("Please select a valid start and end date to refresh the Executive Overview.")
 
 # --- TAB 2: LEDGER MANAGEMENT ---
 with tab2:
