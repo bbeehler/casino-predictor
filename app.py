@@ -835,7 +835,7 @@ with tab5:
         st.session_state.messages = []
         st.rerun()
 
-# --- TAB 6: MASTER REPORT (Comprehensive with Total Revenue) ---
+# --- TAB 6: MASTER REPORT (Comprehensive with Live AI Strategic Intelligence) ---
 with tab6:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
@@ -857,19 +857,12 @@ with tab6:
     # --- DATE RANGE SELECTOR ---
     df_raw = pd.DataFrame(ledger_data)
     df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
-    
     min_date = df_raw['entry_date'].min().date()
     max_date = df_raw['entry_date'].max().date()
 
     col_date_1, col_date_2 = st.columns([1, 2])
     with col_date_1:
-        selected_range = st.date_input(
-            "Select Audit Period:",
-            value=(min_date, max_date),
-            min_value=min_date,
-            max_value=max_date,
-            key="master_report_date_filter_v2"
-        )
+        selected_range = st.date_input("Select Audit Period:", value=(min_date, max_date), key="master_report_final_filter")
 
     # Proceed only if a full range is selected
     if isinstance(selected_range, tuple) and len(selected_range) == 2:
@@ -881,44 +874,31 @@ with tab6:
             st.info("No data found for the selected range.")
             st.stop()
 
-        # Pull data from the Upgraded Engine
+        # Engine Processing
         metrics = get_forensic_metrics(filtered_ledger, st.session_state.coeffs)
         df_rep = metrics.get('df_with_awareness').copy()
         
         c = st.session_state.coeffs
-        avg_spend = float(c.get('Avg_Coin_In', 112.50))
-        prop_theo = float(c.get('Property_Theo', 450.00))
-        hold_factor = float(c.get('Hold_Pct', 10.0)) / 100
+        avg_spend = float(c.get('avg_coin_in') or c.get('Avg_Coin_In') or 112.50)
+        prop_theo = float(c.get('property_theo') or c.get('Property_Theo') or 450.00)
+        hold_factor = float(c.get('hold_pct') or c.get('Hold_Pct') or 10.0) / 100
         ooh_daily = metrics.get('ooh_total_daily', 0)
 
-        # 2. TOP ROW: THE FINANCIAL CORE (Updated to 5 Columns)
+        # 2. TOP ROW: THE FINANCIAL CORE
         st.write("### 💰 Property Yield & GGR")
         f1, f2, f3, f4, f5 = st.columns(5)
         
         total_traffic = df_rep['actual_traffic'].sum()
-        # NEW: Total Revenue calculation (Gross Coin-In)
         total_revenue = total_traffic * avg_spend
         actual_ggr = total_revenue * hold_factor
-        
         total_theo_win = total_traffic * prop_theo
         yield_variance = ((actual_ggr / total_theo_win) - 1) * 100 if total_theo_win > 0 else 0
         
-        f1.metric("Total Traffic", f"{total_traffic:,.0f}", 
-                  help="Total headcount recorded during this period.")
-        
-        # NEW CARD
-        f2.metric("Total Revenue", f"${total_revenue:,.2f}", 
-                  help="Gross property volume (Traffic × Avg Spend) before House Hold is applied.")
-        
-        f3.metric("Actual GGR", f"${actual_ggr:,.2f}", 
-                  delta=f"{yield_variance:.1f}% vs Theo", 
-                  help=f"Net Win based on your calibrated {hold_factor*100:.1f}% hold.")
-        
-        f4.metric("Total Theo Win", f"${total_theo_win:,.2f}", 
-                  help="Revenue target based on property theoretical spend.")
-        
-        f5.metric("Avg Spend", f"${avg_spend:.2f}", 
-                  help="The average Coin-In per guest anchor.")
+        f1.metric("Total Traffic", f"{total_traffic:,.0f}")
+        f2.metric("Total Revenue", f"${total_revenue:,.2f}")
+        f3.metric("Actual GGR", f"${actual_ggr:,.2f}", delta=f"{yield_variance:.1f}% vs Theo")
+        f4.metric("Total Theo Win", f"${total_theo_win:,.2f}")
+        f5.metric("Avg Spend", f"${avg_spend:.2f}")
 
         st.divider()
 
@@ -929,6 +909,7 @@ with tab6:
         total_digital_lift_guests = df_rep['residual_lift'].sum()
         total_ooh_lift_guests = ooh_daily * len(df_rep)
         total_live_gravity_guests = df_rep['gravity_lift'].sum()
+        attendance = df_rep['attendance'].sum()
         
         total_mkt_guests = total_digital_lift_guests + total_ooh_lift_guests + total_live_gravity_guests
         mkt_revenue_impact = (total_mkt_guests * avg_spend) * hold_factor
@@ -948,8 +929,8 @@ with tab6:
         total_new_members = df_rep['new_members'].sum() if 'new_members' in df_rep.columns else 0
         member_conv_rate = (total_new_members / total_traffic * 100) if total_traffic > 0 else 0
         
-        total_snow_loss = (df_rep['snow_cm'].sum() * float(c.get('Snow_cm', -45)))
-        total_rain_loss = (df_rep['rain_mm'].sum() * float(c.get('Rain_mm', -12)))
+        total_snow_loss = (df_rep['snow_cm'].sum() * float(c.get('snow_cm') or c.get('Snow_cm') or -45))
+        total_rain_loss = (df_rep['rain_mm'].sum() * float(c.get('rain_mm') or c.get('Rain_mm') or -12))
         total_env_friction = total_snow_loss + total_rain_loss
 
         l1.metric("New Unity Members", f"{total_new_members:,.0f}")
@@ -960,98 +941,57 @@ with tab6:
         # 5. ATTRIBUTION STACK
         st.write("### 📊 Comprehensive Attribution Stack")
         df_rep['OOH Lift'] = ooh_daily
-        df_rep['Weather Impact'] = (df_rep['snow_cm'] * float(c.get('Snow_cm', -45))) + (df_rep['rain_mm'] * float(c.get('Rain_mm', -12)))
+        df_rep['Weather Impact'] = (df_rep['snow_cm'] * float(c.get('snow_cm', -45))) + (df_rep['rain_mm'] * float(c.get('rain_mm', -12)))
         
-        chart_cols = {
-            'baseline_isolated': 'Organic Baseline',
-            'OOH Lift': 'Billboard Lift',
-            'residual_lift': 'Digital Awareness Pool',
-            'gravity_lift': 'Entertainment Gravity', 
-            'Weather Impact': 'Weather Friction'
-        }
-        
+        chart_cols = {'baseline_isolated': 'Organic Baseline', 'OOH Lift': 'Billboard Lift', 'residual_lift': 'Digital Awareness Pool', 'gravity_lift': 'Entertainment Gravity', 'Weather Impact': 'Weather Friction'}
         chart_df = df_rep.rename(columns=chart_cols)
         st.area_chart(chart_df.set_index('entry_date')[list(chart_cols.values())])
 
-        # 6. SHOW AUDIT TABLE
-        if total_live_gravity_guests > 0:
-            with st.expander("🎸 View Hard Rock LIVE Impact Audit"):
-                event_days = df_rep[df_rep['attendance'] > 0].copy()
-                st.dataframe(
-                    event_days[['entry_date', 'event_type', 'attendance', 'gravity_lift']],
-                    column_config={
-                        "entry_date": "Show Date",
-                        "event_type": "Setup",
-                        "attendance": "Tickets Sold",
-                        "gravity_lift": "Gaming Floor Cross-over"
-                    },
-                    hide_index=True,
-                    use_container_width=True
-                )
+        # 6. --- 🤖 THE FULL AI STRATEGIC ANALYST ---
+        st.divider()
+        import google.generativeai as genai
+
+        try:
+            api_key = st.secrets["GOOGLE_API_KEY"]
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            
+            forensic_dossier = f"""
+            Hard Rock Hotel & Casino Ottawa - Forensic Audit
+            Period: {start_date} to {end_date}
+
+            METRICS:
+            - Traffic: {total_traffic:,.0f} | GGR: ${actual_ggr:,.2f} | Volume: ${total_revenue:,.2f}
+            - Yield Variance: {yield_variance:.1f}% vs Theo
+            - Marketing Capture: {capture_rate:.1f}% | LIVE Gravity: {total_live_gravity_guests:,.0f} guests
+            - Loyalty: {total_new_members:,.0f} new members ({member_conv_rate:.2f}% conv)
+            - Weather Friction: {total_env_friction:,.0f} guests lost
+
+            CONTEXT:
+            Average Spend anchor is set at ${avg_spend:.2f}. AI Predictability for this model is {metrics['predictability']}.
+            
+            TASK: Provide a 3-part 'Executive Briefing' for Brian and Tammy.
+            1. 'The Why': Correlate these specific numbers.
+            2. 'The Audit': Evaluate the efficiency of marketing maneuvers.
+            3. 'The Directive': Give 2 high-stakes powerhouse moves.
+            """
+
+            if st.button("🧠 Generate Gemini Strategic Briefing", use_container_width=True):
+                with st.spinner("Gemini is auditing the Vault..."):
+                    response = model.generate_content(forensic_dossier)
+                    st.markdown(f"""
+                        <div style="background-color: #000; padding: 30px; border-radius: 15px; border: 1px solid #FFCC00; border-left: 12px solid #FFCC00; margin-top: 20px;">
+                            <h2 style="color: #FFCC00; margin-top: 0;">📋 Gemini Executive Briefing</h2>
+                            <div style="color: #ffffff; line-height: 1.7; font-size: 1.1em;">
+                                {response.text.replace('**', '<b>').replace('*', '•')}
+                            </div>
+                        </div>
+                    """, unsafe_allow_html=True)
+        except Exception as e:
+            st.info("💡 Connect your Google AI API Key in secrets to enable the Live Executive Briefing.")
+
     else:
-        st.info("Please select a valid start and end date to generate the Forensic Report.")
-
-# 7. THE AI STRATEGIC ANALYST (Visual Integration)
-    st.divider()
-    
-    # Calculate Forensic Deltas for the AI
-    lift_efficiency = (total_live_gravity_guests / attendance * 100) if attendance > 0 else 0
-    marketing_roi_factor = (mkt_revenue_impact / 500) # Placeholder: assumes $500 avg daily spend
-    
-    # Create the Visual AI Container
-    st.markdown(f"""
-        <div style="background-color: #0e1117; padding: 25px; border-radius: 15px; border: 2px solid #FFCC00; border-left: 10px solid #FFCC00;">
-            <h2 style="color: #FFCC00; margin-top: 0; display: flex; align-items: center;">
-                <span style="margin-right: 15px;">🧠</span> AI Strategic Diagnostic
-            </h2>
-            <p style="color: #ffffff; font-size: 1.1em; line-height: 1.6;">
-                <b>Period Narrative:</b> The Forensic Engine has detected a <b>{yield_variance:.1f}% variance</b> against property theoreticals. 
-                Analysis of the Attribution Stack suggests that <b>{"Entertainment Gravity" if total_live_gravity_guests > 0 else "Organic Baselines"}</b> 
-                acted as the primary revenue stabilizer for this period.
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # The Logic-Driven Strategic Directive Cards
-    st.write("### 🚀 Executive Directives")
-    d1, d2, d3 = st.columns(3)
-
-    with d1:
-        # Diagnostic: Entertainment Capture
-        if lift_efficiency > 40:
-            st.success("🎯 **High Capture Detected**")
-            st.write(f"The **{lift_efficiency:.1f}%** floor crossover is elite. The concert demographic has high 'Gaming DNA'. Replicate this talent profile for Q3.")
-        else:
-            st.warning("🎯 **Capture Friction**")
-            st.write(f"Crossover is at **{lift_efficiency:.1f}%**. Guests are 'Leaking' post-show. Deploy mobile 'Unity Boost' offers 15 mins before show-end.")
-
-    with d2:
-        # Diagnostic: Marketing Efficiency
-        if capture_rate > 30:
-            st.success("📣 **Market Dominance**")
-            st.write("Marketing is driving nearly 1/3 of your floor traffic. Your 'Digital Awareness Pool' is saturated and yielding high-intent guests.")
-        else:
-            st.info("📣 **Awareness Gap**")
-            st.write("Capture is below 30%. Your digital maneuvers are reaching the crowd, but not converting to foot traffic. Check 'Call to Action' on social ads.")
-
-    with d3:
-        # Diagnostic: Environmental Resilience
-        if total_env_friction < -200:
-            st.error("🌦️ **Environmental Erosion**")
-            st.write(f"Weather friction cost you **{abs(total_env_friction):,.0f}** potential guests. GGR was defended solely by the **Entertainment Pulse**.")
-        else:
-            st.success("☀️ **Operational Runway**")
-            st.write("Weather friction is negligible. Current performance is a pure reflection of Marketing Strategy and Organic Baseline strength.")
-
-    # 8. THE KICK-ASS "WHY" ANALYSIS
-    with st.expander("🔍 Deep-Dive: Why did we perform this way?"):
-        st.markdown(f"""
-        ### Forensic Audit Log:
-        * **Baseline Integrity:** The 'Heartbeat' of the property was **{"Strong" if yield_variance > 0 else "Strained"}**.
-        * **Attribution Leakage:** The engine found **{total_mkt_guests:,.0f}** guests that would not have existed without your maneuvers.
-        * **The 'Why':** {"High Yield Crossover from LIVE" if lift_efficiency > 40 else "Weather patterns and Digital Adstock decay"} were the defining variables of this window.
-        """)
-
+        st.info("Please select a date range to generate the report.")
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX ---
 with tab7:
     st.markdown("""
