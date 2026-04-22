@@ -620,56 +620,60 @@ with tab3:
     else:
         st.info("No data found in the Vault. Please backfill results in Tab 2 to see analytics.")
 
-# --- TAB 4: CALIBRATION & WEIGHTS (LATEST VERSION) ---
+# --- TAB 4: CALIBRATION & WEIGHTS (Crash-Proof Version) ---
 with tab4:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">⚙️ Model Calibration & Weights</h2>
-            <p style="color: #888; margin: 0;">Fine-tune the Forensic Engine to match Hard Rock Ottawa's unique property DNA.</p>
+            <h2 style="color: #FFCC00; margin: 0;">⚙️ Model Calibration</h2>
+            <p style="color: #888; margin: 0;">Adjust weights. If a value is 'out of bounds', the slider will auto-reset to the limit.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # Use a form to batch-process all updates at once
-    with st.form("calibration_v7_form"):
-        st.write("### 📣 Marketing & Attribution Weights")
+    # 1. PRE-VALIDATION (Prevents StreamlitValueAboveMaxError)
+    # This logic ensures the 'value' never exceeds the 'max' set in the widget
+    def safe_val(key, default, min_v, max_v):
+        val = float(st.session_state.coeffs.get(key, default))
+        return max(min(val, max_v), min_v)
+
+    with st.form("calibration_v9_form"):
+        st.write("### 📣 Marketing & Gravity Multipliers")
         c1, c2 = st.columns(2)
         
         with c1:
-            # Digital Multipliers
-            n_clicks = st.slider("Ad Click Weight", 0.00, 1.00, float(st.session_state.coeffs.get('Clicks', 0.05)), 0.01, help="Conversion rate from digital clicks to physical property entries.")
-            n_impressions = st.slider("Social Impression Weight", 0.0000, 0.0010, float(st.session_state.coeffs.get('Impressions', 0.0002)), 0.0001, format="%.4f")
+            n_clicks = st.slider("Ad Click Weight", 0.00, 1.00, safe_val('Clicks', 0.05, 0.0, 1.0))
+            n_impressions = st.slider("Social Weight", 0.0000, 0.0050, safe_val('Impressions', 0.0002, 0.0, 0.005), format="%.4f")
         
         with c2:
-            # OOH and Live Gravity
-            n_ooh = st.number_input("OOH Daily Guest Inertia", 0, 1000, int(st.session_state.coeffs.get('OOH_Daily', 150)), help="The static daily lift from billboard/offline presence.")
-            n_gravity = st.slider("HR LIVE Gravity (%)", 0.0, 100.0, float(st.session_state.coeffs.get('event_gravity', 25.0)), 0.5, help="Percentage of concert attendees who crossover to the gaming floor.")
+            n_ooh = st.number_input("OOH Daily Guests", 0, 2000, int(safe_val('OOH_Daily', 150, 0, 2000)))
+            n_gravity = st.slider("HR LIVE Gravity (%)", 0.0, 100.0, safe_val('event_gravity', 25.0, 0.0, 100.0))
 
         st.divider()
         
         st.write("### 💰 Financial Performance Anchors")
         f1, f2, f3 = st.columns(3)
         with f1:
-            n_avg_spend = st.number_input("Avg. Spend / Head ($)", 50.0, 500.0, float(st.session_state.coeffs.get('Avg_Coin_In', 112.50)))
+            # Setting max to 2000.0 to prevent the 'AboveMax' error you just saw
+            n_avg_spend = st.number_input("Avg. Spend / Head ($)", 0.0, 2000.0, safe_val('Avg_Coin_In', 112.50, 0.0, 2000.0))
         with f2:
-            n_theo = st.number_input("Property Theo ($)", 100.0, 1000.0, float(st.session_state.coeffs.get('Property_Theo', 450.00)))
+            n_theo = st.number_input("Property Theo ($)", 0.0, 5000.0, safe_val('Property_Theo', 450.00, 0.0, 5000.0))
         with f3:
-            n_hold = st.slider("House Hold %", 5.0, 20.0, float(st.session_state.coeffs.get('Hold_Pct', 10.0)), 0.1)
+            n_hold = st.slider("House Hold %", 0.0, 50.0, safe_val('Hold_Pct', 10.0, 0.0, 50.0))
 
         st.divider()
         
-        st.write("### ❄️ Environmental & Operational Friction")
+        st.write("### ❄️ Environmental Friction")
         e1, e2 = st.columns(2)
         with e1:
-            n_snow = st.number_input("Snow Friction (Guests lost per cm)", -200, 0, int(st.session_state.coeffs.get('Snow_cm', -45)))
+            n_snow = st.number_input("Snow Friction (G/cm)", -500, 0, int(safe_val('Snow_cm', -45, -500, 0)))
         with e2:
-            n_rain = st.number_input("Rain Friction (Guests lost per mm)", -100, 0, int(st.session_state.coeffs.get('Rain_mm', -12)))
+            n_rain = st.number_input("Rain Friction (G/mm)", -200, 0, int(safe_val('Rain_mm', -12, -200, 0)))
 
-        # THE COMMIT BUTTON
-        submit_update = st.form_submit_button("🚀 Commit Weights to Engine", use_container_width=True)
+        # THE CRITICAL SUBMIT BUTTON
+        submit_calib = st.form_submit_button("🚀 Update & Commit Weights", use_container_width=True)
 
-        if submit_update:
-            # 1. Update Session State (Immediate impact on current view)
-            st.session_state.coeffs.update({
+        if submit_calib:
+            # Writing back to session state
+            st.session_state.coeffs = {
                 'Clicks': n_clicks,
                 'Impressions': n_impressions,
                 'OOH_Daily': n_ooh,
@@ -679,10 +683,8 @@ with tab4:
                 'Hold_Pct': n_hold,
                 'Snow_cm': n_snow,
                 'Rain_mm': n_rain
-            })
-            
-            # 2. SUCCESS FEEDBACK
-            st.success("✅ Engine Recalibrated. Performance visuals and AI briefings are now using updated weights.")
+            }
+            st.success("✅ Calibration Successful. All forensic layers updated.")
             st.balloons()
 # --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
 with tab5:
