@@ -984,13 +984,13 @@ with tab6:
             GOAL: Analyze performance and provide executive directives for Brian and Tammy.
             """
 
-            if st.button("🧠 Generate Gemini Strategic Briefing", use_container_width=True):
+            if st.button("🧠 Generate Strategic Briefing", use_container_width=True):
                 with st.spinner("Gemini is auditing the Vault..."):
                     response = model.generate_content(forensic_dossier)
                     ai_briefing_text = response.text
                     st.markdown(f"""
                         <div style="background-color: #000; padding: 30px; border-radius: 15px; border: 1px solid #FFCC00; border-left: 12px solid #FFCC00; margin-top: 20px;">
-                            <h2 style="color: #FFCC00; margin-top: 0;">📋 Gemini Executive Briefing</h2>
+                            <h2 style="color: #FFCC00; margin-top: 0;">📋 Executive Briefing</h2>
                             <div style="color: #ffffff; line-height: 1.7; font-size: 1.1em;">
                                 {ai_briefing_text.replace('**', '<b>').replace('*', '•')}
                             </div>
@@ -1013,7 +1013,7 @@ with tab6:
                 df_metrics.to_excel(writer, sheet_name='Financial Summary', index=False)
                 df_stack.to_excel(writer, sheet_name='Attribution Stack', index=False)
                 df_ai = pd.DataFrame({"Strategic Briefing": [ai_text]})
-                df_ai.to_excel(writer, sheet_name='Gemini AI Analysis', index=False)
+                df_ai.to_excel(writer, sheet_name='AI Analysis', index=False)
             return output.getvalue()
 
         # Build Dataframes for Export
