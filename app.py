@@ -1033,12 +1033,12 @@ with tab6:
     else:
         st.info("Please select a valid date range to generate the Forensic Report.")
 
-# --- TAB 7: SYNCHRONIZED FORECAST SANDBOX (Full Forensic Logic) ---
+# --- TAB 7: SYNCHRONIZED FORECAST SANDBOX (With Social Engagement) ---
 with tab7:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🧪 Forecast Sandbox</h2>
-            <p style="color: #888; margin: 0;">Synchronized Simulation: Triangulating Digital, OOH, Hard Rock LIVE, & Environment.</p>
+            <p style="color: #888; margin: 0;">Full Digital Attribution: Clicks, Impressions, and Engagements.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -1047,8 +1047,7 @@ with tab7:
     date_range = st.date_input(
         "Select Simulation Window:",
         value=(today, today + datetime.timedelta(days=2)),
-        help="The Sandbox pulls specific daily forecasts for this entire window.",
-        key="sb_date_range_vfinal"
+        key="sb_date_range_v15"
     )
 
     if isinstance(date_range, tuple) and len(date_range) == 2:
@@ -1065,6 +1064,7 @@ with tab7:
             s_promo = st.checkbox("Active Major Promotion?", value=False)
             s_clicks = st.number_input("Est. Daily Ad Clicks", value=500)
             s_imp = st.number_input("Est. Daily Social Impressions", value=10000)
+            s_eng = st.number_input("Est. Daily Social Engagements", value=250) # RESTORED
             
             st.divider()
             st.write("**🎸 Hard Rock LIVE Simulation**")
@@ -1079,10 +1079,10 @@ with tab7:
             m_snow = st.slider("Manual Snow (cm)", 0, 50, 0, disabled=(weather_mode == "Live EC Forecast"))
 
         with col3:
-            st.write("**⚙️ Engine Weights (Live from Tab 4)**")
+            st.write("**⚙️ Engine Weights**")
             c = st.session_state.coeffs
             st.metric("OOH Daily Inertia", f"{c.get('OOH_Daily', 0):,.0f} Guests")
-            st.metric("Spend Anchor", f"${c.get('Avg_Coin_In', 112.50):,.2f}")
+            st.metric("Engage Weight", f"{c.get('Social_Eng', 0.01):,.2f}") # TRACKING
             st.metric("Event Gravity", f"{c.get('Event_Gravity', 25.0):,.1f}%")
 
         # 3. UNIFIED CALCULATION LOOP
@@ -1090,74 +1090,50 @@ with tab7:
         total_range_revenue = 0
         total_range_members = 0
         
-        # Calculate Member Conversion Ratio based on historical ledger
         if ledger_data:
-            df_hist = pd.DataFrame(ledger_data)
-            tot_h_traffic = df_hist['actual_traffic'].sum()
-            tot_h_members = df_hist['new_members'].sum() if 'new_members' in df_hist.columns else 0
-            member_ratio = (tot_h_members / tot_h_traffic) if tot_h_traffic > 0 else 0.02
-            
-            # Pull purified DOW heartbeats
             sb_metrics = get_forensic_metrics(ledger_data, c)
             dow_profiles = sb_metrics.get('heartbeats', {})
+            df_hist = pd.DataFrame(ledger_data)
+            m_ratio = (df_hist['new_members'].sum() / df_hist['actual_traffic'].sum()) if df_hist['actual_traffic'].sum() > 0 else 0.02
         else:
-            member_ratio = 0.02
-            dow_profiles = {}
+            dow_profiles, m_ratio = {}, 0.02
 
-        # RUN SIMULATION
         current_date = start_date
         while current_date <= end_date:
-            day_str = current_date.strftime("%Y-%m-%d")
             day_name = current_date.strftime("%A")
             
-            # Weather Logic
-            if weather_mode == "Live EC Forecast" and live_forecast:
-                ec_day = next((item for item in live_forecast if str(item.get('datetime')).startswith(day_str)), None)
-                day_t = ec_day.get('temperature', 15.0) if ec_day else m_temp
-                day_r, day_s = (0, 0) # Forecast assumes clear unless manual override for sim
-            else:
-                day_t, day_r, day_s = m_temp, m_rain, m_snow
-
-            # --- THE FORENSIC MATH CORE ---
+            # --- THE TRIPLE-THREAT MARKETING MATH ---
             base_traffic = dow_profiles.get(day_name, 4365)
-            
-            # Layers: OOH + Digital + Gravity + Weather
             ooh_lift = float(c.get('OOH_Daily', 0))
-            m_lift = (s_clicks * c.get('Clicks', 0.05)) + (s_imp * float(c.get('Social_Imp', 0.0002)))
+            
+            # DIGITAL LIFT: Clicks + (Impressions * Weight) + (Engagements * Weight)
+            m_lift = (s_clicks * c.get('Clicks', 0.05)) + \
+                     (s_imp * float(c.get('Social_Imp', 0.0002))) + \
+                     (s_eng * float(c.get('Social_Eng', 0.01))) # FACTORED IN
+            
             e_lift = (sim_attend * (c.get('Event_Gravity', 25.0)/100)) if sim_event else 0
             p_lift = c.get('Promo', 450.0) if s_promo else 0
-            w_friction = (day_r * c.get('Rain_mm', -12.0)) + (day_s * c.get('Snow_cm', -45.0))
+            
+            # Weather Friction
+            w_friction = (m_rain * c.get('Rain_mm', -12.0)) + (m_snow * c.get('Snow_cm', -45.0))
             
             daily_total = max(0, base_traffic + ooh_lift + m_lift + e_lift + p_lift + w_friction)
             
             total_range_traffic += daily_total
             total_range_revenue += (daily_total * c.get('Avg_Coin_In', 112.50))
-            total_range_members += (daily_total * member_ratio)
-            
+            total_range_members += (daily_total * m_ratio)
             current_date += datetime.timedelta(days=1)
 
-        # 4. RESULTS DISPLAY (KPI CARDS)
+        # 4. RESULTS DISPLAY
         st.divider()
         res1, res2, res3, res4 = st.columns(4)
-        
-        with res1:
-            st.metric("Predicted Traffic", f"{int(total_range_traffic):,} Guests")
-        with res2:
-            # Net Win = Revenue * Hold %
-            hold_factor = float(c.get('Hold_Pct', 10.0)) / 100
-            st.metric("Projected Net Win", f"${(total_range_revenue * hold_factor):,.2f}")
-        with res3:
-            st.metric("Predicted New Members", f"{int(total_range_members):,}")
-        with res4:
-            gravity_val = int(sim_attend * (c.get('Event_Gravity', 25.0)/100)) if sim_event else 0
-            st.metric("Gravity Impact", f"+{gravity_val:,} Guests", help="Specific crossover from Hard Rock LIVE.")
+        with res1: st.metric("Predicted Traffic", f"{int(total_range_traffic):,} Guests")
+        with res2: 
+            h_pct = float(c.get('Hold_Pct', 10.0)) / 100
+            st.metric("Projected Net Win", f"${(total_range_revenue * h_pct):,.2f}")
+        with res3: st.metric("Predicted New Members", f"{int(total_range_members):,}")
+        with res4: 
+            grav_impact = int(sim_attend * (c.get('Event_Gravity', 25.0)/100)) if sim_event else 0
+            st.metric("Gravity Impact", f"+{grav_impact:,} Guests")
 
-        # 5. STRATEGIC CONTEXT
-        st.write("---")
-        avg_daily = total_range_traffic / num_days
-        if sim_event:
-            st.success(f"🎸 **Entertainment Gravity:** The simulated show night accounts for approximately **{ (gravity_val / avg_daily) * 100:.1f}%** of daily traffic.")
-        st.info(f"💡 **Model Confidence:** Simulation is utilizing a **{c.get('Ad_Decay', 85)}% Ad Decay** factor for awareness persistence.")
-
-    else:
-        st.info("Please select a valid date range to run the simulation.")
+        st.info(f"💡 **Strategic Forecast:** Social Engagements are contributing **{ ( (s_eng * float(c.get('Social_Eng', 0.01))) / (total_range_traffic / num_days) ) * 100:.1f}%** of the projected daily lift.")
