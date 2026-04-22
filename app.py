@@ -1042,6 +1042,17 @@ with tab7:
         </div>
     """, unsafe_allow_html=True)
 
+    # --- DYNAMIC OOH RECALCULATION BRIDGE ---
+    c = st.session_state.coeffs
+    
+    # This ensures OOH_Daily is never '0' if your counts/weights are set in Tab 4
+    static_lift = float(c.get('Static_Count', 0)) * float(c.get('Static_Weight', 0))
+    digital_lift = float(c.get('Digital_OOH_Count', 0)) * float(c.get('Digital_OOH_Weight', 0))
+    current_ooh_inertia = static_lift + digital_lift
+    
+    # Update the local context so the Sandbox doesn't show '0'
+    st.session_state.coeffs['OOH_Daily'] = current_ooh_inertia
+
     # 1. DATE RANGE SELECTION
     today = datetime.date.today()
     date_range = st.date_input(
