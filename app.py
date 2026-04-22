@@ -510,12 +510,31 @@ with tab2:
         )
 
         if st.button("✅ Confirm & Sync Edits", key="btn_sync_v6", use_container_width=True):
-            with st.spinner("Updating Vault..."):
+            with st.spinner("Sanitizing & Updating Vault..."):
                 try:
+                    # 1. Prepare the data
                     sync_ready = edited_df.copy()
+                    
+                    # 2. THE FIX: Replace 'NaN' with 0 for numbers and "None" for text
+                    # This ensures JSON compliance
+                    sync_ready['temp_c'] = sync_ready['temp_c'].fillna(15.0)
+                    sync_ready['snow_cm'] = sync_ready['snow_cm'].fillna(0.0)
+                    sync_ready['rain_mm'] = sync_ready['rain_mm'].fillna(0.0)
+                    sync_ready['attendance'] = sync_ready['attendance'].fillna(0)
+                    sync_ready['event_type'] = sync_ready['event_type'].fillna("None")
+                    
+                    # Also fill any empty Marketing/Financial cells
+                    num_cols = sync_ready.select_dtypes(include=[np.number]).columns
+                    sync_ready[num_cols] = sync_ready[num_cols].fillna(0)
+
+                    # 3. Format Date
                     sync_ready['entry_date'] = sync_ready['entry_date'].dt.strftime('%Y-%m-%d')
-                    supabase.table("ledger").upsert(sync_ready.to_dict(orient='records'), on_conflict="entry_date").execute()
-                    st.success("Vault Updated.")
+                    
+                    # 4. Push to Supabase
+                    payload = sync_ready.to_dict(orient='records')
+                    supabase.table("ledger").upsert(payload, on_conflict="entry_date").execute()
+                    
+                    st.success("✅ Vault Successfully Sanitized & Updated.")
                     st.rerun() 
                 except Exception as e:
                     st.error(f"Manual sync failed: {e}")
