@@ -835,7 +835,7 @@ with tab5:
         st.session_state.messages = []
         st.rerun()
 
-# --- TAB 6: MASTER REPORT (Comprehensive with Entertainment Gravity) ---
+# --- TAB 6: MASTER REPORT (Comprehensive with Total Revenue) ---
 with tab6:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
@@ -854,7 +854,7 @@ with tab6:
         st.warning("Vault is empty. No data available.")
         st.stop()
 
-    # --- NEW: DATE RANGE SELECTOR ---
+    # --- DATE RANGE SELECTOR ---
     df_raw = pd.DataFrame(ledger_data)
     df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
     
@@ -868,7 +868,7 @@ with tab6:
             value=(min_date, max_date),
             min_value=min_date,
             max_value=max_date,
-            key="master_report_date_filter"
+            key="master_report_date_filter_v2"
         )
 
     # Proceed only if a full range is selected
@@ -881,7 +881,7 @@ with tab6:
             st.info("No data found for the selected range.")
             st.stop()
 
-        # Pull data from the Upgraded Engine using the FILTERED slice
+        # Pull data from the Upgraded Engine
         metrics = get_forensic_metrics(filtered_ledger, st.session_state.coeffs)
         df_rep = metrics.get('df_with_awareness').copy()
         
@@ -891,48 +891,53 @@ with tab6:
         hold_factor = float(c.get('Hold_Pct', 10.0)) / 100
         ooh_daily = metrics.get('ooh_total_daily', 0)
 
-        # 2. TOP ROW: THE FINANCIAL CORE
+        # 2. TOP ROW: THE FINANCIAL CORE (Updated to 5 Columns)
         st.write("### 💰 Property Yield & GGR")
-        f1, f2, f3, f4 = st.columns(4)
+        f1, f2, f3, f4, f5 = st.columns(5)
         
         total_traffic = df_rep['actual_traffic'].sum()
-        actual_ggr = (total_traffic * avg_spend) * hold_factor
+        # NEW: Total Revenue calculation (Gross Coin-In)
+        total_revenue = total_traffic * avg_spend
+        actual_ggr = total_revenue * hold_factor
+        
         total_theo_win = total_traffic * prop_theo
         yield_variance = ((actual_ggr / total_theo_win) - 1) * 100 if total_theo_win > 0 else 0
         
         f1.metric("Total Traffic", f"{total_traffic:,.0f}", 
-                  help="Total headcount recorded at all property turnstiles during this period.")
-        f2.metric("Total Theo Win", f"${total_theo_win:,.2f}", 
-                  help=f"Theoretical revenue expected based on a property target of ${prop_theo} per guest.")
-        f3.metric("Actual GGR (Net Win)", f"${actual_ggr:,.2f}", delta=f"{yield_variance:.1f}% vs Theo", 
-                  help=f"Estimated Net Gaming Revenue (GGR) based on your calibrated {hold_factor*100:.1f}% house hold.")
-        f4.metric("Avg Spend/Head", f"${avg_spend:.2f}", 
-                  help="The average Coin-In per guest. This is your 'Financial Anchor' for the property.")
+                  help="Total headcount recorded during this period.")
+        
+        # NEW CARD
+        f2.metric("Total Revenue", f"${total_revenue:,.2f}", 
+                  help="Gross property volume (Traffic × Avg Spend) before House Hold is applied.")
+        
+        f3.metric("Actual GGR", f"${actual_ggr:,.2f}", 
+                  delta=f"{yield_variance:.1f}% vs Theo", 
+                  help=f"Net Win based on your calibrated {hold_factor*100:.1f}% hold.")
+        
+        f4.metric("Total Theo Win", f"${total_theo_win:,.2f}", 
+                  help="Revenue target based on property theoretical spend.")
+        
+        f5.metric("Avg Spend", f"${avg_spend:.2f}", 
+                  help="The average Coin-In per guest anchor.")
 
         st.divider()
 
-        # 3. SECOND ROW: THE ATTRIBUTION BOARD (MARKETING & LIVE)
+        # 3. SECOND ROW: ATTRIBUTION
         st.write("### 📣 Attribution: Marketing & Hard Rock LIVE")
         m1, m2, m3, m4 = st.columns(4)
         
-        # Calculate Impact Layers
         total_digital_lift_guests = df_rep['residual_lift'].sum()
         total_ooh_lift_guests = ooh_daily * len(df_rep)
         total_live_gravity_guests = df_rep['gravity_lift'].sum()
         
-        # Combined Marketing Maneuver Total
         total_mkt_guests = total_digital_lift_guests + total_ooh_lift_guests + total_live_gravity_guests
         mkt_revenue_impact = (total_mkt_guests * avg_spend) * hold_factor
         capture_rate = (mkt_revenue_impact / actual_ggr * 100) if actual_ggr > 0 else 0
 
-        m1.metric("Marketing Guests", f"{total_mkt_guests:,.0f}", 
-                  help="Combined lift from Digital Pool, OOH, and Hard Rock LIVE events.")
-        m2.metric("LIVE Gravity Lift", f"{total_live_gravity_guests:,.0f}", 
-                  help="Total gaming floor traffic specifically attributed to concert and event attendance.")
-        m3.metric("Market Capture Rate", f"{capture_rate:.1f}%", 
-                  help="The percentage of total property revenue driven by your Marketing and Entertainment maneuvers.")
-        m4.metric("AI Predictability", metrics['predictability'], 
-                  help="The confidence score of the Forensic Engine based on how closely our model matches actual traffic.")
+        m1.metric("Marketing Guests", f"{total_mkt_guests:,.0f}")
+        m2.metric("LIVE Gravity Lift", f"{total_live_gravity_guests:,.0f}")
+        m3.metric("Market Capture Rate", f"{capture_rate:.1f}%")
+        m4.metric("AI Predictability", metrics['predictability'])
 
         st.divider()
 
@@ -947,16 +952,12 @@ with tab6:
         total_rain_loss = (df_rep['rain_mm'].sum() * float(c.get('Rain_mm', -12)))
         total_env_friction = total_snow_loss + total_rain_loss
 
-        l1.metric("New Unity Members", f"{total_new_members:,.0f}", 
-                  help="Total number of new Unity Card sign-ups recorded in the database.")
-        l2.metric("Member Conv. Rate", f"{member_conv_rate:.2f}%", 
-                  help="The percentage of the total crowd that converted into a loyalist (New Member).")
-        l3.metric("Weather Friction", f"{total_env_friction:,.0f}", delta="Guests Lost", delta_color="inverse", 
-                  help="The estimated number of guests lost due to Snow and Rain interference.")
-        l4.metric("Guest Quality Index", f"{(actual_ggr / total_theo_win):.2f}x", 
-                  help="A score of 1.0 means guests spent exactly their Theo. >1.0 means you are attracting 'High Value' guests.")
+        l1.metric("New Unity Members", f"{total_new_members:,.0f}")
+        l2.metric("Member Conv. Rate", f"{member_conv_rate:.2f}%")
+        l3.metric("Weather Friction", f"{total_env_friction:,.0f}", delta="Guests Lost", delta_color="inverse")
+        l4.metric("Guest Quality Index", f"{(actual_ggr / total_theo_win):.2f}x")
 
-        # 5. THE UPDATED ATTRIBUTION STACK (Now with Gravity)
+        # 5. ATTRIBUTION STACK
         st.write("### 📊 Comprehensive Attribution Stack")
         df_rep['OOH Lift'] = ooh_daily
         df_rep['Weather Impact'] = (df_rep['snow_cm'] * float(c.get('Snow_cm', -45))) + (df_rep['rain_mm'] * float(c.get('Rain_mm', -12)))
@@ -972,7 +973,7 @@ with tab6:
         chart_df = df_rep.rename(columns=chart_cols)
         st.area_chart(chart_df.set_index('entry_date')[list(chart_cols.values())])
 
-        # 6. OPTIONAL: SHOW AUDIT TABLE
+        # 6. SHOW AUDIT TABLE
         if total_live_gravity_guests > 0:
             with st.expander("🎸 View Hard Rock LIVE Impact Audit"):
                 event_days = df_rep[df_rep['attendance'] > 0].copy()
