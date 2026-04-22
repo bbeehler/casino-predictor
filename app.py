@@ -386,28 +386,41 @@ with tab2:
 
     col_a, col_b = st.columns([1, 1])
 
-    # --- SECTION A: MANUAL FORM ---
+    # --- SECTION A: MANUAL FORM (RESTORED) ---
     with col_a:
         st.write("### ✍️ Manual Results Entry")
-        with st.form("manual_entry_v4"):
+        with st.form("manual_entry_v5"):
             entry_date = st.date_input("Select Date", datetime.date.today())
             
+            # Row 1: Core Financials
             c1, c2, c3 = st.columns(3)
             with c1: traffic = st.number_input("Traffic (Headcount)", min_value=0)
             with c2: coin_in = st.number_input("Coin-In ($)", min_value=0.0, format="%.2f")
             with c3: new_mems = st.number_input("New Members", min_value=0, step=1)
             
             st.divider()
+            
+            # Row 2: Environment & Promo (RESTORED)
+            st.write("**🌦️ Environment & Promotion**")
+            w1, w2, w3 = st.columns(3)
+            with w1: snow = st.number_input("Snow (cm)", min_value=0.0, step=0.1)
+            with w2: rain = st.number_input("Rain (mm)", min_value=0.0, step=0.1)
+            with w3: promo = st.checkbox("Major Promo Active?")
+
+            st.divider()
+
+            # Row 3: Hard Rock LIVE
             st.write("**🎸 Hard Rock LIVE Event Data**")
             e1, e2 = st.columns(2)
             with e1: 
-                # Ensuring options match the Selectbox exactly
                 event_type = st.selectbox("Event Setup", ["None", "GA (2,200)", "Seated (1,900)"])
             with e2: 
                 attendance = st.number_input("Actual Attendance", min_value=0, max_value=2200)
 
             st.divider()
-            st.write("**Marketing Metrics**")
+
+            # Row 4: Marketing
+            st.write("**📣 Marketing Metrics**")
             m1, m2, m3 = st.columns(3)
             with m1: clicks = st.number_input("Ad Clicks", min_value=0)
             with m2: imps = st.number_input("Ad Impressions", min_value=0)
@@ -418,7 +431,6 @@ with tab2:
             if submit_form:
                 with st.spinner("Writing to Vault..."):
                     date_str = entry_date.isoformat()
-                    # CRITICAL: Payload must match Supabase column names EXACTLY (lowercase)
                     new_row = {
                         "entry_date": date_str,
                         "actual_traffic": int(traffic),
@@ -427,24 +439,20 @@ with tab2:
                         "ad_impressions": int(imps),
                         "social_engagements": int(social),
                         "new_members": int(new_mems),
-                        "event_type": event_type,   # Must exist in Supabase ledger table
-                        "attendance": int(attendance) # Must exist in Supabase ledger table
+                        "snow_cm": float(snow),
+                        "rain_mm": float(rain),
+                        "promo_flag": bool(promo),
+                        "event_type": event_type,
+                        "attendance": int(attendance)
                     }
                     try:
-                        response = supabase.table("ledger").upsert(new_row, on_conflict="entry_date").execute()
-                        
-                        # Verify the response has data
-                        if hasattr(response, 'data') and len(response.data) > 0:
-                            st.success(f"✅ Data for {date_str} is now in the Vault.")
-                            import time
-                            time.sleep(1)
-                            st.rerun() 
-                        else:
-                            st.error("🚨 Sync failed: The database accepted the call but didn't return a confirmation.")
+                        supabase.table("ledger").upsert(new_row, on_conflict="entry_date").execute()
+                        st.success(f"✅ Data for {date_str} synced.")
+                        import time
+                        time.sleep(1)
+                        st.rerun() 
                     except Exception as e:
-                        # This will expose the exact missing column or type error
-                        st.error("🚨 Database Error")
-                        st.write(f"**Error Details:** {e}")
+                        st.error(f"🚨 Database Error: {e}")
 
     # --- SECTION B: BULK UPLOAD ---
     with col_b:
@@ -453,8 +461,7 @@ with tab2:
         if uploaded_file is not None:
             df_upload = pd.read_csv(uploaded_file)
             st.dataframe(df_upload.head(3), use_container_width=True)
-            
-            if st.button("🚀 Push CSV to Vault", use_container_width=True, key="btn_csv_push_t2"):
+            if st.button("🚀 Push CSV to Vault", use_container_width=True):
                 try:
                     data_dict = df_upload.to_dict(orient='records')
                     supabase.table("ledger").upsert(data_dict, on_conflict="entry_date").execute()
@@ -470,10 +477,14 @@ with tab2:
     if ledger_data:
         df_history = pd.DataFrame(ledger_data)
         
-        # Ensure new columns exist locally before rendering editor
-        for col in ['event_type', 'attendance']:
+        # Ensure all columns exist locally for the editor
+        expected_cols = {
+            'snow_cm': 0.0, 'rain_mm': 0.0, 'promo_flag': False, 
+            'event_type': "None", 'attendance': 0
+        }
+        for col, default in expected_cols.items():
             if col not in df_history.columns:
-                df_history[col] = "None" if col == 'event_type' else 0
+                df_history[col] = default
 
         if 'entry_date' in df_history.columns:
             df_history['entry_date'] = pd.to_datetime(df_history['entry_date'])
@@ -481,32 +492,27 @@ with tab2:
         
         edited_df = st.data_editor(
             df_history, 
-            key="ledger_editor_unique_t2", 
+            key="ledger_editor_v5", 
             use_container_width=True, 
             hide_index=True,
             column_config={
                 "entry_date": st.column_config.DateColumn("Date", disabled=True),
-                "actual_traffic": st.column_config.NumberColumn("Traffic", format="%d"),
-                "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)", format="$%.2f"),
-                "new_members": st.column_config.NumberColumn("New Members", format="%d"),
+                "actual_traffic": st.column_config.NumberColumn("Traffic"),
+                "snow_cm": st.column_config.NumberColumn("Snow (cm)"),
+                "rain_mm": st.column_config.NumberColumn("Rain (mm)"),
+                "promo_flag": st.column_config.CheckboxColumn("Promo?"),
                 "event_type": st.column_config.SelectboxColumn("Live Setup", options=["None", "GA (2,200)", "Seated (1,900)"]),
-                "attendance": st.column_config.NumberColumn("Attendance", min_value=0, max_value=2200)
+                "attendance": st.column_config.NumberColumn("Attendance")
             }
         )
 
-        if st.button("✅ Confirm & Sync Edits", key="btn_sync_ledger_t2", use_container_width=True):
-            with st.spinner("Updating Vault records..."):
+        if st.button("✅ Confirm & Sync Edits", key="btn_sync_v5", use_container_width=True):
+            with st.spinner("Updating Vault..."):
                 try:
-                    # Clean the dates back to strings before syncing
-                    sync_ready_df = edited_df.copy()
-                    sync_ready_df['entry_date'] = sync_ready_df['entry_date'].dt.strftime('%Y-%m-%d')
-                    
-                    sync_data = sync_ready_df.to_dict(orient='records')
-                    
-                    # Mass upsert for efficiency
-                    supabase.table("ledger").upsert(sync_data, on_conflict="entry_date").execute()
-                    
-                    st.success("Vault Successfully Updated!")
+                    sync_ready = edited_df.copy()
+                    sync_ready['entry_date'] = sync_ready['entry_date'].dt.strftime('%Y-%m-%d')
+                    supabase.table("ledger").upsert(sync_ready.to_dict(orient='records'), on_conflict="entry_date").execute()
+                    st.success("Vault Updated.")
                     st.rerun() 
                 except Exception as e:
                     st.error(f"Manual sync failed: {e}")
