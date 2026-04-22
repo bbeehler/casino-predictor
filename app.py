@@ -937,7 +937,7 @@ with tab7:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🧪 Forecast Sandbox</h2>
-            <p style="color: #888; margin: 0;">Fully Synchronized: Triangulating Historical Baselines, Hard Rock LIVE, & Loyalty Conversion.</p>
+            <p style="color: #888; margin: 0;">Fully Synchronized: Triangulating Social, Awareness, Hard Rock LIVE, & Environment.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -960,30 +960,33 @@ with tab7:
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.write("**Marketing & Social**")
+            st.write("**📣 Marketing & Social**")
             s_promo = st.checkbox("Active Major Promotion?", value=False)
             s_clicks = st.number_input("Est. Daily Ad Clicks", value=500)
+            # RESTORED: Social and Impression inputs
+            s_imp = st.number_input("Est. Daily Social Impressions", value=10000)
+            s_eng = st.number_input("Est. Daily Social Engagements", value=250)
             
             st.divider()
             st.write("**🎸 Hard Rock LIVE Simulation**")
-            # Added event simulation inputs
             sim_event = st.checkbox("Include Show Night in window?", value=False)
             sim_setup = st.selectbox("Simulated Setup", ["GA (2,200)", "Seated (1,900)"], disabled=not sim_event)
             sim_attend = st.number_input("Projected Tickets Sold", 0, 2200, value=1800, disabled=not sim_event)
         
         with col2:
-            st.write("**Environment**")
+            st.write("**❄️ Environment**")
             weather_mode = st.radio("Weather Source:", ["Live EC Forecast", "Manual Overrides"])
             m_temp = st.slider("Manual Temp (°C)", -30, 40, 15, disabled=(weather_mode == "Live EC Forecast"))
             m_rain = st.slider("Manual Rain (mm)", 0, 50, 0, disabled=(weather_mode == "Live EC Forecast"))
             m_snow = st.slider("Manual Snow (cm)", 0, 50, 0, disabled=(weather_mode == "Live EC Forecast"))
 
         with col3:
-            st.write("**Engine Baseline**")
+            st.write("**⚙️ Engine Baseline**")
             c = st.session_state.coeffs
             st.metric("Spend Anchor", f"${c.get('Avg_Coin_In', 112.50):,.2f}")
             st.metric("Event Gravity", f"{c.get('Event_Gravity', 20.0):,.1f}%")
-            st.info("Simulation pulls baseline 'Heartbeats' and 'Member Ratios' from history.")
+            # RESTORED: Awareness Retention context
+            st.info(f"Using {c.get('Ad_Decay', 85.0)}% Awareness Retention for digital carry-over.")
 
         # 3. UNIFIED CALCULATION LOOP
         total_range_traffic = 0
@@ -995,7 +998,7 @@ with tab7:
             df_sb['entry_date'] = pd.to_datetime(df_sb['entry_date'])
             df_sb['day_name'] = df_sb['entry_date'].dt.day_name()
             
-            # Heartbeats (Using purified baseline from engine)
+            # Pull purified heartbeats from engine
             sb_metrics = get_forensic_metrics(ledger_data, c)
             dow_profiles = sb_metrics.get('heartbeats', {})
             
@@ -1016,26 +1019,24 @@ with tab7:
             if weather_mode == "Live EC Forecast" and live_forecast:
                 ec_day = next((item for item in live_forecast if str(item.get('datetime')).startswith(day_str)), None)
                 day_temp = ec_day.get('temperature', 15.0) if ec_day else m_temp
-                day_rain = m_rain 
-                day_snow = m_snow
+                day_rain, day_snow = m_rain, m_snow 
             else:
                 day_temp, day_rain, day_snow = m_temp, m_rain, m_snow
 
             # --- THE FORENSIC MATH ---
             base_traffic = dow_profiles.get(day_name, 4365)
             p_lift = c.get('Promo', 450.0) if s_promo else 0
-            m_lift = (s_clicks * c.get('Clicks', 0.04))
             
-            # NEW: Event Gravity Logic
-            # We apply the event lift only once if the user selected a window, 
-            # or we could logic it to only apply on Friday/Saturday of the window.
-            # For simplicity in a Sandbox: If sim_event is ON, it pulses the window.
+            # RESTORED: Multi-factor Marketing Lift (Clicks + Impressions)
+            m_lift = (s_clicks * c.get('Clicks', 0.04)) + (s_imp * c.get('Impressions', 0.0002))
+            
+            # Event Gravity Lift
             e_lift = (sim_attend * (c.get('Event_Gravity', 20.0)/100)) if sim_event else 0
             
+            # Weather Friction
             w_friction = (day_rain * c.get('Rain_mm', -12.0)) + (day_snow * c.get('Snow_cm', -45.0))
             
             daily_total = max(0, base_traffic + p_lift + m_lift + e_lift + w_friction)
-            
             daily_members = daily_total * member_ratio
             
             total_range_traffic += daily_total
@@ -1058,16 +1059,13 @@ with tab7:
             st.metric("Gravity Impact", f"+{int(sim_attend * (c.get('Event_Gravity', 20.0)/100)) if sim_event else 0} / Show",
                       help="The specific traffic lift provided by Hard Rock LIVE attendees.")
 
-        # 5. STRATEGIC INSIGHT
+        # 5. STRATEGIC INSIGHTS
         st.write("---")
         if sim_event:
-            st.info(f"🎸 **Entertainment Insight:** Including a **{sim_setup}** event with **{sim_attend}** tickets sold provides a simulated lift of **{int(sim_attend * (c.get('Event_Gravity', 20.0)/100))}** guests to the gaming floor.")
+            st.info(f"🎸 **Entertainment Insight:** A **{sim_setup}** event with **{sim_attend}** attendees is projected to contribute **{ ( (sim_attend * (c.get('Event_Gravity', 20.0)/100)) / (total_range_traffic / num_days) ) * 100:.1f}%** of your total simulated daily traffic.")
 
         if total_range_members / num_days > 50:
-            st.success(f"💎 **Loyalty Alert:** This scenario predicts high member acquisition ({int(total_range_members / num_days)}/day).")
-        
-        if total_range_traffic / num_days > 5000:
-            st.success("🔥 **High Volume Scenario:** Configuration suggests property is trending above average capacity.")
+            st.success(f"💎 **Loyalty Alert:** Forecast suggests high acquisition ({int(total_range_members / num_days)}/day). Ensure Unity staff is optimized.")
 
     else:
         st.info("Please select a valid date range to start the simulation.")
