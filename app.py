@@ -8,6 +8,60 @@ from env_canada import ECWeather
 import google.generativeai as genai
 from supabase import create_client
 
+# --- MOBILE-FIRST RESPONSIVE CONFIG ---
+st.set_page_config(layout="wide", page_title="HR Ottawa Forensic Engine")
+
+def local_css():
+    st.markdown("""
+        <style>
+        /* 1. Force columns to wrap on mobile devices */
+        [data-testid="column"] {
+            width: 100% !important;
+            flex: 1 1 calc(50% - 1rem) !important; /* Shows 2 side-by-side on tablets */
+            min-width: 150px !important;
+        }
+
+        /* 2. On very small screens (phones), show 1 column per row */
+        @media (max-width: 640px) {
+            [data-testid="column"] {
+                flex: 1 1 100% !important;
+                min-width: 100% !important;
+            }
+            /* Shrink headers for mobile */
+            h1 { font-size: 1.8rem !important; }
+            h2 { font-size: 1.5rem !important; }
+            h3 { font-size: 1.2rem !important; }
+            
+            /* Make metric cards more compact */
+            [data-testid="stMetricValue"] {
+                font-size: 1.6rem !important;
+            }
+        }
+
+        /* 3. Improve the look of the "Vault" cards on mobile */
+        div.stMetric {
+            background-color: #1a1a1a;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #333;
+        }
+
+        /* 4. Custom Hard Rock Gold Buttons for Touch */
+        .stButton>button {
+            width: 100%;
+            border-radius: 10px;
+            height: 3em;
+            background-color: #FFCC00;
+            color: black;
+            font-weight: bold;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+local_css()
+
+# --- END RESPONSIVE CONFIG ---
+
 # 1. PAGE CONFIG (Must be the very first Streamlit command)
 st.set_page_config(page_title="FloorCast | Hard Rock Ottawa", layout="wide", page_icon="🎰")
 
