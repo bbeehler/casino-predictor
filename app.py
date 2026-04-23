@@ -8,64 +8,6 @@ from env_canada import ECWeather
 import google.generativeai as genai
 from supabase import create_client
 
-# --- MOBILE-FIRST RESPONSIVE CONFIG V2 ---
-st.set_page_config(layout="wide", page_title="HR Ottawa Forensic Engine")
-
-def apply_mobile_optimization():
-    st.markdown("""
-        <style>
-        /* 1. FORCE COLUMN STACKING ON MOBILE */
-        /* This targets the horizontal flex container Streamlit uses for columns */
-        [data-testid="column"] {
-            min-width: 300px !important; /* Forces wrapping when screen gets narrow */
-        }
-
-        /* 2. CUSTOM MEDIA QUERY FOR PHONES */
-        @media (max-width: 800px) {
-            /* Force the main container to stack everything vertically */
-            [data-testid="stHorizontalBlock"] {
-                flex-direction: column !important;
-            }
-            
-            /* Make the columns take up 100% width on phone */
-            [data-testid="column"] {
-                width: 100% !important;
-                min-width: 100% !important;
-                margin-bottom: 10px !important;
-            }
-
-            /* Shrink the metric card labels to fit smaller screens */
-            [data-testid="stMetricLabel"] {
-                font-size: 0.9rem !important;
-            }
-            
-            /* Adjust the metric value size so it doesn't wrap awkwardly */
-            [data-testid="stMetricValue"] {
-                font-size: 1.8rem !important;
-            }
-
-            /* Hide non-essential padding to save screen real estate */
-            .main .block-container {
-                padding-top: 1rem !important;
-                padding-left: 1rem !important;
-                padding-right: 1rem !important;
-            }
-        }
-
-        /* 3. HARD ROCK STYLING FOR CARDS */
-        div[data-testid="metric-container"] {
-            background-color: #0e0e0e;
-            border: 1px solid #333;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 5px solid #FFCC00;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-apply_mobile_optimization()
-# --- END CONFIG ---
-
 # 1. PAGE CONFIG (Must be the very first Streamlit command)
 st.set_page_config(page_title="FloorCast | Hard Rock Ottawa", layout="wide", page_icon="🎰")
 
