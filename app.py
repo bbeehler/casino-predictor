@@ -720,135 +720,73 @@ with tab4:
             
             st.success(f"✅ Vault Updated. GGR Anchors and OOH Inertia ({calculated_ooh_daily:,.0f}) successfully recalibrated.")
             st.balloons()
-# --- TAB 5: FORENSIC ANALYST & PRODUCT EXPERT ---
+
+# --- TAB 5: FLOORCAST ANALYSTS (The AI Deep Dive) ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
-            <h2 style="color: #FFCC00; margin: 0;">🧠 Forensic Consultant & App Expert</h2>
-            <p style="color: #888; margin: 0;">Real-time KPI calculation and strategic guidance powered by Gemini.</p>
+            <h2 style="color: #FFCC00; margin: 0;">🕵️ FloorCast Strategic Analysts</h2>
+            <p style="color: #888; margin: 0;">Direct access to the Daily Ledger: Correlating Floor Gravity with Marketing ROI.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+    # 1. RANGE FILTER (Same as Master Report for consistency)
+    df_raw = pd.DataFrame(ledger_data)
+    df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
+    
+    col_a, col_b = st.columns([1, 2])
+    with col_a:
+        ana_range = st.date_input("Select Analysis Window:", 
+                                  value=(df_raw['entry_date'].min().date(), df_raw['entry_date'].max().date()),
+                                  key="analyst_date_range")
 
-    # 1. THE FORENSIC DATA VAULT (Synced to Latest Schema)
-    vault_metrics = {}
-    if ledger_data:
-        df_vault = pd.DataFrame(ledger_data).copy()
-        df_vault['entry_date'] = pd.to_datetime(df_vault['entry_date'])
-        
-        # --- DYNAMIC COLUMN NORMALIZATION ---
-        col_map = {
-            'ad_impressions': ['ad_impressions', 'Impressions'],
-            'ad_clicks': ['ad_clicks', 'Clicks'],
-            'actual_traffic': ['actual_traffic', 'Traffic'],
-            'actual_coin_in': ['actual_coin_in', 'Revenue', 'actual_coin_in'],
-            'new_members': ['new_members', 'Signups', 'Members'] # Added New Members mapping
-        }
-        
-        for target, aliases in col_map.items():
-            existing_col = next((c for c in aliases if c in df_vault.columns), None)
-            if existing_col:
-                df_vault.rename(columns={existing_col: target}, inplace=True)
-                df_vault[target] = pd.to_numeric(df_vault[target], errors='coerce').fillna(0)
-            else:
-                df_vault[target] = 0
+    if isinstance(ana_range, tuple) and len(ana_range) == 2:
+        start_a, end_a = ana_range
+        df_ana = df_raw[(df_raw['entry_date'].dt.date >= start_a) & (df_raw['entry_date'].dt.date <= end_a)].copy()
 
-        # Calculation logic
-        df_vault['day_name'] = df_vault['entry_date'].dt.day_name()
-        heartbeats = df_vault.groupby('day_name')['actual_traffic'].mean().to_dict()
-        
-        # Pull Weights
-        w_clicks = st.session_state.coeffs.get('Clicks', 0.02)
-        w_social = st.session_state.coeffs.get('Impressions', 0.0002)
-        c_static = st.session_state.coeffs.get('Static_Weight', 50.0)
-        n_static = st.session_state.coeffs.get('Static_Count', 2)
-        c_dig_ooh = st.session_state.coeffs.get('Digital_OOH_Weight', 10.0)
-        n_dig_ooh = st.session_state.coeffs.get('Digital_OOH_Count', 4)
-        total_ooh_lift = (c_static * n_static) + (c_dig_ooh * n_dig_ooh)
-        
-        total_traffic = df_vault['actual_traffic'].sum()
-        total_members = df_vault['new_members'].sum() # New Calculation
-        marketing_impact = (df_vault['ad_clicks'].sum() * w_clicks) + \
-                           (df_vault['ad_impressions'].sum() * w_social)
-        digital_lift_pct = (marketing_impact / total_traffic) * 100 if total_traffic > 0 else 0
+        # 2. DATA PURIFICATION FOR AI
+        # We build a 'Forensic String' that lists daily performance
+        daily_ledger_string = ""
+        for _, row in df_ana.iterrows():
+            daily_ledger_string += f"- Date: {row['entry_date'].strftime('%Y-%m-%d')} | Traffic: {row['actual_traffic']:,} | New Members: {row.get('new_members', 0):,} | Weather: {row.get('temp_c', 15)}°C, {row.get('snow_cm', 0)}cm snow\n"
 
-        # AI Predictability
-        df_vault['expected'] = df_vault.apply(lambda x: heartbeats.get(x['day_name'], 0) + 
-                                            (x['ad_clicks'] * w_clicks) + 
-                                            (x['ad_impressions'] * w_social) +
-                                            total_ooh_lift, axis=1)
-        
-        import numpy as np
-        mape = (np.abs(df_vault['actual_traffic'] - df_vault['expected']) / df_vault['actual_traffic']).replace([np.inf, -np.inf], np.nan).dropna().mean()
-        predictability_score = (1 - mape) * 100 if not np.isnan(mape) else 85.0
-
-        vault_metrics = {
-            "heartbeats": heartbeats,
-            "digital_lift": f"{digital_lift_pct:.1f}%",
-            "ooh_lift": f"{total_ooh_lift:.0f} guests/day",
-            "predictability": f"{predictability_score:.1f}%",
-            "avg_spend": f"${df_vault['actual_coin_in'].mean():,.2f}",
-            "total_new_members": f"{total_members:,.0f} sign-ups" # New Metric for AI
-        }
-
-    # 2. CHAT INPUT
-    prompt = st.chat_input("Ask about Digital Lift, Member Sign-ups, or Billboard ROI...")
-
-    if prompt:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
+        # 3. AI STRATEGIC PROMPT
+        import google.generativeai as genai
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            api_key = st.secrets["GEMINI_API_KEY"]
+            genai.configure(api_key=api_key)
+            # Using 1.5 Flash for rapid data digestion
             model = genai.GenerativeModel('gemini-2.5-flash') 
-            
-            history_payload = []
-            for m in st.session_state.messages[:-1]:
-                role = "model" if m["role"] == "assistant" else "user"
-                history_payload.append({"role": role, "parts": [m["content"]]})
-            
-            # THE FORENSIC BRAIN CONTEXT (Now includes Loyalty Data)
-            sys_context = f"""
-            SYSTEM ROLE: Chief Strategy Officer at Hard Rock Ottawa. 
-            TONE: Professional, Data-Driven, Wit/Sharp.
 
-            LIVE KPI VAULT:
-            - AI Predictability: {vault_metrics.get('predictability', 'N/A')}
-            - Pure Digital Lift (Ads): {vault_metrics.get('digital_lift', 'N/A')}
-            - OOH Baseline Lift (Billboards): {vault_metrics.get('ooh_lift', 'N/A')}
-            - Total New Members (Loyalty): {vault_metrics.get('total_new_members', 'N/A')}
-            - Avg. Property Spend: {vault_metrics.get('avg_spend', 'N/A')}
-            - Baseline DOW Heartbeats: {vault_metrics.get('heartbeats', {})}
+            forensic_prompt = f"""
+            You are the Senior Strategic Analyst for Hard Rock Hotel & Casino Ottawa. 
+            You are reviewing the DAILY LEDGER for the period {start_a} to {end_a}.
 
-            CAMPAIGN CONTEXT:
-            - Campaign: 'Your Turn to Hit'.
-            - Goal: Drive foot traffic and Unity card sign-ups (New Members).
-            - OOH is an 'Inertia Lifter' while Digital is 'Reactive Pressure'.
+            THE DATA:
+            {daily_ledger_string}
 
-            STRATEGY RULE: 
-            If New Members are low relative to traffic, suggest a 'Unity-specific' digital ad push.
-            Always end with one sharp strategic question regarding ROI or demographic capture.
+            YOUR MISSION:
+            1. Correlate 'New Member' signups with 'Actual Traffic'.
+            2. Identify 'High-Yield' days where conversion was above the average.
+            3. Note the impact of weather friction on those specific signups.
+            4. Give Brian and Tammy 3 tactical directives based ONLY on this daily data.
             """
 
-            chat = model.start_chat(history=history_payload)
-            response = chat.send_message(f"{sys_context}\n\nUSER MESSAGE: {prompt}")
-            
-            st.session_state.messages.append({"role": "assistant", "content": response.text})
-            st.rerun()
+            if st.button("🧠 Execute Deep-Dive Analysis", use_container_width=True):
+                with st.spinner("Analyzing Daily Heartbeats..."):
+                    response = model.generate_content(forensic_prompt)
+                    
+                    st.markdown(f"""
+                        <div style="background-color: #000; padding: 25px; border-radius: 15px; border: 1px solid #FFCC00; margin-top: 20px;">
+                            <h3 style="color: #FFCC00; margin-top: 0;">📋 Daily Correlation Briefing</h3>
+                            <div style="color: #eee; line-height: 1.6;">
+                                {response.text.replace('**', '<b>').replace('*', '•')}
+                            </div>
+                        </div>
+                    """, unsafe_allow_html=True)
 
         except Exception as e:
-            st.error(f"Consultation Error: {e}")
-
-    # 3. DISPLAY FEED
-    for message in reversed(st.session_state.messages):
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    if st.button("🗑️ Reset Forensic Session", key="reset_chat_t5"):
-        st.session_state.messages = []
-        st.rerun()
+            st.error(f"AI Analyst Offline: {e}")
 
 # --- TAB 6: MASTER REPORT (Comprehensive with Live AI & Excel Export) ---
 with tab6:
