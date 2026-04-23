@@ -8,6 +8,27 @@ from env_canada import ECWeather
 import google.generativeai as genai
 from supabase import create_client
 
+# --- THE PERMANENT INITIALIZATION LOCK ---
+# This MUST be at the top of your script, after imports
+if 'coeffs' not in st.session_state:
+    # These are only used if the database/vault is completely empty
+    st.session_state.coeffs = {
+        'Static_Count': 10,
+        'Static_Weight': 15.0,
+        'Digital_OOH_Count': 5,
+        'Digital_OOH_Weight': 25.0,
+        'Clicks': 0.05,
+        'Social_Imp': 0.0002,
+        'Social_Eng': 0.01,
+        'Event_Gravity': 25.0,
+        'Avg_Coin_In': 112.50,
+        'Property_Theo': 450.00,
+        'Hold_Pct': 10.0,
+        'Snow_cm': -45,
+        'Rain_mm': -12,
+        'Ad_Decay': 85.0
+    }
+
 # 1. PAGE CONFIG (Must be the very first Streamlit command)
 st.set_page_config(page_title="FloorCast | Hard Rock Ottawa", layout="wide", page_icon="🎰")
 
