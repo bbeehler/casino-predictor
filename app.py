@@ -721,20 +721,17 @@ with tab4:
             st.success(f"✅ Vault Updated. GGR Anchors and OOH Inertia ({calculated_ooh_daily:,.0f}) successfully recalibrated.")
             st.balloons()
 
-# --- TAB 5: FLOORCAST ANALYSTS (Full Q&A + Multi-Column Access) ---
+# --- TAB 5: FLOORCAST ANALYSTS (Reverse Chronological Q&A) ---
 with tab5:
     st.markdown("""
-        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
+        <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 10px;">
             <h2 style="color: #FFCC00; margin: 0;">🕵️ FloorCast Strategic Analysts</h2>
-            <p style="color: #888; margin: 0;">Ask anything. The AI is now synced with every column in the Forensic Vault.</p>
+            <p style="color: #888; margin: 0;">Newest insights at the top. Ask anything about the daily ledger.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. PREP THE DATA DOSSIER (Every Column)
+    # 1. PREP THE DATA DOSSIER (All Columns)
     df_raw = pd.DataFrame(ledger_data)
-    
-    # We build a comprehensive text-based version of your database for the AI
-    # This includes every variable that could impact GGR or Traffic
     full_vault_data = ""
     for _, row in df_raw.iterrows():
         full_vault_data += (
@@ -745,58 +742,51 @@ with tab5:
             f"Snow: {row.get('snow_cm')}cm | Rain: {row.get('rain_mm')}mm\n"
         )
 
-    # 2. THE CHAT INTERFACE
-    st.write("### 💬 Strategic Q&A")
+    # 2. INPUT AT THE TOP
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display chat history
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    # Chat Input stays fixed at top of this tab content
+    prompt = st.chat_input("Query the Vault: 'Analyze Tuesday's engagement vs signups'...")
 
-    # 3. AI LOGIC
-    if prompt := st.chat_input("Ask about social ROI, weather impact, or signup trends..."):
-        # Display user message
+    if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Generate Response
+        
+        # AI Processing
         import google.generativeai as genai
         try:
             api_key = st.secrets["GEMINI_API_KEY"]
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.5-flash') 
 
-            # The "Brain" context: Feeding the AI the entire database
             context = f"""
             You are the Lead Strategic Analyst for Hard Rock Hotel & Casino Ottawa.
-            You have full access to the Forensic Vault Data provided below.
+            Analyze ALL columns in the VAULT DATA below to answer the USER QUESTION.
             
             VAULT DATA:
             {full_vault_data}
             
             USER QUESTION: {prompt}
-            
-            INSTRUCTIONS:
-            - Analyze ALL columns (Marketing, Weather, Loyalty, Traffic).
-            - Look for hidden correlations (e.g., 'Do high social engagements on Monday lead to more signups on Tuesday?').
-            - Be concise, tactical, and direct. Use data points to back up your claims.
             """
-
-            with st.chat_message("assistant"):
-                response = model.generate_content(context)
-                st.markdown(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
+            
+            response = model.generate_content(context)
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            st.rerun() # Refresh to show newest at top immediately
 
         except Exception as e:
             st.error(f"Engine Error: {e}")
 
-    # Button to clear analysis
-    if st.button("🗑️ Clear Chat History"):
-        st.session_state.messages = []
-        st.rerun()
+    st.divider()
+
+    # 3. DISPLAY MESSAGES (Newest First)
+    # We iterate through the list in reverse order [::-1]
+    for message in reversed(st.session_state.messages):
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Clear utility
+    if st.session_state.messages:
+        st.sidebar.button("🗑️ Reset Analyst Chat", on_click=lambda: st.session_state.update({"messages": []}))
 
 # --- TAB 6: MASTER REPORT (Comprehensive with Live AI & Excel Export) ---
 with tab6:
