@@ -34,62 +34,77 @@ if 'coeffs' not in st.session_state:
 # 1. PAGE CONFIG (Must be the very first Streamlit command)
 st.set_page_config(page_title="FloorCast | Hard Rock Ottawa", layout="wide", page_icon="🎰")
 
-import streamlit as st
-
-# 1. MUST BE THE FIRST LINE
+# 1. This MUST remain the first Streamlit command
 st.set_page_config(layout="wide", page_title="HR Ottawa Forensic Engine")
 
-# 2. FORCE STYLING (No function, just direct injection)
+# 2. UNIVERSAL DARK THEME INJECTION
 st.markdown("""
     <style>
-    /* Global Background & Text */
+    /* FORCE GLOBAL BACKGROUND */
     .stApp {
         background-color: #0a0a0a !important;
     }
-    
-    /* Force ALL text to white across all tabs */
+
+    /* THE NUCLEAR OPTION: Force EVERY element to have white text */
     * {
         color: #FFFFFF !important;
     }
 
-    /* Target Widget Labels Specifically */
-    label p, .stMarkdown p, [data-testid="stWidgetLabel"] {
+    /* SPECIFIC FIX FOR INPUT BOXES (Where text is often hidden) */
+    input, textarea, select {
+        color: #FFFFFF !important;
+        background-color: #1a1a1a !important;
+        border: 1px solid #333 !important;
+    }
+
+    /* WIDGET LABELS & DESCRIPTIONS */
+    [data-testid="stWidgetLabel"] p, .stMarkdown p, label {
         color: #FFFFFF !important;
     }
 
-    /* Metric Card Styling */
+    /* METRIC CARDS - Gold Labels, White Values */
     div[data-testid="metric-container"] {
         background-color: #161616 !important;
-        border: 1px solid #333 !important;
+        border: 1px solid #222 !important;
         border-left: 5px solid #FFCC00 !important;
-        padding: 15px !important;
         border-radius: 10px !important;
     }
-
-    /* Metric Labels (Gold) */
     [data-testid="stMetricLabel"] p {
-        color: #FFCC00 !important;
+        color: #FFCC00 !important; /* Keep labels Gold */
+    }
+    [data-testid="stMetricValue"] div {
+        color: #FFFFFF !important;
     }
 
-    /* Tab Styling */
-    button[data-baseweb="tab"] {
-        background-color: #1a1a1a !important;
-        border: none !important;
-        margin-right: 5px !important;
+    /* TABS - Gold for active, Grey for inactive */
+    button[data-baseweb="tab"] p {
+        color: #AAAAAA !important; 
     }
-    
     button[aria-selected="true"] {
         background-color: #FFCC00 !important;
+        border-radius: 5px 5px 0 0 !important;
     }
-    
     button[aria-selected="true"] p {
-        color: #000000 !important; /* Black text on Gold Tab */
+        color: #000000 !important; /* Black text ONLY on the gold tab for readability */
     }
 
-    /* Fix for invisible input text */
-    input {
+    /* SIDEBAR FIX */
+    section[data-testid="stSidebar"] {
+        background-color: #111111 !important;
+    }
+    section[data-testid="stSidebar"] * {
+        color: #FFFFFF !important;
+    }
+
+    /* TOOLTIPS & HELP ICONS */
+    .stTooltipIcon {
+        color: #FFCC00 !important;
+    }
+    
+    /* CHAT INPUT FIX (Ensuring the text you type is visible) */
+    [data-testid="stChatInput"] textarea {
+        color: #FFFFFF !important;
         background-color: #222 !important;
-        color: #fff !important;
     }
     </style>
     """, unsafe_allow_html=True)
