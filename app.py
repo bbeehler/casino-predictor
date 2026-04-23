@@ -746,38 +746,43 @@ with tab5:
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Chat Input stays fixed at top of this tab content
-    prompt = st.chat_input("Query the Vault: 'Analyze Tuesday's engagement vs signups'...")
+    prompt = st.chat_input("Query the Vault...")
 
     if prompt:
+        # Add user message to history
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        # AI Processing
+        # 3. AI PROCESSING WITH LIVE STATUS
         import google.generativeai as genai
         try:
             api_key = st.secrets["GEMINI_API_KEY"]
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.5-flash') 
 
-            context = f"""
-            You are the Lead Strategic Analyst for Hard Rock Hotel & Casino Ottawa.
-            Analyze ALL columns in the VAULT DATA below to answer the USER QUESTION.
-            
-            VAULT DATA:
-            {full_vault_data}
-            
-            USER QUESTION: {prompt}
-            """
-            
-            response = model.generate_content(context)
+            # Create a live status container
+            with st.status("🕵️ FloorCast Analyst is thinking...", expanded=True) as status:
+                st.write("🔍 Accessing Forensic Vault...")
+                # The "Brain" context
+                context = f"""
+                You are the Lead Strategic Analyst for Hard Rock Hotel & Casino Ottawa.
+                VAULT DATA:
+                {full_vault_data}
+                
+                USER QUESTION: {prompt}
+                """
+                
+                st.write("📊 Correlating Marketing & Weather variables...")
+                response = model.generate_content(context)
+                
+                st.write("🧠 Finalizing strategic directives...")
+                status.update(label="✅ Analysis Complete!", state="complete", expanded=False)
+
+            # Store and Refresh
             st.session_state.messages.append({"role": "assistant", "content": response.text})
-            st.rerun() # Refresh to show newest at top immediately
+            st.rerun() 
 
         except Exception as e:
             st.error(f"Engine Error: {e}")
-
-    st.divider()
-
     # 3. DISPLAY MESSAGES (Newest First)
     # We iterate through the list in reverse order [::-1]
     for message in reversed(st.session_state.messages):
