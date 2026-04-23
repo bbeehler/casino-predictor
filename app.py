@@ -721,72 +721,82 @@ with tab4:
             st.success(f"✅ Vault Updated. GGR Anchors and OOH Inertia ({calculated_ooh_daily:,.0f}) successfully recalibrated.")
             st.balloons()
 
-# --- TAB 5: FLOORCAST ANALYSTS (The AI Deep Dive) ---
+# --- TAB 5: FLOORCAST ANALYSTS (Full Q&A + Multi-Column Access) ---
 with tab5:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
             <h2 style="color: #FFCC00; margin: 0;">🕵️ FloorCast Strategic Analysts</h2>
-            <p style="color: #888; margin: 0;">Direct access to the Daily Ledger: Correlating Floor Gravity with Marketing ROI.</p>
+            <p style="color: #888; margin: 0;">Ask anything. The AI is now synced with every column in the Forensic Vault.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. RANGE FILTER (Same as Master Report for consistency)
+    # 1. PREP THE DATA DOSSIER (Every Column)
     df_raw = pd.DataFrame(ledger_data)
-    df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
     
-    col_a, col_b = st.columns([1, 2])
-    with col_a:
-        ana_range = st.date_input("Select Analysis Window:", 
-                                  value=(df_raw['entry_date'].min().date(), df_raw['entry_date'].max().date()),
-                                  key="analyst_date_range")
+    # We build a comprehensive text-based version of your database for the AI
+    # This includes every variable that could impact GGR or Traffic
+    full_vault_data = ""
+    for _, row in df_raw.iterrows():
+        full_vault_data += (
+            f"Date: {row.get('entry_date')} | Traffic: {row.get('actual_traffic')} | "
+            f"Members: {row.get('new_members')} | Promo: {row.get('promo_active')} | "
+            f"Clicks: {row.get('clicks')} | Social_Imp: {row.get('impressions')} | "
+            f"Social_Eng: {row.get('engagements')} | Temp: {row.get('temp_c')}°C | "
+            f"Snow: {row.get('snow_cm')}cm | Rain: {row.get('rain_mm')}mm\n"
+        )
 
-    if isinstance(ana_range, tuple) and len(ana_range) == 2:
-        start_a, end_a = ana_range
-        df_ana = df_raw[(df_raw['entry_date'].dt.date >= start_a) & (df_raw['entry_date'].dt.date <= end_a)].copy()
+    # 2. THE CHAT INTERFACE
+    st.write("### 💬 Strategic Q&A")
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-        # 2. DATA PURIFICATION FOR AI
-        # We build a 'Forensic String' that lists daily performance
-        daily_ledger_string = ""
-        for _, row in df_ana.iterrows():
-            daily_ledger_string += f"- Date: {row['entry_date'].strftime('%Y-%m-%d')} | Traffic: {row['actual_traffic']:,} | New Members: {row.get('new_members', 0):,} | Weather: {row.get('temp_c', 15)}°C, {row.get('snow_cm', 0)}cm snow\n"
+    # Display chat history
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-        # 3. AI STRATEGIC PROMPT
+    # 3. AI LOGIC
+    if prompt := st.chat_input("Ask about social ROI, weather impact, or signup trends..."):
+        # Display user message
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Generate Response
         import google.generativeai as genai
         try:
             api_key = st.secrets["GEMINI_API_KEY"]
             genai.configure(api_key=api_key)
-            # Using 1.5 Flash for rapid data digestion
             model = genai.GenerativeModel('gemini-2.5-flash') 
 
-            forensic_prompt = f"""
-            You are the Senior Strategic Analyst for Hard Rock Hotel & Casino Ottawa. 
-            You are reviewing the DAILY LEDGER for the period {start_a} to {end_a}.
-
-            THE DATA:
-            {daily_ledger_string}
-
-            YOUR MISSION:
-            1. Correlate 'New Member' signups with 'Actual Traffic'.
-            2. Identify 'High-Yield' days where conversion was above the average.
-            3. Note the impact of weather friction on those specific signups.
-            4. Give Brian and Tammy 3 tactical directives based ONLY on this daily data.
+            # The "Brain" context: Feeding the AI the entire database
+            context = f"""
+            You are the Lead Strategic Analyst for Hard Rock Hotel & Casino Ottawa.
+            You have full access to the Forensic Vault Data provided below.
+            
+            VAULT DATA:
+            {full_vault_data}
+            
+            USER QUESTION: {prompt}
+            
+            INSTRUCTIONS:
+            - Analyze ALL columns (Marketing, Weather, Loyalty, Traffic).
+            - Look for hidden correlations (e.g., 'Do high social engagements on Monday lead to more signups on Tuesday?').
+            - Be concise, tactical, and direct. Use data points to back up your claims.
             """
 
-            if st.button("🧠 Execute Deep-Dive Analysis", use_container_width=True):
-                with st.spinner("Analyzing Daily Heartbeats..."):
-                    response = model.generate_content(forensic_prompt)
-                    
-                    st.markdown(f"""
-                        <div style="background-color: #000; padding: 25px; border-radius: 15px; border: 1px solid #FFCC00; margin-top: 20px;">
-                            <h3 style="color: #FFCC00; margin-top: 0;">📋 Daily Correlation Briefing</h3>
-                            <div style="color: #eee; line-height: 1.6;">
-                                {response.text.replace('**', '<b>').replace('*', '•')}
-                            </div>
-                        </div>
-                    """, unsafe_allow_html=True)
+            with st.chat_message("assistant"):
+                response = model.generate_content(context)
+                st.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
 
         except Exception as e:
-            st.error(f"AI Analyst Offline: {e}")
+            st.error(f"Engine Error: {e}")
+
+    # Button to clear analysis
+    if st.button("🗑️ Clear Chat History"):
+        st.session_state.messages = []
+        st.rerun()
 
 # --- TAB 6: MASTER REPORT (Comprehensive with Live AI & Excel Export) ---
 with tab6:
