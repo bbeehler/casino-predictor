@@ -897,11 +897,20 @@ with tab6:
         total_theo_win = total_traffic * prop_theo
         yield_variance = ((actual_ggr / total_theo_win) - 1) * 100 if total_theo_win > 0 else 0
         
-        f1.metric("Total Traffic", f"{total_traffic:,.0f}")
-        f2.metric("Total Revenue", f"${total_revenue:,.2f}")
-        f3.metric("Actual GGR", f"${actual_ggr:,.2f}", delta=f"{yield_variance:.1f}% vs Theo")
-        f4.metric("Total Theo Win", f"${total_theo_win:,.2f}")
-        f5.metric("Avg Spend", f"${avg_spend:.2f}")
+        f1.metric("Total Traffic", f"{total_traffic:,.0f}", 
+                  help="Total physical entries recorded via turnstiles/ledger for this period.")
+        
+        f2.metric("Total Revenue", f"${total_revenue:,.2f}", 
+                  help="Forensic Volume: (Total Traffic × Avg_Coin_In). This represents the total spend volume generated.")
+        
+        f3.metric("Actual GGR", f"${actual_ggr:,.2f}", delta=f"{yield_variance:.1f}% vs Theo", 
+                  help="Actual Gross Gaming Revenue: (Total Revenue × Hold_Pct). Delta compares this to the theoretical target.")
+        
+        f4.metric("Total Theo Win", f"${total_theo_win:,.2f}", 
+                  help="The 'House Target': (Total Traffic × Property_Theo). Based on ideal machine/table performance.")
+        
+        f5.metric("Avg Spend", f"${avg_spend:.2f}", 
+                  help="The Spend Anchor: Calculated as the current Avg_Coin_In coefficient from the Vault.")
 
         st.divider()
 
@@ -910,7 +919,6 @@ with tab6:
         m1, m2, m3, m4 = st.columns(4)
         
         total_digital_lift_guests = df_rep['residual_lift'].sum()
-        # OOH lift is daily inertia * number of days in the filtered window
         total_ooh_lift_guests = ooh_daily * len(df_rep)
         total_live_gravity_guests = df_rep['gravity_lift'].sum()
         
@@ -918,10 +926,17 @@ with tab6:
         mkt_revenue_impact = (total_mkt_guests * avg_spend) * hold_factor
         capture_rate = (mkt_revenue_impact / actual_ggr * 100) if actual_ggr > 0 else 0
 
-        m1.metric("Marketing Guests", f"{total_mkt_guests:,.0f}")
-        m2.metric("LIVE Gravity Lift", f"{total_live_gravity_guests:,.0f}")
-        m3.metric("Market Capture Rate", f"{capture_rate:.1f}%")
-        m4.metric("AI Predictability", metrics['predictability'])
+        m1.metric("Marketing Guests", f"{total_mkt_guests:,.0f}", 
+                  help="Total traffic attributed to Clicks, Social, OOH Inertia, and Event Gravity.")
+        
+        m2.metric("LIVE Gravity Lift", f"{total_live_gravity_guests:,.0f}", 
+                  help="Crossover Traffic: (Concert Attendance × Event_Gravity %). Headcount migrated from theater to floor.")
+        
+        m3.metric("Market Capture Rate", f"{capture_rate:.1f}%", 
+                  help="Marketing Equity: Percentage of the Actual GGR directly driven by active marketing and events.")
+        
+        m4.metric("AI Predictability", metrics['predictability'], 
+                  help="Confidence Score: How accurately the Forensic Engine's attribution explains the actual traffic variance.")
 
         st.divider()
 
@@ -936,10 +951,17 @@ with tab6:
         total_rain_loss = (df_rep['rain_mm'].sum() * float(c.get('Rain_mm', -12)))
         total_env_friction = total_snow_loss + total_rain_loss
 
-        l1.metric("New Unity Members", f"{total_new_members:,.0f}")
-        l2.metric("Member Conv. Rate", f"{member_conv_rate:.2f}%")
-        l3.metric("Weather Friction", f"{total_env_friction:,.0f}", delta="Guests Lost", delta_color="inverse")
-        l4.metric("Guest Quality Index", f"{(actual_ggr / total_theo_win):.2f}x")
+        l1.metric("New Unity Members", f"{total_new_members:,.0f}", 
+                  help="Total new Unity loyalty sign-ups recorded in the ledger for this period.")
+        
+        l2.metric("Member Conv. Rate", f"{member_conv_rate:.2f}%", 
+                  help="Acquisition Efficiency: (New Members ÷ Total Traffic). Percentage of guests converted to the database.")
+        
+        l3.metric("Weather Friction", f"{total_env_friction:,.0f}", delta="Guests Lost", delta_color="inverse", 
+                  help="Synthetic Traffic Loss: Total potential guests removed from the baseline due to rain and snow events.")
+        
+        l4.metric("Guest Quality Index", f"{(actual_ggr / total_theo_win):.2f}x", 
+                  help="Yield Density: Ratio of Actual GGR to Theoretical Win. Higher numbers indicate a higher-value guest mix.")
 
         # --- CHARTING ---
         st.write("### 📊 Comprehensive Attribution Stack")
@@ -955,9 +977,6 @@ with tab6:
         }
         chart_df = df_rep.rename(columns=chart_cols)
         st.area_chart(chart_df.set_index('entry_date')[[v for v in chart_cols.values() if v in chart_df.columns]])
-
-        # --- AI & EXPORT Logic remains as per your current setup ---
-        # (Be sure to check your 'GEMINI_API_KEY' vs 'GOOGLE_API_KEY' naming)
 
 # --- TAB 7: SYNCHRONIZED FORECAST SANDBOX (Streamlined View) ---
 with tab7:
