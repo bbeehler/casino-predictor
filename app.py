@@ -379,29 +379,101 @@ elif page == "📑 Daily Ledger Vault":
             st.success("Vault synced.")
 
 # =================================================================
-# 9. PAGE 3: ATTRIBUTION ANALYTICS (PLOTLY INTEGRATED)
+# 13. PAGE 3: ATTRIBUTION ANALYTICS (EXECUTIVE OVERHAUL)
 # =================================================================
 elif page == "📊 Attribution Analytics":
-    st.header("📊 Multi-Channel Attribution Analytics")
-    
+    st.markdown("""
+        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
+            <h2 style="color: #0047AB; margin: 0;">📊 Attribution Intelligence Suite</h2>
+            <p style="color: #444; margin: 0;">Multi-dimensional analysis of marketing equity and environmental friction.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
     if not ledger_data:
-        st.warning("Vault is empty.")
+        st.warning("Forensic Vault is empty. Attribution modeling requires historical data.")
         st.stop()
-        
+
     df_an = pd.DataFrame(ledger_data)
     df_an['entry_date'] = pd.to_datetime(df_an['entry_date'])
     
-    st.write("### 🧬 Variable Correlation Matrix")
-    corr_cols = ['actual_traffic', 'new_members', 'actual_coin_in', 'ad_clicks', 'temp_c', 'snow_cm']
-    fig_corr = px.scatter_matrix(df_an, dimensions=corr_cols, color='new_members', title="Daily Variable Scatter")
-    st.plotly_chart(fig_corr, use_container_width=True)
+    # 1. Run Forensic Engine for the entire history to get lift components
+    m_full = get_forensic_metrics(ledger_data, st.session_state.coeffs)
+    df_metrics = m_full['df']
+
+    # --- TOP ROW: EQUITY MIX & EFFICIENCY ---
+    col_mix, col_eff = st.columns([1, 1])
+    
+    with col_mix:
+        st.write("### 🧬 Total Attribution Mix")
+        total_organic = df_metrics['baseline_isolated'].sum()
+        total_digital = df_metrics['residual_lift'].sum()
+        total_ooh = m_full['ooh_total_daily'] * len(df_metrics)
+        total_live = df_metrics['gravity_lift'].sum()
+        
+        mix_data = pd.DataFrame({
+            'Channel': ['Organic Baseline', 'Digital ROI Lift', 'OOH Inertia', 'LIVE Gravity'],
+            'Guests': [total_organic, total_digital, total_ooh, total_live]
+        })
+        
+        fig_pie = px.pie(mix_data, values='Guests', names='Channel', 
+                         color_discrete_sequence=['#E1E8F0', '#0047AB', '#FFCC00', '#1A1A1B'],
+                         hole=0.4)
+        fig_pie.update_layout(margin=dict(l=0, r=0, t=30, b=0), legend=dict(orientation="h", yanchor="bottom", y=-0.2))
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    with col_eff:
+        st.write("### ⚡ Channel Efficiency Indices")
+        # Calculate synthetic efficiency (Lift per Unit of Input)
+        avg_digital_efficiency = df_metrics['residual_lift'].sum() / (df_metrics['ad_clicks'].sum() + 1)
+        avg_event_capture = float(st.session_state.coeffs.get('Event_Gravity', 25.0))
+        
+        st.info(f"**Digital Equity Score:** Each ad click generates **{avg_digital_efficiency:.2f}** synthetic guests over the ad-decay cycle.")
+        st.info(f"**OOH Stability Index:** Your billboard campaign provides a fixed floor of **{m_full['ooh_total_daily']:.0f}** daily guests.")
+        st.info(f"**Crossover Gravity:** Concerts are currently migrating **{avg_event_capture}%** of theater attendance to the gaming floor.")
 
     st.divider()
+
+    # --- MIDDLE ROW: DIGITAL PERSISTENCE MODEL ---
+    st.write("### 📈 Digital Awareness Persistence (Adstock Decay)")
+    fig_adstock = go.Figure()
+    fig_adstock.add_trace(go.Bar(x=df_metrics['entry_date'], y=df_metrics['ad_clicks'], name="Direct Ad Clicks", marker_color='#E1E8F0', opacity=0.5))
+    fig_adstock.add_trace(go.Scatter(x=df_metrics['entry_date'], y=df_metrics['residual_lift'], name="Residual Guest Lift", line=dict(color='#0047AB', width=3)))
     
-    st.write("### 🕒 Day-of-Week Performance (Organic Heartbeat)")
-    df_an['day_name'] = df_an['entry_date'].dt.day_name()
-    avg_day = df_an.groupby('day_name')['actual_traffic'].mean().reindex(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
-    st.bar_chart(avg_day)
+    fig_adstock.update_layout(
+        title="Impact of Clicks vs. Latent Traffic Lift (Ad-Decay Modeling)",
+        plot_bgcolor='rgba(0,0,0,0)',
+        yaxis=dict(title="Volume"),
+        hovermode="x unified"
+    )
+    st.plotly_chart(fig_adstock, use_container_width=True)
+
+    st.divider()
+
+    # --- BOTTOM ROW: ENVIRONMENTAL FRICTION HEATMAP ---
+    st.write("### ❄️ Environmental Friction Analysis")
+    
+    # Prepping Heatmap Data: Day of Week vs. Weather Loss
+    df_metrics['day_name'] = df_metrics['entry_date'].dt.day_name()
+    df_metrics['weather_loss'] = (df_metrics['snow_cm'] * float(st.session_state.coeffs.get('Snow_cm', -45))) + \
+                                 (df_metrics['rain_mm'] * float(st.session_state.coeffs.get('Rain_mm', -12)))
+    
+    # Sort days properly
+    day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    
+    fig_scatter = px.scatter(df_metrics, x="temp_c", y="actual_traffic", size=np.abs(df_metrics['weather_loss']),
+                             color="day_name", category_orders={"day_name": day_order},
+                             title="Traffic Density vs. Temperature (Bubble Size = Weather Friction Loss)",
+                             labels={"temp_c": "Temperature (°C)", "actual_traffic": "Total Guests"},
+                             color_discrete_sequence=px.colors.qualitative.Bold)
+    
+    fig_scatter.update_layout(plot_bgcolor='rgba(0,0,0,0)')
+    st.plotly_chart(fig_scatter, use_container_width=True)
+
+    # --- FINAL INSIGHTS GRID ---
+    st.write("### 🕒 Day-of-Week Organic Heartbeat")
+    avg_day = df_metrics.groupby('day_name')['baseline_isolated'].mean().reindex(day_order)
+    st.bar_chart(avg_day, color='#0047AB')
+    st.caption("This chart shows the 'Purified' baseline—traffic remaining after removing all marketing and weather variables.")
 
 # =================================================================
 # 10. PAGE 4: MASTER AUDIT REPORT
