@@ -235,45 +235,58 @@ if st.sidebar.button("🔓 Logout", use_container_width=True):
 # =================================================================
 # 7. PAGE 1: EXECUTIVE DASHBOARD
 # =================================================================
-if page == "Executive Dashboard":
-    st.header("📈 Executive Performance Pulse")
+if page == "Executive Overview":
+    st.header("📈 Executive Overview")
     
     if not ledger_data:
-        st.info("The Forensic Vault is currently empty. Please populate the Ledger.")
-        st.stop()
-
-    df_full = pd.DataFrame(ledger_data)
-    df_full['entry_date'] = pd.to_datetime(df_full['entry_date'])
-    
-    # Date Filter
-    c_start, c_end = st.columns([1, 3])
-    with c_start:
-        d_range = st.date_input("Audit Window:", value=(df_full['entry_date'].min().date(), df_full['entry_date'].max().date()))
-
-    if isinstance(d_range, tuple) and len(d_range) == 2:
-        start_d, end_d = d_range
-        df_f = df_full[(df_full['entry_date'].dt.date >= start_d) & (df_full['entry_date'].dt.date <= end_d)].to_dict(orient='records')
-        m_results = get_forensic_metrics(df_f, st.session_state.coeffs)
-        df_viz = m_results['df']
-
-        # KPI Layer
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Predictability Score", m_results['predictability'])
-        k2.metric("Avg OOH Inertia", f"{m_results['ooh_total_daily']:.0f} Guests")
-        k3.metric("Total Signups", f"{df_viz['new_members'].sum():,}")
+        st.warning("Forensic Vault is empty. Please enter data in the Ledger tab.")
+    else:
+        df_raw_exec = pd.DataFrame(ledger_data)
+        df_raw_exec['entry_date'] = pd.to_datetime(df_raw_exec['entry_date'])
         
-        # Spend Logic
-        total_head = df_viz['actual_traffic'].sum()
-        spend_head = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
-        k4.metric("Est. Floor GGR", f"${(total_head * spend_head * 0.10):,.0f}")
+        # --- SMART DATE DEFAULTS ---
+        # We find the latest actual date in your DB so the dashboard isn't blank
+        max_db_date = df_raw_exec['entry_date'].max().date()
+        min_db_date = df_raw_exec['entry_date'].min().date()
+        
+        # Default view is the last 14 days of ACTUAL recorded data
+        default_start = max(min_db_date, max_db_date - datetime.timedelta(days=14))
 
-        # Primary Chart
-        st.write("### 🎰 Actual Traffic vs. Engine Prediction")
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df_viz['entry_date'], y=df_viz['actual_traffic'], name="Actual Headcount", line=dict(color='#0047AB', width=4)))
-        fig.add_trace(go.Scatter(x=df_viz['entry_date'], y=df_viz['expected'], name="AI Prediction", line=dict(color='#FFCC00', width=2, dash='dot')))
-        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=0, b=0))
-        st.plotly_chart(fig, use_container_width=True)
+        col_d, _ = st.columns([1, 2])
+        with col_d:
+            exec_range = st.date_input(
+                "Analysis Window:", 
+                value=(default_start, max_db_date),
+                min_value=min_db_date,
+                max_value=max_db_date
+            )
+        
+        # Ensure a valid range is selected before running math
+        if isinstance(exec_range, tuple) and len(exec_range) == 2:
+            start_exec, end_exec = exec_range
+            mask = (df_raw_exec['entry_date'].dt.date >= start_exec) & (df_raw_exec['entry_date'].dt.date <= end_exec)
+            filtered_exec = df_raw_exec.loc[mask].to_dict(orient='records')
+            
+            if not filtered_exec:
+                st.error("No data found for this specific date range.")
+            else:
+                # RUN THE ENGINE
+                metrics = get_forensic_metrics(filtered_exec, st.session_state.coeffs)
+                df_chart = metrics['df_with_awareness']
+                
+                # --- DISPLAY KPIs ---
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Predictability", metrics['predictability'])
+                c2.metric("OOH Daily Lift", f"{metrics['ooh_total_daily']:.0f} Guests")
+                
+                # Spend Logic from Calibration
+                avg_spend = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
+                total_traffic = df_chart['actual_traffic'].sum()
+                c3.metric("Total Period GGR", f"${(total_traffic * avg_spend * 0.10):,.0f}")
+                c4.metric("New Members", f"{df_chart['new_members'].sum():,}")
+
+                st.write("### 📊 Performance vs. Engine Prediction")
+                st.line_chart(df_chart.set_index('entry_date')[['actual_traffic', 'expected']])
 
 # =================================================================
 # 8. PAGE 2: DAILY LEDGER VAULT
