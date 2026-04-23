@@ -8,8 +8,6 @@ from env_canada import ECWeather
 import google.generativeai as genai
 from supabase import create_client
 
-import streamlit as st
-
 # --- THE PERMANENT INITIALIZATION LOCK ---
 # This MUST be at the top of your script, after imports
 if 'coeffs' not in st.session_state:
@@ -34,81 +32,80 @@ if 'coeffs' not in st.session_state:
 # 1. PAGE CONFIG (Must be the very first Streamlit command)
 st.set_page_config(page_title="FloorCast | Hard Rock Ottawa", layout="wide", page_icon="🎰")
 
-# 1. This MUST remain the first Streamlit command
+import streamlit as st
+
+# 1. First line remains
 st.set_page_config(layout="wide", page_title="HR Ottawa Forensic Engine")
 
-# 2. UNIVERSAL DARK THEME INJECTION
+# 2. LIGHT BLUE & GREY THEME INJECTION
 st.markdown("""
     <style>
-    /* FORCE GLOBAL BACKGROUND */
+    /* Global Background: Light Grey */
     .stApp {
-        background-color: #0a0a0a !important;
+        background-color: #F0F2F6 !important;
     }
 
-    /* THE NUCLEAR OPTION: Force EVERY element to have white text */
+    /* Force ALL text to Black for legibility */
     * {
-        color: #FFFFFF !important;
+        color: #000000 !important;
     }
 
-    /* SPECIFIC FIX FOR INPUT BOXES (Where text is often hidden) */
-    input, textarea, select {
-        color: #FFFFFF !important;
-        background-color: #1a1a1a !important;
-        border: 1px solid #333 !important;
+    /* Target Widget Labels & Markdown specifically */
+    label p, .stMarkdown p, [data-testid="stWidgetLabel"] {
+        color: #000000 !important;
     }
 
-    /* WIDGET LABELS & DESCRIPTIONS */
-    [data-testid="stWidgetLabel"] p, .stMarkdown p, label {
-        color: #FFFFFF !important;
-    }
-
-    /* METRIC CARDS - Gold Labels, White Values */
+    /* Metric Card Styling: Light Blue with Darker Blue Border */
     div[data-testid="metric-container"] {
-        background-color: #161616 !important;
-        border: 1px solid #222 !important;
-        border-left: 5px solid #FFCC00 !important;
+        background-color: #E1E8F0 !important; /* Light Blue-Grey */
+        border: 1px solid #B0C4DE !important;
+        border-left: 5px solid #0047AB !important; /* Cobalt Blue Accent */
+        padding: 15px !important;
         border-radius: 10px !important;
     }
+
+    /* Metric Labels */
     [data-testid="stMetricLabel"] p {
-        color: #FFCC00 !important; /* Keep labels Gold */
-    }
-    [data-testid="stMetricValue"] div {
-        color: #FFFFFF !important;
+        color: #0047AB !important; /* Cobalt Blue for Metric titles */
+        font-weight: bold !important;
     }
 
-    /* TABS - Gold for active, Grey for inactive */
-    button[data-baseweb="tab"] p {
-        color: #AAAAAA !important; 
-    }
-    button[aria-selected="true"] {
-        background-color: #FFCC00 !important;
-        border-radius: 5px 5px 0 0 !important;
-    }
-    button[aria-selected="true"] p {
-        color: #000000 !important; /* Black text ONLY on the gold tab for readability */
-    }
-
-    /* SIDEBAR FIX */
-    section[data-testid="stSidebar"] {
-        background-color: #111111 !important;
-    }
-    section[data-testid="stSidebar"] * {
-        color: #FFFFFF !important;
-    }
-
-    /* TOOLTIPS & HELP ICONS */
-    .stTooltipIcon {
-        color: #FFCC00 !important;
+    /* Tab Styling: Clean Grey & Blue */
+    button[data-baseweb="tab"] {
+        background-color: #DDE1E7 !important;
+        border: none !important;
+        margin-right: 5px !important;
+        color: #333333 !important;
     }
     
-    /* CHAT INPUT FIX (Ensuring the text you type is visible) */
-    [data-testid="stChatInput"] textarea {
-        color: #FFFFFF !important;
-        background-color: #222 !important;
+    button[aria-selected="true"] {
+        background-color: #0047AB !important; /* Blue for Active Tab */
+    }
+    
+    button[aria-selected="true"] p {
+        color: #FFFFFF !important; /* White text on Blue Active Tab only */
+    }
+
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #F8F9FA !important;
+        border-right: 1px solid #DEE2E6 !important;
+    }
+
+    /* Input Fields: White boxes with Black text */
+    input, textarea, select {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+        border: 1px solid #CED4DA !important;
+    }
+
+    /* Analyst Status Bar */
+    [data-testid="stStatus"] {
+        background-color: #E7F3FF !important;
+        border: 1px solid #0047AB !important;
     }
     </style>
     """, unsafe_allow_html=True)
-
 # --- AUTH LIST ---
 ADMIN_USERS = ["bjbeehler@gmail.com"]
 
