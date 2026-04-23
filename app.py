@@ -742,42 +742,56 @@ with tab5:
             f"Snow: {row.get('snow_cm')}cm | Rain: {row.get('rain_mm')}mm\n"
         )
 
-    # 2. INPUT AT THE TOP
+   # 2. INPUT AT THE TOP
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
     prompt = st.chat_input("Query the Vault...")
 
     if prompt:
-        # Add user message to history
+        # 3. BUILD THE CONVERSATION MEMORY
+        # We take the last 10 messages so the AI stays focused without getting confused
+        chat_history_context = ""
+        for msg in st.session_state.messages[-10:]:
+            chat_history_context += f"{msg['role'].upper()}: {msg['content']}\n"
+
+        # Add current user message to history
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        # 3. AI PROCESSING WITH LIVE STATUS
+        # 4. AI PROCESSING WITH MEMORY
         import google.generativeai as genai
         try:
             api_key = st.secrets["GEMINI_API_KEY"]
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.5-flash') 
 
-            # Create a live status container
-            with st.status("🕵️ FloorCast Analyst is thinking...", expanded=True) as status:
+            with st.status("🕵️ FloorCast Analyst is referencing history...", expanded=True) as status:
                 st.write("🔍 Accessing Forensic Vault...")
-                # The "Brain" context
+                
+                # The "Brain" context now includes History
                 context = f"""
                 You are the Lead Strategic Analyst for Hard Rock Hotel & Casino Ottawa.
-                VAULT DATA:
+                
+                VAULT DATA (Daily Ledger):
                 {full_vault_data}
                 
-                USER QUESTION: {prompt}
+                CONVERSATION HISTORY:
+                {chat_history_context}
+                
+                NEW USER QUESTION: {prompt}
+                
+                INSTRUCTIONS:
+                - Use the HISTORY to maintain context for follow-up questions.
+                - If the user says 'that day' or 'the date you mentioned', refer to the history.
+                - Be concise and data-driven.
                 """
                 
-                st.write("📊 Correlating Marketing & Weather variables...")
+                st.write("🧠 Correlating current query with previous insights...")
                 response = model.generate_content(context)
                 
-                st.write("🧠 Finalizing strategic directives...")
-                status.update(label="✅ Analysis Complete!", state="complete", expanded=False)
+                status.update(label="✅ Contextual Analysis Complete!", state="complete", expanded=False)
 
-            # Store and Refresh
+            # Store assistant response and Refresh
             st.session_state.messages.append({"role": "assistant", "content": response.text})
             st.rerun() 
 
