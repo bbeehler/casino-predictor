@@ -8,6 +8,103 @@ from env_canada import ECWeather
 import google.generativeai as genai
 from supabase import create_client
 
+import streamlit as st
+
+def apply_executive_styling():
+    st.markdown("""
+        <style>
+        /* 1. THE FOUNDATION: Global Theme */
+        .stApp {
+            background-color: #0a0a0a;
+            color: #e0e0e0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* 2. THE TABS: Premium Navigation */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 8px;
+            background-color: #111;
+            padding: 10px 10px 0px 10px;
+            border-radius: 12px 12px 0 0;
+        }
+        .stTabs [data-baseweb="tab"] {
+            height: 45px;
+            background-color: #1a1a1a;
+            border-radius: 8px 8px 0 0;
+            color: #888;
+            border: none;
+            transition: all 0.3s ease;
+        }
+        .stTabs [aria-selected="true"] {
+            background-color: #FFCC00 !important;
+            color: #000 !important;
+            font-weight: bold !important;
+        }
+
+        /* 3. THE CARDS: Bloomberg-Style Metric Containers */
+        div[data-testid="metric-container"] {
+            background: linear-gradient(145deg, #161616, #0d0d0d);
+            border: 1px solid #222;
+            padding: 20px !important;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border-left: 4px solid #FFCC00 !important;
+            transition: transform 0.2s ease;
+        }
+        div[data-testid="metric-container"]:hover {
+            transform: translateY(-3px);
+            border-color: #FFCC00;
+        }
+        [data-testid="stMetricLabel"] {
+            color: #aaa !important;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.8rem !important;
+        }
+        [data-testid="stMetricValue"] {
+            color: #fff !important;
+            font-weight: 700 !important;
+        }
+
+        /* 4. CHAT INTERFACE: Floating Analyst Style */
+        .stChatMessage {
+            background-color: #161616 !important;
+            border: 1px solid #262626 !important;
+            border-radius: 15px !important;
+            padding: 15px !important;
+            margin-bottom: 10px !important;
+        }
+        .stChatInputContainer {
+            padding-bottom: 20px !important;
+        }
+
+        /* 5. INPUTS & BUTTONS */
+        .stNumberInput, .stTextInput, .stDateInput, .stSlider {
+            background-color: #1a1a1a !important;
+            border-radius: 8px !important;
+        }
+        .stButton>button {
+            background-color: #FFCC00 !important;
+            color: #000 !important;
+            border: none !important;
+            font-weight: bold !important;
+            text-transform: uppercase !important;
+            letter-spacing: 1px !important;
+            height: 3em !important;
+        }
+        
+        /* 6. STATUS BARS */
+        [data-testid="stStatus"] {
+            background-color: #111 !important;
+            border: 1px solid #FFCC00 !important;
+            color: #FFCC00 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+# Run the style function immediately
+apply_executive_styling()
+
 # --- THE PERMANENT INITIALIZATION LOCK ---
 # This MUST be at the top of your script, after imports
 if 'coeffs' not in st.session_state:
