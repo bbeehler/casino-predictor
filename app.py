@@ -4,540 +4,469 @@ import datetime
 import json
 import asyncio
 import numpy as np
-import plotly.graph_objects as go
-import plotly.express as px
 from env_canada import ECWeather
 import google.generativeai as genai
 from supabase import create_client
-from io import BytesIO
 
-# =================================================================
-# 1. PERMANENT INITIALIZATION & STATE LOCK
-# =================================================================
+# --- THE PERMANENT INITIALIZATION LOCK ---
+# This MUST be at the top of your script, after imports
 if 'coeffs' not in st.session_state:
+    # These are only used if the database/vault is completely empty
     st.session_state.coeffs = {
-        'Static_Count': 10, 'Static_Weight': 15.0, 
-        'Digital_OOH_Count': 5, 'Digital_OOH_Weight': 25.0, 
-        'Clicks': 0.05, 'Social_Imp': 0.0002, 'Social_Eng': 0.01, 
-        'Event_Gravity': 25.0, 'Avg_Coin_In': 112.50, 
-        'Property_Theo': 450.00, 'Hold_Pct': 10.0, 
-        'Snow_cm': -45, 'Rain_mm': -12, 'Ad_Decay': 85.0
+        'Static_Count': 10,
+        'Static_Weight': 15.0,
+        'Digital_OOH_Count': 5,
+        'Digital_OOH_Weight': 25.0,
+        'Clicks': 0.05,
+        'Social_Imp': 0.0002,
+        'Social_Eng': 0.01,
+        'Event_Gravity': 25.0,
+        'Avg_Coin_In': 112.50,
+        'Property_Theo': 450.00,
+        'Hold_Pct': 10.0,
+        'Snow_cm': -45,
+        'Rain_mm': -12,
+        'Ad_Decay': 85.0
     }
 
-if 'messages' not in st.session_state:
-    st.session_state.messages = []
+# 1. PAGE CONFIG (Must be the very first Streamlit command)
+st.set_page_config(page_title="FloorCast | Hard Rock Ottawa", layout="wide", page_icon="🎰")
 
-# =================================================================
-# 2. GLOBAL PAGE CONFIG & EXECUTIVE THEME
-# =================================================================
-st.set_page_config(
-    page_title="FloorCast Pro | Hard Rock Ottawa", 
-    layout="wide", 
-    page_icon="🎰",
-    initial_sidebar_state="expanded"
-)
+# 2. LIGHT BLUE & GREY THEME INJECTION
+st.markdown("""
+    <style>
+    /* Global Background: Light Grey */
+    .stApp {
+        background-color: #F0F2F6 !important;
+    }
 
-def apply_corporate_styling():
-    st.markdown("""
-        <style>
-        /* Global Foundations */
-        .stApp { background-color: #F0F2F6 !important; }
-        
-        /* Typography Force-Black */
-        h1, h2, h3, h4, h5, h6, p, span, label, div, [data-testid="stMarkdownContainer"] p {
-            color: #1A1A1B !important;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-        }
+    /* Force ALL text to Black for legibility */
+    * {
+        color: #000000 !important;
+    }
 
-        /* Sidebar: Clean Drawer Style */
-        section[data-testid="stSidebar"] {
-            background-color: #FFFFFF !important;
-            border-right: 2px solid #DEE2E6 !important;
-            padding-top: 2rem;
-        }
-        
-        /* Metric Card: Executive Blue */
-        div[data-testid="metric-container"] {
-            background-color: #E1E8F0 !important;
-            border: 1px solid #B0C4DE !important;
-            border-left: 6px solid #0047AB !important;
-            padding: 20px !important;
-            border-radius: 12px !important;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-        [data-testid="stMetricLabel"] p {
-            color: #0047AB !important;
-            font-weight: 700 !important;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-size: 0.85rem !important;
-        }
+    /* Target Widget Labels & Markdown specifically */
+    label p, .stMarkdown p, [data-testid="stWidgetLabel"] {
+        color: #000000 !important;
+    }
 
-        /* Inputs & Buttons */
-        .stButton>button {
-            background-color: #0047AB !important;
-            color: white !important;
-            border-radius: 8px !important;
-            font-weight: 600 !important;
-            border: none !important;
-            transition: all 0.3s ease;
-        }
-        .stButton>button:hover {
-            background-color: #002D6B !important;
-            box-shadow: 0 4px 12px rgba(0,71,171,0.3);
-        }
-        input, textarea, select {
-            background-color: #FFFFFF !important;
-            border-radius: 8px !important;
-        }
-        
-        /* Analyst Status Bar */
-        [data-testid="stStatus"] {
-            background-color: #E7F3FF !important;
-            border: 1px solid #0047AB !important;
-            border-radius: 10px !important;
-        }
-        </style>
+    /* Metric Card Styling: Light Blue with Darker Blue Border */
+    div[data-testid="metric-container"] {
+        background-color: #E1E8F0 !important; /* Light Blue-Grey */
+        border: 1px solid #B0C4DE !important;
+        border-left: 5px solid #0047AB !important; /* Cobalt Blue Accent */
+        padding: 15px !important;
+        border-radius: 10px !important;
+    }
+
+    /* Metric Labels */
+    [data-testid="stMetricLabel"] p {
+        color: #0047AB !important; /* Cobalt Blue for Metric titles */
+        font-weight: bold !important;
+    }
+
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #F8F9FA !important;
+        border-right: 1px solid #DEE2E6 !important;
+    }
+
+    /* Input Fields: White boxes with Black text */
+    input, textarea, select {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+        border: 1px solid #CED4DA !important;
+    }
+
+    /* Analyst Status Bar */
+    [data-testid="stStatus"] {
+        background-color: #E7F3FF !important;
+        border: 1px solid #0047AB !important;
+    }
+    </style>
     """, unsafe_allow_html=True)
 
-apply_corporate_styling()
+# --- AUTH LIST ---
+ADMIN_USERS = ["bjbeehler@gmail.com"]
 
-# =================================================================
-# 3. MASTER FORENSIC ENGINE (THE HEARTBEAT)
-# =================================================================
 def get_forensic_metrics(df_input, coeffs):
     """
-    Triangulates Daily Traffic by isolating Organic, Digital, OOH, and LIVE factors.
+    THE MASTER ENGINE: Triangulates Organic Baselines, Adstock, 
+    OOH Pressure, Hard Rock LIVE Gravity, and Weather Friction.
     """
-    if not df_input:
-        return {"predictability": "0.0%", "heartbeats": {}, "ooh_total_daily": 0, "df": pd.DataFrame()}
+    if df_input is None or len(df_input) == 0:
+        return {
+            "predictability": "0.0%", 
+            "digital_lift": "0.0%", 
+            "heartbeats": {}, 
+            "ooh_total_daily": 0,
+            "df_with_awareness": pd.DataFrame()
+        }
 
     df = pd.DataFrame(df_input).copy()
+    
+    # 1. STANDARDIZE & CLEAN COLUMNS
+    cols_to_ensure = {
+        'ad_clicks': ['ad_clicks', 'Clicks'],
+        'ad_impressions': ['ad_impressions', 'Impressions'],
+        'actual_traffic': ['actual_traffic', 'Traffic'],
+        'snow_cm': ['snow_cm', 'Snow', 'snow'],
+        'rain_mm': ['rain_mm', 'Rain', 'rain'],
+        'attendance': ['attendance', 'Attendance', 'event_attendance']
+    }
+
+    for target, aliases in cols_to_ensure.items():
+        existing = next((c for c in aliases if c in df.columns), None)
+        if existing:
+            df.rename(columns={existing: target}, inplace=True)
+        if target not in df.columns:
+            df[target] = 0 
+        df[target] = pd.to_numeric(df[target], errors='coerce').fillna(0)
+
     df['entry_date'] = pd.to_datetime(df['entry_date'])
     df = df.sort_values('entry_date')
     df['day_name'] = df['entry_date'].dt.day_name()
     
-    # 3.1 Extract Weighted Coefficients
-    c_clicks = float(coeffs.get('Clicks', 0.05))
-    c_social = float(coeffs.get('Social_Imp', 0.0002))
-    c_eng = float(coeffs.get('Social_Eng', 0.01))
-    decay = float(coeffs.get('Ad_Decay', 85.0)) / 100 
-    gravity = float(coeffs.get('Event_Gravity', 25.0)) / 100
+    # 2. PULL CALIBRATED WEIGHTS
+    c_clicks = float(coeffs.get('Clicks') or coeffs.get('clicks') or 0.04)
+    c_social = float(coeffs.get('Impressions') or coeffs.get('impressions') or 0.0002)
+    decay_rate = float(coeffs.get('Ad_Decay') or coeffs.get('ad_decay') or 85.0) / 100 
     
-    ooh_daily = (float(coeffs.get('Static_Weight', 15)) * int(coeffs.get('Static_Count', 10))) + \
-                 (float(coeffs.get('Digital_OOH_Weight', 25)) * int(coeffs.get('Digital_OOH_Count', 5)))
+    raw_gravity = coeffs.get('event_gravity') or coeffs.get('Event_Gravity') or 20.0
+    event_capture = float(raw_gravity) / 100
+    
+    ooh_w = float(coeffs.get('Static_Weight') or coeffs.get('static_weight') or 50.0)
+    ooh_c = int(coeffs.get('Static_Count') or coeffs.get('static_count') or 2)
+    dig_w = float(coeffs.get('Digital_OOH_Weight') or coeffs.get('digital_ooh_weight') or 10.0)
+    dig_c = int(coeffs.get('Digital_OOH_Count') or coeffs.get('digital_ooh_count') or 4)
+    total_ooh_lift = (ooh_w * ooh_c) + (dig_w * dig_c)
+    
+    c_snow = float(coeffs.get('Snow_cm') or coeffs.get('snow_cm') or -45.0)
+    c_rain = float(coeffs.get('Rain_mm') or coeffs.get('rain_mm') or -12.0)
 
-    # 3.2 Recursive Adstock Loop (Awareness Persistence)
-    awareness_pool, current_pool = [], 0.0
+    # 3. THE AWARENESS POOL (ADSTOCK LOOP)
+    awareness_pool = []
+    current_pool = 0.0
     for _, row in df.iterrows():
-        daily_in = (row.get('ad_clicks', 0) * c_clicks) + \
-                   (row.get('ad_impressions', 0) * c_social) + \
-                   (row.get('social_engagements', 0) * c_eng)
-        current_pool = daily_in + (current_pool * decay)
+        daily_input = (row['ad_clicks'] * c_clicks) + (row['ad_impressions'] * c_social)
+        current_pool = daily_input + (current_pool * decay_rate)
         awareness_pool.append(current_pool)
     
     df['residual_lift'] = awareness_pool
-    df['gravity_lift'] = df.get('attendance', 0) * gravity
-    
-    # 3.3 Baseline Purification
-    df['baseline_isolated'] = df['actual_traffic'] - df['residual_lift'] - ooh_daily - df['gravity_lift']
+
+    # 4. THE GRAVITY PULSE (HARD ROCK LIVE)
+    df['gravity_lift'] = df['attendance'] * event_capture
+
+    # 5. BASELINE PURIFICATION
+    df['baseline_isolated'] = df['actual_traffic'] - df['residual_lift'] - total_ooh_lift - df['gravity_lift']
     heartbeats = df.groupby('day_name')['baseline_isolated'].mean().to_dict()
-    
-    # 3.4 Predictive Modeling
-    df['expected'] = df.apply(lambda x: heartbeats.get(x['day_name'], 4365) + x['residual_lift'] + ooh_daily + x['gravity_lift'], axis=1)
-    
-    # Forecast Error Variance
-    mape = (np.abs(df['actual_traffic'] - df['expected']) / df['actual_traffic']).replace([np.inf, -np.inf], np.nan).dropna().mean()
-    pred_score = (1 - mape) * 100 if not np.isnan(mape) else 85.0
+
+    # 6. MASTER ATTRIBUTION (EXPECTED VALUE)
+    df['expected'] = df.apply(lambda x: 
+        heartbeats.get(x['day_name'], 4000) + 
+        x['residual_lift'] + 
+        total_ooh_lift + 
+        x['gravity_lift'] + 
+        (x['snow_cm'] * c_snow) + 
+        (x['rain_mm'] * c_rain), 
+        axis=1
+    )
+
+    # 7. FINAL PERFORMANCE METRICS
+    df_filtered = df[df['actual_traffic'] > 0].copy()
+    if not df_filtered.empty:
+        mape = (np.abs(df_filtered['actual_traffic'] - df_filtered['expected']) / df_filtered['actual_traffic']).replace([np.inf, -np.inf], np.nan).dropna().mean()
+        pred_val = (1 - mape) * 100 if not np.isnan(mape) else 85.0
+        latest_traffic = df_filtered['actual_traffic'].iloc[-1]
+        latest_residual = df_filtered['residual_lift'].iloc[-1]
+        lift_pct = (latest_residual / latest_traffic * 100) if latest_traffic > 0 else 0
+    else:
+        pred_val, lift_pct, latest_residual = 0, 0, 0
 
     return {
-        "predictability": f"{pred_score:.1f}%",
+        "predictability": f"{pred_val:.1f}%",
+        "digital_lift": f"{lift_pct:.1f}%",
+        "digital_lift_val": latest_residual,
         "heartbeats": heartbeats,
-        "ooh_total_daily": ooh_daily,
-        "df": df
+        "ooh_total_daily": total_ooh_lift,
+        "df_with_awareness": df
     }
 
-# =================================================================
-# 4. DATA INFRASTRUCTURE (SUPABASE & WEATHER)
-# =================================================================
-try:
-    supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-except:
-    st.error("🚨 Critical Error: Supabase connection failed. Check your secrets.toml.")
+# 3. INITIALIZE CLIENTS
+url = st.secrets["SUPABASE_URL"]
+key = st.secrets["SUPABASE_KEY"]
+supabase = create_client(url, key)
 
-async def fetch_weather():
+if "GEMINI_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+
+# 4. WEATHER LOGIC
+async def fetch_live_ec_data():
     try:
         ec = ECWeather(coordinates=(45.33, -75.71))
         await ec.update()
-        return {"current": ec.conditions, "forecast": ec.daily_forecasts}
+        return {"current": ec.conditions, "forecast": ec.daily_forecasts, "alerts": ec.alerts}
     except:
-        return {"error": "Station Unavailable"}
+        return {"error": "Weather Unavailable"}
 
 if 'weather_data' not in st.session_state:
-    st.session_state.weather_data = asyncio.run(fetch_weather())
+    st.session_state.weather_data = asyncio.run(fetch_live_ec_data())
 
-# =================================================================
-# 5. HYDRATION & RECOVERY
-# =================================================================
+if 'user_authenticated' not in st.session_state:
+    st.session_state.user_authenticated = False
+
+# 5. GATEKEEPER
+if not st.session_state.user_authenticated:
+    st.markdown("<div style='text-align:center; padding:50px;'><h1 style='color:#0047AB;'>🎰 FloorCast</h1><h3>Hard Rock Ottawa | Strategic Engine</h3></div>", unsafe_allow_html=True)
+    with st.container(border=True):
+        email_input = st.text_input("Email")
+        pw_input = st.text_input("Password", type="password")
+        if st.button("Access Engine", use_container_width=True, key="login_btn"):
+            try:
+                res = supabase.auth.sign_in_with_password({"email": email_input, "password": pw_input})
+                if res.user:
+                    st.session_state.user_authenticated = True
+                    st.session_state.user_email = res.user.email
+                    st.success(f"Welcome, {res.user.email}")
+                    st.rerun() 
+                else:
+                    st.error("Authentication failed.")
+            except Exception as e:
+                st.error("Invalid credentials or connection error.")
+    st.stop()
+
+# --- 6. CRITICAL DATA HYDRATION ---
 try:
-    # Hydrate Coefficients (Vault)
     c_res = supabase.table("coefficients").select("*").eq("id", 1).execute()
     if c_res.data:
         st.session_state.coeffs = c_res.data[0]
-    
-    # Hydrate Daily Ledger
+        defaults = {'Static_Weight': 50.0, 'Static_Count': 2, 'Digital_OOH_Weight': 10.0, 'Digital_OOH_Count': 4}
+        for k, v in defaults.items():
+            if k not in st.session_state.coeffs:
+                st.session_state.coeffs[k] = v
+except:
+    st.session_state.coeffs = {}
+
+try:
     l_res = supabase.table("ledger").select("*").execute()
     ledger_data = l_res.data if l_res.data else []
 except:
     ledger_data = []
 
-# =================================================================
-# 6. SIDEBAR NAVIGATION & AUTH
-# =================================================================
-st.sidebar.markdown("<h1 style='color:#0047AB; font-size: 28px; margin-bottom: 0;'>🎰 FloorCast</h1><p style='color:#888;'>Hard Rock Ottawa v4.0</p>", unsafe_allow_html=True)
+metrics = get_forensic_metrics(ledger_data, st.session_state.coeffs)
+
+# --- 7. SIDEBAR NAVIGATION (THE SIDECAR) ---
+st.sidebar.markdown("<h2 style='color:#0047AB; margin-bottom:0;'>🎰 FloorCast</h2>", unsafe_allow_html=True)
+st.sidebar.write(f"User: {st.session_state.get('user_email', 'Brian')}")
 st.sidebar.divider()
 
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-
-if not st.session_state.authenticated:
-    with st.sidebar:
-        st.subheader("Executive Access")
-        e_mail = st.text_input("Email")
-        p_word = st.text_input("Password", type="password")
-        if st.button("Unlock Engine", use_container_width=True):
-            try:
-                res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
-                if res.user:
-                    st.session_state.authenticated = True
-                    st.session_state.user_email = res.user.email
-                    st.rerun()
-            except:
-                st.error("Invalid Credentials")
-    st.stop()
-
-# Persistent Menu
-page = st.sidebar.radio("Navigation Workspace", [
-    "📈 Executive Dashboard", 
-    "📑 Daily Ledger Vault", 
-    "📊 Attribution Analytics", 
-    "📋 Master Audit Report",
-    "🧠 FloorCast AI Analyst", 
-    "⚙️ Engine Calibration", 
+page = st.sidebar.radio("Select Workspace:", [
+    "📈 Executive Overview", 
+    "📑 Ledger Management", 
+    "📊 Property Analytics", 
+    "⚙️ Engine Control", 
+    "🧠 FloorCast Analyst", 
+    "📋 Master Report", 
     "🧪 Forecast Sandbox"
 ])
 
-st.sidebar.divider()
 if st.sidebar.button("🔓 Logout", use_container_width=True):
-    st.session_state.authenticated = False
+    supabase.auth.sign_out()
+    st.session_state.user_authenticated = False
     st.rerun()
 
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD
+# 8. WORKSPACE LOGIC (IF/ELIF BLOCKS)
 # =================================================================
-if page == "Executive Overview":
-    st.header("📈 Executive Overview")
-    
+
+if page == "📈 Executive Overview":
+    st.markdown("""
+        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 10px; border-left: 5px solid #0047AB; margin-bottom: 25px;">
+            <h2 style="color: #0047AB; margin: 0;">📈 Executive Overview</h2>
+            <p style="color: #444; margin: 0;">Real-time property pulse and forensic attribution for Hard Rock Ottawa.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
     if not ledger_data:
-        st.warning("Forensic Vault is empty. Please enter data in the Ledger tab.")
+        st.warning("Vault is empty. No data available.")
     else:
         df_raw_exec = pd.DataFrame(ledger_data)
         df_raw_exec['entry_date'] = pd.to_datetime(df_raw_exec['entry_date'])
-        
-        # --- SMART DATE DEFAULTS ---
-        # We find the latest actual date in your DB so the dashboard isn't blank
-        max_db_date = df_raw_exec['entry_date'].max().date()
-        min_db_date = df_raw_exec['entry_date'].min().date()
-        
-        # Default view is the last 14 days of ACTUAL recorded data
-        default_start = max(min_db_date, max_db_date - datetime.timedelta(days=14))
+        min_d_exec = df_raw_exec['entry_date'].min().date()
+        max_d_exec = df_raw_exec['entry_date'].max().date()
 
-        col_d, _ = st.columns([1, 2])
-        with col_d:
-            exec_range = st.date_input(
-                "Analysis Window:", 
-                value=(default_start, max_db_date),
-                min_value=min_db_date,
-                max_value=max_db_date
-            )
-        
-        # Ensure a valid range is selected before running math
+        col_d1, col_d2 = st.columns([1, 2])
+        with col_d1:
+            d_start_exec = max(min_d_exec, max_d_exec - datetime.timedelta(days=14))
+            exec_range = st.date_input("Executive View Period:", value=(d_start_exec, max_d_exec), key="exec_overview_calendar_vfinal")
+
         if isinstance(exec_range, tuple) and len(exec_range) == 2:
             start_exec, end_exec = exec_range
-            mask = (df_raw_exec['entry_date'].dt.date >= start_exec) & (df_raw_exec['entry_date'].dt.date <= end_exec)
-            filtered_exec = df_raw_exec.loc[mask].to_dict(orient='records')
+            mask_exec = (df_raw_exec['entry_date'].dt.date >= start_exec) & (df_raw_exec['entry_date'].dt.date <= end_exec)
+            filtered_exec = df_raw_exec.loc[mask_exec].to_dict(orient='records')
             
-            if not filtered_exec:
-                st.error("No data found for this specific date range.")
-            else:
-                # RUN THE ENGINE
-                metrics = get_forensic_metrics(filtered_exec, st.session_state.coeffs)
-                df_chart = metrics['df_with_awareness']
-                
-                # --- DISPLAY KPIs ---
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Predictability", metrics['predictability'])
-                c2.metric("OOH Daily Lift", f"{metrics['ooh_total_daily']:.0f} Guests")
-                
-                # Spend Logic from Calibration
-                avg_spend = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
-                total_traffic = df_chart['actual_traffic'].sum()
-                c3.metric("Total Period GGR", f"${(total_traffic * avg_spend * 0.10):,.0f}")
-                c4.metric("New Members", f"{df_chart['new_members'].sum():,}")
+            metrics = get_forensic_metrics(filtered_exec, st.session_state.coeffs)
+            df_chart = metrics.get('df_with_awareness').copy()
+            
+            col1, col2, col3, col4, col5 = st.columns(5)
+            col1.metric("Predictability", metrics['predictability'])
+            total_digital = df_chart['residual_lift'].sum()
+            col2.metric("Digital Lift", f"{total_digital:,.0f}")
+            ooh_val = metrics.get('ooh_total_daily', 0)
+            col3.metric("OOH Pressure", f"{ooh_val:.0f} Guests")
+            total_new_mems = df_chart['new_members'].sum()
+            col4.metric("New Members", f"{total_new_mems:,.0f}")
+            avg_spend_val = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
+            col5.metric("Avg. Spend", f"${avg_spend_val:.2f}")
 
-                st.write("### 📊 Performance vs. Engine Prediction")
-                st.line_chart(df_chart.set_index('entry_date')[['actual_traffic', 'expected']])
+            st.divider()
+            st.write("### 📊 Performance vs. Prediction")
+            df_plot = df_chart.copy().rename(columns={'actual_traffic': 'Actual Traffic', 'expected': 'Expected Traffic'})
+            st.line_chart(df_plot.set_index('entry_date')[['Actual Traffic', 'Expected Traffic']])
 
-# =================================================================
-# 8. PAGE 2: DAILY LEDGER VAULT
-# =================================================================
-elif page == "📑 Daily Ledger Vault":
-    st.header("📑 Forensic Ledger Management")
-    
-    col_l, col_r = st.columns(2)
-    with col_l:
-        with st.form("vault_entry_form"):
-            st.subheader("✍️ Add Daily Metrics")
-            d_entry = st.date_input("Entry Date", datetime.date.today())
-            f1, f2 = st.columns(2)
-            with f1:
-                t_in = st.number_input("Traffic (Turnstile)", min_value=0)
-                m_in = st.number_input("Unity Signups", min_value=0)
-            with f2:
-                c_in = st.number_input("Total Coin-In ($)", min_value=0.0)
-                a_in = st.number_input("Event Attendance", min_value=0)
+elif page == "📑 Ledger Management":
+    st.markdown("""
+        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 10px; border-left: 5px solid #0047AB; margin-bottom: 25px;">
+            <h2 style="color: #0047AB; margin: 0;">📑 Ledger Management</h2>
+            <p style="color: #444; margin: 0;">Update property performance records.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    col_a, col_b = st.columns([1, 1])
+    with col_a:
+        st.write("### ✍️ Manual Results Entry")
+        with st.form("manual_entry_v6"):
+            entry_date = st.date_input("Select Date", datetime.date.today())
+            c1, c2, c3 = st.columns(3)
+            traffic = c1.number_input("Traffic", min_value=0)
+            coin_in = c2.number_input("Coin-In ($)", min_value=0.0)
+            new_mems = c3.number_input("New Members", min_value=0)
+            w1, w2, w3, w4 = st.columns(4)
+            temp = w1.number_input("Temp (°C)", value=15.0)
+            snow = w2.number_input("Snow (cm)", 0.0)
+            rain = w3.number_input("Rain (mm)", 0.0)
+            promo = w4.checkbox("Major Promo?")
             
-            st.write("**Environmental & Ad Data**")
-            w1, w2 = st.columns(2)
-            with w1:
-                temp = st.number_input("Temp (°C)", value=15.0)
-                clicks = st.number_input("Ad Clicks", min_value=0)
-            with w2:
-                snow = st.number_input("Snow (cm)", min_value=0.0)
-                imps = st.number_input("Impressions", min_value=0)
-            
-            if st.form_submit_button("🔒 Sync to Supabase", use_container_width=True):
-                payload = {
-                    "entry_date": d_entry.isoformat(), "actual_traffic": int(t_in),
-                    "actual_coin_in": float(c_in), "new_members": int(m_in),
-                    "attendance": int(a_in), "temp_c": float(temp),
-                    "snow_cm": float(snow), "ad_clicks": int(clicks), "ad_impressions": int(imps)
-                }
-                supabase.table("ledger").upsert(payload, on_conflict="entry_date").execute()
-                st.success(f"Data for {d_entry} verified and stored.")
+            if st.form_submit_button("💾 Sync to Vault"):
+                new_row = {"entry_date": entry_date.isoformat(), "actual_traffic": int(traffic), "actual_coin_in": float(coin_in), "new_members": int(new_mems), "temp_c": float(temp), "snow_cm": float(snow), "rain_mm": float(rain), "active_promo": bool(promo)}
+                supabase.table("ledger").upsert(new_row, on_conflict="entry_date").execute()
+                st.success("Synced!")
                 st.rerun()
 
-    with col_r:
-        st.subheader("📤 Bulk Systems Import")
-        st.caption("Upload your daily .csv export from the Marketing Hub.")
-        csv_file = st.file_uploader("Drop Ledger CSV here", type="csv")
-        if csv_file and st.button("🚀 Execute Bulk Sync"):
-            df_up = pd.read_csv(csv_file)
-            supabase.table("ledger").upsert(df_up.to_dict(orient='records')).execute()
-            st.success("Bulk synchronization complete.")
+    with col_b:
+        st.write("### 📤 Bulk CSV Upload")
+        uploaded_file = st.file_uploader("Upload Ledger CSV", type="csv")
+        if uploaded_file and st.button("🚀 Push CSV"):
+            df_upload = pd.read_csv(uploaded_file)
+            supabase.table("ledger").upsert(df_upload.to_dict(orient='records')).execute()
+            st.success("Bulk Upload Complete")
             st.rerun()
 
     st.divider()
-    st.subheader("📜 Universal Ledger History")
+    st.write("### 📜 Ledger Editor")
     if ledger_data:
-        df_edit = pd.DataFrame(ledger_data).sort_values('entry_date', ascending=False)
-        edited_df = st.data_editor(df_edit, use_container_width=True, hide_index=True)
-        if st.button("✅ Confirm Manual Overwrites"):
-            final_p = edited_df.to_dict(orient='records')
-            supabase.table("ledger").upsert(final_p).execute()
-            st.success("Vault state updated.")
+        df_history = pd.DataFrame(ledger_data).sort_values(by='entry_date', ascending=False)
+        edited_df = st.data_editor(df_history, key="ledger_editor_v6", use_container_width=True, hide_index=True)
+        if st.button("✅ Confirm & Sync Edits"):
+            sync_ready = edited_df.copy()
+            sync_ready['entry_date'] = pd.to_datetime(sync_ready['entry_date']).dt.strftime('%Y-%m-%d')
+            supabase.table("ledger").upsert(sync_ready.to_dict(orient='records')).execute()
+            st.success("Vault Updated.")
+            st.rerun()
 
-# =================================================================
-# 9. PAGE 5: AI STRATEGIC ANALYST (MEMORY INTEGRATED)
-# =================================================================
-elif page == "🧠 FloorCast AI Analyst":
-    st.header("🧠 FloorCast Strategic AI")
+elif page == "📊 Property Analytics":
+    st.markdown("<h2 style='color:#0047AB;'>📊 Property Performance Analytics</h2>", unsafe_allow_html=True)
+    if ledger_data:
+        df_analysis = pd.DataFrame(ledger_data).sort_values('entry_date')
+        df_analysis['entry_date'] = pd.to_datetime(df_analysis['entry_date'])
+        metric_choice = st.pills("Metric:", ["Traffic", "Coin-In", "New Members"], default="Traffic")
+        if metric_choice == "Traffic": st.area_chart(df_analysis.set_index('entry_date')['actual_traffic'], color="#0047AB")
+        elif metric_choice == "Coin-In": st.line_chart(df_analysis.set_index('entry_date')['actual_coin_in'], color="#2ecc71")
+        elif metric_choice == "New Members": st.bar_chart(df_analysis.set_index('entry_date')['new_members'], color="#E74C3C")
+
+elif page == "⚙️ Engine Control":
+    st.header("⚙️ Engine Calibration")
+    with st.form("db_calib_form_v14_uncapped"):
+        st.write("### 🏢 OOH Weighted Logic")
+        c1, c2 = st.columns(2)
+        sc = c1.number_input("Static Count", value=int(st.session_state.coeffs.get('Static_Count', 10)))
+        sw = c1.slider("Static Weight", 0.0, 100.0, float(st.session_state.coeffs.get('Static_Weight', 15.0)))
+        dc = c2.number_input("Digital Count", value=int(st.session_state.coeffs.get('Digital_OOH_Count', 5)))
+        dw = c2.slider("Digital Weight", 0.0, 200.0, float(st.session_state.coeffs.get('Digital_OOH_Weight', 25.0)))
+        
+        st.divider()
+        st.write("### 💰 Financial DNA")
+        f1, f2, f3 = st.columns(3)
+        spend = f1.number_input("Avg_Coin_In", value=float(st.session_state.coeffs.get('Avg_Coin_In', 112.50)))
+        hold = f2.slider("Hold %", 0.0, 100.0, float(st.session_state.coeffs.get('Hold_Pct', 10.0)))
+        grav = f3.slider("Event Gravity", 0.0, 100.0, float(st.session_state.coeffs.get('Event_Gravity', 25.0)))
+        
+        if st.form_submit_button("🚀 Commit Weights"):
+            st.session_state.coeffs.update({'Static_Count': sc, 'Static_Weight': sw, 'Digital_OOH_Count': dc, 'Digital_OOH_Weight': dw, 'Avg_Coin_In': spend, 'Hold_Pct': hold, 'Event_Gravity': grav})
+            supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
+            st.success("Vault Calibrated.")
+
+elif page == "🧠 FloorCast Analyst":
+    st.header("🧠 FloorCast Analyst")
+    df_raw = pd.DataFrame(ledger_data)
+    dossier = "".join([f"Date: {r.get('entry_date')} | Traffic: {r.get('actual_traffic')} | Members: {r.get('new_members')} | Promo: {r.get('promo_active')} | Clicks: {r.get('ad_clicks')} | Temp: {r.get('temp_c')}C\n" for _, r in df_raw.iterrows()])
     
-    # Prep the data for the AI Brain
-    df_ai = pd.DataFrame(ledger_data)
-    dossier = "".join([f"Date: {r.get('entry_date')} | Traffic: {r.get('actual_traffic')} | Signups: {r.get('new_members')} | Promo: {r.get('active_promo')} | Weather: {r.get('temp_c')}C\n" for _, r in df_ai.iterrows()])
-
-    # Memory UI Flow
-    prompt = st.chat_input("Chief, what do you need to know about our floor performance?")
+    if "messages" not in st.session_state: st.session_state.messages = []
+    prompt = st.chat_input("Ask about ROI or trends...")
     
     if prompt:
-        # History Context Bridge
-        history_str = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages[-8:]])
+        hist = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages[-10:]])
         st.session_state.messages.append({"role": "user", "content": prompt})
-        
         try:
-            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             model = genai.GenerativeModel('gemini-2.0-flash')
-            
-            with st.status("🕵️ Analyst is Auditing Daily Ledger...", expanded=True) as status:
-                st.write("🔍 Accessing Forensic Vault...")
-                full_prompt = f"""
-                You are the Chief Strategic Analyst for Hard Rock Casino Ottawa.
-                You have full access to the daily ledger data below.
-                
-                LEDGER DATA:
-                {dossier}
-                
-                CONVERSATION HISTORY:
-                {history_str}
-                
-                MISSION:
-                Answer the user's question with precise data. Use correlations between 
-                weather, events, and signups. Be direct.
-                
-                QUESTION: {prompt}
-                """
-                response = model.generate_content(full_prompt)
-                status.update(label="✅ Strategic Insight Finalized!", state="complete", expanded=False)
-            
-            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            with st.status("🕵️ Analyst is thinking...", expanded=True) as status:
+                ctx = f"Role: Casino Analyst. Vault:\n{dossier}\nHistory:\n{hist}\nQuestion: {prompt}"
+                resp = model.generate_content(ctx)
+                status.update(label="✅ Analysis Complete!", state="complete")
+            st.session_state.messages.append({"role": "assistant", "content": resp.text})
             st.rerun()
-        except Exception as e:
-            st.error(f"Brain Sync Error: {e}")
+        except Exception as e: st.error(f"Error: {e}")
 
-    # Display Response (Newest to Oldest)
     for m in reversed(st.session_state.messages):
-        with st.chat_message(m["role"]):
-            st.markdown(m["content"])
+        with st.chat_message(m["role"]): st.markdown(m["content"])
 
-# =================================================================
-# 10. PAGE 6: ENGINE CALIBRATION
-# =================================================================
-elif page == "⚙️ Engine Calibration":
-    st.header("⚙️ Forensic Engine Weight Calibration")
-    st.info("These weights drive the AI's predictive logic. Adjust based on audited marketing ROI.")
+elif page == "📋 Master Report":
+    st.header("📋 Master Forensic Report")
+    df_raw = pd.DataFrame(ledger_data)
+    df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
+    sel_range = st.date_input("Audit Period:", value=(df_raw['entry_date'].min().date(), df_raw['entry_date'].max().date()), key="master_report_final_filter_v8")
     
-    with st.form("calibration_form"):
-        st.subheader("🏢 OOH Inertia Weights")
-        c1, c2 = st.columns(2)
-        with c1:
-            n_sc = st.number_input("Static Board Count", value=int(st.session_state.coeffs.get('Static_Count', 10)))
-            n_sw = st.slider("Weight per Static Board", 0.0, 100.0, float(st.session_state.coeffs.get('Static_Weight', 15.0)))
-        with c2:
-            n_dc = st.number_input("Digital Face Count", value=int(st.session_state.coeffs.get('Digital_OOH_Count', 5)))
-            n_dw = st.slider("Weight per Digital Face", 0.0, 200.0, float(st.session_state.coeffs.get('Digital_OOH_Weight', 25.0)))
-
-        st.divider()
-        st.subheader("💰 Financial & Gravity Anchors")
-        f1, f2, f3 = st.columns(3)
-        with f1: 
-            n_spend = st.number_input("Avg Spend / Head ($)", value=float(st.session_state.coeffs.get('Avg_Coin_In', 112.50)))
-        with f2:
-            n_hold = st.slider("Property Hold %", 0.0, 100.0, float(st.session_state.coeffs.get('Hold_Pct', 10.0)))
-        with f3:
-            n_grav = st.slider("Event Gravity %", 0.0, 100.0, float(st.session_state.coeffs.get('Event_Gravity', 25.0)))
+    if isinstance(sel_range, tuple) and len(sel_range) == 2:
+        s_d, e_d = sel_range
+        df_f = df_raw[(df_raw['entry_date'].dt.date >= s_d) & (df_raw['entry_date'].dt.date <= e_d)].to_dict(orient='records')
+        m = get_forensic_metrics(df_f, st.session_state.coeffs)
+        df_rep = m['df_with_awareness']
         
-        if st.form_submit_button("🚀 Commit Calibrated Weights to Vault", use_container_width=True):
-            st.session_state.coeffs.update({
-                "Static_Count": n_sc, "Static_Weight": n_sw,
-                "Digital_OOH_Count": n_dc, "Digital_OOH_Weight": n_dw,
-                "Avg_Coin_In": n_spend, "Hold_Pct": n_hold, "Event_Gravity": n_grav
-            })
-            supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
-            st.success("Engine recalibrated successfully.")
+        st.write("### 💰 Property Yield")
+        f1, f2, f3, f4, f5 = st.columns(5)
+        total_t = df_rep['actual_traffic'].sum()
+        rev = total_t * float(st.session_state.coeffs['Avg_Coin_In'])
+        f1.metric("Traffic", f"{total_t:,}")
+        f2.metric("Revenue", f"${rev:,.2f}")
+        f3.metric("GGR", f"${(rev * float(st.session_state.coeffs['Hold_Pct'])/100):,.2f}")
+        f4.metric("Theo Win", f"${(total_t * float(st.session_state.coeffs['Property_Theo'])):,.2f}")
+        f5.metric("Predictability", m['predictability'])
 
-# =================================================================
-# 11. PAGE 7: FORECAST SANDBOX (SIMULATION)
-# =================================================================
 elif page == "🧪 Forecast Sandbox":
-    st.header("🧪 Strategic Forecast Simulator")
-    
-    # Bridge Current Inertia
+    st.header("🧪 Forecast Sandbox")
     c = st.session_state.coeffs
-    ooh_inertia = (float(c['Static_Count']) * float(c['Static_Weight'])) + \
-                  (float(c['Digital_OOH_Count']) * float(c['Digital_OOH_Weight']))
-
-    col_l, col_r = st.columns([1, 1])
-    with col_l:
-        st.subheader("🎛️ Market Inputs")
-        s_clicks = st.number_input("Planned Daily Ad Clicks", 500)
-        s_imp = st.number_input("Planned Impressions", 10000)
-        s_attend = st.number_input("Concert Projected Attendance", 1800)
+    ooh = (float(c['Static_Count']) * float(c['Static_Weight'])) + (float(c['Digital_OOH_Count']) * float(c['Digital_OOH_Weight']))
     
-    with col_r:
-        st.subheader("❄️ Environment Friction")
-        s_snow = st.slider("Snow Forecast (cm)", 0, 50, 0)
-        s_temp = st.slider("Expected Temp (C)", -30, 40, 15)
-
-    # Simulation Calc
-    m_lift = (s_clicks * c['Clicks']) + (s_imp * c['Social_Imp'])
-    e_lift = s_attend * (c['Event_Gravity']/100)
-    w_loss = (s_snow * c['Snow_cm'])
+    col_l, col_r = st.columns(2)
+    s_clicks = col_l.number_input("Ad Clicks", 500)
+    s_attend = col_l.number_input("Event Attendance", 1800)
+    s_snow = col_r.slider("Snow (cm)", 0, 50, 0)
     
-    # 4365 is the hardcoded "Ottawa Baseline" fallback
-    predicted_head = max(0, 4365 + ooh_inertia + m_lift + e_lift + w_loss)
-    predicted_win = predicted_head * c['Avg_Coin_In'] * (c['Hold_Pct']/100)
-
+    pred = max(0, 4365 + ooh + (s_clicks * c['Clicks']) + (s_attend * (c['Event_Gravity']/100)) + (s_snow * c['Snow_cm']))
     st.divider()
-    res1, res2, res3 = st.columns(3)
-    res1.metric("Simulated Daily Traffic", f"{int(predicted_head):,} Guests")
-    res2.metric("Projected Daily Win", f"${predicted_win:,.2f}")
-    res3.metric("OOH Passive Lift", f"+{int(ooh_inertia)} Guests")
+    res1, res2 = st.columns(2)
+    res1.metric("Predicted Traffic", f"{int(pred):,}")
+    res2.metric("Net Win", f"${(pred * c['Avg_Coin_In'] * (c['Hold_Pct']/100)):,.2f}")
 
-    # Interactive What-If
-    st.caption("💡 Projections are based on current calibrated weights in the Engine.")
-
-# =================================================================
-# 12. PAGE 4: MASTER AUDIT REPORT
-# =================================================================
-elif page == "📋 Master Audit Report":
-    st.header("📋 Comprehensive Forensic Audit")
-    
-    df_audit = pd.DataFrame(ledger_data)
-    df_audit['entry_date'] = pd.to_datetime(df_audit['entry_date'])
-    
-    audit_range = st.date_input("Audit Selection:", value=(df_audit['entry_date'].min().date(), df_audit['entry_date'].max().date()), key="master_audit_range")
-    
-    if isinstance(audit_range, tuple) and len(audit_range) == 2:
-        s_a, e_a = audit_range
-        df_slice = df_audit[(df_audit['entry_date'].dt.date >= s_a) & (df_audit['entry_date'].dt.date <= e_a)].to_dict(orient='records')
-        audit_metrics = get_forensic_metrics(df_slice, st.session_state.coeffs)
-        df_rep = audit_metrics['df']
-        
-        st.write("### 💰 Financial Integrity Analysis")
-        a1, a2, a3, a4 = st.columns(4)
-        t_traffic = df_rep['actual_traffic'].sum()
-        a_spend = float(st.session_state.coeffs['Avg_Coin_In'])
-        t_win = t_traffic * a_spend * (float(st.session_state.coeffs['Hold_Pct'])/100)
-        
-        a1.metric("Aggregated Traffic", f"{t_traffic:,}")
-        a2.metric("Audited GGR", f"${t_win:,.2f}")
-        a3.metric("Digital ROI Lift", f"{df_rep['residual_lift'].sum():,.0f} Guests")
-        a4.metric("Model Confidence", audit_metrics['predictability'])
-        
-        st.write("### 📊 Attribution Component Breakdown")
-        df_rep['OOH'] = audit_metrics['ooh_total_daily']
-        chart_data = df_rep.set_index('entry_date')[['baseline_isolated', 'OOH', 'residual_lift', 'gravity_lift']]
-        st.area_chart(chart_data)
-
-        # Export Logic
-        csv_buffer = df_rep.to_csv(index=False).encode('utf-8')
-        st.download_button("📂 Export Audit Data to Excel (CSV)", data=csv_buffer, file_name=f"HR_Ottawa_Audit_{s_a}_{e_a}.csv", mime="text/csv")
-
-# =================================================================
-# 13. PAGE 3: ATTRIBUTION ANALYTICS
-# =================================================================
-elif page == "📊 Attribution Analytics":
-    st.header("📊 Multi-Channel Attribution Analytics")
-    
-    df_an = pd.DataFrame(ledger_data)
-    df_an['entry_date'] = pd.to_datetime(df_an['entry_date'])
-    
-    st.write("### 🧬 Variable Correlation Matrix")
-    # Interactive correlation plot
-    corr_cols = ['actual_traffic', 'new_members', 'actual_coin_in', 'ad_clicks', 'temp_c', 'snow_cm']
-    fig_corr = px.scatter_matrix(df_an, dimensions=corr_cols, color='new_members', title="Daily Variable Scatter")
-    st.plotly_chart(fig_corr, use_container_width=True)
-
-    st.divider()
-    
-    st.write("### 🕒 Day-of-Week Performance (Organic Heartbeat)")
-    df_an['day_name'] = df_an['entry_date'].dt.day_name()
-    avg_day = df_an.groupby('day_name')['actual_traffic'].mean().reindex(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
-    st.bar_chart(avg_day)
-
-# =================================================================
-# 14. MOBILE TOGGLE & FINAL FOOTER
-# =================================================================
 st.sidebar.divider()
-st.sidebar.caption("© 2026 FloorCast Technologies | Strategic AI Unit")
+st.sidebar.caption("© 2026 FloorCast Technologies")
