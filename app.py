@@ -978,7 +978,7 @@ with tab6:
         chart_df = df_rep.rename(columns=chart_cols)
         st.area_chart(chart_df.set_index('entry_date')[[v for v in chart_cols.values() if v in chart_df.columns]])
 
-# --- TAB 7: SYNCHRONIZED FORECAST SANDBOX (Streamlined View) ---
+# --- TAB 7: SYNCHRONIZED FORECAST SANDBOX (Final Calibration) ---
 with tab7:
     st.markdown("""
         <div style="background-color: #111; padding: 20px; border-radius: 10px; border-left: 5px solid #FFCC00; margin-bottom: 25px;">
@@ -990,12 +990,12 @@ with tab7:
     # --- DYNAMIC OOH RECALCULATION BRIDGE ---
     c = st.session_state.coeffs
     
-    # This ensures OOH_Daily is never '0' if your counts/weights are set in Tab 4
+    # Force recalculation of OOH Inertia to ensure it's never 0
     static_lift = float(c.get('Static_Count', 0)) * float(c.get('Static_Weight', 0))
     digital_lift = float(c.get('Digital_OOH_Count', 0)) * float(c.get('Digital_OOH_Weight', 0))
     current_ooh_inertia = static_lift + digital_lift
     
-    # Update the local context so the Sandbox doesn't show '0'
+    # Sync OOH_Daily for the engine
     st.session_state.coeffs['OOH_Daily'] = current_ooh_inertia
 
     # 1. DATE RANGE SELECTION
@@ -1003,16 +1003,18 @@ with tab7:
     date_range = st.date_input(
         "Select Simulation Window:",
         value=(today, today + datetime.timedelta(days=2)),
-        key="sb_date_range_v16_lean"
+        key="sb_date_range_v17_sync"
     )
 
     if isinstance(date_range, tuple) and len(date_range) == 2:
         start_date, end_date = date_range
         num_days = (end_date - start_date).days + 1
         live_forecast = st.session_state.get('weather_data', {}).get('forecast', [])
+        
+        # Pull latest coefficients
         c = st.session_state.coeffs
 
-        # 2. SCENARIO INPUTS (Redistributed to 2 Columns)
+        # 2. SCENARIO INPUTS
         st.write(f"### 🎛️ Simulation Parameters ({num_days} Days)")
         col_left, col_right = st.columns(2)
         
@@ -1035,7 +1037,7 @@ with tab7:
             m_rain = st.slider("Manual Rain (mm)", 0, 50, 0, disabled=(weather_mode == "Live EC Forecast"))
             m_snow = st.slider("Manual Snow (cm)", 0, 50, 0, disabled=(weather_mode == "Live EC Forecast"))
             
-            st.info(f"💡 Engine is currently factoring in a constant OOH inertia of **{c.get('OOH_Daily', 0):,.0f} guests/day** based on your Tab 4 calibration.")
+            st.info(f"💡 Engine factoring in **{current_ooh_inertia:,.0f} OOH guests/day** and **{c.get('Event_Gravity', 25.0)}% Gravity**.")
 
         # 3. CALCULATION ENGINE
         total_range_traffic = 0
@@ -1054,13 +1056,16 @@ with tab7:
         while current_date <= end_date:
             day_name = current_date.strftime("%A")
             
-            # Weighted Math
+            # --- THE FORENSIC MATH (Synchronized) ---
             base_traffic = dow_profiles.get(day_name, 4365)
-            ooh_lift = float(c.get('OOH_Daily', 0))
+            ooh_lift = current_ooh_inertia
+            
+            # Use Capitalized Keys from Database
             m_lift = (s_clicks * c.get('Clicks', 0.05)) + \
                      (s_imp * float(c.get('Social_Imp', 0.0002))) + \
                      (s_eng * float(c.get('Social_Eng', 0.01)))
             
+            # FIXED: Changed event_gravity to Event_Gravity to match DB
             e_lift = (sim_attend * (c.get('Event_Gravity', 25.0)/100)) if sim_event else 0
             p_lift = c.get('Promo', 450.0) if s_promo else 0
             w_friction = (m_rain * c.get('Rain_mm', -12.0)) + (m_snow * c.get('Snow_cm', -45.0))
@@ -1072,7 +1077,7 @@ with tab7:
             total_range_members += (daily_total * m_ratio)
             current_date += datetime.timedelta(days=1)
 
-        # 4. RESULTS DISPLAY (The KPI Vault)
+        # 4. RESULTS DISPLAY
         st.divider()
         res1, res2, res3, res4 = st.columns(4)
         with res1: 
@@ -1083,12 +1088,9 @@ with tab7:
         with res3: 
             st.metric("Predicted New Members", f"{int(total_range_members):,}")
         with res4: 
+            # FIXED: Gravity Impact calculation sync
             grav_impact = int(sim_attend * (c.get('Event_Gravity', 25.0)/100)) if sim_event else 0
             st.metric("Gravity Impact", f"+{grav_impact:,} Guests")
-
-        # 5. FORENSIC FOOTNOTE
-        st.write("---")
-        st.caption(f"Simulation finalized using a **{c.get('Ad_Decay', 85)}% Ad Decay** factor and current **{c.get('Hold_Pct', 10)}% Hold** targets.")
 
     else:
         st.info("Please select a valid date range to run the simulation.")
