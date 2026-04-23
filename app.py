@@ -10,68 +10,6 @@ from supabase import create_client
 
 import streamlit as st
 
-def apply_executive_styling():
-    st.markdown("""
-        <style>
-        /* 1. THE FOUNDATION: Global Text Color */
-        .stApp {
-            background-color: #0a0a0a;
-            color: #FFFFFF !important; /* Force all base text to white */
-            font-family: 'Inter', sans-serif;
-        }
-
-        /* 2. WIDGET LABELS: Sliders, Inputs, Selectors */
-        /* This ensures you can actually read the names of your inputs */
-        label, .stMarkdown p, [data-testid="stWidgetLabel"] p {
-            color: #FFFFFF !important;
-            font-weight: 500 !important;
-        }
-
-        /* 3. INPUT FIELD TEXT: What you type into the boxes */
-        input {
-            color: #FFFFFF !important;
-            background-color: #1a1a1a !important;
-        }
-
-        /* 4. THE TABS: Updated for visibility */
-        .stTabs [data-baseweb="tab-list"] {
-            background-color: #111;
-            padding: 10px 10px 0px 10px;
-        }
-        .stTabs [data-baseweb="tab"] {
-            color: #AAAAAA !important; /* Muted grey for inactive tabs */
-        }
-        .stTabs [aria-selected="true"] {
-            background-color: #FFCC00 !important;
-            color: #000000 !important; /* Black text ONLY on the gold active tab */
-        }
-
-        /* 5. METRIC CARDS: High Contrast values */
-        [data-testid="stMetricLabel"] {
-            color: #FFCC00 !important; /* Hard Rock Gold for labels */
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        [data-testid="stMetricValue"] {
-            color: #FFFFFF !important;
-            font-size: 2.2rem !important;
-        }
-
-        /* 6. SIDEBAR TEXT */
-        [data-testid="stSidebar"] {
-            background-color: #111111 !important;
-        }
-        [data-testid="stSidebar"] label, [data-testid="stSidebar"] p {
-            color: #FFFFFF !important;
-        }
-
-        /* 7. CHAT MESSAGES: Force text to white inside the AI chat */
-        .stChatMessage p, .stChatMessage span {
-            color: #FFFFFF !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
 # --- THE PERMANENT INITIALIZATION LOCK ---
 # This MUST be at the top of your script, after imports
 if 'coeffs' not in st.session_state:
@@ -95,6 +33,66 @@ if 'coeffs' not in st.session_state:
 
 # 1. PAGE CONFIG (Must be the very first Streamlit command)
 st.set_page_config(page_title="FloorCast | Hard Rock Ottawa", layout="wide", page_icon="🎰")
+
+import streamlit as st
+
+# 1. MUST BE THE FIRST LINE
+st.set_page_config(layout="wide", page_title="HR Ottawa Forensic Engine")
+
+# 2. FORCE STYLING (No function, just direct injection)
+st.markdown("""
+    <style>
+    /* Global Background & Text */
+    .stApp {
+        background-color: #0a0a0a !important;
+    }
+    
+    /* Force ALL text to white across all tabs */
+    * {
+        color: #FFFFFF !important;
+    }
+
+    /* Target Widget Labels Specifically */
+    label p, .stMarkdown p, [data-testid="stWidgetLabel"] {
+        color: #FFFFFF !important;
+    }
+
+    /* Metric Card Styling */
+    div[data-testid="metric-container"] {
+        background-color: #161616 !important;
+        border: 1px solid #333 !important;
+        border-left: 5px solid #FFCC00 !important;
+        padding: 15px !important;
+        border-radius: 10px !important;
+    }
+
+    /* Metric Labels (Gold) */
+    [data-testid="stMetricLabel"] p {
+        color: #FFCC00 !important;
+    }
+
+    /* Tab Styling */
+    button[data-baseweb="tab"] {
+        background-color: #1a1a1a !important;
+        border: none !important;
+        margin-right: 5px !important;
+    }
+    
+    button[aria-selected="true"] {
+        background-color: #FFCC00 !important;
+    }
+    
+    button[aria-selected="true"] p {
+        color: #000000 !important; /* Black text on Gold Tab */
+    }
+
+    /* Fix for invisible input text */
+    input {
+        background-color: #222 !important;
+        color: #fff !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- AUTH LIST ---
 ADMIN_USERS = ["bjbeehler@gmail.com"]
