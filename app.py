@@ -112,59 +112,59 @@ apply_corporate_styling()
 # 3. MASTER FORENSIC ENGINE (THE HEARTBEAT)
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
-    """
-    MASTER ENGINE: Triangulates Organic Baselines, Adstock, 
-    OOH Pressure, Hard Rock LIVE Gravity, and Weather Friction.
-    """
     if not df_input:
-        return {"predictability": "0.0%", "heartbeats": {}, "ooh_total_daily": 0, "df": pd.DataFrame()}
+        return {"predictability": "0.0%", "df": pd.DataFrame(), "ooh_total_daily": 0}
 
     df = pd.DataFrame(df_input).copy()
     df['entry_date'] = pd.to_datetime(df['entry_date'])
     df = df.sort_values('entry_date')
     df['day_name'] = df['entry_date'].dt.day_name()
     
-    # 3.1 Extract Calibrated Weights
+    # NEW: Operational Status Failsafe
+    # If there are no guests and no signups, the property is functionally 'closed'
+    df['is_closed'] = df.apply(lambda x: 1 if (x['actual_traffic'] == 0 and x['new_members'] == 0) else 0, axis=1)
+
+    # Weights
     c_clicks = float(coeffs.get('Clicks', 0.05))
     c_social = float(coeffs.get('Social_Imp', 0.0002))
-    c_eng = float(coeffs.get('Social_Eng', 0.01))
     decay = float(coeffs.get('Ad_Decay', 85.0)) / 100 
-    
-    # SAFE-FETCH FOR EVENT GRAVITY
-    raw_gravity = coeffs.get('event_gravity') or coeffs.get('Event_Gravity') or 25.0
-    gravity_capture = float(raw_gravity) / 100
-    
+    gravity = float(coeffs.get('Event_Gravity', 25.0)) / 100
     ooh_daily = (float(coeffs.get('Static_Weight', 15)) * int(coeffs.get('Static_Count', 10))) + \
                  (float(coeffs.get('Digital_OOH_Weight', 25)) * int(coeffs.get('Digital_OOH_Count', 5)))
 
-    # 3.2 Recursive Adstock Loop (Awareness Persistence)
+    # Guest-Based Adstock Loop
     awareness_pool, current_pool = [], 0.0
     for _, row in df.iterrows():
-        daily_in = (row.get('ad_clicks', 0) * c_clicks) + \
-                   (row.get('ad_impressions', 0) * c_social) + \
-                   (row.get('social_engagements', 0) * c_eng)
+        daily_in = (row.get('ad_clicks', 0) * c_clicks) + (row.get('ad_impressions', 0) * c_social)
         current_pool = daily_in + (current_pool * decay)
         awareness_pool.append(current_pool)
     
     df['residual_lift'] = awareness_pool
-    df['gravity_lift'] = df.get('attendance', 0) * gravity_capture
+    df['gravity_lift'] = df.get('attendance', 0) * gravity
+
+    # PURIFIED GUEST HEARTBEAT
+    # Calculate baseline guests ONLY from days where the property was open
+    df['guest_baseline'] = df['actual_traffic'] - df['residual_lift'] - ooh_daily - df['gravity_lift']
+    heartbeats = df[df['is_closed'] == 0].groupby('day_name')['guest_baseline'].mean().to_dict()
     
-    # 3.3 Baseline Purification
-    df['baseline_isolated'] = df['actual_traffic'] - df['residual_lift'] - ooh_daily - df['gravity_lift']
-    heartbeats = df.groupby('day_name')['baseline_isolated'].mean().to_dict()
+    # GUEST PREDICTION LOGIC
+    def predict_guests(row):
+        if row['is_closed'] == 1: return 0
+        base = heartbeats.get(row['day_name'], 4365) # 4365 is a hard-coded fallback baseline
+        return max(0, base + row['residual_lift'] + ooh_daily + row['gravity_lift'])
+
+    df['expected'] = df.apply(predict_guests, axis=1)
     
-    # 3.4 Predictive Modeling
-    df['expected'] = df.apply(lambda x: heartbeats.get(x['day_name'], 4365) + x['residual_lift'] + ooh_daily + x['gravity_lift'], axis=1)
-    
-    # Forecast Error Variance
-    mape = (np.abs(df['actual_traffic'] - df['expected']) / df['actual_traffic']).replace([np.inf, -np.inf], np.nan).dropna().mean()
+    # PREDICTABILITY SCORE (Based on Headcount, not Dollars)
+    df['variance'] = df['actual_traffic'] - df['expected']
+    # Calculate Mean Absolute Percentage Error on Headcount
+    mape = (np.abs(df['variance']) / df['actual_traffic']).replace([np.inf, -np.inf], np.nan).dropna().mean()
     pred_score = (1 - mape) * 100 if not np.isnan(mape) else 85.0
 
     return {
         "predictability": f"{pred_score:.1f}%",
-        "heartbeats": heartbeats,
-        "ooh_total_daily": ooh_daily,
-        "df": df
+        "df": df,
+        "ooh_total_daily": ooh_daily
     }
 
 # =================================================================
