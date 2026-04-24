@@ -109,19 +109,14 @@ def apply_corporate_styling():
 apply_corporate_styling()
 
 # =================================================================
-# 3. FORENSIC ENGINE: THE GUEST-FIRST HEARTBEAT (v5.2)
+# 3. FORENSIC ENGINE: THE GUEST-FIRST HEARTBEAT (v5.3 - PROMO READY)
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
-    """
-    ENGINE: Prioritizes 'Guests on the Floor' (Traffic) over Revenue.
-    Includes Smart Future Baselines & 'Today' Forecast Persistence.
-    """
     if not df_input:
         return {"predictability": "0.0%", "df": pd.DataFrame(), "ooh_total_daily": 0}
 
     df = pd.DataFrame(df_input).copy()
     df['entry_date'] = pd.to_datetime(df['entry_date'])
-    # Set 'today' as a normalized timestamp for comparison
     today = pd.Timestamp(datetime.date.today())
     
     # --- COEFFICIENT EXTRACTION ---
@@ -129,14 +124,13 @@ def get_forensic_metrics(df_input, coeffs):
     c_social = float(coeffs.get('Social_Imp', 0.0002))
     decay = float(coeffs.get('Ad_Decay', 85.0)) / 100 
     gravity = float(coeffs.get('Event_Gravity', 25.0)) / 100
+    # SAFETY: Default to 500 guests if Promo_Lift isn't set in Page 6
+    promo_lift_weight = float(coeffs.get('Promo_Lift', 500))
     
-    # OOH is a fixed daily "Inertia" (Billboards/Static)
     ooh_daily = (float(coeffs.get('Static_Weight', 15)) * int(coeffs.get('Static_Count', 10))) + \
                  (float(coeffs.get('Digital_OOH_Weight', 25)) * int(coeffs.get('Digital_OOH_Count', 5)))
 
-    # --- I. OPERATIONAL STATUS (FAILSAFE) ---
-    # Only flag as 'Closed' if it's strictly BEFORE today. 
-    # This ensures TODAY still shows a prediction even if traffic is currently 0.
+    # --- I. OPERATIONAL STATUS ---
     df['is_closed'] = df.apply(
         lambda x: 1 if (x['entry_date'] < today and x['actual_traffic'] == 0 and x['new_members'] == 0) else 0, 
         axis=1
@@ -153,21 +147,15 @@ def get_forensic_metrics(df_input, coeffs):
     df['gravity_lift'] = df.get('attendance', 0) * gravity
 
     # --- III. SMART HEARTBEAT CALCULATION ---
-    # Calculate 'Organic' traffic (Actuals minus Marketing Lifts)
     df['guest_baseline'] = df['actual_traffic'] - df['residual_lift'] - ooh_daily - df['gravity_lift']
-    
-    # Generate Day-of-Week averages using only OPEN PAST days
     open_past_data = df[(df['is_closed'] == 0) & (df['entry_date'] < today)]
     
     if not open_past_data.empty:
         heartbeats = open_past_data.groupby(open_past_data['entry_date'].dt.day_name())['guest_baseline'].mean().to_dict()
     else:
-        # Fallback if the ledger is new
         heartbeats = {d: 4300 for d in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']}
     
-    # --- IV. PREDICTION LOGIC (FUTURE-READY) ---
-    promo_lift_weight = float(coeffs.get('Promo_Lift', 500)) 
-
+    # --- IV. PREDICTION LOGIC (THE PROMO ENGINE) ---
     def predict_guests(row):
         if row['is_closed'] == 1: 
             return 0
@@ -175,30 +163,26 @@ def get_forensic_metrics(df_input, coeffs):
         day_name = row['entry_date'].strftime('%A')
         base = heartbeats.get(day_name, 4300) 
         
-        # --- THE FIX: Add math for the promo flag ---
-        # If active_promo has a name and isn't '0', add the lift
+        # PROMO IMPACT MATH:
+        # Check if the promo column exists and has a non-zero value
         promo_impact = 0
-        if 'active_promo' in row and str(row['active_promo']) not in ['0', '0.0', 'nan', 'None', '']:
+        p_val = str(row.get('active_promo', '0'))
+        if p_val not in ['0', '0.0', 'nan', 'None', '']:
             promo_impact = promo_lift_weight
 
-        # Total Prediction = Base + OOH + Adstock + Event + PROMO IMPACT
         return max(0, base + row['residual_lift'] + ooh_daily + row['gravity_lift'] + promo_impact)
+
+    df['expected'] = df.apply(predict_guests, axis=1)
     
-    # --- V. PREDICTABILITY AUDIT (GRADES THE PAST) ---
-    # Only calculate accuracy for completed days
+    # --- V. PREDICTABILITY AUDIT ---
     df_audit = df[(df['entry_date'] < today) & (df['is_closed'] == 0) & (df['actual_traffic'] > 0)].copy()
-    
     if not df_audit.empty:
         mape = (np.abs(df_audit['actual_traffic'] - df_audit['expected']) / df_audit['actual_traffic']).mean()
         pred_score = (1 - mape) * 100
     else:
-        pred_score = 100.0 # Standard start score
+        pred_score = 100.0
 
-    return {
-        "predictability": f"{pred_score:.1f}%",
-        "df": df,
-        "ooh_total_daily": ooh_daily
-    }
+    return {"predictability": f"{pred_score:.1f}%", "df": df, "ooh_total_daily": ooh_daily}
 # =================================================================
 # 4. DATA INFRASTRUCTURE (SUPABASE & WEATHER)
 # =================================================================
