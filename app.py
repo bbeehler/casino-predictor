@@ -329,7 +329,7 @@ with st.sidebar:
         "Intelligence Decks:",
         [
             "📈 Executive Dashboard", 
-            "🎰 Universal Ledger", 
+            "🎰 Daily Ledger Audit", 
             "📡 Attribution Analytics", 
             "📋 Master Audit Report", 
             "⚙️ AI Calibration",
