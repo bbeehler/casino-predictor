@@ -324,7 +324,7 @@ with st.sidebar:
     st.title("Admin Command")
     st.divider()
     
-    # Using a radio list instead of a dropdown for one-click access
+    # Vertical navigation list
     page = st.radio(
         "Intelligence Decks:",
         [
@@ -340,11 +340,12 @@ with st.sidebar:
     )
     
     st.divider()
-    # Logic to show the reset button only when on the AI Analyst page
+
+    # THE FIX: Ensure these two lines are indented exactly like this
     if page == "🤖 FloorCast AI Analyst" and st.session_state.get('messages'):
-    if st.sidebar.button("🗑️ Reset Analyst Thread", use_container_width=True, key="sidebar_reset"):
-        st.session_state.messages = []
-        st.rerun()
+        if st.sidebar.button("🗑️ Reset Analyst Thread", use_container_width=True, key="sidebar_reset"):
+            st.session_state.messages = []
+            st.rerun()
 
 # =================================================================
 # 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION - FULLY SYNCED)
