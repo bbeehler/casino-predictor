@@ -192,13 +192,13 @@ def get_forensic_metrics(df_input, coeffs):
         # UPDATED: Hard Rock Hotel & Casino Ottawa Specific Organic Baselines
         # These are the "Naked" numbers (No marketing, no events)
         heartbeats = {
-            'Monday': 3200,
-            'Tuesday': 3100,
-            'Wednesday': 3400,
-            'Thursday': 3800,
-            'Friday': 5200,
-            'Saturday': 5800,  # Raised from 4200
-            'Sunday': 4500
+            'Monday': 3398,
+            'Tuesday': 3800,
+            'Wednesday': 5574,
+            'Thursday': 3931,
+            'Friday': 7651,
+            'Saturday': 9800,
+            'Sunday': 5800
         }
     
     # --- 5. PREDICTION LOGIC ---
