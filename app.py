@@ -319,10 +319,6 @@ if not st.session_state.authenticated:
 # =================================================================
 # --- SECTION 2: EXECUTIVE NAVIGATION ---
 # =================================================================
-# --- SIDEBAR NAVIGATION ---
-# =================================================================
-# 6. SIDEBAR NAVIGATION (LIST VIEW - FIXED SYNTAX)
-# =================================================================
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/en/thumb/0/04/Hard_Rock_Cafe_logo.svg/1200px-Hard_Rock_Cafe_logo.svg.png", width=150)
     st.title("Admin Command")
@@ -349,10 +345,6 @@ with st.sidebar:
         if st.sidebar.button("🗑️ Reset Analyst Thread", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.caption(f"**FloorCast AI v6.0**")
-st.sidebar.caption(f"Status: Operational | {datetime.date.today().strftime('%b %Y')}")
 
 # =================================================================
 # 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION - FULLY SYNCED)
