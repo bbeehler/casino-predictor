@@ -439,21 +439,27 @@ if page == "📈 Executive Dashboard":
             else:
                 st.write("No marketing overlays detected for this window.")
 
-        # --- IV. STRATEGIC INTELLIGENCE SUITE (v6.0 - PROMO AWARE) ---
+        # --- IV. STRATEGIC INTELLIGENCE SUITE (SITUATIONAL AWARENESS) ---
         st.divider()
         st.write("### 🧠 Strategic Intelligence")
         
-        # 1. THE FORECAST INTELLIGENCE MODULE (Only for Future/Mixed Views)
+        # 1. THE FORECAST INTELLIGENCE MODULE
         if is_future or (not is_past):
             st.write("#### 📅 Upcoming Campaign & Event Briefing")
             
-            # Filter the future dates to see what's planned
+            # Create localized future dataframe
             df_upcoming = df_final[df_final['entry_date'].dt.date >= today]
             
-            # Identify unique promotions and events in the selected window
-            # We filter out 0 or empty strings to find the 'real' active promos
-            active_promos = [p for p in df_upcoming['promotion_name'].unique() if p and str(p) != '0']
-            active_events = df_upcoming[df_upcoming['attendance'] > 0]
+            # THE FIX: Looking specifically for your 'active_promo' column
+            p_col = 'active_promo'
+            
+            active_promos = []
+            if p_col in df_upcoming.columns:
+                # Filter out placeholders like '0', 'nan', or empty strings
+                active_promos = [p for p in df_upcoming[p_col].unique() if p and str(p) not in ['0', '0.0', 'nan', 'None', '']]
+            
+            # Check for events via attendance
+            active_events = df_upcoming[df_upcoming['attendance'] > 0] if 'attendance' in df_upcoming.columns else pd.DataFrame()
 
             if active_promos or not active_events.empty:
                 m1, m2 = st.columns(2)
@@ -462,19 +468,37 @@ if page == "📈 Executive Dashboard":
                         st.markdown("**Active Promotions:**")
                         for promo in active_promos:
                             st.info(f"🚀 {promo}")
-                    else:
-                        st.write("No specific promotions flagged for this window.")
-                
                 with m2:
                     if not active_events.empty:
                         st.markdown("**High-Gravity Events:**")
                         for _, evt in active_events.iterrows():
-                            st.warning(f"🎸 {evt['entry_date'].strftime('%b %d')}: Hard Rock LIVE Peak")
-                    else:
-                        st.write("No major LIVE events detected.")
+                            e_name = evt.get('event_name', 'Hard Rock LIVE Peak')
+                            if not e_name or str(e_name) == '0': e_name = 'Hard Rock LIVE Peak'
+                            st.warning(f"🎸 {evt['entry_date'].strftime('%b %d')}: {e_name}")
             else:
-                st.write("No marketing overlays detected. Showing Organic Heartbeat expectations.")
+                st.write("No specific marketing overlays detected for this window.")
 
+        # 2. OPERATIONAL RISK & OPPORTUNITY
+        st.divider()
+        st.write("#### 🛡️ Operational Risk & Opportunity")
+        o1, o2, o3 = st.columns(3)
+        
+        with o1:
+            # Weather Friction Calculation
+            snow_impact = df_final['snow_cm'].sum() * float(st.session_state.coeffs.get('Snow_cm', -45))
+            rain_impact = df_final['rain_mm'].sum() * float(st.session_state.coeffs.get('Rain_mm', -12))
+            st.metric("Weather Friction", f"-{abs(snow_impact + rain_impact):,.0f}", help="Volume lost to weather.")
+            
+        with o2:
+            # Opportunity Check (Non-Members)
+            potential = int(df_final['expected'].sum() - df_final['new_members'].sum())
+            st.metric("Conversion Opportunity", f"{max(0, potential):,.0f}", help="Guests available for Unity enrollment.")
+            
+        with o3:
+            # Staffing Intensity
+            max_val = df_final['expected'].max()
+            intensity = "Critical Peak" if max_val > 5500 else ("High" if max_val > 4500 else "Moderate")
+            st.metric("Staffing Intensity", intensity)
         # 2. PERFORMANCE NARRATIVE
         st.divider()
         s_col1, s_col2 = st.columns(2)
