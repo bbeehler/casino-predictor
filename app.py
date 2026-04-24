@@ -507,15 +507,6 @@ if page == "📈 Executive Dashboard":
             st.info("Please select a complete Start and End date range to view the Dashboard.")
             st.stop() 
 
-# --- START PAGE 2 (Ensure 'elif' is at the same indentation as 'if page ==') ---
-elif page == "Daily Ledger Audit":
-    st.markdown("""
-        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
-            <h2 style="color: #0047AB; margin: 0;">🎰 Daily Property Ledger</h2>
-            <p style="color: #444; margin: 0;">Ground Truth Data: Financials, Foot Traffic, and Marketing Spend.</p>
-        </div>
-    """, unsafe_allow_html=True)
-
 # =================================================================
 # 8. PAGE 2: DAILY LEDGER AUDIT (v12 - NAME SYNCED)
 # =================================================================
