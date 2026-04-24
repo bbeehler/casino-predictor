@@ -405,27 +405,65 @@ if page == "📈 Executive Dashboard":
         )
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # --- IV. STRATEGIC INTELLIGENCE SUITE ---
+        # --- IV. STRATEGIC INTELLIGENCE SUITE (v6.0 - PROMO AWARE) ---
         st.divider()
         st.write("### 🧠 Strategic Intelligence")
         
+        # 1. THE FORECAST INTELLIGENCE MODULE (Only for Future/Mixed Views)
+        if is_future or (not is_past):
+            st.write("#### 📅 Upcoming Campaign & Event Briefing")
+            
+            # Filter the future dates to see what's planned
+            df_upcoming = df_final[df_final['entry_date'].dt.date >= today]
+            
+            # Identify unique promotions and events in the selected window
+            # We filter out 0 or empty strings to find the 'real' active promos
+            active_promos = [p for p in df_upcoming['promotion_name'].unique() if p and str(p) != '0']
+            active_events = df_upcoming[df_upcoming['attendance'] > 0]
+
+            if active_promos or not active_events.empty:
+                m1, m2 = st.columns(2)
+                with m1:
+                    if active_promos:
+                        st.markdown("**Active Promotions:**")
+                        for promo in active_promos:
+                            st.info(f"🚀 {promo}")
+                    else:
+                        st.write("No specific promotions flagged for this window.")
+                
+                with m2:
+                    if not active_events.empty:
+                        st.markdown("**High-Gravity Events:**")
+                        for _, evt in active_events.iterrows():
+                            st.warning(f"🎸 {evt['entry_date'].strftime('%b %d')}: Hard Rock LIVE Peak")
+                    else:
+                        st.write("No major LIVE events detected.")
+            else:
+                st.write("No marketing overlays detected. Showing Organic Heartbeat expectations.")
+
+        # 2. PERFORMANCE NARRATIVE
+        st.divider()
         s_col1, s_col2 = st.columns(2)
         with s_col1:
             if is_future or (not is_past):
                 peak_day = df_final.loc[df_final['expected'].idxmax()]
-                st.success(f"**Forecast Outlook:** Expecting **{df_final['expected'].sum():,.0f}** total guests. Peak demand projected for **{peak_day['entry_date'].strftime('%A, %b %d')}**.")
+                st.success(f"""
+                    **Forecast Outlook:** Expecting **{df_final['expected'].sum():,.0f}** total guests. 
+                    Peak demand projected for **{peak_day['entry_date'].strftime('%A, %b %d')}**.
+                """)
             else:
-                st.info(f"**Audit Summary:** The floor averaged **{int(df_final['actual_traffic'].mean()):,.0f}** daily guests. Marketing drove **{mkt_impact_pct:.1f}%** of volume.")
+                st.info(f"**Audit Summary:** The floor averaged **{int(df_final['actual_traffic'].mean()):,.0f}** daily guests.")
 
+        # 3. OPERATIONAL RISK & OPPORTUNITY
         st.write("#### 🛡️ Operational Risk & Opportunity")
         o1, o2, o3 = st.columns(3)
         with o1:
             snow_impact = df_final['snow_cm'].sum() * float(st.session_state.coeffs.get('Snow_cm', -45))
             rain_impact = df_final['rain_mm'].sum() * float(st.session_state.coeffs.get('Rain_mm', -12))
-            st.metric("Weather Friction", f"-{abs(snow_impact + rain_impact):,.0f}", help="Volume lost to weather.")
+            st.metric("Weather Friction", f"-{abs(snow_impact + rain_impact):,.0f}")
         with o2:
             potential = int(df_final['expected'].sum() - df_final['new_members'].sum())
-            st.metric("Conversion Opportunity", f"{potential:,.0f}", help="Guests available for Unity enrollment.")
+            st.metric("Conversion Opportunity", f"{potential:,.0f}")
         with o3:
             intensity = "Critical Peak" if df_final['expected'].max() > 5500 else ("High" if df_final['expected'].max() > 4500 else "Moderate")
             st.metric("Staffing Intensity", intensity)
