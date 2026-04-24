@@ -988,16 +988,33 @@ elif page == "⚙️ AI Calibration":
             n_snow = st.slider("Snow Impact (per cm)", -500, 0, int(st.session_state.coeffs.get('Snow_cm', -45)))
 
         if st.form_submit_button("🚀 Recalibrate Property Engine", use_container_width=True):
-            st.session_state.coeffs.update({
-                "Clicks": n_clicks, "Social_Imp": n_social, "Ad_Decay": n_decay,
-                "Broadcast_Weight": n_broad, "OOH_Weight": n_ooh, "Promo": n_print,
-                "PR_Weight": n_earned, "Event_Gravity": n_grav, "Promo": n_promo,
-                "Rain_mm": n_rain, "Snow_cm": n_snow
-            })
+            # 1. Update Session State immediately (Forces Page 1 to see it)
+            updated_coeffs = {
+                "Clicks": float(n_clicks),
+                "Social_Imp": float(n_social),
+                "Ad_Decay": int(n_decay),
+                "Broadcast_Weight": float(n_broad),
+                "OOH_Weight": float(n_ooh),
+                "Print_Lift": float(n_print),
+                "PR_Weight": float(n_earned),
+                "Event_Gravity": float(n_grav),
+                "Promo": float(n_promo), # This is the 1500 you are changing
+                "Rain_mm": float(n_rain),
+                "Snow_cm": float(n_snow)
+            }
+            
+            # 2. Update the Global State
+            st.session_state.coeffs.update(updated_coeffs)
             
             try:
+                # 3. Force Push to Supabase
+                # We use the 'id' (usually 1) to ensure we are overwriting the same row
                 supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
-                st.success("Universal Ledger weights saved and Engine recalibrated.")
+                
+                st.success(f"✅ Weights Saved.")
+                
+                # 4. CRITICAL: Clear cache and rerun to force Page 1 to pull the new data
+                st.cache_data.clear()
                 st.rerun()
             except Exception as e:
                 st.error(f"Sync Error: {e}")
