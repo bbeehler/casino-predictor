@@ -333,23 +333,45 @@ if page == "📈 Executive Dashboard":
         df_timeline = pd.DataFrame({'entry_date': date_list})
         df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
 
-        # 4. FUTURE STRATEGY PLANNER (Overrides)
+        # 4. FUTURE STRATEGY PLANNER (User-Driven Overrides)
         if is_future:
             with st.expander("🛠️ Future Strategy Planner", expanded=True):
-                st.write("Input upcoming variables to adjust the AI Target in real-time.")
+                st.write("Determine if there is an active promo or event for this window.")
+                
+                # A simple switch for the user to declare an active promo
+                has_promo = st.toggle("Active Promotion Running?", value=False, key="promo_toggle")
+                
                 f1, f2, f3 = st.columns(3)
                 with f1:
-                    manual_promo = st.text_input("Active Promotion Name:", key="man_promo")
+                    # Input is only relevant if the toggle is ON
+                    if has_promo:
+                        manual_promo = st.text_input("Promotion Name:", placeholder="e.g. Rock of Ages", key="man_promo")
+                    else:
+                        manual_promo = None
+                        st.caption("No active promo selected.")
+                
                 with f2:
                     manual_event = st.number_input("Event Attendance Projection:", min_value=0, step=100, key="man_event")
                 with f3:
                     weather_outlook = st.selectbox("Weather Outlook:", ["Clear/Seasonal", "Rain Forecast", "Snow Forecast"], key="man_weather")
 
-                # Apply Overrides
-                if manual_promo: df_p['active_promo'] = manual_promo
-                if manual_event > 0: df_p['attendance'] = manual_event
-                if weather_outlook == "Rain Forecast": df_p['rain_mm'] = 10
-                elif weather_outlook == "Snow Forecast": df_p['snow_cm'] = 5
+                # --- INJECT USER SELECTIONS INTO THE ENGINE ---
+                # This ensures the 'active_promo' flag is set for the display modules
+                if manual_promo: 
+                    df_p['active_promo'] = manual_promo
+                elif not has_promo:
+                    df_p['active_promo'] = "0" # Explicitly clear any ledger data for this view
+
+                if manual_event > 0: 
+                    df_p['attendance'] = manual_event
+                
+                if weather_outlook == "Rain Forecast": 
+                    df_p['rain_mm'] = 10
+                elif weather_outlook == "Snow Forecast": 
+                    df_p['snow_cm'] = 5
+
+                if has_promo and manual_promo:
+                    st.success(f"✅ AI Target now includes lift for: **{manual_promo}**")
 
         # 5. RUN ENGINE
         m = get_forensic_metrics(df_p.to_dict(orient='records'), st.session_state.coeffs)
