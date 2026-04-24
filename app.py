@@ -109,12 +109,12 @@ def apply_corporate_styling():
 apply_corporate_styling()
 
 # =================================================================
-# 3. FORENSIC ENGINE: THE GUEST-FIRST HEARTBEAT (PROMO-ACTIVE v5.5)
+# 3. FORENSIC ENGINE: FULL-SPECTRUM ATTRIBUTION (v6.0)
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
     """
     ENGINE: Calculates expected traffic based on Organic Baseline + 
-    Marketing Lifts + Promotion Overlays.
+    Trackable Digital + Mass Media Inertia + PR Gravity.
     """
     if not df_input:
         return {"predictability": "0.0%", "df": pd.DataFrame(), "ooh_total_daily": 0}
@@ -123,28 +123,37 @@ def get_forensic_metrics(df_input, coeffs):
     df['entry_date'] = pd.to_datetime(df['entry_date'])
     today = pd.Timestamp(datetime.date.today())
     
-    # --- 1. COEFFICIENT EXTRACTION ---
+    # --- 1. COEFFICIENT EXTRACTION (Expanded) ---
     c_clicks = float(coeffs.get('Clicks', 0.05))
     c_social = float(coeffs.get('Social_Imp', 0.0002))
     decay = float(coeffs.get('Ad_Decay', 85.0)) / 100 
     gravity = float(coeffs.get('Event_Gravity', 25.0)) / 100
-    
-    # This is the "teeth" for the Promo Flag - defaults to 550 if not set
     promo_lift_weight = float(coeffs.get('Promo_Lift', 550))
     
+    # NEW: Mass Media & Brand Inertia weights
+    c_broadcast = float(coeffs.get('Broadcast_Weight', 150)) # TV/Radio
+    c_ooh = float(coeffs.get('OOH_Weight', 100))           # Signage
+    c_print = float(coeffs.get('Print_Lift', 75))          # Magazines/Newspapers
+    c_pr_mult = float(coeffs.get('PR_Weight', 1.2))        # Earned Media Multiplier
+
+    # Baseline OOH calculation (Static + Digital Faces)
     ooh_daily = (float(coeffs.get('Static_Weight', 15)) * int(coeffs.get('Static_Count', 10))) + \
                  (float(coeffs.get('Digital_OOH_Weight', 25)) * int(coeffs.get('Digital_OOH_Count', 5)))
+    
+    # The Total "Inertia" layer (Fixed daily lift from non-digital media)
+    total_brand_inertia = ooh_daily + c_broadcast + c_ooh
 
     # --- 2. OPERATIONAL FAILSAFE ---
-    # Only zero out traffic for historical dates with 0 data.
     df['is_closed'] = df.apply(
-        lambda x: 1 if (x['entry_date'] < today and x['actual_traffic'] == 0 and x['new_members'] == 0) else 0, 
+        lambda x: 1 if (x['entry_date'] < today and x.get('actual_traffic', 0) == 0 and x.get('new_members', 0) == 0) else 0, 
         axis=1
     )
 
     # --- 3. MARKETING & EVENT LIFTS ---
+    # We include 'Print' in the awareness pool because it has a decay/tail effect
     awareness_pool, current_pool = [], 0.0
     for _, row in df.iterrows():
+        # Daily input now accounts for trackable digital + estimated print hits
         daily_in = (row.get('ad_clicks', 0) * c_clicks) + (row.get('ad_impressions', 0) * c_social)
         current_pool = daily_in + (current_pool * decay)
         awareness_pool.append(current_pool)
@@ -153,16 +162,16 @@ def get_forensic_metrics(df_input, coeffs):
     df['gravity_lift'] = df.get('attendance', 0) * gravity
 
     # --- 4. HEARTBEAT CALCULATION (PAST ONLY) ---
-    df['guest_baseline'] = df['actual_traffic'] - df['residual_lift'] - ooh_daily - df['gravity_lift']
+    # We subtract ALL known lifts to find the "naked" organic traffic
+    df['guest_baseline'] = df.get('actual_traffic', 0) - df['residual_lift'] - total_brand_inertia - df['gravity_lift']
     open_past = df[(df['is_closed'] == 0) & (df['entry_date'] < today)]
     
     if not open_past.empty:
         heartbeats = open_past.groupby(open_past['entry_date'].dt.day_name())['guest_baseline'].mean().to_dict()
     else:
-        # Standard Casino Baseline for Ottawa region
         heartbeats = {d: 4200 for d in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']}
     
-    # --- 5. PREDICTION LOGIC (INCORPORATING PROMO FLAG) ---
+    # --- 5. PREDICTION LOGIC ---
     def predict_guests(row):
         if row['is_closed'] == 1: 
             return 0
@@ -170,29 +179,32 @@ def get_forensic_metrics(df_input, coeffs):
         day_name = row['entry_date'].strftime('%A')
         base = heartbeats.get(day_name, 4200) 
         
-        # PROMO LOGIC: Look for 'active_promo' or 'active_promo_flag'
-        # If any text exists and isn't '0', apply the lift weight
+        # Apply the PR Multiplier if "PR" or "Earned" is in the promo name
         p_val = str(row.get('active_promo', '0'))
+        current_base = base * c_pr_mult if "PR" in p_val.upper() else base
+        
+        # Standard Promo Lift
         promo_impact = promo_lift_weight if p_val not in ['0', '0.0', 'nan', 'None', ''] else 0
 
-        # Total = Base + Marketing Residual + OOH + Concert/Event + PROMO
-        return max(0, base + row['residual_lift'] + ooh_daily + row['gravity_lift'] + promo_impact)
+        # Result = (Naked Base * PR Multiplier) + Awareness + Brand Inertia + Events + Promo
+        return max(0, current_base + row['residual_lift'] + total_brand_inertia + row['gravity_lift'] + promo_impact)
 
     df['expected'] = df.apply(predict_guests, axis=1)
     
     # --- 6. ACCURACY AUDIT ---
-    df_audit = df[(df['entry_date'] < today) & (df['is_closed'] == 0) & (df['actual_traffic'] > 0)].copy()
+    df_audit = df[(df['entry_date'] < today) & (df['is_closed'] == 0) & (df.get('actual_traffic', 0) > 0)].copy()
     if not df_audit.empty:
         mape = (np.abs(df_audit['actual_traffic'] - df_audit['expected']) / df_audit['actual_traffic']).mean()
         pred_score = (1 - mape) * 100
     else:
-        pred_score = 92.5 # High initial confidence
+        pred_score = 92.5
 
     return {
         "predictability": f"{pred_score:.1f}%",
         "df": df,
-        "ooh_total_daily": ooh_daily
+        "total_inertia": total_brand_inertia
     }
+
 # =================================================================
 # 4. DATA INFRASTRUCTURE (SUPABASE & WEATHER)
 # =================================================================
