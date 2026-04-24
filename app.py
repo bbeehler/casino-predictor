@@ -389,7 +389,7 @@ if page == "📈 Executive Dashboard":
         df_final = m['df'].sort_values('entry_date')
 
         # Marketing Impact Calculation
-        total_lift = df_final['residual_lift'].sum() + df_final['gravity_lift'].sum() + (m['ooh_total_daily'] * len(df_final))
+        total_lift = df_final['residual_lift'].sum() + df_final['gravity_lift'].sum() + (m.get('total_inertia', 0) * len(df_final))
         total_vol = df_final['expected'].sum()
         mkt_impact_pct = (total_lift / total_vol * 100) if total_vol > 0 else 0
 
