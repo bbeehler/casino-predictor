@@ -274,20 +274,59 @@ if not st.session_state.authenticated:
                     st.error("Access Denied: Invalid credentials or connection error.")
     st.stop() # Prevents dashboard from rendering until authenticated
 
-# --- SECTION 2: NAVIGATION ---
+# =================================================================
+# --- SECTION 2: EXECUTIVE NAVIGATION ---
+# =================================================================
+st.sidebar.image("https://upload.wikimedia.org/wikipedia/en/thumb/0/04/Hard_Rock_Cafe_logo.svg/1200px-Hard_Rock_Cafe_logo.svg.png", width=150)
+st.sidebar.markdown("---")
+
 page = st.sidebar.radio("Navigate:", [
     "📈 Executive Dashboard", 
-    "📑 Daily Ledger Vault", 
+    "📑 Daily Ledger Audit", 
     "📊 Attribution Analytics", 
     "📋 Master Audit Report", 
-    "🧠 FloorCast AI Analyst"
+    "⚙️ AI Calibration"
 ])
 
-st.sidebar.divider()
-if st.sidebar.button("🔓 Logout", use_container_width=True):
-    st.session_state.authenticated = False
-    st.session_state.user_email = None
-    st.rerun()
+st.sidebar.markdown("---")
+st.sidebar.caption(f"**FloorCast AI v6.0**")
+st.sidebar.caption(f"Status: Operational | {datetime.date.today().strftime('%b %Y')}")
+
+# =================================================================
+# --- SECTION 4: PAGE ROUTING LOGIC ---
+# =================================================================
+
+# 1. EXECUTIVE DASHBOARD (Performance Pulse & Strategy Planner)
+if page == "📈 Executive Dashboard":
+    st.markdown("## 📈 Executive Dashboard")
+    # This block contains your KPI Cards, AI Pulse Chart, 
+    # and the Daily Strategy Planner (Data Editor).
+
+# 2. DAILY LEDGER AUDIT (The Source of Truth)
+elif page == "📑 Daily Ledger Audit":
+    st.title("📑 Daily Ledger Audit")
+    st.write("### Data Entry & Sync Status")
+    # This block contains your Google Sheets connection 
+    # and the historical data entry table.
+
+# 3. ATTRIBUTION ANALYTICS (Volume Layers)
+elif page == "📊 Attribution Analytics":
+    st.title("📊 Attribution Analytics")
+    # This block contains the Stacked Area Chart showing 
+    # Organic vs. Digital vs. Event guest volume.
+
+# 4. MASTER AUDIT REPORT (Deep Dive Forensic)
+elif page == "📋 Master Audit Report":
+    st.title("📋 Master Audit Report")
+    st.write("### Comprehensive Historical Review")
+    # This block contains the detailed dataframe/table 
+    # showing Actuals vs. Targets for the entire year.
+
+# 5. AI CALIBRATION (The Control Room)
+elif page == "⚙️ AI Calibration":
+    st.title("⚙️ AI Calibration & Sensitivity")
+    # This block contains your Sensitivity Sliders (Clicks, 
+    # Social, Rain, Snow) and Model Predictability scores.
 
 # =================================================================
 # 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION)
