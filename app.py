@@ -706,7 +706,7 @@ elif page == "📊 Attribution Analytics":
         st.caption("Note: These calculations are derived from the coefficients set in the AI Calibration panel.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v10 - REPAIRED)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v11 - REPAIRED)
 # =================================================================
 elif page == "📋 Master Audit Report":
     # Custom CSS to shrink KPI labels for a dense, professional look
@@ -731,7 +731,6 @@ elif page == "📋 Master Audit Report":
         st.stop()
 
     df_audit_raw = pd.DataFrame(ledger_data)
-    # CRITICAL: Ensure entry_date is a datetime object immediately
     df_audit_raw['entry_date'] = pd.to_datetime(df_audit_raw['entry_date'])
     
     # 1. AUDIT RANGE SELECTOR
@@ -740,7 +739,6 @@ elif page == "📋 Master Audit Report":
 
     col_date, col_export = st.columns([2, 1])
     with col_date:
-        # THE FIX: Explicit key and robust handling for partial range selection
         audit_range = st.date_input(
             "Audit Selection Window:", 
             value=(min_audit, max_audit),
@@ -749,22 +747,19 @@ elif page == "📋 Master Audit Report":
             key="master_audit_v11_fixed"
         )
 
-    # 2. DATE FILTERING (REPAIRED)
-    # We must check if the user has selected BOTH a start and end date
+    # 2. DATE FILTERING
     if isinstance(audit_range, tuple) and len(audit_range) == 2:
         s_date, e_date = audit_range
-        
-        # We compare .dt.date to the widget's date objects
         mask = (df_audit_raw['entry_date'].dt.date >= s_date) & (df_audit_raw['entry_date'].dt.date <= e_date)
-        df_audit = df_audit_raw.loc[mask].copy()
+        df_audit_filtered = df_audit_raw.loc[mask].copy()
         
-        if df_audit.empty:
+        if df_audit_filtered.empty:
             st.error(f"No records found between {s_date} and {e_date}.")
             st.stop()
 
         # RUN ENGINE ON FILTERED DATA
-        m = get_forensic_metrics(df_audit.to_dict(orient='records'), st.session_state.coeffs)
-        df_final = m['df'] # Engine returns 'df'
+        m = get_forensic_metrics(df_audit_filtered.to_dict(orient='records'), st.session_state.coeffs)
+        df_final = m['df'] 
         c = st.session_state.coeffs
         num_days = len(df_final)
 
@@ -791,11 +786,13 @@ elif page == "📋 Master Audit Report":
         st.write("### 🧬 Marketing Equity & Friction")
         k6, k7, k8, k9, k10 = st.columns(5)
         
+        # REPAIR: Use new 'total_inertia' key from upgraded Section 3
         t_digital = df_final['residual_lift'].sum()
-        t_ooh = m.get('total_inertia', 0) * num_days
-        t_lift = df_audit['residual_lift'].sum() + df_audit['gravity_lift'].sum() + t_ooh
+        t_inertia_total = m.get('total_inertia', 0) * num_days
         t_gravity = df_final['gravity_lift'].sum()
-        t_mkt = t_digital + t_ooh + t_gravity
+        
+        # Calculate Total Marketing Lift
+        t_mkt = t_digital + t_inertia_total + t_gravity
         mkt_share = (t_mkt / t_traffic * 100) if t_traffic > 0 else 0
         
         # Weather Friction Logic
@@ -811,18 +808,19 @@ elif page == "📋 Master Audit Report":
 
         st.divider()
 
-      # 5. FORENSIC ATTRIBUTION (TRUE SCALE + INTEGER ROUNDING)
+        # 5. FORENSIC ATTRIBUTION (TRUE SCALE + INTEGER ROUNDING)
         st.write("### 🧬 Multi-Channel Attribution: Absolute Guest Volume")
-        df_final['OOH_Pressure'] = m['ooh_total_daily']
         
-        # Ensure all components are rounded to whole numbers for the chart
+        # REPAIR: Align local column with new Engine key
+        df_final['Brand_Inertia_Layer'] = m.get('total_inertia', 0)
+        
         df_final['guest_baseline_int'] = df_final['guest_baseline'].round(0)
         df_final['residual_lift_int'] = df_final['residual_lift'].round(0)
         df_final['gravity_lift_int'] = df_final['gravity_lift'].round(0)
         
         fig_audit = go.Figure()
 
-        # 1. THE FOUNDATION: Organic Heartbeat (Area)
+        # 1. THE FOUNDATION: Organic Heartbeat
         fig_audit.add_trace(go.Scatter(
             x=df_final['entry_date'], 
             y=df_final['guest_baseline_int'], 
@@ -830,11 +828,10 @@ elif page == "📋 Master Audit Report":
             fill='tozeroy',
             fillcolor='rgba(200, 210, 225, 0.4)', 
             line=dict(width=2, color='#8E9AAF', shape='spline'),
-            hovertemplate='%{y:,d} Guests' # Force integer formatting in hover
+            hovertemplate='%{y:,d} Guests'
         ))
         
-        # 2. THE LIFTS: Plotted as distinct lines
-        # Digital ROI
+        # 2. Digital ROI
         fig_audit.add_trace(go.Scatter(
             x=df_final['entry_date'], 
             y=df_final['residual_lift_int'], 
@@ -843,16 +840,16 @@ elif page == "📋 Master Audit Report":
             hovertemplate='%{y:,d} Guests'
         ))
         
-        # OOH Pressure
+        # 3. Brand Inertia (REPAIRED: TV, Radio, Signage combined)
         fig_audit.add_trace(go.Scatter(
             x=df_final['entry_date'], 
-            y=df_final['OOH_Pressure'].round(0), 
-            name='OOH Passive Inertia', 
+            y=df_final['Brand_Inertia_Layer'].round(0), 
+            name='Brand Inertia (OOH/TV/Radio)', 
             line=dict(width=3, color='#5D707F', dash='dot', shape='spline'),
             hovertemplate='%{y:,d} Guests'
         ))
         
-        # Event Gravity
+        # 4. Event Gravity
         fig_audit.add_trace(go.Scatter(
             x=df_final['entry_date'], 
             y=df_final['gravity_lift_int'], 
@@ -865,21 +862,9 @@ elif page == "📋 Master Audit Report":
             plot_bgcolor='rgba(0,0,0,0)', 
             height=550,
             margin=dict(l=10, r=10, t=10, b=10),
-            legend=dict(
-                orientation="h", 
-                yanchor="top", 
-                y=-0.15, 
-                xanchor="center", 
-                x=0.5,
-                bgcolor='rgba(255,255,255,0.8)'
-            ),
+            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
             hovermode="x unified",
-            yaxis=dict(
-                title="Guest Volume (Absolute)", 
-                showgrid=True, 
-                gridcolor='#F0F2F6',
-                tickformat=',d' # Ensures Y-axis ticks are also whole numbers
-            )
+            yaxis=dict(title="Guest Volume", showgrid=True, gridcolor='#F0F2F6', tickformat=',d')
         )
         st.plotly_chart(fig_audit, use_container_width=True)
         
@@ -905,6 +890,7 @@ elif page == "📋 Master Audit Report":
             )
     else:
         st.info("Please select a range (Start and End date) to generate the audit report.")
+
 # =================================================================
 # 11. PAGE 5: AI STRATEGIC ANALYST (REVERSED + RESET BUTTON)
 # =================================================================
