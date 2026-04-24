@@ -421,7 +421,9 @@ if page == "📈 Executive Dashboard":
 
         # --- 8. STRATEGIC INTELLIGENCE ---
         st.divider()
-        if is_future or (not is_past):
+        
+        # A. PROMOS & EVENTS (Only show if there is a future component)
+        if not is_past:
             st.write("### 📅 Upcoming Campaign & Event Briefing")
             df_upcoming = df_final[df_final['entry_date'].dt.date >= today]
             
@@ -442,21 +444,35 @@ if page == "📈 Executive Dashboard":
                             e_name = evt.get('event_name', 'Hard Rock LIVE Peak')
                             st.warning(f"🎸 {evt['entry_date'].strftime('%b %d')}: {e_name}")
 
-        st.write("#### 🛡️ Operational Risk & Opportunity")
-        o1, o2, o3 = st.columns(3)
-        with o1:
-            s_imp = df_final['snow_cm'].sum() * float(st.session_state.coeffs.get('Snow_cm', -45))
-            r_imp = df_final['rain_mm'].sum() * float(st.session_state.coeffs.get('Rain_mm', -12))
-            st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
-        with o2:
-            potential = int(df_final['expected'].sum() - df_final['new_members'].sum())
-            st.metric("Conversion Opportunity", f"{max(0, potential):,.0f}")
-        with o3:
-            # FIX: STAFFING INTENSITY SPECIFIC TO THE DAY
-            # We calculate the peak day's volume within this window to set the intensity label
-            peak_day_volume = df_final['expected'].max()
-            intensity_label = "🔴 Critical Peak" if peak_day_volume > 6200 else ("🟡 High" if peak_day_volume > 5200 else "🟢 Stable")
-            st.metric("Staffing Intensity", intensity_label, help="Based on the maximum daily peak in this window.")
+        # B. OPERATIONAL RISK vs. HISTORICAL AUDIT
+        if is_past:
+            st.write("#### 🔍 Historical Performance Audit")
+            o1, o2, o3 = st.columns(3)
+            with o1:
+                variance = df_final['actual_traffic'].sum() - df_final['expected'].sum()
+                st.metric("Volume Variance", f"{variance:+,.0f}", help="Total difference between Actuals and AI Targets")
+            with o2:
+                avg_daily = df_final['actual_traffic'].mean()
+                st.metric("Avg Daily Traffic", f"{avg_daily:,.0f}")
+            with o3:
+                st.metric("Data Integrity", "Verified" if m['predictability'] != "0.0%" else "Incomplete")
+        
+        else:
+            # FUTURE MODE: Staffing and Risk
+            st.write("#### 🛡️ Operational Risk & Opportunity")
+            o1, o2, o3 = st.columns(3)
+            with o1:
+                s_imp = df_final['snow_cm'].sum() * float(st.session_state.coeffs.get('Snow_cm', -45))
+                r_imp = df_final['rain_mm'].sum() * float(st.session_state.coeffs.get('Rain_mm', -12))
+                st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
+            with o2:
+                potential = int(df_final['expected'].sum() - df_final['new_members'].sum())
+                st.metric("Conversion Opportunity", f"{max(0, potential):,.0f}")
+            with o3:
+                # Peak Day Intensity (Only for future/current windows)
+                peak_day_volume = df_final['expected'].max()
+                intensity_label = "🔴 Critical Peak" if peak_day_volume > 6200 else ("🟡 High" if peak_day_volume > 5200 else "🟢 Stable")
+                st.metric("Staffing Intensity", intensity_label)
 
 # =================================================================
 # 📑 PAGE 2: DAILY LEDGER AUDIT (HARD ROCK LIVE SYNC)
