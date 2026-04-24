@@ -584,69 +584,96 @@ elif page == "📑 Daily Ledger Audit":
         st.info("The Ledger is currently empty. Add your first entry above.")
 
 # =================================================================
-# 8. PAGE 3: AI CALIBRATION & SENSITIVITY (STRICT STABILITY)
+# 3. PAGE 3: ATTRIBUTION ANALYTICS
 # =================================================================
-if page == "⚙️ AI Calibration":
-    st.title("⚙️ AI Logic & Sensitivity Calibration")
-    
-    # --- SAFETY CHECK 1: Imports ---
-    import numpy as np # Ensure this is here
-    
-    # --- SAFETY CHECK 2: Coefficients ---
-    if 'coeffs' not in st.session_state:
-        st.session_state.coeffs = {
-            'Clicks': 0.05, 'Social_Imp': 0.0002, 'Ad_Decay': 85,
-            'Promo_Lift': 550, 'Rain_mm': -12, 'Snow_cm': -45, 'Event_Gravity': 0.25,
-            'Static_Weight': 15, 'Static_Count': 10, 'Digital_OOH_Weight': 25, 'Digital_OOH_Count': 5
-        }
+elif page == "📊 Attribution Analytics":
+    st.markdown("""
+        <div style="background-color:#F8F9FA;padding:20px;border-radius:12px;border-left:6px solid #6c757d;margin-bottom:20px;">
+            <h2 style="color:#343a40;margin:0;">📊 Attribution Analytics</h2>
+            <p style="color:#666;margin:0;">Analyzing the layers of guest demand: Organic Heartbeat vs. Marketing-Driven Lift.</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-    # --- SAFETY CHECK 3: Data ---
     if not ledger_data:
-        st.warning("Forensic Vault is empty. Add data to the Ledger to see Calibration metrics.")
-        # We don't stop here, so the sliders still show up!
-    
+        st.info("💡 The Vault is empty. Please ensure data is synced in the Daily Ledger Audit to view attribution.")
+        st.stop()
+
     # 1. RUN ENGINE
-    try:
-        m_full = get_forensic_metrics(ledger_data, st.session_state.coeffs)
-        df_metrics = m_full['df']
-        
-        # 2. KPI GRID
-        c1, c2, c3 = st.columns(3)
-        if not df_metrics.empty:
-            c1.metric("Model Predictability", m_full.get('predictability', 'N/A'))
-            c2.metric("Organic Heartbeat", f"{df_metrics['guest_baseline'].sum():,.0f}")
-            c3.metric("Marketing Yield", f"{(df_metrics['residual_lift'].sum() + df_metrics['gravity_lift'].sum()):,.0f}")
-        else:
-            c1.metric("Model Predictability", "0%")
-            c2.metric("Organic Heartbeat", "0")
-            c3.metric("Marketing Yield", "0")
+    # This processes your Supabase data through the AI math weights defined in Calibration
+    m_full = get_forensic_metrics(ledger_data, st.session_state.coeffs)
+    df_attr = m_full['df']
 
-    except Exception as e:
-        st.error(f"Engine Error: {e}")
+    if df_attr.empty:
+        st.warning("No historical metrics available to attribute. Check your Ledger date range.")
+    else:
+        # 2. EXECUTIVE SCORECARD
+        st.write("### 🧠 Performance Attribution Scorecard")
+        c1, c2, c3, c4 = st.columns(4)
+        
+        with c1:
+            st.metric("Model Predictability", m_full.get('predictability', '0%'), 
+                      help="Accuracy of AI Target vs. Actual Floor Traffic")
+        with c2:
+            org_vol = df_attr['guest_baseline'].sum()
+            st.metric("Organic Heartbeat", f"{org_vol:,.0f}", 
+                      help="Estimated traffic without any marketing or digital spend.")
+        with c3:
+            # Lift = Awareness Tail + Event Gravity + Promo Overlays
+            mkt_vol = df_attr['residual_lift'].sum() + df_attr['gravity_lift'].sum()
+            st.metric("Marketing Lift", f"{mkt_vol:,.0f}", 
+                      help="Total guests attributed to Clicks, Social, and Events.")
+        with c4:
+            total_act = df_attr['actual_traffic'].sum()
+            lift_perc = (mkt_vol / total_act * 100) if total_act > 0 else 0
+            st.metric("Marketing Yield %", f"{lift_perc:.1f}%")
 
     st.divider()
 
-    # 3. THE SLIDERS (Separated for stability)
-    st.subheader("🎛️ Sensitivity Sliders")
-    col_left, col_right = st.columns(2)
-
-    with col_left:
-        st.markdown("**Digital Drivers**")
-        st.session_state.coeffs['Clicks'] = st.slider("Click Weight", 0.0, 1.0, float(st.session_state.coeffs['Clicks']))
-        st.session_state.coeffs['Social_Imp'] = st.slider("Social Imp Weight", 0.0, 0.01, float(st.session_state.coeffs['Social_Imp']), format="%.4f")
-        st.session_state.coeffs['Promo_Lift'] = st.slider("Promo Lift (Guests)", 0, 2000, int(st.session_state.coeffs['Promo_Lift']))
-
-    with col_right:
-        st.markdown("**Environmental Friction**")
-        st.session_state.coeffs['Rain_mm'] = st.slider("Rain Impact", -100, 0, int(st.session_state.coeffs['Rain_mm']))
-        st.session_state.coeffs['Snow_cm'] = st.slider("Snow Impact", -500, 0, int(st.session_state.coeffs['Snow_cm']))
-        
-    st.divider()
+    # 3. VOLUME STACK CHART (The "Why" Behind the Numbers)
+    st.write("### 🔍 Volume Layer Breakdown")
+    st.caption("This chart stacks the guest layers to show what drove traffic each day.")
     
-    # 4. CHART (Optional/Safety)
-    if not df_metrics.empty:
-        st.write("### 🔍 Attribution Breakdown")
-        st.area_chart(df_metrics.set_index('entry_date')[['guest_baseline', 'residual_lift', 'gravity_lift']])
+    # Prepare Chart Data
+    chart_data = df_attr.copy()
+    chart_data = chart_data.set_index('entry_date')[['guest_baseline', 'residual_lift', 'gravity_lift']]
+    chart_data.columns = ['Organic Heartbeat', 'Digital Awareness (Adstock)', 'Hard Rock LIVE Gravity']
+    
+    # Display the Area Chart (Stacked)
+    st.area_chart(chart_data, use_container_width=True)
+
+    st.divider()
+
+    # 4. DIGITAL ADSTOCK AUDIT
+    st.write("### 📣 Digital Awareness Pool")
+    st.caption("Tracking the residual 'Tail' of your digital spend (Adstock) over time.")
+    
+    import plotly.graph_objects as go
+    fig_ad = go.Figure()
+    fig_ad.add_trace(go.Scatter(
+        x=df_attr['entry_date'], 
+        y=df_attr['residual_lift'], 
+        name="Adstock Awareness", 
+        fill='tozeroy',
+        line=dict(color='#0047AB', width=2)
+    ))
+    fig_ad.update_layout(
+        height=300, 
+        margin=dict(l=0,r=0,t=0,b=0), 
+        plot_bgcolor='rgba(0,0,0,0)',
+        xaxis_title="Date",
+        yaxis_title="Attributed Guests"
+    )
+    st.plotly_chart(fig_ad, use_container_width=True)
+
+    # 5. STRATEGIC INSIGHTS
+    with st.expander("📝 Strategic Interpretation"):
+        avg_organic = df_attr['guest_baseline'].mean()
+        max_lift_day = df_attr.loc[df_attr['residual_lift'].idxmax(), 'entry_date']
+        
+        st.write(f"**Organic Baseline:** On average, your floor carries a heartbeat of **{avg_organic:,.0f}** organic guests per day.")
+        st.write(f"**Peak Marketing Impact:** Your highest digital awareness impact was recorded on **{max_lift_day.strftime('%B %d, %Y')}**.")
+        st.write("---")
+        st.caption("Note: These calculations are derived from the coefficients set in the AI Calibration panel.")
 
 # =================================================================
 # 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v10 - REPAIRED)
