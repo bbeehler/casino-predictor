@@ -548,34 +548,76 @@ elif page == "📑 Daily Ledger Vault":
             st.success("Vault synced.")
 
 # =================================================================
-# 8. PAGE 3: AI CALIBRATION & SENSITIVITY (v4.0)
+# 8. PAGE 3: AI CALIBRATION & SENSITIVITY
 # =================================================================
 if page == "⚙️ AI Calibration":
     st.markdown("## ⚙️ AI Logic & Sensitivity Calibration")
     
-    # 1. Run the engine on the full ledger to get the "Truth"
+    # 1. DATA VALIDATION
+    if not ledger_data:
+        st.info("💡 The Forensic Vault is empty. Please add historical data in the Ledger to calibrate the AI.")
+        st.stop()
+
+    # 2. RUN ENGINE ON HISTORICAL TRUTH
     m_full = get_forensic_metrics(ledger_data, st.session_state.coeffs)
     df_metrics = m_full['df']
     
-    # 2. KEY METRICS CALCULATION
-    if not df_metrics.empty:
-        # THE FIX: Syncing column names with Section 3
-        # Use 'guest_baseline' instead of 'baseline_isolated'
-        total_organic = df_metrics['guest_baseline'].sum()
-        total_lift = df_metrics['residual_lift'].sum() + df_metrics['gravity_lift'].sum()
-        
-        # Calculate OOH (Inertia) over the historical period
-        ooh_daily = m_full['ooh_total_daily']
-        num_days = len(df_metrics)
-        total_ooh = ooh_daily * num_days
-        
-        # Performance Indicators
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Model Predictability", m_full['predictability'])
-        c2.metric("Organic Heartbeat", f"{total_organic:,.0f} Guests")
-        c3.metric("Marketing Yield", f"{(total_lift + total_ooh):,.0f} Guests")
-        
-        st.divider()
+    if df_metrics.empty:
+        st.error("The AI Engine couldn't process the Ledger data. Check your date formats.")
+        st.stop()
+
+    # 3. KEY PERFORMANCE INDICATORS
+    # Ensure we use 'guest_baseline' (the organic heartbeat)
+    total_organic = df_metrics['guest_baseline'].sum()
+    
+    # Sum up all marketing lifts
+    total_lift = (
+        df_metrics['residual_lift'].sum() + 
+        df_metrics['gravity_lift'].sum()
+    )
+    
+    # Factor in the OOH Inertia
+    ooh_daily = m_full.get('ooh_total_daily', 0)
+    total_ooh = ooh_daily * len(df_metrics)
+    
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("Model Predictability", m_full['predictability'])
+    with c2:
+        st.metric("Organic Heartbeat", f"{total_organic:,.0f} Guests")
+    with c3:
+        st.metric("Marketing Yield", f"{(total_lift + total_ooh):,.0f} Guests")
+    
+    st.divider()
+
+    # 4. SENSITIVITY SLIDERS (The Remote Control for the AI)
+    st.write("### 🎛️ Sensitivity Sliders")
+    st.info("Adjust these to align the AI Target with actual floor performance.")
+    
+    col_a, col_b = st.columns(2)
+    
+    with col_a:
+        st.write("**Digital Drivers**")
+        st.session_state.coeffs['Clicks'] = st.slider("Google/FB Click Weight", 0.0, 1.0, float(st.session_state.coeffs.get('Clicks', 0.05)))
+        st.session_state.coeffs['Social_Imp'] = st.slider("Social Impression Weight", 0.0, 0.01, float(st.session_state.coeffs.get('Social_Imp', 0.0002)), format="%.4f")
+        st.session_state.coeffs['Ad_Decay'] = st.slider("Adstock Retention %", 50, 100, int(st.session_state.coeffs.get('Ad_Decay', 85)))
+        st.session_state.coeffs['Promo_Lift'] = st.slider("Standard Promo Lift (Guests)", 0, 2000, int(st.session_state.coeffs.get('Promo_Lift', 550)))
+
+    with col_b:
+        st.write("**Physical & Weather Friction**")
+        st.session_state.coeffs['Rain_mm'] = st.slider("Rain Friction (per mm)", -50, 0, int(st.session_state.coeffs.get('Rain_mm', -12)))
+        st.session_state.coeffs['Snow_cm'] = st.slider("Snow Friction (per cm)", -200, 0, int(st.session_state.coeffs.get('Snow_cm', -45)))
+        st.session_state.coeffs['Event_Gravity'] = st.slider("Concert/Event Gravity %", 0, 100, int(float(st.session_state.coeffs.get('Event_Gravity', 0.25)) * 100)) / 100
+
+    st.divider()
+
+    # 5. LIFT COMPOSITION CHART
+    st.write("### 🔍 Attribution Breakdown")
+    # Showing how much of the "Expected" volume comes from which source
+    chart_data = df_metrics[['entry_date', 'guest_baseline', 'residual_lift', 'gravity_lift']].copy()
+    chart_data['OOH_Inertia'] = ooh_daily
+    
+    st.area_chart(chart_data.set_index('entry_date'))
 
 # =================================================================
 # 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v10 - REPAIRED)
