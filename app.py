@@ -319,16 +319,18 @@ if not st.session_state.authenticated:
 # =================================================================
 # --- SECTION 2: EXECUTIVE NAVIGATION ---
 # =================================================================
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/en/thumb/0/04/Hard_Rock_Cafe_logo.svg/1200px-Hard_Rock_Cafe_logo.svg.png", width=150)
-st.sidebar.markdown("---")
-
-page = st.sidebar.radio("Navigate:", [
-    "📈 Executive Dashboard", 
-    "📑 Daily Ledger Audit", 
-    "📊 Attribution Analytics", 
-    "📋 Master Audit Report", 
-    "⚙️ AI Calibration"
-])
+# --- SIDEBAR NAVIGATION ---
+with st.sidebar:
+    st.image("https://upload.wikimedia.org/wikipedia/en/thumb/0/04/Hard_Rock_Cafe_logo.svg/1200px-Hard_Rock_Cafe_logo.svg.png", width=150)
+    st.title("Admin Command")
+    page = st.selectbox("Select Intelligence Deck:", [
+        "📈 Executive Dashboard", 
+        "🎰 Universal Ledger", 
+        "📡 Attribution Analytics", 
+        "📋 Master Audit Report", 
+        "⚙️ AI Calibration",
+        "🤖 FloorCast AI Analyst" # Added back to Nav
+    ])
 
 st.sidebar.markdown("---")
 st.sidebar.caption(f"**FloorCast AI v6.0**")
@@ -895,69 +897,6 @@ elif page == "📋 Master Audit Report":
         st.info("Please select a range (Start and End date) to generate the audit report.")
 
 # =================================================================
-# 11. PAGE 5: AI STRATEGIC ANALYST (REVERSED + RESET BUTTON)
-# =================================================================
-elif page == "🧠 FloorCast AI Analyst":
-    st.markdown("""
-        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
-            <h2 style="color: #0047AB; margin: 0;">🕵️ FloorCast Strategic AI Analyst</h2>
-            <p style="color: #444; margin: 0;">Executive Intelligence: Correlating redictions with Actual Results.</p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    if not ledger_data:
-        st.warning("Forensic Vault is empty. Analyst cannot audit performance without a ledger.")
-        st.stop()
-
-    # 1. SIDEBAR UTILITY: RESET BUTTON
-    # This only shows up when on Page 5 and there are messages to clear
-    if st.session_state.messages:
-        st.sidebar.divider()
-        if st.sidebar.button("🗑️ Reset Analyst Thread", use_container_width=True):
-            st.session_state.messages = []
-            st.rerun()
-
-    # 2. RUN FORENSIC ENGINE FOR DOSSIER
-    m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
-    df_ai = m_audit['df']
-    
-    dossier = ""
-    for _, r in df_ai.sort_values('entry_date', ascending=False).head(30).iterrows():
-        actual = r.get('actual_traffic', 0)
-        expected = int(r.get('expected', 0))
-        variance = actual - expected
-        dossier += (
-            f"Date: {r.get('entry_date')} | Actual: {actual} | Prediction: {expected} | "
-            f"Variance: {variance} | Members: {r.get('new_members')} | Temp: {r.get('temp_c')}C\n"
-        )
-
-    # 3. CHAT INPUT
-    prompt = st.chat_input("What are you looking for in the data?")
-    
-    if prompt:
-        history_str = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages[-8:]])
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        try:
-            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model = genai.GenerativeModel('gemini-2.5-flash')
-            
-            with st.status("🕵️ Auditing Predictions & Variance...", expanded=True) as status:
-                full_prompt = f"Role: Casino Strategist. Data:\n{dossier}\nHistory:\n{history_str}\nQuestion: {prompt}"
-                response = model.generate_content(full_prompt)
-                status.update(label="✅ Analysis Finalized", state="complete")
-            
-            st.session_state.messages.append({"role": "assistant", "content": response.text})
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-    # 4. DISPLAY THREAD: NEWEST AT THE TOP
-    for m in reversed(st.session_state.messages):
-        with st.chat_message(m["role"]):
-            st.markdown(m["content"])
-
-# =================================================================
 # ⚙️ PAGE 5: AI CALIBRATION & ENGINE WEIGHTS
 # =================================================================
 elif page == "⚙️ AI Calibration":
@@ -1054,6 +993,101 @@ elif page == "⚙️ AI Calibration":
 
     with st.expander("🔍 View Active Sensitivity Manifest"):
         st.json(st.session_state.coeffs)
+
+# =================================================================
+# 11. PAGE 6: AI STRATEGIC ANALYST (EXECUTIVE UPGRADE v12)
+# =================================================================
+elif page == "🤖 FloorCast AI Analyst":
+    st.markdown("""
+        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
+            <h2 style="color: #0047AB; margin: 0;">🕵️ FloorCast Strategic AI Analyst</h2>
+            <p style="color: #444; margin: 0;">Executive Intelligence: Correlating Predictions with Actual Results.</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    if not ledger_data:
+        st.warning("Forensic Vault is empty. Analyst cannot audit performance without a ledger.")
+        st.stop()
+
+    # 1. SIDEBAR UTILITY: RESET BUTTON
+    if st.session_state.get('messages'):
+        st.sidebar.divider()
+        if st.sidebar.button("🗑️ Reset Analyst Thread", use_container_width=True):
+            st.session_state.messages = []
+            st.rerun()
+
+    # 2. RUN FORENSIC ENGINE FOR DOSSIER
+    m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
+    df_ai = m_audit['df']
+    
+    # 3. BUILD THE EXECUTIVE DOSSIER (Includes Weights + Variance)
+    # We feed the AI the 'Whys' so it can diagnose the Saturday gaps
+    c = st.session_state.coeffs
+    dossier = f"""
+    PROPERTY: Hard Rock Hotel & Casino Ottawa
+    CURRENT CALIBRATION WEIGHTS:
+    - Promo Lift: {c.get('Promo_Lift')}
+    - Billboard Weight: {c.get('OOH_Weight')}
+    - Broadcast/TV Lift: {c.get('Broadcast_Weight')}
+    - PR Multiplier: {c.get('PR_Weight')}
+    - Event Gravity: {c.get('Event_Gravity')}
+    - AI Predictability: {m_audit.get('predictability')}
+
+    RECENT PERFORMANCE DATA (Last 30 Days):
+    """
+    
+    for _, r in df_ai.sort_values('entry_date', ascending=False).head(30).iterrows():
+        actual = r.get('actual_traffic', 0)
+        expected = int(r.get('expected', 0))
+        variance = actual - expected
+        dossier += (
+            f"Date: {r.get('entry_date').strftime('%Y-%m-%d')} ({r.get('entry_date').day_name()}) | "
+            f"Actual: {actual} | Target: {expected} | Variance: {variance:+d} | "
+            f"Promo: {r.get('active_promo')} | Lift: {r.get('residual_lift', 0):.0f}\n"
+        )
+
+    # 4. CHAT INPUT
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    prompt = st.chat_input("Ask about Saturday demand or marketing ROI...")
+    
+    if prompt:
+        history_str = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages[-8:]])
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            # Using 1.5-flash for stability and speed
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            
+            with st.status("🕵️ Auditing Property Patterns...", expanded=True) as status:
+                # Optimized System Prompt for Hard Rock Ottawa Context
+                full_prompt = f"""
+                You are the Senior Strategy Analyst for Hard Rock Hotel & Casino Ottawa. 
+                Your task is to analyze the following Ledger and Weights to find growth opportunities or calibration errors.
+                
+                CONTEXT:
+                {dossier}
+                
+                CONVERSATION HISTORY:
+                {history_str}
+                
+                EXECUTIVE QUERY: {prompt}
+                """
+                response = model.generate_content(full_prompt)
+                status.update(label="✅ Analysis Finalized", state="complete")
+            
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            st.rerun()
+        except Exception as e:
+            st.error(f"AI Error: {e}")
+
+    # 5. DISPLAY THREAD: NEWEST AT THE TOP
+    for m in reversed(st.session_state.messages):
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
 
 # =================================================================
 # 13. PAGE 7: FORECAST SANDBOX
