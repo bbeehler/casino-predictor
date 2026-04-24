@@ -375,6 +375,7 @@ if page == "📈 Executive Dashboard":
             key="pulse_exec_vfinal_synced"
         )
 
+    # CHECK: Ensure we have a valid range before running the dashboard logic
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
         is_future = start_p >= today
@@ -385,7 +386,7 @@ if page == "📈 Executive Dashboard":
         df_timeline = pd.DataFrame({'entry_date': date_list})
         df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
 
-        # 2. STRATEGIC DAILY PLANNER (Social & Adstock Integrated)
+        # 2. STRATEGIC DAILY PLANNER
         if is_future:
             with st.expander("📅 Daily Strategy Planner", expanded=True):
                 st.write("Plan your digital spend and PR events to see the projected lift.")
@@ -416,14 +417,11 @@ if page == "📈 Executive Dashboard":
                 df_p['snow_cm'] = edited_df['snow_cm'].values
 
         # --- 3. THE BRIDGE: CONNECTING LIVE COEFFICIENTS ---
-        # Crucial: Pull live sliders from session state to feed the engine
         current_weights = st.session_state.get('coeffs', {})
-        
-        # RUN THE ENGINE
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
 
-        # CALCULATE MARKETING IMPACT (Pulling all Mass Media + Digital + Events)
+        # CALCULATE MARKETING IMPACT
         daily_brand_inertia = (
             float(current_weights.get('Broadcast_Weight', 150)) + 
             float(current_weights.get('OOH_Weight', 100)) + 
@@ -489,7 +487,6 @@ if page == "📈 Executive Dashboard":
             st.write("#### 🛡️ Operational Risk & Opportunity")
             o1, o2, o3 = st.columns(3)
             with o1:
-                # Use live weights for friction
                 s_imp = df_final['snow_cm'].sum() * float(current_weights.get('Snow_cm', -45))
                 r_imp = df_final['rain_mm'].sum() * float(current_weights.get('Rain_mm', -12))
                 st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
@@ -497,15 +494,15 @@ if page == "📈 Executive Dashboard":
                 potential = int(df_final['expected'].sum() - df_final['new_members'].sum())
                 st.metric("Conversion Opportunity", f"{max(0, potential):,.0f}")
             with o3:
-                # Daily-specific Staffing Intensity
                 peak_day_volume = df_final['expected'].max()
                 intensity_label = "🔴 Critical Peak" if peak_day_volume > 6200 else ("🟡 High" if peak_day_volume > 5200 else "🟢 Stable")
                 st.metric("Staffing Intensity", intensity_label)
-        
-        # --- CLOSE PAGE 1 DATE CHECK ---
-        else:
-            st.info("Please select a complete Start and End date range to view the Dashboard.")
-            st.stop() 
+
+    # --- THE DATE RANGE FIX ---
+    # This else is aligned with 'if isinstance(pulse_range, tuple)...'
+    else:
+        st.info("Please select a complete Start and End date range to view the Dashboard.")
+        st.stop() 
 
 # =================================================================
 # 8. PAGE 2: DAILY LEDGER AUDIT (v12 - NAME SYNCED)
