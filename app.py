@@ -792,7 +792,8 @@ elif page == "📋 Master Audit Report":
         k6, k7, k8, k9, k10 = st.columns(5)
         
         t_digital = df_final['residual_lift'].sum()
-        t_ooh = m['ooh_total_daily'] * num_days
+        t_ooh = m.get('total_inertia', 0) * num_days
+        t_lift = df_audit['residual_lift'].sum() + df_audit['gravity_lift'].sum() + t_ooh
         t_gravity = df_final['gravity_lift'].sum()
         t_mkt = t_digital + t_ooh + t_gravity
         mkt_share = (t_mkt / t_traffic * 100) if t_traffic > 0 else 0
