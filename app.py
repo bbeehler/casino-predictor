@@ -256,47 +256,111 @@ if st.sidebar.button("🔓 Logout", use_container_width=True):
     st.rerun()
 
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD
+# 7. PAGE 1: EXECUTIVE OVERVIEW (MATCHED TO ATTRIBUTION STYLE)
 # =================================================================
-if page == "📈 Executive Dashboard":
-    st.header("📈 Executive Performance Pulse")
-    
+if page == "📈 Executive Overview":
+    # The "Hero" Container matching Attribution Intelligence
+    st.markdown("""
+        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
+            <h2 style="color: #0047AB; margin: 0;">📈 Executive Performance Pulse</h2>
+            <p style="color: #444; margin: 0;">Real-time property health, predictive accuracy, and financial anchors.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
     if not ledger_data:
-        st.info("The Forensic Vault is currently empty. Please populate the Ledger.")
+        st.warning("Forensic Vault is empty. Please populate the Ledger to see property performance.")
         st.stop()
 
-    df_full = pd.DataFrame(ledger_data)
-    df_full['entry_date'] = pd.to_datetime(df_full['entry_date'])
+    df_raw_exec = pd.DataFrame(ledger_data)
+    df_raw_exec['entry_date'] = pd.to_datetime(df_raw_exec['entry_date'])
     
-    # Date Filter with Smart Defaults
-    max_db_date = df_full['entry_date'].max().date()
-    min_db_date = df_full['entry_date'].min().date()
+    # Smart Date Defaults
+    max_db_date = df_raw_exec['entry_date'].max().date()
+    min_db_date = df_raw_exec['entry_date'].min().date()
     default_start = max(min_db_date, max_db_date - datetime.timedelta(days=14))
 
     col_d, _ = st.columns([1, 2])
     with col_d:
-        d_range = st.date_input("Audit Window:", value=(default_start, max_db_date), min_value=min_db_date, max_value=max_db_date)
-
-    if isinstance(d_range, tuple) and len(d_range) == 2:
-        start_d, end_d = d_range
-        df_f = df_full[(df_full['entry_date'].dt.date >= start_d) & (df_full['entry_date'].dt.date <= end_d)].to_dict(orient='records')
-        m_results = get_forensic_metrics(df_f, st.session_state.coeffs)
-        df_viz = m_results['df']
-
-        # KPI LAYER
-        k1, k2, k3, k4, k5 = st.columns(5)
-        k1.metric("Predictability", m_results['predictability'])
-        k2.metric("OOH Daily Inertia", f"{m_results['ooh_total_daily']:.0f} Guests")
-        k3.metric("Digital Lift (Total)", f"{df_viz['residual_lift'].sum():,.0f}")
-        k4.metric("New Members", f"{df_viz['new_members'].sum():,}")
+        exec_range = st.date_input(
+            "Analysis Window:", 
+            value=(default_start, max_db_date),
+            min_value=min_db_date,
+            max_value=max_db_date,
+            key="exec_date_picker"
+        )
+    
+    if isinstance(exec_range, tuple) and len(exec_range) == 2:
+        start_exec, end_exec = exec_range
+        mask = (df_raw_exec['entry_date'].dt.date >= start_exec) & (df_raw_exec['entry_date'].dt.date <= end_exec)
+        filtered_exec = df_raw_exec.loc[mask].to_dict(orient='records')
         
-        # Spend Logic
-        avg_spend = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
-        k5.metric("Avg. Spend / Head", f"${avg_spend:.2f}")
+        if not filtered_exec:
+            st.error("No data found for this specific date range.")
+        else:
+            # Run the Engine on filtered subset
+            metrics = get_forensic_metrics(filtered_exec, st.session_state.coeffs)
+            df_chart = metrics['df']
+            
+            # --- TOP ROW: KPI GRID ---
+            st.write("### 🏛️ Property Vital Signs")
+            c1, c2, c3, c4, c5 = st.columns(5)
+            
+            c1.metric("Predictability", metrics['predictability'])
+            c2.metric("OOH Daily Lift", f"{metrics['ooh_total_daily']:.0f} Guests")
+            
+            # Financials using calibrated weights
+            avg_spend = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
+            total_traffic = df_chart['actual_traffic'].sum()
+            hold_pct = float(st.session_state.coeffs.get('Hold_Pct', 10.0)) / 100
+            
+            c3.metric("Est. Period GGR", f"${(total_traffic * avg_spend * hold_pct):,.0f}")
+            c4.metric("New Members", f"{df_chart['new_members'].sum():,}")
+            c5.metric("Avg. Yield/Head", f"${(avg_spend * hold_pct):,.2f}")
 
-        st.divider()
-        st.write("### 🎰 Actual Traffic vs. Engine Prediction")
-        st.line_chart(df_viz.set_index('entry_date')[['actual_traffic', 'expected']])
+            st.divider()
+
+            # --- MIDDLE ROW: INTERACTIVE FORENSIC CHART ---
+            st.write("### 🧬 Actual Traffic vs. Forensic Prediction")
+            
+            fig_exec = go.Figure()
+            # Actual Traffic Line
+            fig_exec.add_trace(go.Scatter(
+                x=df_chart['entry_date'], 
+                y=df_chart['actual_traffic'],
+                name="Actual Traffic",
+                line=dict(color='#0047AB', width=4)
+            ))
+            # Expected Traffic Line
+            fig_exec.add_trace(go.Scatter(
+                x=df_chart['entry_date'], 
+                y=df_chart['expected'],
+                name="AI Expected",
+                line=dict(color='#FFCC00', width=2, dash='dot')
+            ))
+            
+            fig_exec.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=0, r=0, t=20, b=0),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                hovermode="x unified"
+            )
+            fig_exec.update_xaxes(showgrid=False)
+            fig_exec.update_yaxes(showgrid=True, gridcolor='#DEE2E6')
+            
+            st.plotly_chart(fig_exec, use_container_width=True)
+
+            # --- BOTTOM ROW: INSIGHT CARDS ---
+            st.divider()
+            st.write("### 🧠 Strategic Summary")
+            
+            ins_col1, ins_col2 = st.columns(2)
+            with ins_col1:
+                st.info(f"**Period Performance:** Your floor saw **{total_traffic:,}** guests. The engine explains **{metrics['predictability']}** of this volume through organic baseline, marketing lift, and event gravity.")
+            with ins_col2:
+                total_mkt_lift = df_chart['residual_lift'].sum() + (metrics['ooh_total_daily'] * len(df_chart))
+                mkt_impact = (total_mkt_lift / total_traffic) * 100 if total_traffic > 0 else 0
+                st.success(f"**Marketing Equity:** Approximately **{mkt_impact:.1f}%** of this period's traffic is directly attributed to your active Digital and OOH campaigns.")
 
 # =================================================================
 # 8. PAGE 2: DAILY LEDGER VAULT (FULL HARD ROCK LIVE LOGIC)
