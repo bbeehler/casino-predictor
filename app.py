@@ -457,12 +457,18 @@ if page == "📈 Executive Dashboard":
             intensity = "Critical Peak" if max_v > 5500 else ("High" if max_v > 4500 else "Moderate")
             st.metric("Staffing Intensity", intensity)
 # =================================================================
-# 8. PAGE 2: DAILY LEDGER VAULT (FULL HARD ROCK LIVE LOGIC)
+# 📑 PAGE 2: DAILY LEDGER AUDIT (HARD ROCK LIVE SYNC)
 # =================================================================
-elif page == "📑 Daily Ledger Vault":
-    st.header("📑 Daily Ledger Entry")
-    
+elif page == "📑 Daily Ledger Audit":
+    st.markdown("""
+        <div style="background-color:#E1E8F0;padding:20px;border-radius:12px;border-left:6px solid #0047AB;margin-bottom:20px;">
+            <h2 style="color:#0047AB;margin:0;">📑 Daily Ledger Audit</h2>
+            <p style="color:#333;margin:0;">The Source of Truth: Manage historical traffic, financials, and event data.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
     col_l, col_r = st.columns(2)
+    
     with col_l:
         with st.form("vault_entry_form"):
             st.subheader("✍️ Add Daily Metrics")
@@ -486,7 +492,7 @@ elif page == "📑 Daily Ledger Vault":
 
             st.divider()
 
-            # Row 3: HARD ROCK LIVE (RECONSTRUCTED)
+            # Row 3: HARD ROCK LIVE Data
             st.write("**🎸 Hard Rock LIVE Event Data**")
             e1, e2 = st.columns(2)
             with e1: 
@@ -519,35 +525,63 @@ elif page == "📑 Daily Ledger Vault":
                     "ad_impressions": int(imps),
                     "social_engagements": int(social)
                 }
-                supabase.table("ledger").upsert(payload, on_conflict="entry_date").execute()
-                st.success("Vault state updated.")
-                st.rerun()
+                # Syncing to Supabase
+                try:
+                    supabase.table("ledger").upsert(payload, on_conflict="entry_date").execute()
+                    st.success(f"Vault state updated for {d_entry.strftime('%Y-%m-%d')}.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Sync Failed: {e}")
 
     with col_r:
         st.subheader("📤 Bulk Systems Import")
+        st.write("Upload exported CSVs from casino management systems.")
         csv_file = st.file_uploader("Drop Ledger CSV here", type="csv")
         if csv_file and st.button("🚀 Execute Bulk Sync"):
-            df_up = pd.read_csv(csv_file)
-            supabase.table("ledger").upsert(df_up.to_dict(orient='records')).execute()
-            st.success("Bulk synchronization complete.")
-            st.rerun()
+            try:
+                df_up = pd.read_csv(csv_file)
+                supabase.table("ledger").upsert(df_up.to_dict(orient='records')).execute()
+                st.success("Bulk synchronization complete.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Bulk Import Failed: {e}")
 
     st.divider()
+    
+    # UNIVERSAL LEDGER EDITOR
     st.subheader("📜 Universal Ledger Editor")
     if ledger_data:
         df_edit = pd.DataFrame(ledger_data)
         df_edit['entry_date'] = pd.to_datetime(df_edit['entry_date'])
         df_edit = df_edit.sort_values('entry_date', ascending=False)
         
-        edited_df = st.data_editor(df_edit, use_container_width=True, hide_index=True)
+        # Interactive table for manual cleaning
+        edited_df = st.data_editor(
+            df_edit, 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "entry_date": st.column_config.DateColumn("Date", disabled=True),
+                "actual_traffic": st.column_config.NumberColumn("Traffic"),
+                "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)"),
+            }
+        )
+        
         if st.button("✅ Confirm Manual Overwrites"):
             final_p = edited_df.to_dict(orient='records')
-            # Sanitize dates for DB
+            # Sanitize dates back to strings for the database
             for p in final_p:
                 if isinstance(p['entry_date'], (datetime.datetime, pd.Timestamp)):
                     p['entry_date'] = p['entry_date'].strftime('%Y-%m-%d')
-            supabase.table("ledger").upsert(final_p).execute()
-            st.success("Vault synced.")
+            
+            try:
+                supabase.table("ledger").upsert(final_p).execute()
+                st.success("Universal Ledger state synced.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Overwrite Failed: {e}")
+    else:
+        st.info("The Ledger is currently empty. Add your first entry above.")
 
 # =================================================================
 # 8. PAGE 3: AI CALIBRATION & SENSITIVITY (STRICT STABILITY)
