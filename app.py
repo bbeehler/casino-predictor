@@ -202,7 +202,7 @@ except:
     ledger_data = []
 
 # =================================================================
-# 6. SIDEBAR NAVIGATION & AUTH
+# 6. SIDEBAR NAVIGATION & AUTH (GATEKEEPER OVERHAUL)
 # =================================================================
 st.sidebar.markdown("<h1 style='color:#0047AB; font-size: 28px; margin-bottom: 0;'>🎰 FloorCast</h1><p style='color:#888;'>Hard Rock Ottawa v4.0</p>", unsafe_allow_html=True)
 st.sidebar.divider()
@@ -210,23 +210,34 @@ st.sidebar.divider()
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
+# --- THE GATEKEEPER ---
 if not st.session_state.authenticated:
-    with st.sidebar:
-        st.subheader("Executive Access")
-        e_mail = st.text_input("Email")
-        p_word = st.text_input("Password", type="password")
-        if st.button("Unlock Engine", use_container_width=True):
-            try:
-                res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
-                if res.user:
-                    st.session_state.authenticated = True
-                    st.session_state.user_email = res.user.email
-                    st.rerun()
-            except:
-                st.error("Invalid Credentials")
-    st.stop()
+    # Shift login to the main area for a smoother single-click experience
+    st.markdown("<h1 style='color:#0047AB; text-align:center;'>Executive Access Required</h1>", unsafe_allow_html=True)
+    
+    with st.container():
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            with st.form("login_form"):
+                e_mail = st.text_input("Email")
+                p_word = st.text_input("Password", type="password")
+                submit = st.form_submit_button("Unlock Engine", use_container_width=True)
+                
+                if submit:
+                    try:
+                        res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
+                        if res.user:
+                            # CRITICAL: Update state and force an immediate rerun
+                            st.session_state.authenticated = True
+                            st.session_state.user_email = res.user.email
+                            st.rerun() 
+                        else:
+                            st.error("Authentication failed.")
+                    except Exception as e:
+                        st.error(f"Access Denied: {str(e)}")
+    st.stop() # Prevents any dashboard code from running until auth is True
 
-# PERSISTENT SIDEBAR MENU
+# --- POST-AUTH SIDEBAR ---
 page = st.sidebar.radio("Navigation Workspace", [
     "📈 Executive Dashboard", 
     "📑 Daily Ledger Vault", 
@@ -239,7 +250,9 @@ page = st.sidebar.radio("Navigation Workspace", [
 
 st.sidebar.divider()
 if st.sidebar.button("🔓 Logout", use_container_width=True):
+    # Reset state for a clean logout
     st.session_state.authenticated = False
+    st.session_state.user_email = None
     st.rerun()
 
 # =================================================================
