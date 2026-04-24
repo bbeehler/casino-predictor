@@ -328,12 +328,12 @@ with st.sidebar:
     page = st.radio(
         "Intelligence Decks:",
         [
-            "📈 Executive Dashboard", 
-            "🎰 Daily Ledger Audit", 
-            "📡 Attribution Analytics", 
-            "📋 Master Audit Report", 
-            "⚙️ AI Calibration",
-            "🤖 FloorCast AI Analyst"
+            "Executive Dashboard", 
+            "Daily Ledger Audit", 
+            "Attribution Analytics", 
+            "Master Audit Report", 
+            "AI Calibration",
+            "FloorCast AI Analyst"
         ],
         index=0,
         key="nav_list_v12"
