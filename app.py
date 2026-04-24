@@ -294,13 +294,13 @@ if st.sidebar.button("🔓 Logout", use_container_width=True):
     st.rerun()
 
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (SITUATIONAL INTELLIGENCE)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (CONSOLIDATED)
 # =================================================================
 if page == "📈 Executive Dashboard":
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">📈 Executive Performance Pulse</h2>
-            <p style="color: #444; margin: 0;">Predictive Guest Volume & Loyalty Acquisition Tracking.</p>
+            <p style="color: #444; margin: 0;">Predictive Guest Volume & Strategic Planning Command Center.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -312,143 +312,100 @@ if page == "📈 Executive Dashboard":
     df_raw = pd.DataFrame(ledger_data)
     df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
     
-    # 1. DATE RANGE SELECTOR
+    # 1. DATE SELECTION
     col_date, _ = st.columns([1, 2])
     with col_date:
         pulse_range = st.date_input(
             "Select Analysis Window:", 
-            value=(today - datetime.timedelta(days=3), today + datetime.timedelta(days=3)), 
-            key="pulse_executive_final"
+            value=(today, today + datetime.timedelta(days=7)), 
+            key="pulse_exec_vfinal"
         )
 
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
         
-        # Build Unified Timeline (Past + Future)
+        # 2. DEFINE MODES (Fixed Sequence)
+        is_future = start_p >= today
+        is_past = end_p < today
+        
+        # 3. GENERATE TIMELINE
         date_list = pd.date_range(start=start_p, end=end_p)
         df_timeline = pd.DataFrame({'entry_date': date_list})
         df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
 
-        # --- FUTURE PLANNER: MANUAL OVERRIDES ---
+        # 4. FUTURE STRATEGY PLANNER (Overrides)
         if is_future:
             with st.expander("🛠️ Future Strategy Planner", expanded=True):
-                st.write("Incorporate upcoming marketing or operational factors to adjust the AI Target.")
+                st.write("Input upcoming variables to adjust the AI Target in real-time.")
                 f1, f2, f3 = st.columns(3)
-                
                 with f1:
-                    manual_promo = st.text_input("Active Promotion Name:", placeholder="e.g. Rock of Ages May")
+                    manual_promo = st.text_input("Active Promotion Name:", key="man_promo")
                 with f2:
-                    manual_event = st.number_input("Event Attendance Projection:", min_value=0, step=100)
+                    manual_event = st.number_input("Event Attendance Projection:", min_value=0, step=100, key="man_event")
                 with f3:
-                    weather_outlook = st.selectbox("Weather Outlook:", ["Clear/Seasonal", "Rain Forecast", "Snow Forecast"])
+                    weather_outlook = st.selectbox("Weather Outlook:", ["Clear/Seasonal", "Rain Forecast", "Snow Forecast"], key="man_weather")
 
-                # Inject these values into the dataframe before the engine runs
-                df_p['active_promo'] = manual_promo
-                df_p['attendance'] = manual_event
-                
-                if weather_outlook == "Rain Forecast":
-                    df_p['rain_mm'] = 10 # Sample friction value
-                elif weather_outlook == "Snow Forecast":
-                    df_p['snow_cm'] = 5  # Sample friction value
-                    
-                st.caption("⚠️ These values are for 'What-If' analysis and are not saved to the permanent Ledger.")
-        
-        # Run Forensic Engine
+                # Apply Overrides
+                if manual_promo: df_p['active_promo'] = manual_promo
+                if manual_event > 0: df_p['attendance'] = manual_event
+                if weather_outlook == "Rain Forecast": df_p['rain_mm'] = 10
+                elif weather_outlook == "Snow Forecast": df_p['snow_cm'] = 5
+
+        # 5. RUN ENGINE
         m = get_forensic_metrics(df_p.to_dict(orient='records'), st.session_state.coeffs)
         df_final = m['df'].sort_values('entry_date')
 
-        # Logic for Reporting Mode (Today is counted as a Forecast Day)
-        is_future = start_p >= today
-        is_past = end_p < today
-        
-        # Calculate Marketing Impact % (Lifts / Total Expected)
+        # Calculate Marketing Impact %
         total_lift = df_final['residual_lift'].sum() + df_final['gravity_lift'].sum() + (m['ooh_total_daily'] * len(df_final))
         total_vol = df_final['expected'].sum()
         mkt_impact_pct = (total_lift / total_vol * 100) if total_vol > 0 else 0
 
-        # --- II. EXECUTIVE KPI GRID (NON-FINANCIAL) ---
+        # --- VI. EXECUTIVE KPI GRID ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
         
         if is_future:
-            total_projected = df_final['expected'].sum()
-            k1.metric("Projected Demand", f"{total_projected:,.0f} Guests")
-            k2.metric("Target Signups", f"{(total_projected * 0.05):,.0f}", help="Based on 5% Target Conversion")
+            total_proj = df_final['expected'].sum()
+            k1.metric("Projected Demand", f"{total_proj:,.0f} Guests")
+            k2.metric("Target Signups", f"{(total_proj * 0.05):,.0f}")
             k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
             k4.metric("AI Confidence", m['predictability'])
         elif is_past:
-            total_actual = df_final['actual_traffic'].sum()
-            k1.metric("Actual Guest Flow", f"{total_actual:,.0f}")
+            total_act = df_final['actual_traffic'].sum()
+            k1.metric("Actual Guest Flow", f"{total_act:,.0f}")
             k2.metric("New Unity Members", f"{df_final['new_members'].sum():,.0f}")
             k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
             k4.metric("Audited Accuracy", m['predictability'])
         else:
-            # Mixed Mode: Combine Actuals (Past) with AI Target (Today + Future)
-            past_traffic = df_final[df_final['entry_date'].dt.date < today]['actual_traffic'].sum()
-            future_expected = df_final[df_final['entry_date'].dt.date >= today]['expected'].sum()
-            combined_total = past_traffic + future_expected
-            
-            k1.metric("Total Window Guests", f"{combined_total:,.0f}")
+            past_t = df_final[df_final['entry_date'].dt.date < today]['actual_traffic'].sum()
+            future_e = df_final[df_final['entry_date'].dt.date >= today]['expected'].sum()
+            k1.metric("Total Window Guests", f"{(past_t + future_e):,.0f}")
             k2.metric("Window New Members", f"{df_final['new_members'].sum():,.0f}")
             k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
             k4.metric("Current Accuracy", m['predictability'])
 
         st.divider()
 
-        # --- III. PERFORMANCE VIZ ---
-        st.write("### 🎰 The Unified Pulse: Actuals & Projections")
+        # --- VII. PERFORMANCE VIZ ---
+        st.write("### 🎰 The Unified Pulse")
         fig_pulse = go.Figure()
+        df_act_chart = df_final[df_final['entry_date'].dt.date < today]
+        fig_pulse.add_trace(go.Scatter(x=df_act_chart['entry_date'], y=df_act_chart['actual_traffic'], name="Actual Guests", line=dict(color='#0047AB', width=4)))
+        fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
         
-        # Actuals (Strictly before Today)
-        df_act = df_final[df_final['entry_date'].dt.date < today]
-        fig_pulse.add_trace(go.Scatter(
-            x=df_act['entry_date'], y=df_act['actual_traffic'], 
-            name="Actual Guests", line=dict(color='#0047AB', width=4), connectgaps=True
-        ))
-        
-        # AI Target (Whole Range)
-        fig_pulse.add_trace(go.Scatter(
-            x=df_final['entry_date'], y=df_final['expected'].round(0), 
-            name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')
-        ))
-        
-        # Today Marker
         today_ts = pd.Timestamp(today)
-        fig_pulse.add_shape(
-            type="line", x0=today_ts, x1=today_ts, y0=0, y1=1, yref="paper",
-            line=dict(color="#666", width=2, dash="dash")
-        )
-        fig_pulse.add_annotation(
-            x=today_ts, y=1, yref="paper", text="Today", showarrow=False, 
-            textangle=-90, xanchor="right", font=dict(color="#666")
-        )
+        fig_pulse.add_shape(type="line", x0=today_ts, x1=today_ts, y0=0, y1=1, yref="paper", line=dict(color="#666", width=2, dash="dash"))
+        fig_pulse.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=400, margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
+        st.plotly_chart(fig_pulse, use_container_width=True)
 
-        fig_pulse.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)', height=450, margin=dict(l=0, r=0, t=10, b=0),
-            hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        st.plotly_chart(fig_pulse, use_container_width=True)\
-
-        # --- IV. STRATEGIC INTELLIGENCE SUITE (SITUATIONAL AWARENESS) ---
+        # --- VIII. STRATEGIC INTELLIGENCE ---
         st.divider()
-        st.write("### 🧠 Strategic Intelligence")
-        
-        # 1. THE FORECAST INTELLIGENCE MODULE
         if is_future or (not is_past):
-            st.write("#### 📅 Upcoming Campaign & Event Briefing")
-            
-            # Create localized future dataframe
+            st.write("### 📅 Upcoming Campaign & Event Briefing")
             df_upcoming = df_final[df_final['entry_date'].dt.date >= today]
             
-            # THE FIX: Looking specifically for your 'active_promo' column
             p_col = 'active_promo'
-            
-            active_promos = []
-            if p_col in df_upcoming.columns:
-                # Filter out placeholders like '0', 'nan', or empty strings
-                active_promos = [p for p in df_upcoming[p_col].unique() if p and str(p) not in ['0', '0.0', 'nan', 'None', '']]
-            
-            # Check for events via attendance
+            active_promos = [p for p in df_upcoming[p_col].unique() if p and str(p) not in ['0', '0.0', 'nan', 'None', '']] if p_col in df_upcoming.columns else []
             active_events = df_upcoming[df_upcoming['attendance'] > 0] if 'attendance' in df_upcoming.columns else pd.DataFrame()
 
             if active_promos or not active_events.empty:
@@ -456,43 +413,26 @@ if page == "📈 Executive Dashboard":
                 with m1:
                     if active_promos:
                         st.markdown("**Active Promotions:**")
-                        for promo in active_promos:
-                            st.info(f"🚀 {promo}")
+                        for promo in active_promos: st.info(f"🚀 {promo}")
                 with m2:
                     if not active_events.empty:
                         st.markdown("**High-Gravity Events:**")
                         for _, evt in active_events.iterrows():
                             e_name = evt.get('event_name', 'Hard Rock LIVE Peak')
-                            if not e_name or str(e_name) == '0': e_name = 'Hard Rock LIVE Peak'
                             st.warning(f"🎸 {evt['entry_date'].strftime('%b %d')}: {e_name}")
-            else:
-                st.write("No specific marketing overlays detected for this window.")
 
-        # 2. PERFORMANCE NARRATIVE
-        st.divider()
-        s_col1, s_col2 = st.columns(2)
-        with s_col1:
-            if is_future or (not is_past):
-                peak_day = df_final.loc[df_final['expected'].idxmax()]
-                st.success(f"""
-                    **Forecast Outlook:** Expecting **{df_final['expected'].sum():,.0f}** total guests. 
-                    Peak demand projected for **{peak_day['entry_date'].strftime('%A, %b %d')}**.
-                """)
-            else:
-                st.info(f"**Audit Summary:** The floor averaged **{int(df_final['actual_traffic'].mean()):,.0f}** daily guests.")
-
-        # 3. OPERATIONAL RISK & OPPORTUNITY
         st.write("#### 🛡️ Operational Risk & Opportunity")
         o1, o2, o3 = st.columns(3)
         with o1:
-            snow_impact = df_final['snow_cm'].sum() * float(st.session_state.coeffs.get('Snow_cm', -45))
-            rain_impact = df_final['rain_mm'].sum() * float(st.session_state.coeffs.get('Rain_mm', -12))
-            st.metric("Weather Friction", f"-{abs(snow_impact + rain_impact):,.0f}")
+            s_imp = df_final['snow_cm'].sum() * float(st.session_state.coeffs.get('Snow_cm', -45))
+            r_imp = df_final['rain_mm'].sum() * float(st.session_state.coeffs.get('Rain_mm', -12))
+            st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
         with o2:
             potential = int(df_final['expected'].sum() - df_final['new_members'].sum())
-            st.metric("Conversion Opportunity", f"{potential:,.0f}")
+            st.metric("Conversion Opportunity", f"{max(0, potential):,.0f}")
         with o3:
-            intensity = "Critical Peak" if df_final['expected'].max() > 5500 else ("High" if df_final['expected'].max() > 4500 else "Moderate")
+            max_v = df_final['expected'].max()
+            intensity = "Critical Peak" if max_v > 5500 else ("High" if max_v > 4500 else "Moderate")
             st.metric("Staffing Intensity", intensity)
 # =================================================================
 # 8. PAGE 2: DAILY LEDGER VAULT (FULL HARD ROCK LIVE LOGIC)
