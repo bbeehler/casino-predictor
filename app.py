@@ -348,7 +348,20 @@ if page == "📈 Executive Dashboard":
                 with f2:
                     manual_event = st.number_input("Event Attendance Projection:", min_value=0, step=100, key="man_event")
                 with f3:
-                    weather_outlook = st.selectbox("Weather Outlook:", ["Clear/Seasonal", "Rain Forecast", "Snow Forecast"], key="man_weather")
+                    # --- DYNAMIC WEATHER OVERRIDES ---
+                # Pull the actual sensitivity from your Page 6 coefficients
+                rain_sensitivity = float(st.session_state.coeffs.get('Rain_mm', -12))
+                snow_sensitivity = float(st.session_state.coeffs.get('Snow_cm', -45))
+
+                if weather_outlook == "Rain Forecast":
+                    # We inject enough rain to see a noticeable dip based on your Page 6 math
+                    df_p['rain_mm'] = 10 
+                    st.caption(f"🌧️ Applying Rain Friction: {rain_sensitivity * 10:,.0f} guests")
+                    
+                elif weather_outlook == "Snow Forecast":
+                    # We inject enough snow to trigger the friction
+                    df_p['snow_cm'] = 5
+                    st.caption(f"❄️ Applying Snow Friction: {snow_sensitivity * 5:,.0f} guests")
 
                 # Apply Overrides to df_p before Engine Runs
                 if manual_promo: 
