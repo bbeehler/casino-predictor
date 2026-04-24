@@ -331,21 +331,20 @@ if page == "📈 Executive Dashboard":
         df_timeline = pd.DataFrame({'entry_date': date_list})
         df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
 
-        # 4. STRATEGIC DAILY PLANNER (Type-Safe Version)
+        # 4. STRATEGIC DAILY PLANNER (Social & Adstock Integrated)
         if is_future:
             with st.expander("📅 Daily Strategy Planner", expanded=True):
-                st.write("Assign specific events, promos, or weather to individual days.")
+                st.write("Plan your digital spend and social reach to see the projected lift.")
                 
-                # A. Prepare the data and force types to prevent StreamlitAPIException
-                df_plan = df_p[['entry_date', 'active_promo', 'attendance', 'rain_mm', 'snow_cm']].copy()
+                # A. Prepare the planning data
+                # We add 'ad_clicks' and 'ad_impressions' to the view
+                df_plan = df_p[['entry_date', 'active_promo', 'attendance', 
+                                'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']].copy()
                 
-                # FORCE TYPES: Ensure numbers are floats and promos are strings
+                # Force types for the editor
                 df_plan['active_promo'] = df_plan['active_promo'].astype(str).replace(['0', '0.0', 'nan'], '')
-                df_plan['attendance'] = df_plan['attendance'].astype(float)
-                df_plan['rain_mm'] = df_plan['rain_mm'].astype(float)
-                df_plan['snow_cm'] = df_plan['snow_cm'].astype(float)
-                
-                # Format date for display
+                float_cols = ['attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
+                df_plan[float_cols] = df_plan[float_cols].astype(float)
                 df_plan['entry_date'] = df_plan['entry_date'].dt.strftime('%a, %b %d')
                 
                 # B. The Data Editor
@@ -353,19 +352,23 @@ if page == "📈 Executive Dashboard":
                     df_plan,
                     column_config={
                         "entry_date": st.column_config.Column("Date", disabled=True),
-                        "active_promo": st.column_config.TextColumn("Active Promo", help="Type name to trigger lift"),
-                        "attendance": st.column_config.NumberColumn("Event Attendance", min_value=0, step=100),
-                        "rain_mm": st.column_config.NumberColumn("Rain (mm)", min_value=0),
-                        "snow_cm": st.column_config.NumberColumn("Snow (cm)", min_value=0),
+                        "active_promo": st.column_config.TextColumn("Active Promo", help="Type name to trigger fixed lift"),
+                        "ad_clicks": st.column_config.NumberColumn("Google/FB Clicks", help="Driven by Clicks coefficient"),
+                        "ad_impressions": st.column_config.NumberColumn("Social Impressions", help="Driven by Social coefficient"),
+                        "attendance": st.column_config.NumberColumn("Event Attendance", min_value=0),
+                        "rain_mm": st.column_config.NumberColumn("Rain (mm)"),
+                        "snow_cm": st.column_config.NumberColumn("Snow (cm)"),
                     },
                     hide_index=True,
                     use_container_width=True,
-                    key="strategy_editor_v2"
+                    key="strategy_editor_v3"
                 )
 
-                # C. Map back to the main dataframe
+                # C. Map back to df_p for the Engine
                 df_p['active_promo'] = edited_df['active_promo'].values
                 df_p['attendance'] = edited_df['attendance'].values
+                df_p['ad_clicks'] = edited_df['ad_clicks'].values
+                df_p['ad_impressions'] = edited_df['ad_impressions'].values
                 df_p['rain_mm'] = edited_df['rain_mm'].values
                 df_p['snow_cm'] = edited_df['snow_cm'].values
 
