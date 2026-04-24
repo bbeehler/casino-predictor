@@ -164,18 +164,37 @@ def get_forensic_metrics(df_input, coeffs):
         # Emergency Fallback Baseline
         heartbeats = {d: 4200 for d in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']}
     
-    # IV. PREDICTION LOGIC (FUTURE-READY)
+    # --- IV. PREDICTION LOGIC (FUTURE-READY) ---
     def predict_guests(row):
         if row['is_closed'] == 1: 
             return 0
-        
-        # Pull the average guest baseline for this day of the week
         day_name = row['entry_date'].strftime('%A')
         base = heartbeats.get(day_name, 4200) 
-        
-        # Ensure we add OOH and any scheduled lifts to the future baseline
-        # Even if clicks/impressions are 0 in the future, OOH is a fixed constant
         return max(0, base + row['residual_lift'] + ooh_daily + row['gravity_lift'])
+
+    # THE FIX: Ensure this column is created BEFORE the audit code below runs
+    df['expected'] = df.apply(predict_guests, axis=1)
+    
+    # --- V. PREDICTABILITY AUDIT (JUDGING THE PAST) ---
+    df_past = df[df['entry_date'] <= today]
+    if not df_past.empty:
+        # Filter for days that were open and actually have traffic to avoid division by zero
+        df_audit = df_past[(df_past['is_closed'] == 0) & (df_past['actual_traffic'] > 0)].copy()
+        
+        if not df_audit.empty:
+            # Now 'expected' definitely exists because we created it on line 196
+            mape = (np.abs(df_audit['actual_traffic'] - df_audit['expected']) / df_audit['actual_traffic']).mean()
+            pred_score = (1 - mape) * 100
+        else:
+            pred_score = 100.0 # Default if no past open days exist
+    else:
+        pred_score = 100.0
+
+    return {
+        "predictability": f"{pred_score:.1f}%",
+        "df": df,
+        "ooh_total_daily": ooh_daily
+    }
     
     # --- V. PREDICTABILITY AUDIT ---
     # Only judge AI accuracy on the past
