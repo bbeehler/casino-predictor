@@ -320,17 +320,27 @@ if not st.session_state.authenticated:
 # --- SECTION 2: EXECUTIVE NAVIGATION ---
 # =================================================================
 # --- SIDEBAR NAVIGATION ---
-with st.sidebar:
+ith st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/en/thumb/0/04/Hard_Rock_Cafe_logo.svg/1200px-Hard_Rock_Cafe_logo.svg.png", width=150)
     st.title("Admin Command")
-    page = st.selectbox("Select Intelligence Deck:", [
-        "📈 Executive Dashboard", 
-        "🎰 Universal Ledger", 
-        "📡 Attribution Analytics", 
-        "📋 Master Audit Report", 
-        "⚙️ AI Calibration",
-        "🤖 FloorCast AI Analyst" # Added back to Nav
-    ])
+    st.divider()
+    
+    # We use a radio button to list the pages vertically
+    page = st.radio(
+        "Intelligence Decks:",
+        [
+            "📈 Executive Dashboard", 
+            "🎰 Universal Ledger", 
+            "📡 Attribution Analytics", 
+            "📋 Master Audit Report", 
+            "⚙️ AI Calibration",
+            "🤖 FloorCast AI Analyst"
+        ],
+        index=0, # Defaults to Dashboard
+        key="nav_list"
+    )
+    
+    st.divider()
 
 st.sidebar.markdown("---")
 st.sidebar.caption(f"**FloorCast AI v6.0**")
