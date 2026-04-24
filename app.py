@@ -662,7 +662,7 @@ elif page == "🧠 FloorCast AI Analyst":
     df_ai = pd.DataFrame(ledger_data)
     dossier = "".join([f"Date: {r.get('entry_date')} | Traffic: {r.get('actual_traffic')} | Signups: {r.get('new_members')} | Promo: {r.get('active_promo')} | Weather: {r.get('temp_c')}C\n" for _, r in df_ai.iterrows()])
 
-    prompt = st.chat_input("Chief, what do you need to know?")
+    prompt = st.chat_input("What do you need to know?")
     
     if prompt:
         history_str = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages[-8:]])
