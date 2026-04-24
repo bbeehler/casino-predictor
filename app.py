@@ -266,7 +266,7 @@ if st.sidebar.button("🔓 Logout", use_container_width=True):
     st.rerun()
 
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (FORENSIC & FORECAST)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (CLEAN EDITION)
 # =================================================================
 if page == "📈 Executive Dashboard":
     st.markdown("""
@@ -276,105 +276,81 @@ if page == "📈 Executive Dashboard":
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. SMART DATE ENGINE
+    # 1. DATA PREP & TIMELINE ENGINE
     today = datetime.date.today()
+    if not ledger_data:
+        st.warning("Forensic Vault is empty. Please populate the Ledger.")
+        st.stop()
+
     df_raw = pd.DataFrame(ledger_data)
     df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
     
-    # Defaults: Last 7 days to next 7 days
+    # Date Range Selector
     default_start = today - datetime.timedelta(days=7)
     default_end = today + datetime.timedelta(days=7)
 
     col_date, _ = st.columns([1, 2])
     with col_date:
-        pulse_range = st.date_input(
-            "Strategic Window:", 
-            value=(default_start, default_end),
-            key="pulse_vfinal"
-        )
+        pulse_range = st.date_input("Strategic Analysis Window:", value=(default_start, default_end), key="pulse_vfinal")
 
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
         
-        # 2. GENERATE A UNIFIED DATE RANGE (The "Master Timeline")
-        # This fills in future dates even if they aren't in your ledger yet
+        # Build unified timeline (Past + Future)
         date_list = pd.date_range(start=start_p, end=end_p)
         df_timeline = pd.DataFrame({'entry_date': date_list})
-        
-        # Merge with actual ledger data
         df_merged = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
         
-        # 3. RUN THE ENGINE ON THE TIMELINE
+        # Run Forensic Engine
         m = get_forensic_metrics(df_merged.to_dict(orient='records'), st.session_state.coeffs)
-        df_p = m['df']
+        df_p = m['df'].sort_values('entry_date')
         
-        # 4. SPLIT PERFORMANCE: PAST VS. FUTURE
+        # Split for Logic
         df_past = df_p[df_p['entry_date'].dt.date <= today]
         df_future = df_p[df_p['entry_date'].dt.date > today]
 
-        # --- EXECUTIVE KPI GRID ---
+        # 2. EXECUTIVE KPI GRID
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
         
-        # Calculate accuracy for the PAST portion
-        if not df_past.empty and df_past['actual_traffic'].sum() > 0:
-            past_acc = m['predictability']
-        else:
-            past_acc = "N/A"
-            
-        # Project Future Demand
+        past_acc = m['predictability'] if not df_past.empty else "N/A"
         future_demand = int(df_future['expected'].sum()) if not df_future.empty else 0
-        
-        k1.metric("Past AI Accuracy", past_acc, help="How well the engine predicted the guests we actually saw.")
-        k2.metric("Future Guest Demand", f"{future_demand:,}", help="Total projected headcount for the future dates selected.")
-        k3.metric("OOH Daily Inertia", f"{m['ooh_total_daily']:.0f}", help="Fixed daily guest floor provided by billboards.")
-        
-        # Theoretical GGR for the whole window
         c = st.session_state.coeffs
-        total_projected_ggr = df_p['expected'].sum() * float(c['Avg_Coin_In']) * (float(c['Hold_Pct'])/100)
-        k4.metric("Est. Total GGR", f"${total_projected_ggr:,.0f}")
+        total_theo_ggr = df_p['expected'].sum() * float(c['Avg_Coin_In']) * (float(c['Hold_Pct'])/100)
+        
+        k1.metric("AI Prediction Accuracy", past_acc)
+        k2.metric("Future Guest Demand", f"{future_demand:,}")
+        k3.metric("OOH Daily Inertia", f"{m['ooh_total_daily']:.0f}")
+        k4.metric("Est. Window GGR", f"${total_theo_ggr:,.0f}")
 
         st.divider()
 
-        # --- PERFORMANCE VIZ ---
+        # 3. PERFORMANCE VIZ
         st.write("### 🎰 The Unified Pulse: Actuals & Projections")
-        
         fig_pulse = go.Figure()
         
-        # Actual Traffic (Past Only)
+        # Actuals (Blue Line)
         fig_pulse.add_trace(go.Scatter(
             x=df_past['entry_date'], y=df_past['actual_traffic'],
-            name="Actual Guests", line=dict(color='#0047AB', width=4)
+            name="Actual Guests", line=dict(color='#0047AB', width=4), connectgaps=True
         ))
         
-        # AI Prediction (Whole Range - Past & Future)
+        # Projections (Gold Dotted Line)
         fig_pulse.add_trace(go.Scatter(
             x=df_p['entry_date'], y=df_p['expected'].round(0),
-            name="AI Predicted Target", line=dict(color='#FFCC00', width=2, dash='dot')
+            name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')
         ))
         
-        # Vertical Line for "Today"
-        # 1. Convert today to a timestamp that matches the DataFrame index
-today_ts = pd.Timestamp(today)
-
-# 2. Add the vertical line as a shape
-fig_pulse.add_shape(
-    type="line",
-    x0=today_ts, x1=today_ts,
-    y0=0, y1=1, yref="paper", # 'paper' makes the line span the full height
-    line=dict(color="#666", width=2, dash="dash"),
-)
-
-# 3. Add the "Today" text as a separate annotation (avoids the mean error)
-fig_pulse.add_annotation(
-    x=today_ts,
-    y=1, yref="paper",
-    text="Today",
-    showarrow=False,
-    textangle=-90,
-    xanchor="right",
-    font=dict(color="#666")
-)
+        # "Today" Marker (Shape approach to prevent errors)
+        today_ts = pd.Timestamp(today)
+        fig_pulse.add_shape(
+            type="line", x0=today_ts, x1=today_ts, y0=0, y1=1, yref="paper",
+            line=dict(color="#666", width=2, dash="dash")
+        )
+        fig_pulse.add_annotation(
+            x=today_ts, y=1, yref="paper", text="Today", showarrow=False, 
+            textangle=-90, xanchor="right", font=dict(color="#666")
+        )
 
         fig_pulse.update_layout(
             plot_bgcolor='rgba(0,0,0,0)', height=500, margin=dict(l=0, r=0, t=10, b=0),
@@ -382,17 +358,17 @@ fig_pulse.add_annotation(
         )
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # --- THE EXECUTIVE SUMMARY ---
+        # 4. STRATEGIC BRIEFING
         st.divider()
         st.write("### 🧠 Strategic Briefing")
         s1, s2 = st.columns(2)
-        
         with s1:
-            st.info(f"**Audit Mode:** For the past period, the floor yielded **{int(df_past['actual_traffic'].sum()):,}** guests. The engine successfully explained the variance with **{past_acc}** confidence.")
+            st.info(f"**Past Audit:** Yielded **{int(df_past['actual_traffic'].sum()):,}** guests. AI accuracy stands at **{past_acc}**.")
         with s2:
             if future_demand > 0:
                 peak_day = df_future.loc[df_future['expected'].idxmax()]
-                st.success(f"**Forecast Mode:** Anticipating **{future_demand:,}** guests in the upcoming window. Peak demand is expected on **{peak_day['entry_date'].strftime('%A, %b %d')}** with **{int(peak_day['expected']):,}** guests.")
+                st.success(f"**Forecast:** Expecting **{future_demand:,}** guests. Peak demand on **{peak_day['entry_date'].strftime('%A, %b %d')}**.")
+
 # =================================================================
 # 8. PAGE 2: DAILY LEDGER VAULT (FULL HARD ROCK LIVE LOGIC)
 # =================================================================
