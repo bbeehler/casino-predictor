@@ -654,13 +654,13 @@ elif page == "📋 Master Audit Report":
     else:
         st.info("Please select a range (Start and End date) to generate the audit report.")
 # =================================================================
-# 11. PAGE 5: AI STRATEGIC ANALYST (PREDICTABILITY UPGRADE)
+# 11. PAGE 5: AI STRATEGIC ANALYST (REVERSED + RESET BUTTON)
 # =================================================================
 elif page == "🧠 FloorCast AI Analyst":
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">🕵️ FloorCast Strategic AI Analyst</h2>
-            <p style="color: #444; margin: 0;">Correlating Forensic Predictions with Actual Property Results.</p>
+            <p style="color: #444; margin: 0;">Executive Intelligence: Correlating Forensic Predictions with Actual Results.</p>
         </div>
     """, unsafe_allow_html=True)
     
@@ -668,29 +668,30 @@ elif page == "🧠 FloorCast AI Analyst":
         st.warning("Forensic Vault is empty. Analyst cannot audit performance without a ledger.")
         st.stop()
 
-    # 1. RUN FORENSIC ENGINE ON ENTIRE LEDGER
-    # This generates the 'expected' and 'variance' metrics the AI was missing
+    # 1. SIDEBAR UTILITY: RESET BUTTON
+    # This only shows up when on Page 5 and there are messages to clear
+    if st.session_state.messages:
+        st.sidebar.divider()
+        if st.sidebar.button("🗑️ Reset Analyst Thread", use_container_width=True):
+            st.session_state.messages = []
+            st.rerun()
+
+    # 2. RUN FORENSIC ENGINE FOR DOSSIER
     m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
     df_ai = m_audit['df']
     
-    # 2. PREP THE ENHANCED DOSSIER
-    # We now include AI Prediction and Variance so the AI can "track" predictability
     dossier = ""
-    for _, r in df_ai.sort_values('entry_date', ascending=False).iterrows():
+    for _, r in df_ai.sort_values('entry_date', ascending=False).head(30).iterrows():
         actual = r.get('actual_traffic', 0)
         expected = int(r.get('expected', 0))
         variance = actual - expected
-        accuracy = (1 - (abs(variance)/actual)) * 100 if actual > 0 else 0
-        
         dossier += (
-            f"Date: {r.get('entry_date')} | Actual Traffic: {actual} | "
-            f"AI Prediction: {expected} | Variance: {variance} | "
-            f"Model Accuracy: {accuracy:.1f}% | Signups: {r.get('new_members')} | "
-            f"Weather: {r.get('temp_c')}C\n"
+            f"Date: {r.get('entry_date')} | Actual: {actual} | Prediction: {expected} | "
+            f"Variance: {variance} | Members: {r.get('new_members')} | Temp: {r.get('temp_c')}C\n"
         )
 
-    # 3. CHAT LOGIC (Latest to Oldest)
-    prompt = st.chat_input("Analyze our predictability for the last week...")
+    # 3. CHAT INPUT
+    prompt = st.chat_input("Chief, what are you looking for in the data?")
     
     if prompt:
         history_str = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages[-8:]])
@@ -700,33 +701,17 @@ elif page == "🧠 FloorCast AI Analyst":
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            with st.status("🕵️ Analyst is Auditing Forensic Predictions...", expanded=True) as status:
-                full_prompt = f"""
-                You are the Lead Strategic Analyst for Hard Rock Ottawa. 
-                You have been given the FORENSIC DOSSIER which contains both ACTUAL results 
-                and the AI'S PREDICTIONS.
-                
-                FORENSIC DOSSIER:
-                {dossier}
-                
-                HISTORY:
-                {history_str}
-                
-                MISSION:
-                Analyze our PREDICTABILITY. Identify days with high variance (where the floor 
-                massively beat or missed the AI prediction) and explain why (Weather, Signups, etc).
-                
-                QUESTION: {prompt}
-                """
+            with st.status("🕵️ Auditing Predictions & Variance...", expanded=True) as status:
+                full_prompt = f"Role: Casino Strategist. Data:\n{dossier}\nHistory:\n{history_str}\nQuestion: {prompt}"
                 response = model.generate_content(full_prompt)
-                status.update(label="✅ Strategic Audit Complete", state="complete")
+                status.update(label="✅ Analysis Finalized", state="complete")
             
             st.session_state.messages.append({"role": "assistant", "content": response.text})
             st.rerun()
         except Exception as e:
-            st.error(f"Engine Error: {e}")
+            st.error(f"Error: {e}")
 
-    # Display Response (Newest to Oldest as requested)
+    # 4. DISPLAY THREAD: NEWEST AT THE TOP
     for m in reversed(st.session_state.messages):
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
