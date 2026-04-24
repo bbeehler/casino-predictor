@@ -293,7 +293,7 @@ st.sidebar.caption(f"**FloorCast AI v6.0**")
 st.sidebar.caption(f"Status: Operational | {datetime.date.today().strftime('%b %Y')}")
 
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION - STAFFING UPDATED)
 # =================================================================
 if page == "📈 Executive Dashboard":
     st.markdown("""
@@ -338,7 +338,6 @@ if page == "📈 Executive Dashboard":
                 st.write("Plan your digital spend and social reach to see the projected lift.")
                 
                 # A. Prepare the planning data
-                # We add 'ad_clicks' and 'ad_impressions' to the view
                 df_plan = df_p[['entry_date', 'active_promo', 'attendance', 
                                 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']].copy()
                 
@@ -453,9 +452,12 @@ if page == "📈 Executive Dashboard":
             potential = int(df_final['expected'].sum() - df_final['new_members'].sum())
             st.metric("Conversion Opportunity", f"{max(0, potential):,.0f}")
         with o3:
-            max_v = df_final['expected'].max()
-            intensity = "Critical Peak" if max_v > 5500 else ("High" if max_v > 4500 else "Moderate")
-            st.metric("Staffing Intensity", intensity)
+            # FIX: STAFFING INTENSITY SPECIFIC TO THE DAY
+            # We calculate the peak day's volume within this window to set the intensity label
+            peak_day_volume = df_final['expected'].max()
+            intensity_label = "🔴 Critical Peak" if peak_day_volume > 6200 else ("🟡 High" if peak_day_volume > 5200 else "🟢 Stable")
+            st.metric("Staffing Intensity", intensity_label, help="Based on the maximum daily peak in this window.")
+
 # =================================================================
 # 📑 PAGE 2: DAILY LEDGER AUDIT (HARD ROCK LIVE SYNC)
 # =================================================================
