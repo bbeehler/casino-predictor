@@ -610,60 +610,89 @@ elif page == "📋 Master Audit Report":
 
         st.divider()
 
-        # 5. ATTRIBUTION STACK (UPDATED KEYS FOR GUEST-FIRST ENGINE)
-        st.write("### 📊 Forensic Attribution Stack")
+        # 5. FORENSIC ATTRIBUTION STACK (EXECUTIVE OVERHAUL)
+        st.write("### 🧬 Multi-Channel Attribution Stack")
         df_final['OOH_Pressure'] = m['ooh_total_daily']
         
         fig_audit = go.Figure()
-        
-        # 1. CHANGE: baseline_isolated -> guest_baseline
+
+        # STACK 1: Purified Guest Baseline (The Foundation)
         fig_audit.add_trace(go.Scatter(
             x=df_final['entry_date'], 
-            y=df_final['guest_baseline'], # FIX APPLIED HERE
-            name='Purified Baseline', 
+            y=df_final['guest_baseline'], 
+            name='Organic Heartbeat', 
             stackgroup='one', 
-            fillcolor='#E1E8F0', 
-            line=dict(width=0.5, color='#B0C4DE')
+            fillcolor='rgba(200, 210, 225, 0.6)', # Subtle Executive Grey-Blue
+            line=dict(width=1, color='#8E9AAF', shape='spline'), # Smoothed Spline
+            hoverinfo='x+y+name'
         ))
         
-        # 2. OOH Pressure (Already synced)
+        # STACK 2: OOH Pressure (Fixed Inertia)
         fig_audit.add_trace(go.Scatter(
             x=df_final['entry_date'], 
             y=df_final['OOH_Pressure'], 
-            name='OOH Pressure', 
+            name='OOH Passive Inertia', 
             stackgroup='one', 
-            fillcolor='#B0C4DE', 
-            line=dict(width=0.5, color='#8FA9C7')
+            fillcolor='rgba(143, 169, 199, 0.7)', # Medium Blue-Grey
+            line=dict(width=1, color='#5D707F', shape='spline'),
+            hoverinfo='x+y+name'
         ))
         
-        # 3. Digital ROI (Already synced)
+        # STACK 3: Digital ROI (Active Lift)
         fig_audit.add_trace(go.Scatter(
             x=df_final['entry_date'], 
             y=df_final['residual_lift'], 
-            name='Digital ROI', 
+            name='Digital Adstock Lift', 
             stackgroup='one', 
-            fillcolor='#0047AB', 
-            line=dict(width=0.5, color='#003380')
+            fillcolor='rgba(0, 71, 171, 0.8)', # Bold Cobalt Blue
+            line=dict(width=1, color='#002D6B', shape='spline'),
+            hoverinfo='x+y+name'
         ))
         
-        # 4. Event Gravity (Already synced)
+        # STACK 4: Event Gravity (The Spike)
         fig_audit.add_trace(go.Scatter(
             x=df_final['entry_date'], 
             y=df_final['gravity_lift'], 
-            name='Event Gravity', 
+            name='Hard Rock LIVE Gravity', 
             stackgroup='one', 
-            fillcolor='#FFCC00', 
-            line=dict(width=0.5, color='#CCA300')
+            fillcolor='rgba(255, 204, 0, 0.9)', # Hard Rock Gold
+            line=dict(width=1, color='#B89500', shape='spline'),
+            hoverinfo='x+y+name'
         ))
         
         fig_audit.update_layout(
             plot_bgcolor='rgba(0,0,0,0)', 
-            height=500,
+            paper_bgcolor='rgba(0,0,0,0)',
+            height=550, # Slightly taller for better resolution
             margin=dict(l=10, r=10, t=10, b=10),
-            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, bgcolor='rgba(255,255,255,0.8)', bordercolor="Black", borderwidth=1),
-            hovermode="x unified"
+            # THE EXECUTIVE LEGEND
+            legend=dict(
+                orientation="h", 
+                yanchor="top", 
+                y=-0.12, 
+                xanchor="center", 
+                x=0.5,
+                bgcolor='rgba(255,255,255,0.9)',
+                bordercolor="#DEE2E6",
+                borderwidth=1,
+                font=dict(size=12, color="#1A1A1B")
+            ),
+            hovermode="x unified",
+            xaxis=dict(
+                showgrid=False,
+                linecolor='#DEE2E6',
+                title_font=dict(size=10, color='#666')
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor='#F0F2F6',
+                gridwidth=1,
+                title="Guest Volume",
+                title_font=dict(size=10, color='#666')
+            )
         )
         st.plotly_chart(fig_audit, use_container_width=True)
+        
         # 6. DATA LOG & EXPORT
         st.write("### 📋 Detailed Forensic Ledger")
         df_final['Variance'] = df_final['actual_traffic'] - df_final['expected']
