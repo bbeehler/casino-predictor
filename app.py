@@ -403,7 +403,41 @@ if page == "📈 Executive Dashboard":
             plot_bgcolor='rgba(0,0,0,0)', height=450, margin=dict(l=0, r=0, t=10, b=0),
             hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
-        st.plotly_chart(fig_pulse, use_container_width=True)
+        st.plotly_chart(fig_pulse, use_container_width=True)\
+        # =========================================================
+        # NEW FORECAST INTELLIGENCE MODULE (Place right here)
+        # =========================================================
+        if is_future or (not is_past):
+            st.divider()
+            st.write("### 📅 Upcoming Campaign & Event Briefing")
+            
+            df_upcoming = df_final[df_final['entry_date'].dt.date >= today]
+            
+            # Use 'promotion' as the primary key, fallback to 'promotion_name'
+            p_col = 'promotion' if 'promotion' in df_upcoming.columns else 'promotion_name'
+            
+            if p_col in df_upcoming.columns:
+                active_promos = [p for p in df_upcoming[p_col].unique() if p and str(p) not in ['0', 'nan', 'None']]
+            else:
+                active_promos = []
+
+            active_events = df_upcoming[df_upcoming['attendance'] > 0] if 'attendance' in df_upcoming.columns else pd.DataFrame()
+
+            if active_promos or not active_events.empty:
+                m1, m2 = st.columns(2)
+                with m1:
+                    if active_promos:
+                        st.markdown("**Active Promotions:**")
+                        for promo in active_promos:
+                            st.info(f"🚀 {promo}")
+                with m2:
+                    if not active_events.empty:
+                        st.markdown("**High-Gravity Events:**")
+                        for _, evt in active_events.iterrows():
+                            e_name = evt.get('event_name', 'Hard Rock LIVE Peak')
+                            st.warning(f"🎸 {evt['entry_date'].strftime('%b %d')}: {e_name}")
+            else:
+                st.write("No marketing overlays detected for this window.")
 
         # --- IV. STRATEGIC INTELLIGENCE SUITE (v6.0 - PROMO AWARE) ---
         st.divider()
