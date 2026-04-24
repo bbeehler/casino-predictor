@@ -506,10 +506,10 @@ elif page == "📊 Attribution Analytics":
     st.caption("This chart shows the 'Purified' baseline—traffic remaining after removing all marketing and weather variables.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v10)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v10 - REPAIRED)
 # =================================================================
 elif page == "📋 Master Audit Report":
-    # Custom CSS to shrink KPI labels for a "Wholesome" dense look
+    # Custom CSS to shrink KPI labels for a dense, professional look
     st.markdown("""
         <style>
         [data-testid="stMetricLabel"] p {
@@ -531,6 +531,7 @@ elif page == "📋 Master Audit Report":
         st.stop()
 
     df_audit_raw = pd.DataFrame(ledger_data)
+    # CRITICAL: Ensure entry_date is a datetime object immediately
     df_audit_raw['entry_date'] = pd.to_datetime(df_audit_raw['entry_date'])
     
     # 1. AUDIT RANGE SELECTOR
@@ -539,36 +540,44 @@ elif page == "📋 Master Audit Report":
 
     col_date, col_export = st.columns([2, 1])
     with col_date:
+        # THE FIX: Explicit key and robust handling for partial range selection
         audit_range = st.date_input(
             "Audit Selection Window:", 
             value=(min_audit, max_audit),
             min_value=min_audit,
             max_value=max_audit,
-            key="master_audit_v10"
+            key="master_audit_v11_fixed"
         )
 
+    # 2. DATE FILTERING (REPAIRED)
+    # We must check if the user has selected BOTH a start and end date
     if isinstance(audit_range, tuple) and len(audit_range) == 2:
         s_date, e_date = audit_range
-        df_audit = df_audit_raw[(df_audit_raw['entry_date'].dt.date >= s_date) & (df_audit_raw['entry_date'].dt.date <= e_date)].copy()
+        
+        # We compare .dt.date to the widget's date objects
+        mask = (df_audit_raw['entry_date'].dt.date >= s_date) & (df_audit_raw['entry_date'].dt.date <= e_date)
+        df_audit = df_audit_raw.loc[mask].copy()
         
         if df_audit.empty:
-            st.error("No records found for this window.")
+            st.error(f"No records found between {s_date} and {e_date}.")
             st.stop()
 
-        # RUN ENGINE
+        # RUN ENGINE ON FILTERED DATA
         m = get_forensic_metrics(df_audit.to_dict(orient='records'), st.session_state.coeffs)
-        df_final = m['df']
+        df_final = m['df'] # Engine returns 'df'
         c = st.session_state.coeffs
         num_days = len(df_final)
 
-        # 2. THE WHOLESOME KPI GRID (Row 1: Financials & Loyalty)
+        # 3. THE WHOLESOME KPI GRID
         st.write("### 💰 Financial & Loyalty Integrity")
         k1, k2, k3, k4, k5 = st.columns(5)
         
         t_traffic = df_final['actual_traffic'].sum()
         avg_coin = float(c.get('Avg_Coin_In', 112.50))
+        hold_pct = float(c.get('Hold_Pct', 10.0)) / 100
+        
         t_rev = t_traffic * avg_coin
-        actual_ggr = t_rev * (float(c.get('Hold_Pct', 10.0)) / 100)
+        actual_ggr = t_rev * hold_pct
         t_mems = df_final['new_members'].sum()
         conv_rate = (t_mems / t_traffic * 100) if t_traffic > 0 else 0
 
@@ -578,7 +587,7 @@ elif page == "📋 Master Audit Report":
         k4.metric("New Unity Members", f"{t_mems:,}")
         k5.metric("Member Conv. %", f"{conv_rate:.2f}%")
 
-        # 3. THE WHOLESOME KPI GRID (Row 2: Marketing & Environment)
+        # 4. MARKETING & FRICTION
         st.write("### 🧬 Marketing Equity & Friction")
         k6, k7, k8, k9, k10 = st.columns(5)
         
@@ -588,6 +597,7 @@ elif page == "📋 Master Audit Report":
         t_mkt = t_digital + t_ooh + t_gravity
         mkt_share = (t_mkt / t_traffic * 100) if t_traffic > 0 else 0
         
+        # Weather Friction Logic
         t_snow_loss = (df_final['snow_cm'].sum() * float(c.get('Snow_cm', -45)))
         t_rain_loss = (df_final['rain_mm'].sum() * float(c.get('Rain_mm', -12)))
         friction_total = abs(t_snow_loss + t_rain_loss)
@@ -596,91 +606,53 @@ elif page == "📋 Master Audit Report":
         k7.metric("Marketing Share", f"{mkt_share:.1f}%")
         k8.metric("Digital ROI Lift", f"{t_digital:,.0f}")
         k9.metric("Weather Friction", f"-{friction_total:,.0f}")
-        k10.metric("AI Model Confidence", m['predictability'])
+        k10.metric("AI Confidence", m['predictability'])
 
         st.divider()
 
-# 4. ATTRIBUTION VISUALIZATION (ENHANCED LEGEND)
+        # 5. ATTRIBUTION STACK (LEGEND FIXED)
         st.write("### 📊 Forensic Attribution Stack")
         df_final['OOH_Pressure'] = m['ooh_total_daily']
-        df_final['Weather_Impact'] = (df_final['snow_cm'] * float(c.get('Snow_cm', -45))) + \
-                                     (df_final['rain_mm'] * float(c.get('Rain_mm', -12)))
         
         fig_audit = go.Figure()
-        
-        # We use explicit colors to ensure the "Wholesome" executive look
-        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['baseline_isolated'], 
-                                     name='Purified Baseline', stackgroup='one', 
-                                     fillcolor='#E1E8F0', line=dict(width=0.5, color='#B0C4DE')))
-        
-        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['OOH_Pressure'], 
-                                     name='OOH Pressure', stackgroup='one', 
-                                     fillcolor='#B0C4DE', line=dict(width=0.5, color='#8FA9C7')))
-        
-        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['residual_lift'], 
-                                     name='Digital ROI', stackgroup='one', 
-                                     fillcolor='#0047AB', line=dict(width=0.5, color='#003380')))
-        
-        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['gravity_lift'], 
-                                     name='Event Gravity', stackgroup='one', 
-                                     fillcolor='#FFCC00', line=dict(width=0.5, color='#CCA300')))
+        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['baseline_isolated'], name='Purified Baseline', stackgroup='one', fillcolor='#E1E8F0', line=dict(width=0.5, color='#B0C4DE')))
+        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['OOH_Pressure'], name='OOH Pressure', stackgroup='one', fillcolor='#B0C4DE', line=dict(width=0.5, color='#8FA9C7')))
+        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['residual_lift'], name='Digital ROI', stackgroup='one', fillcolor='#0047AB', line=dict(width=0.5, color='#003380')))
+        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['gravity_lift'], name='Event Gravity', stackgroup='one', fillcolor='#FFCC00', line=dict(width=0.5, color='#CCA300')))
         
         fig_audit.update_layout(
             plot_bgcolor='rgba(0,0,0,0)', 
-            margin=dict(l=10, r=10, t=10, b=10), # Tight margins to give chart more room
             height=500,
-            # IMPROVED LEGEND: Bottom-centered and horizontal
-            legend=dict(
-                orientation="h", 
-                yanchor="top", 
-                y=-0.15, # Moves it below the X-axis
-                xanchor="center", 
-                x=0.5,
-                bgcolor='rgba(255,255,255,0.8)',
-                bordercolor="Black",
-                borderwidth=1
-            ),
+            margin=dict(l=10, r=10, t=10, b=10),
+            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, bgcolor='rgba(255,255,255,0.8)', bordercolor="Black", borderwidth=1),
             hovermode="x unified"
         )
-        
-        # Clean up the axes for high-end look
-        fig_audit.update_xaxes(showgrid=False, zeroline=False)
-        fig_audit.update_yaxes(showgrid=True, gridcolor='#DEE2E6', zeroline=False)
-        
         st.plotly_chart(fig_audit, use_container_width=True)
 
-        # 5. DATA LOG & EXPORT
+        st.divider()
+
+        # 6. DATA LOG & EXPORT
         st.write("### 📋 Detailed Forensic Ledger")
         df_final['Variance'] = df_final['actual_traffic'] - df_final['expected']
         
-        # Format for display
         display_cols = ['entry_date', 'actual_traffic', 'expected', 'Variance', 'residual_lift', 'gravity_lift', 'new_members']
         st.dataframe(
             df_final[display_cols].sort_values('entry_date', ascending=False),
             use_container_width=True,
-            hide_index=True,
-            column_config={
-                "entry_date": "Audit Date",
-                "actual_traffic": st.column_config.NumberColumn("Actual Traffic", format="%d"),
-                "expected": st.column_config.NumberColumn("AI Forecast", format="%d"),
-                "Variance": st.column_config.NumberColumn("Variance", format="%d"),
-                "residual_lift": "Digital Lift",
-                "gravity_lift": "LIVE Lift",
-                "new_members": "Signups"
-            }
+            hide_index=True
         )
 
         with col_export:
-            # Full data export
             csv_data = df_final.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label="📥 Export Full Audit to CSV",
+                label="📥 Export Audit to CSV",
                 data=csv_data,
-                file_name=f"HR_Forensic_Audit_{s_date}_{e_date}.csv",
+                file_name=f"HR_Audit_{s_date}_{e_date}.csv",
                 mime='text/csv',
                 use_container_width=True
             )
-
+    else:
+        st.info("Please select a range (Start and End date) to generate the audit report.")
 # =================================================================
 # 11. PAGE 5: AI ANALYST (MEMORY INTEGRATED)
 # =================================================================
