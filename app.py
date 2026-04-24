@@ -331,48 +331,39 @@ if page == "📈 Executive Dashboard":
         df_timeline = pd.DataFrame({'entry_date': date_list})
         df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
 
-        # 4. FUTURE STRATEGY PLANNER (Corrected Indentation)
+        # 4. STRATEGIC DAILY PLANNER (Precision Mapping)
         if is_future:
-            with st.expander("🛠️ Future Strategy Planner", expanded=True):
-                st.write("Determine if there is an active promo or event for this window.")
-                has_promo = st.toggle("Active Promotion Running?", value=False, key="promo_toggle")
+            with st.expander("📅 Daily Strategy Planner", expanded=True):
+                st.write("Assign specific events, promos, or weather to individual days.")
                 
-                f1, f2, f3 = st.columns(3)
+                # We create an editable data editor for the current window
+                # We only show the columns that matter for planning
+                df_plan = df_p[['entry_date', 'active_promo', 'attendance', 'rain_mm', 'snow_cm']].copy()
+                df_plan['entry_date'] = df_plan['entry_date'].dt.strftime('%a, %b %d')
                 
-                with f1:
-                    if has_promo:
-                        manual_promo = st.text_input("Promotion Name:", key="man_promo", placeholder="e.g. Rock of Ages")
-                        # These must be indented exactly 4 spaces from the 'if' above
-                        promo_lift = st.slider("Anticipated Lift (Guests):", 0, 2000, 500, key="man_lift")
-                        st.session_state.coeffs['Promo_Lift'] = promo_lift
-                    else:
-                        manual_promo = None
+                # Use Streamlit's data_editor to allow day-by-day adjustments
+                edited_df = st.data_editor(
+                    df_plan,
+                    column_config={
+                        "entry_date": st.column_config.Column("Date", disabled=True),
+                        "active_promo": st.column_config.TextColumn("Active Promo", help="Type name to trigger lift"),
+                        "attendance": st.column_config.NumberColumn("Event Attendance", min_value=0, step=100),
+                        "rain_mm": st.column_config.NumberColumn("Rain (mm)", min_value=0),
+                        "snow_cm": st.column_config.NumberColumn("Snow (cm)", min_value=0),
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    key="strategy_editor"
+                )
 
-                with f2:
-                    manual_event = st.number_input("Event Attendance Projection:", min_value=0, step=100, key="man_event")
-                
-                with f3:
-                    weather_outlook = st.selectbox("Weather Outlook:", ["Clear/Seasonal", "Rain Forecast", "Snow Forecast"], key="man_weather")
-                    
-                    # WEATHER LOGIC: Correctly indented inside the 'with f3' block
-                    rain_sensitivity = float(st.session_state.coeffs.get('Rain_mm', -12))
-                    snow_sensitivity = float(st.session_state.coeffs.get('Snow_cm', -45))
+                # RE-INJECT the edited data back into the main dataframe
+                # This maps the user's daily plan directly to the engine
+                df_p['active_promo'] = edited_df['active_promo'].values
+                df_p['attendance'] = edited_df['attendance'].values
+                df_p['rain_mm'] = edited_df['rain_mm'].values
+                df_p['snow_cm'] = edited_df['snow_cm'].values
 
-                    if weather_outlook == "Rain Forecast":
-                        df_p['rain_mm'] = 10 
-                        st.caption(f"🌧️ Projected Impact: {rain_sensitivity * 10:,.0f} guests")
-                    elif weather_outlook == "Snow Forecast":
-                        df_p['snow_cm'] = 5
-                        st.caption(f"❄️ Projected Impact: {snow_sensitivity * 5:,.0f} guests")
-
-                # Apply final overrides to df_p
-                if manual_promo: 
-                    df_p['active_promo'] = manual_promo
-                elif not has_promo:
-                    df_p['active_promo'] = "0"
-                
-                if manual_event > 0: 
-                    df_p['attendance'] = manual_event
+                st.caption("💡 Tip: Changes above instantly update the Projected Demand and AI Pulse chart.")
 
         # 5. RUN ENGINE
         m = get_forensic_metrics(df_p.to_dict(orient='records'), st.session_state.coeffs)
