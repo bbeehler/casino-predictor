@@ -12,29 +12,49 @@ from supabase import create_client
 from io import BytesIO
 
 # =================================================================
-# 1. PERMANENT INITIALIZATION & STATE LOCK
+# 1. PERMANENT INITIALIZATION & STATE LOCK (v7.0 - DB FIRST)
 # =================================================================
 if 'coeffs' not in st.session_state:
-    # These are only used if the database/vault is completely empty
-    st.session_state.coeffs = {
-        'Static_Count': 10,
-        'Static_Weight': 15.0,
-        'Digital_OOH_Count': 5,
-        'Digital_OOH_Weight': 25.0,
-        'Clicks': 0.05,
-        'Social_Imp': 0.0002,
-        'Social_Eng': 0.01,
-        'Event_Gravity': 25.0,
-        'Avg_Coin_In': 112.50,
-        'Property_Theo': 450.00,
-        'Hold_Pct': 10.0,
-        'Snow_cm': -45,
-        'Rain_mm': -12,
-        'Ad_Decay': 85.0
-    }
-
-if 'messages' not in st.session_state:
-    st.session_state.messages = []
+    try:
+        # 🟢 STEP 1: Attempt to pull the Master Weights from Supabase
+        # We assume there is a single row of coefficients (ID=1)
+        response = supabase.table("coefficients").select("*").limit(1).execute()
+        
+        if response.data and len(response.data) > 0:
+            # 🟢 STEP 2: Database Found - Lock these values in
+            st.session_state.coeffs = response.data[0]
+            # Ensure OOH_Count and Static_Count are at least 1 if weights exist
+            if st.session_state.coeffs.get('OOH_Weight', 0) > 0:
+                st.session_state.coeffs['OOH_Count'] = 1
+                st.session_state.coeffs['Static_Count'] = 1
+        else:
+            # 🟡 STEP 3: Fallback - Database is empty, use Hard Rock Defaults
+            st.session_state.coeffs = {
+                'id': 1,
+                'Promo': 500.0,
+                'Broadcast_Weight': 150.0,
+                'OOH_Weight': 100.0,
+                'OOH_Count': 1,
+                'Print_Lift': 75.0,
+                'PR_Weight': 1.2,
+                'Clicks': 0.05,
+                'Social_Imp': 0.0002,
+                'Ad_Decay': 85,
+                'Rain_mm': -12.0,
+                'Snow_cm': -45.0,
+                'Event_Gravity': 0.25,
+                'Static_Weight': 100.0,
+                'Static_Count': 1,
+                'Digital_OOH_Weight': 25.0,
+                'Digital_OOH_Count': 5
+            }
+            # Optional: Seed the DB with these defaults if it's the first run
+            supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
+            
+    except Exception as e:
+        # 🔴 STEP 4: Failsafe - If DB connection fails, use basic defaults so app doesn't crash
+        st.error(f"Database Connection Error: {e}")
+        st.session_state.coeffs = {'Promo_Lift': 500.0, 'OOH_Weight': 100.0, 'OOH_Count': 1}
 
 # =================================================================
 # 2. GLOBAL PAGE CONFIG & EXECUTIVE THEME
@@ -1000,7 +1020,7 @@ elif page == "⚙️ AI Calibration":
                 "Print_Lift": float(n_print),
                 "PR_Weight": float(n_earned),
                 "Event_Gravity": float(n_grav),
-                "Promo_Lift": float(n_promo),
+                "Promo": float(n_promo),
                 "Rain_mm": float(n_rain),
                 "Snow_cm": float(n_snow),
                 "Static_Weight": float(n_ooh), # Syncing to legacy OOH column for safety
@@ -1014,7 +1034,7 @@ elif page == "⚙️ AI Calibration":
                 # Ensure your coefficients table has an 'id' or 'key' to upsert correctly
                 supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
                 
-                st.success(f"✅ Weights Saved. Billboard Impact: {n_ooh} guests/day.")
+                st.success(f"✅ Weights Saved.")
                 
                 # 3. Force Refresh
                 st.cache_data.clear()
