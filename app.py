@@ -320,12 +320,15 @@ if not st.session_state.authenticated:
 # --- SECTION 2: EXECUTIVE NAVIGATION ---
 # =================================================================
 # --- SIDEBAR NAVIGATION ---
-ith st.sidebar:
+# =================================================================
+# 6. SIDEBAR NAVIGATION (LIST VIEW - FIXED SYNTAX)
+# =================================================================
+with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/en/thumb/0/04/Hard_Rock_Cafe_logo.svg/1200px-Hard_Rock_Cafe_logo.svg.png", width=150)
     st.title("Admin Command")
     st.divider()
     
-    # We use a radio button to list the pages vertically
+    # Using a radio list instead of a dropdown for one-click access
     page = st.radio(
         "Intelligence Decks:",
         [
@@ -336,11 +339,16 @@ ith st.sidebar:
             "⚙️ AI Calibration",
             "🤖 FloorCast AI Analyst"
         ],
-        index=0, # Defaults to Dashboard
-        key="nav_list"
+        index=0,
+        key="nav_list_v12"
     )
     
     st.divider()
+    # Logic to show the reset button only when on the AI Analyst page
+    if page == "🤖 FloorCast AI Analyst" and st.session_state.get('messages'):
+        if st.sidebar.button("🗑️ Reset Analyst Thread", use_container_width=True):
+            st.session_state.messages = []
+            st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.caption(f"**FloorCast AI v6.0**")
