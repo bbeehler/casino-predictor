@@ -354,7 +354,27 @@ if page == "📈 Executive Dashboard":
         ))
         
         # Vertical Line for "Today"
-        fig_pulse.add_vline(x=str(today), line_dash="dash", line_color="#666", annotation_text="Today")
+        # 1. Convert today to a timestamp that matches the DataFrame index
+today_ts = pd.Timestamp(today)
+
+# 2. Add the vertical line as a shape
+fig_pulse.add_shape(
+    type="line",
+    x0=today_ts, x1=today_ts,
+    y0=0, y1=1, yref="paper", # 'paper' makes the line span the full height
+    line=dict(color="#666", width=2, dash="dash"),
+)
+
+# 3. Add the "Today" text as a separate annotation (avoids the mean error)
+fig_pulse.add_annotation(
+    x=today_ts,
+    y=1, yref="paper",
+    text="Today",
+    showarrow=False,
+    textangle=-90,
+    xanchor="right",
+    font=dict(color="#666")
+)
 
         fig_pulse.update_layout(
             plot_bgcolor='rgba(0,0,0,0)', height=500, margin=dict(l=0, r=0, t=10, b=0),
