@@ -109,30 +109,39 @@ def apply_corporate_styling():
 apply_corporate_styling()
 
 # =================================================================
-# 3. MASTER FORENSIC ENGINE (THE HEARTBEAT)
+# 3. FORENSIC ENGINE: THE GUEST-FIRST HEARTBEAT
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
+    """
+    ENGINE v5.0: Prioritizes 'Guests on the Floor' (Members) over Revenue.
+    Features: Operational Status Failsafe & Future Baseline Projection.
+    """
     if not df_input:
         return {"predictability": "0.0%", "df": pd.DataFrame(), "ooh_total_daily": 0}
 
     df = pd.DataFrame(df_input).copy()
     df['entry_date'] = pd.to_datetime(df['entry_date'])
-    df = df.sort_values('entry_date')
-    df['day_name'] = df['entry_date'].dt.day_name()
+    today = pd.Timestamp(datetime.date.today())
     
-    # NEW: Operational Status Failsafe
-    # If there are no guests and no signups, the property is functionally 'closed'
-    df['is_closed'] = df.apply(lambda x: 1 if (x['actual_traffic'] == 0 and x['new_members'] == 0) else 0, axis=1)
-
-    # Weights
+    # --- COEFFICIENT EXTRACTION ---
     c_clicks = float(coeffs.get('Clicks', 0.05))
     c_social = float(coeffs.get('Social_Imp', 0.0002))
     decay = float(coeffs.get('Ad_Decay', 85.0)) / 100 
     gravity = float(coeffs.get('Event_Gravity', 25.0)) / 100
+    
+    # OOH is a fixed daily "Inertia" based on Billboard counts
     ooh_daily = (float(coeffs.get('Static_Weight', 15)) * int(coeffs.get('Static_Count', 10))) + \
                  (float(coeffs.get('Digital_OOH_Weight', 25)) * int(coeffs.get('Digital_OOH_Count', 5)))
 
-    # Guest-Based Adstock Loop
+    # --- I. OPERATIONAL STATUS (THE FAILSAFE) ---
+    # Only flag as 'Closed' if it's in the PAST and has zero guests.
+    # Future dates are NEVER flagged as closed automatically.
+    df['is_closed'] = df.apply(
+        lambda x: 1 if (x['entry_date'] <= today and x['actual_traffic'] == 0 and x['new_members'] == 0) else 0, 
+        axis=1
+    )
+
+    # --- II. ADSTOCK & EVENT LIFT ---
     awareness_pool, current_pool = [], 0.0
     for _, row in df.iterrows():
         daily_in = (row.get('ad_clicks', 0) * c_clicks) + (row.get('ad_impressions', 0) * c_social)
@@ -142,24 +151,47 @@ def get_forensic_metrics(df_input, coeffs):
     df['residual_lift'] = awareness_pool
     df['gravity_lift'] = df.get('attendance', 0) * gravity
 
-    # PURIFIED GUEST HEARTBEAT
-    # Calculate baseline guests ONLY from days where the property was open
+    # --- III. SMART HEARTBEAT CALCULATION ---
+    # Isolate 'Organic' traffic (Actual - Marketing Lifts)
     df['guest_baseline'] = df['actual_traffic'] - df['residual_lift'] - ooh_daily - df['gravity_lift']
-    heartbeats = df[df['is_closed'] == 0].groupby('day_name')['guest_baseline'].mean().to_dict()
     
-    # GUEST PREDICTION LOGIC
+    # Calculate Day-of-Week averages using only OPEN PAST days
+    open_past_data = df[(df['is_closed'] == 0) & (df['entry_date'] <= today)]
+    
+    if not open_past_data.empty:
+        heartbeats = open_past_data.groupby(open_past_data['entry_date'].dt.day_name())['guest_baseline'].mean().to_dict()
+    else:
+        # Emergency Fallback Baseline
+        heartbeats = {d: 4200 for d in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']}
+    
+    # --- IV. PREDICTION LOGIC (FUTURE-READY) ---
     def predict_guests(row):
-        if row['is_closed'] == 1: return 0
-        base = heartbeats.get(row['day_name'], 4365) # 4365 is a hard-coded fallback baseline
+        # Override to zero if we recorded it as closed in the past
+        if row['is_closed'] == 1: 
+            return 0
+        
+        # Pull baseline for the specific day name (e.g., 'Friday')
+        day_name = row['entry_date'].strftime('%A')
+        base = heartbeats.get(day_name, 4200) 
+        
+        # Predicted = Baseline + OOH + Adstock + Event Gravity
         return max(0, base + row['residual_lift'] + ooh_daily + row['gravity_lift'])
 
     df['expected'] = df.apply(predict_guests, axis=1)
     
-    # PREDICTABILITY SCORE (Based on Headcount, not Dollars)
-    df['variance'] = df['actual_traffic'] - df['expected']
-    # Calculate Mean Absolute Percentage Error on Headcount
-    mape = (np.abs(df['variance']) / df['actual_traffic']).replace([np.inf, -np.inf], np.nan).dropna().mean()
-    pred_score = (1 - mape) * 100 if not np.isnan(mape) else 85.0
+    # --- V. PREDICTABILITY AUDIT ---
+    # Only judge AI accuracy on the past
+    df_past = df[df['entry_date'] <= today]
+    if not df_past.empty and df_past['actual_traffic'].sum() > 0:
+        # Exclude closed days from accuracy score to avoid skewing data
+        df_audit = df_past[df_past['is_closed'] == 0]
+        if not df_audit.empty:
+            mape = (np.abs(df_audit['actual_traffic'] - df_audit['expected']) / df_audit['actual_traffic']).mean()
+            pred_score = (1 - mape) * 100
+        else:
+            pred_score = 90.0
+    else:
+        pred_score = 90.0
 
     return {
         "predictability": f"{pred_score:.1f}%",
