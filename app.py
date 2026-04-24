@@ -305,7 +305,7 @@ st.sidebar.caption(f"**FloorCast AI v6.0**")
 st.sidebar.caption(f"Status: Operational | {datetime.date.today().strftime('%b %Y')}")
 
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION - FULL SPECTRUM)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION - FULLY SYNCED)
 # =================================================================
 if page == "📈 Executive Dashboard":
     st.markdown("""
@@ -329,54 +329,42 @@ if page == "📈 Executive Dashboard":
         pulse_range = st.date_input(
             "Select Analysis Window:", 
             value=(today, today + datetime.timedelta(days=7)), 
-            key="pulse_exec_vfinal"
+            key="pulse_exec_vfinal_synced"
         )
 
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
-        
-        # 2. DEFINE MODES (Today counts as Forecast)
         is_future = start_p >= today
         is_past = end_p < today
         
-        # 3. GENERATE TIMELINE
+        # TIMELINE GENERATION
         date_list = pd.date_range(start=start_p, end=end_p)
         df_timeline = pd.DataFrame({'entry_date': date_list})
         df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
 
-        # 4. STRATEGIC DAILY PLANNER (Social & Adstock Integrated)
+        # 2. STRATEGIC DAILY PLANNER (Social & Adstock Integrated)
         if is_future:
             with st.expander("📅 Daily Strategy Planner", expanded=True):
-                st.write("Plan your digital spend and social reach to see the projected lift.")
-                
-                # A. Prepare the planning data
+                st.write("Plan your digital spend and PR events to see the projected lift.")
                 df_plan = df_p[['entry_date', 'active_promo', 'attendance', 
                                 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']].copy()
                 
-                # Force types for the editor
-                df_plan['active_promo'] = df_plan['active_promo'].astype(str).replace(['0', '0.0', 'nan'], '')
+                df_plan['active_promo'] = df_plan['active_promo'].astype(str).replace(['0', '0.0', 'nan', 'None'], '')
                 float_cols = ['attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
                 df_plan[float_cols] = df_plan[float_cols].astype(float)
                 df_plan['entry_date'] = df_plan['entry_date'].dt.strftime('%a, %b %d')
                 
-                # B. The Data Editor
                 edited_df = st.data_editor(
                     df_plan,
                     column_config={
                         "entry_date": st.column_config.Column("Date", disabled=True),
-                        "active_promo": st.column_config.TextColumn("Active Promo/PR hit", help="Type 'PR' in name to trigger PR Multiplier"),
-                        "ad_clicks": st.column_config.NumberColumn("Google/FB Clicks", help="Driven by Clicks coefficient"),
-                        "ad_impressions": st.column_config.NumberColumn("Social Impressions", help="Driven by Social coefficient"),
-                        "attendance": st.column_config.NumberColumn("Event Attendance", min_value=0),
-                        "rain_mm": st.column_config.NumberColumn("Rain (mm)"),
-                        "snow_cm": st.column_config.NumberColumn("Snow (cm)"),
+                        "active_promo": st.column_config.TextColumn("Active Promo/PR Hit", help="Type 'PR' in name for PR Multiplier"),
+                        "ad_clicks": st.column_config.NumberColumn("Google/FB Clicks"),
+                        "ad_impressions": st.column_config.NumberColumn("Social Impressions"),
+                        "attendance": st.column_config.NumberColumn("Event Attendance"),
                     },
-                    hide_index=True,
-                    use_container_width=True,
-                    key="strategy_editor_v3"
+                    hide_index=True, use_container_width=True, key="p1_planner_vfinal"
                 )
-
-                # C. Map back to df_p for the Engine
                 df_p['active_promo'] = edited_df['active_promo'].values
                 df_p['attendance'] = edited_df['attendance'].values
                 df_p['ad_clicks'] = edited_df['ad_clicks'].values
@@ -384,25 +372,37 @@ if page == "📈 Executive Dashboard":
                 df_p['rain_mm'] = edited_df['rain_mm'].values
                 df_p['snow_cm'] = edited_df['snow_cm'].values
 
-        # 5. RUN ENGINE (Using the Full-Spectrum Logic)
-        m = get_forensic_metrics(df_p.to_dict(orient='records'), st.session_state.coeffs)
+        # --- 3. THE BRIDGE: CONNECTING LIVE COEFFICIENTS ---
+        # Crucial: Pull live sliders from session state to feed the engine
+        current_weights = st.session_state.get('coeffs', {})
+        
+        # RUN THE ENGINE
+        m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
 
-        # Marketing Impact Calculation (Now including Total Inertia: OOH, TV, Radio)
-        # We multiply daily inertia by the length of the window
-        total_inertia_window = m.get('total_inertia', 0) * len(df_final)
-        total_lift = df_final['residual_lift'].sum() + df_final['gravity_lift'].sum() + total_inertia_window
+        # CALCULATE MARKETING IMPACT (Pulling all Mass Media + Digital + Events)
+        daily_brand_inertia = (
+            float(current_weights.get('Broadcast_Weight', 150)) + 
+            float(current_weights.get('OOH_Weight', 100)) + 
+            float(current_weights.get('Print_Lift', 75)) +
+            (float(current_weights.get('Static_Weight', 15)) * int(current_weights.get('Static_Count', 10))) +
+            (float(current_weights.get('Digital_OOH_Weight', 25)) * int(current_weights.get('Digital_OOH_Count', 5)))
+        )
+        
+        total_lift_vol = (df_final['residual_lift'].sum() + 
+                          df_final['gravity_lift'].sum() + 
+                          (daily_brand_inertia * len(df_final)))
+        
         total_vol = df_final['expected'].sum()
-        mkt_impact_pct = (total_lift / total_vol * 100) if total_vol > 0 else 0
+        mkt_impact_pct = (total_lift_vol / total_vol * 100) if total_vol > 0 else 0
 
-        # --- 6. EXECUTIVE KPI GRID ---
+        # --- 4. EXECUTIVE KPI GRID ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
         
         if is_future:
-            total_proj = df_final['expected'].sum()
-            k1.metric("Projected Demand", f"{total_proj:,.0f} Guests")
-            k2.metric("Target Signups", f"{(total_proj * 0.05):,.0f}")
+            k1.metric("Projected Demand", f"{total_vol:,.0f} Guests")
+            k2.metric("Target Signups", f"{(total_vol * 0.05):,.0f}")
             k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
             k4.metric("AI Confidence", m['predictability'])
         elif is_past:
@@ -421,7 +421,7 @@ if page == "📈 Executive Dashboard":
 
         st.divider()
 
-        # --- 7. PERFORMANCE VIZ ---
+        # --- 5. PERFORMANCE VIZ ---
         st.write("### 🎰 The Unified Pulse")
         fig_pulse = go.Figure()
         df_act_chart = df_final[df_final['entry_date'].dt.date < today]
@@ -433,59 +433,28 @@ if page == "📈 Executive Dashboard":
         fig_pulse.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=400, margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # --- 8. STRATEGIC INTELLIGENCE ---
+        # --- 6. OPERATIONAL RISK vs. HISTORICAL AUDIT ---
         st.divider()
-        
-        # A. PROMOS & EVENTS (Only show if there is a future component)
-        if not is_past:
-            st.write("### 📅 Upcoming Campaign & Event Briefing")
-            df_upcoming = df_final[df_final['entry_date'].dt.date >= today]
-            
-            p_col = 'active_promo'
-            active_promos = [p for p in df_upcoming[p_col].unique() if p and str(p) not in ['0', '0.0', 'nan', 'None', '']] if p_col in df_upcoming.columns else []
-            active_events = df_upcoming[df_upcoming['attendance'] > 0] if 'attendance' in df_upcoming.columns else pd.DataFrame()
-
-            if active_promos or not active_events.empty:
-                m1, m2 = st.columns(2)
-                with m1:
-                    if active_promos:
-                        st.markdown("**Active Promotions:**")
-                        for promo in active_promos: st.info(f"🚀 {promo}")
-                with m2:
-                    if not active_events.empty:
-                        st.markdown("**High-Gravity Events:**")
-                        for _, evt in active_events.iterrows():
-                            e_name = evt.get('event_name', 'Hard Rock LIVE Peak')
-                            st.warning(f"🎸 {evt['entry_date'].strftime('%b %d')}: {e_name}")
-
-        # B. OPERATIONAL RISK vs. HISTORICAL AUDIT
         if is_past:
             st.write("#### 🔍 Historical Performance Audit")
             o1, o2, o3 = st.columns(3)
-            with o1:
-                variance = df_final['actual_traffic'].sum() - df_final['expected'].sum()
-                st.metric("Volume Variance", f"{variance:+,.0f}", help="Total difference between Actuals and AI Targets")
-            with o2:
-                avg_daily = df_final['actual_traffic'].mean()
-                st.metric("Avg Daily Traffic", f"{avg_daily:,.0f}")
-            with o3:
-                st.metric("Data Integrity", "Verified" if m['predictability'] != "0.0%" else "Incomplete")
-        
+            variance = df_final['actual_traffic'].sum() - df_final['expected'].sum()
+            o1.metric("Volume Variance", f"{variance:+,.0f}")
+            o2.metric("Avg Daily Traffic", f"{df_final['actual_traffic'].mean():,.0f}")
+            o3.metric("Data Integrity", "Verified" if m['predictability'] != "0.0%" else "Incomplete")
         else:
-            # FUTURE MODE: Staffing and Risk
             st.write("#### 🛡️ Operational Risk & Opportunity")
             o1, o2, o3 = st.columns(3)
             with o1:
-                # Weather Friction using current calibration weights
-                s_imp = df_final['snow_cm'].sum() * float(st.session_state.coeffs.get('Snow_cm', -45))
-                r_imp = df_final['rain_mm'].sum() * float(st.session_state.coeffs.get('Rain_mm', -12))
+                # Use live weights for friction
+                s_imp = df_final['snow_cm'].sum() * float(current_weights.get('Snow_cm', -45))
+                r_imp = df_final['rain_mm'].sum() * float(current_weights.get('Rain_mm', -12))
                 st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
             with o2:
-                # Conversion Opportunity
                 potential = int(df_final['expected'].sum() - df_final['new_members'].sum())
                 st.metric("Conversion Opportunity", f"{max(0, potential):,.0f}")
             with o3:
-                # DAILY STAFFING INTENSITY (Fixed to day-specific peak)
+                # Daily-specific Staffing Intensity
                 peak_day_volume = df_final['expected'].max()
                 intensity_label = "🔴 Critical Peak" if peak_day_volume > 6200 else ("🟡 High" if peak_day_volume > 5200 else "🟢 Stable")
                 st.metric("Staffing Intensity", intensity_label)
