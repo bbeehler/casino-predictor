@@ -506,43 +506,136 @@ elif page == "📊 Attribution Analytics":
     st.caption("This chart shows the 'Purified' baseline—traffic remaining after removing all marketing and weather variables.")
 
 # =================================================================
-# 10. PAGE 4: MASTER AUDIT REPORT
+# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION)
 # =================================================================
 elif page == "📋 Master Audit Report":
-    st.header("📋 Comprehensive Forensic Audit")
+    st.markdown("""
+        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
+            <h2 style="color: #0047AB; margin: 0;">📋 Master Forensic Audit</h2>
+            <p style="color: #444; margin: 0;">Comprehensive property audit: Performance, Marketing Equity, and Guest Yield.</p>
+        </div>
+    """, unsafe_allow_html=True)
     
-    df_audit = pd.DataFrame(ledger_data)
-    df_audit['entry_date'] = pd.to_datetime(df_audit['entry_date'])
+    if not ledger_data:
+        st.warning("Audit Vault is empty. Please populate the Ledger.")
+        st.stop()
+
+    df_audit_raw = pd.DataFrame(ledger_data)
+    df_audit_raw['entry_date'] = pd.to_datetime(df_audit_raw['entry_date'])
     
-    audit_range = st.date_input("Audit Selection:", value=(df_audit['entry_date'].min().date(), df_audit['entry_date'].max().date()), key="master_audit_range")
-    
+    # 1. AUDIT RANGE SELECTOR
+    min_audit = df_audit_raw['entry_date'].min().date()
+    max_audit = df_audit_raw['entry_date'].max().date()
+
+    col_date, col_export = st.columns([2, 1])
+    with col_date:
+        audit_range = st.date_input(
+            "Select Audit Period:", 
+            value=(min_audit, max_audit),
+            min_value=min_audit,
+            max_value=max_audit,
+            key="master_audit_v9"
+        )
+
     if isinstance(audit_range, tuple) and len(audit_range) == 2:
-        s_a, e_a = audit_range
-        df_slice = df_audit[(df_audit['entry_date'].dt.date >= s_a) & (df_audit['entry_date'].dt.date <= e_a)].to_dict(orient='records')
-        audit_metrics = get_forensic_metrics(df_slice, st.session_state.coeffs)
-        df_rep = audit_metrics['df']
+        s_date, e_date = audit_range
+        df_audit = df_audit_raw[(df_audit_raw['entry_date'].dt.date >= s_date) & (df_audit_raw['entry_date'].dt.date <= e_date)].copy()
         
-        # FINANCIAL INTEGRITY PANEL
-        st.write("### 💰 Financial Integrity Analysis")
-        a1, a2, a3, a4, a5 = st.columns(5)
-        t_traffic = df_rep['actual_traffic'].sum()
-        a_spend = float(st.session_state.coeffs['Avg_Coin_In'])
-        t_win = t_traffic * a_spend * (float(st.session_state.coeffs['Hold_Pct'])/100)
+        if df_audit.empty:
+            st.error("No data found for the selected audit window.")
+            st.stop()
+
+        # RUN THE ENGINE
+        m = get_forensic_metrics(df_audit.to_dict(orient='records'), st.session_state.coeffs)
+        df_final = m['df']
+        c = st.session_state.coeffs
+
+        # --- FINANCIAL YIELD PANEL ---
+        st.write("### 💰 Financial Yield & GGR Audit")
+        f1, f2, f3, f4, f5 = st.columns(5)
         
-        a1.metric("Aggregated Traffic", f"{t_traffic:,}")
-        a2.metric("Audited GGR", f"${t_win:,.2f}")
-        a3.metric("Digital ROI Lift", f"{df_rep['residual_lift'].sum():,.0f}")
-        a4.metric("AI Confidence", audit_metrics['predictability'])
-        a5.metric("Guest Density", f"{(t_win / (t_traffic * float(st.session_state.coeffs['Property_Theo']))):.2f}x")
+        t_traffic = df_final['actual_traffic'].sum()
+        avg_spend = float(c.get('Avg_Coin_In', 112.50))
+        t_rev = t_traffic * avg_spend
+        actual_ggr = t_rev * (float(c.get('Hold_Pct', 10.0)) / 100)
+        theo_win = t_traffic * float(c.get('Property_Theo', 450.00))
+        yield_index = (actual_ggr / theo_win) if theo_win > 0 else 0
+
+        f1.metric("Total Traffic", f"{t_traffic:,}")
+        f2.metric("Total Revenue", f"${t_rev:,.0f}")
+        f3.metric("Actual GGR", f"${actual_ggr:,.0f}")
+        f4.metric("Theo Win", f"${theo_win:,.0f}")
+        f5.metric("Yield Index", f"{yield_index:.2f}x", help="Ratio of Actual GGR to Theoretical Target.")
 
         st.divider()
-        st.write("### 📊 Attribution Component Breakdown")
-        df_rep['OOH Inertia'] = audit_metrics['ooh_total_daily']
-        chart_data = df_rep.set_index('entry_date')[['baseline_isolated', 'OOH Inertia', 'residual_lift', 'gravity_lift']]
-        st.area_chart(chart_data)
 
-        csv_buffer = df_rep.to_csv(index=False).encode('utf-8')
-        st.download_button("📂 Export Audit Data", data=csv_buffer, file_name=f"HR_Audit_{s_a}_{e_a}.csv", mime="text/csv")
+        # --- ATTRIBUTION STACK ---
+        st.write("### 🧬 Attribution Mix & Channel Equity")
+        col_chart, col_stats = st.columns([2, 1])
+        
+        with col_chart:
+            df_final['OOH_Inertia'] = m['ooh_total_daily']
+            df_final['Weather_Friction'] = (df_final['snow_cm'] * float(c.get('Snow_cm', -45))) + \
+                                           (df_final['rain_mm'] * float(c.get('Rain_mm', -12)))
+            
+            # Stacked Area Chart for Attribution
+            fig_stack = go.Figure()
+            fig_stack.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['baseline_isolated'], name='Organic Baseline', stackgroup='one', fillcolor='#E1E8F0', line=dict(width=0)))
+            fig_stack.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['OOH_Inertia'], name='OOH Inertia', stackgroup='one', fillcolor='#B0C4DE', line=dict(width=0)))
+            fig_stack.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['residual_lift'], name='Digital Lift', stackgroup='one', fillcolor='#0047AB', line=dict(width=0)))
+            fig_stack.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['gravity_lift'], name='LIVE Gravity', stackgroup='one', fillcolor='#FFCC00', line=dict(width=0)))
+            
+            fig_stack.update_layout(plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=20, b=0), height=400)
+            st.plotly_chart(fig_stack, use_container_width=True)
+
+        with col_stats:
+            total_digital = df_final['residual_lift'].sum()
+            total_gravity = df_final['gravity_lift'].sum()
+            total_mkt = total_digital + (m['ooh_total_daily'] * len(df_final)) + total_gravity
+            mkt_capture = (total_mkt / t_traffic) * 100 if t_traffic > 0 else 0
+            
+            st.info(f"**Marketing Equity:** {mkt_capture:.1f}%")
+            st.write(f"Digital ROI Guests: **{total_digital:,.0f}**")
+            st.write(f"LIVE Conversion Guests: **{total_gravity:,.0f}**")
+            st.write(f"Forensic Predictability: **{m['predictability']}**")
+
+        st.divider()
+
+        # --- DATA GRID & EXPORT ---
+        st.write("### 📋 Detailed Audit Log")
+        
+        # Prepare Export Table
+        export_cols = [
+            'entry_date', 'actual_traffic', 'expected', 'baseline_isolated', 
+            'residual_lift', 'gravity_lift', 'OOH_Inertia', 'Weather_Friction', 'new_members'
+        ]
+        df_export = df_final[export_cols].copy()
+        df_export['variance'] = df_export['actual_traffic'] - df_export['expected']
+        
+        st.dataframe(
+            df_export.sort_values('entry_date', ascending=False), 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "entry_date": "Date",
+                "actual_traffic": st.column_config.NumberColumn("Actual", format="%d"),
+                "expected": st.column_config.NumberColumn("AI Target", format="%d"),
+                "variance": st.column_config.NumberColumn("Variance", format="%d"),
+                "residual_lift": "Digital Lift",
+                "gravity_lift": "LIVE Lift"
+            }
+        )
+
+        with col_export:
+            # Multi-format Export
+            csv_data = df_export.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download Audit (.CSV)",
+                data=csv_data,
+                file_name=f"HR_Audit_{s_date}_to_{e_date}.csv",
+                mime='text/csv',
+                use_container_width=True
+            )
 
 # =================================================================
 # 11. PAGE 5: AI ANALYST (MEMORY INTEGRATED)
