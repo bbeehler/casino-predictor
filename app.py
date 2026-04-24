@@ -335,7 +335,7 @@ if page == "📈 Executive Dashboard":
         is_past = end_p <= today
         is_mixed = start_p <= today <= end_p
 
-        # --- EXECUTIVE KPI GRID (DYNAMIC LABELS) ---
+        # --- EXECUTIVE KPI GRID (DYNAMIC & IMPACT FOCUSED) ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
         
@@ -343,28 +343,32 @@ if page == "📈 Executive Dashboard":
         avg_spend = float(c.get('Avg_Coin_In', 112.50))
         hold = float(c.get('Hold_Pct', 10.0)) / 100
 
+        # Calculate Marketing Impact % (Lifts / Total Expected)
+        total_lift = df_final['residual_lift'].sum() + df_final['gravity_lift'].sum() + (m['ooh_total_daily'] * len(df_final))
+        total_vol = df_final['expected'].sum()
+        mkt_impact_pct = (total_lift / total_vol * 100) if total_vol > 0 else 0
+
         if is_future:
             # FUTURE MODE
             total_projected = df_final['expected'].sum()
             k1.metric("Projected Demand", f"{total_projected:,.0f} Guests")
             k2.metric("Projected GGR", f"${(total_projected * avg_spend * hold):,.0f}")
-            k3.metric("Peak Day Demand", f"{df_final['expected'].max():,.0f}")
+            k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%", help="Percentage of future traffic driven by active marketing & OOH.")
             k4.metric("AI Confidence", m['predictability'])
         elif is_past:
             # AUDIT MODE
             total_actual = df_final['actual_traffic'].sum()
             k1.metric("Actual Guest Flow", f"{total_actual:,.0f}")
             k2.metric("Audited Accuracy", m['predictability'])
-            k3.metric("New Members", f"{df_final['new_members'].sum():,.0f}")
+            k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%", help="Percentage of historical traffic attributed to marketing vs. organic.")
             k4.metric("Revenue Yield", f"${(df_final['actual_coin_in'].sum() * hold):,.0f}")
         else:
-            # MIXED MODE (Today is in the middle)
-            k1.metric("Total Window Guests", f"{(df_final['actual_traffic'].sum() + df_final[df_final['entry_date'].dt.date > today]['expected'].sum()):,.0f}")
+            # MIXED MODE
+            combined_guests = df_act['actual_traffic'].sum() + df_final[df_final['entry_date'].dt.date > today]['expected'].sum()
+            k1.metric("Total Window Guests", f"{combined_guests:,.0f}")
             k2.metric("Current Accuracy", m['predictability'])
-            k3.metric("Daily OOH Inertia", f"{m['ooh_total_daily']:.0f}")
+            k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
             k4.metric("Est. Window GGR", f"${(df_final['expected'].sum() * avg_spend * hold):,.0f}")
-
-        st.divider()
 
         # --- PERFORMANCE VIZ ---
         fig_pulse = go.Figure()
