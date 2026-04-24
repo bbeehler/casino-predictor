@@ -166,19 +166,23 @@ def get_forensic_metrics(df_input, coeffs):
         heartbeats = {d: 4300 for d in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']}
     
     # --- IV. PREDICTION LOGIC (FUTURE-READY) ---
+    promo_lift_weight = float(coeffs.get('Promo_Lift', 500)) 
+
     def predict_guests(row):
-        # Override to zero only if we confirmed a past closure
         if row['is_closed'] == 1: 
             return 0
         
-        # Pull the average for this specific day (Friday, Saturday, etc.)
         day_name = row['entry_date'].strftime('%A')
         base = heartbeats.get(day_name, 4300) 
         
-        # Total Prediction = Heartbeat + Billboard Inertia + Ad Lift + Event Gravity
-        return max(0, base + row['residual_lift'] + ooh_daily + row['gravity_lift'])
+        # --- THE FIX: Add math for the promo flag ---
+        # If active_promo has a name and isn't '0', add the lift
+        promo_impact = 0
+        if 'active_promo' in row and str(row['active_promo']) not in ['0', '0.0', 'nan', 'None', '']:
+            promo_impact = promo_lift_weight
 
-    df['expected'] = df.apply(predict_guests, axis=1)
+        # Total Prediction = Base + OOH + Adstock + Event + PROMO IMPACT
+        return max(0, base + row['residual_lift'] + ooh_daily + row['gravity_lift'] + promo_impact)
     
     # --- V. PREDICTABILITY AUDIT (GRADES THE PAST) ---
     # Only calculate accuracy for completed days
