@@ -1019,13 +1019,6 @@ elif page == "🤖 FloorCast AI Analyst":
         st.warning("Forensic Vault is empty. Analyst cannot audit performance without a ledger.")
         st.stop()
 
-    # 1. SIDEBAR UTILITY: RESET BUTTON
-    if st.session_state.get('messages'):
-        st.sidebar.divider()
-        if st.sidebar.button("🗑️ Reset Analyst Thread", use_container_width=True):
-            st.session_state.messages = []
-            st.rerun()
-
     # 2. RUN FORENSIC ENGINE FOR DOSSIER
     m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
     df_ai = m_audit['df']
