@@ -342,9 +342,9 @@ with st.sidebar:
     st.divider()
     # Logic to show the reset button only when on the AI Analyst page
     if page == "🤖 FloorCast AI Analyst" and st.session_state.get('messages'):
-        if st.sidebar.button("🗑️ Reset Analyst Thread", use_container_width=True):
-            st.session_state.messages = []
-            st.rerun()
+    if st.sidebar.button("🗑️ Reset Analyst Thread", use_container_width=True, key="sidebar_reset"):
+        st.session_state.messages = []
+        st.rerun()
 
 # =================================================================
 # 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION - FULLY SYNCED)
