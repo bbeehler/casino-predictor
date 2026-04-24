@@ -189,7 +189,17 @@ def get_forensic_metrics(df_input, coeffs):
     if not open_past.empty:
         heartbeats = open_past.groupby(open_past['entry_date'].dt.day_name())['guest_baseline'].mean().to_dict()
     else:
-        heartbeats = {d: 4200 for d in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']}
+        # UPDATED: Hard Rock Hotel & Casino Ottawa Specific Organic Baselines
+        # These are the "Naked" numbers (No marketing, no events)
+        heartbeats = {
+            'Monday': 3200,
+            'Tuesday': 3100,
+            'Wednesday': 3400,
+            'Thursday': 3800,
+            'Friday': 5200,
+            'Saturday': 5800,  # Raised from 4200
+            'Sunday': 4500
+        }
     
     # --- 5. PREDICTION LOGIC ---
     def predict_guests(row):
