@@ -399,6 +399,64 @@ if page == "📈 Executive Dashboard":
 
         fig_pulse.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=450, margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
         st.plotly_chart(fig_pulse, use_container_width=True)
+        # 4. STRATEGIC INTELLIGENCE SUITE
+        st.divider()
+        st.write("### 🧠 Strategic Intelligence")
+        
+        # A. Performance Narrative
+        if is_future:
+            # We use idxmax() to find the date with the highest predicted guests
+            peak_day_idx = df_final['expected'].idxmax()
+            peak_day = df_final.loc[peak_day_idx]
+            avg_future = df_final[df_final['entry_date'].dt.date > today]['expected'].mean()
+            
+            # Logic to determine intensity
+            intensity = "High" if avg_future > 4500 else "Standard"
+            
+            st.success(f"""
+                **Forecast Outlook:** {intensity} Demand Window. 
+                Expecting **{total_projected:,.0f}** total guests. 
+                The primary volume driver is **{peak_day['entry_date'].strftime('%A, %b %d')}** with a projected ceiling of **{int(peak_day['expected']):,.0f}** guests.
+            """)
+        else:
+            st.info(f"""
+                **Audit Summary:** The floor maintained an average guest count of **{int(df_final['actual_traffic'].mean()):,.0f}** per day for this period. 
+                Marketing efforts successfully captured **{mkt_impact_pct:.1f}%** of total volume.
+            """)
+
+        # B. Operational Anticipation
+        st.write("#### 🛡️ Operational Risk & Opportunity")
+        o1, o2, o3 = st.columns(3)
+        
+        with o1:
+            # Calculate Weather Friction (Sum of Snow and Rain impact)
+            # Pulling from your calibration coefficients
+            snow_impact = df_final['snow_cm'].sum() * float(st.session_state.coeffs.get('Snow_cm', -45))
+            rain_impact = df_final['rain_mm'].sum() * float(st.session_state.coeffs.get('Rain_mm', -12))
+            total_friction = abs(snow_impact + rain_impact)
+            
+            st.metric("Weather Friction", f"-{total_friction:,.0f}", 
+                      help="Estimated guest volume lost to historical or forecasted weather conditions.")
+            
+        with o2:
+            # Growth Opportunity: Total guests predicted minus those already in the system
+            # Since we don't have 'existing_members' in the future, we look at the 'Non-Signup' pool
+            potential_members = int(df_final['expected'].sum() - df_final['new_members'].sum())
+            st.metric("Conversion Opportunity", f"{potential_members:,.0f}", 
+                      help="Predicted guests on the floor available for Unity Member enrollment.")
+            
+        with o3:
+            # Staffing Intensity: Practical advice for the floor manager
+            max_expected = df_final['expected'].max()
+            if max_expected > 5500:
+                intensity_score = "Critical Peak"
+            elif max_expected > 4500:
+                intensity_score = "High"
+            else:
+                intensity_score = "Moderate"
+                
+            st.metric("Staffing Intensity", intensity_score, 
+                      help="Recommended property readiness based on peak demand spikes.")
 
 # =================================================================
 # 8. PAGE 2: DAILY LEDGER VAULT (FULL HARD ROCK LIVE LOGIC)
