@@ -331,17 +331,24 @@ if page == "📈 Executive Dashboard":
         df_timeline = pd.DataFrame({'entry_date': date_list})
         df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
 
-        # 4. STRATEGIC DAILY PLANNER (Precision Mapping)
+        # 4. STRATEGIC DAILY PLANNER (Type-Safe Version)
         if is_future:
             with st.expander("📅 Daily Strategy Planner", expanded=True):
                 st.write("Assign specific events, promos, or weather to individual days.")
                 
-                # We create an editable data editor for the current window
-                # We only show the columns that matter for planning
+                # A. Prepare the data and force types to prevent StreamlitAPIException
                 df_plan = df_p[['entry_date', 'active_promo', 'attendance', 'rain_mm', 'snow_cm']].copy()
+                
+                # FORCE TYPES: Ensure numbers are floats and promos are strings
+                df_plan['active_promo'] = df_plan['active_promo'].astype(str).replace(['0', '0.0', 'nan'], '')
+                df_plan['attendance'] = df_plan['attendance'].astype(float)
+                df_plan['rain_mm'] = df_plan['rain_mm'].astype(float)
+                df_plan['snow_cm'] = df_plan['snow_cm'].astype(float)
+                
+                # Format date for display
                 df_plan['entry_date'] = df_plan['entry_date'].dt.strftime('%a, %b %d')
                 
-                # Use Streamlit's data_editor to allow day-by-day adjustments
+                # B. The Data Editor
                 edited_df = st.data_editor(
                     df_plan,
                     column_config={
@@ -353,17 +360,14 @@ if page == "📈 Executive Dashboard":
                     },
                     hide_index=True,
                     use_container_width=True,
-                    key="strategy_editor"
+                    key="strategy_editor_v2"
                 )
 
-                # RE-INJECT the edited data back into the main dataframe
-                # This maps the user's daily plan directly to the engine
+                # C. Map back to the main dataframe
                 df_p['active_promo'] = edited_df['active_promo'].values
                 df_p['attendance'] = edited_df['attendance'].values
                 df_p['rain_mm'] = edited_df['rain_mm'].values
                 df_p['snow_cm'] = edited_df['snow_cm'].values
-
-                st.caption("💡 Tip: Changes above instantly update the Projected Demand and AI Pulse chart.")
 
         # 5. RUN ENGINE
         m = get_forensic_metrics(df_p.to_dict(orient='records'), st.session_state.coeffs)
