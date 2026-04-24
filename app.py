@@ -266,55 +266,113 @@ if st.sidebar.button("🔓 Logout", use_container_width=True):
     st.rerun()
 
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (FIXED)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (FORENSIC & FORECAST)
 # =================================================================
 if page == "📈 Executive Dashboard":
-    st.header("📈 Executive Performance Pulse")
+    st.markdown("""
+        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
+            <h2 style="color: #0047AB; margin: 0;">📈 Executive Performance Pulse</h2>
+            <p style="color: #444; margin: 0;">Auditing Historical Accuracy & Projecting Future Guest Demand.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # 1. SMART DATE ENGINE
+    today = datetime.date.today()
+    df_raw = pd.DataFrame(ledger_data)
+    df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
     
-    if not ledger_data:
-        st.info("The Forensic Vault is currently empty. Please populate the Ledger.")
-        st.stop()
+    # Defaults: Last 7 days to next 7 days
+    default_start = today - datetime.timedelta(days=7)
+    default_end = today + datetime.timedelta(days=7)
 
-    df_full = pd.DataFrame(ledger_data)
-    df_full['entry_date'] = pd.to_datetime(df_full['entry_date'])
-    
-    # Date Filter with Smart Defaults to latest available data
-    max_db_date = df_full['entry_date'].max().date()
-    min_db_date = df_full['entry_date'].min().date()
-    default_start = max(min_db_date, max_db_date - datetime.timedelta(days=14))
+    col_date, _ = st.columns([1, 2])
+    with col_date:
+        pulse_range = st.date_input(
+            "Strategic Window:", 
+            value=(default_start, default_end),
+            key="pulse_vfinal"
+        )
 
-    col_d, _ = st.columns([1, 3])
-    with col_d:
-        d_range = st.date_input("Audit Window:", value=(default_start, max_db_date))
-
-    if isinstance(d_range, tuple) and len(d_range) == 2:
-        start_d, end_d = d_range
-        df_f = df_full[(df_full['entry_date'].dt.date >= start_d) & (df_full['entry_date'].dt.date <= end_d)].to_dict(orient='records')
+    if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
+        start_p, end_p = pulse_range
         
-        # RUN THE ENGINE
-        m_results = get_forensic_metrics(df_f, st.session_state.coeffs)
-        # THE FIX: Engine returns 'df', not 'df_with_awareness'
-        df_viz = m_results['df'] 
+        # 2. GENERATE A UNIFIED DATE RANGE (The "Master Timeline")
+        # This fills in future dates even if they aren't in your ledger yet
+        date_list = pd.date_range(start=start_p, end=end_p)
+        df_timeline = pd.DataFrame({'entry_date': date_list})
+        
+        # Merge with actual ledger data
+        df_merged = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
+        
+        # 3. RUN THE ENGINE ON THE TIMELINE
+        m = get_forensic_metrics(df_merged.to_dict(orient='records'), st.session_state.coeffs)
+        df_p = m['df']
+        
+        # 4. SPLIT PERFORMANCE: PAST VS. FUTURE
+        df_past = df_p[df_p['entry_date'].dt.date <= today]
+        df_future = df_p[df_p['entry_date'].dt.date > today]
 
-        # KPI Layer
+        # --- EXECUTIVE KPI GRID ---
+        st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Predictability Score", m_results['predictability'])
-        k2.metric("Avg OOH Inertia", f"{m_results['ooh_total_daily']:.0f} Guests")
-        k3.metric("Total Signups", f"{df_viz['new_members'].sum():,}")
         
-        # Spend Logic using calibrated weights
-        total_head = df_viz['actual_traffic'].sum()
-        spend_head = float(st.session_state.coeffs.get('Avg_Coin_In', 112.50))
-        hold_pct = float(st.session_state.coeffs.get('Hold_Pct', 10.0)) / 100
-        k4.metric("Est. Floor GGR", f"${(total_head * spend_head * hold_pct):,.0f}")
+        # Calculate accuracy for the PAST portion
+        if not df_past.empty and df_past['actual_traffic'].sum() > 0:
+            past_acc = m['predictability']
+        else:
+            past_acc = "N/A"
+            
+        # Project Future Demand
+        future_demand = int(df_future['expected'].sum()) if not df_future.empty else 0
+        
+        k1.metric("Past AI Accuracy", past_acc, help="How well the engine predicted the guests we actually saw.")
+        k2.metric("Future Guest Demand", f"{future_demand:,}", help="Total projected headcount for the future dates selected.")
+        k3.metric("OOH Daily Inertia", f"{m['ooh_total_daily']:.0f}", help="Fixed daily guest floor provided by billboards.")
+        
+        # Theoretical GGR for the whole window
+        c = st.session_state.coeffs
+        total_projected_ggr = df_p['expected'].sum() * float(c['Avg_Coin_In']) * (float(c['Hold_Pct'])/100)
+        k4.metric("Est. Total GGR", f"${total_projected_ggr:,.0f}")
 
-        # Primary Chart
-        st.write("### 🎰 Actual Traffic vs. Engine Prediction")
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df_viz['entry_date'], y=df_viz['actual_traffic'], name="Actual Headcount", line=dict(color='#0047AB', width=4)))
-        fig.add_trace(go.Scatter(x=df_viz['entry_date'], y=df_viz['expected'], name="AI Prediction", line=dict(color='#FFCC00', width=2, dash='dot')))
-        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=0, b=0), hovermode="x unified")
-        st.plotly_chart(fig, use_container_width=True)
+        st.divider()
+
+        # --- PERFORMANCE VIZ ---
+        st.write("### 🎰 The Unified Pulse: Actuals & Projections")
+        
+        fig_pulse = go.Figure()
+        
+        # Actual Traffic (Past Only)
+        fig_pulse.add_trace(go.Scatter(
+            x=df_past['entry_date'], y=df_past['actual_traffic'],
+            name="Actual Guests", line=dict(color='#0047AB', width=4)
+        ))
+        
+        # AI Prediction (Whole Range - Past & Future)
+        fig_pulse.add_trace(go.Scatter(
+            x=df_p['entry_date'], y=df_p['expected'].round(0),
+            name="AI Predicted Target", line=dict(color='#FFCC00', width=2, dash='dot')
+        ))
+        
+        # Vertical Line for "Today"
+        fig_pulse.add_vline(x=today, line_dash="dash", line_color="#666", annotation_text="Today")
+
+        fig_pulse.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)', height=500, margin=dict(l=0, r=0, t=10, b=0),
+            hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_pulse, use_container_width=True)
+
+        # --- THE EXECUTIVE SUMMARY ---
+        st.divider()
+        st.write("### 🧠 Strategic Briefing")
+        s1, s2 = st.columns(2)
+        
+        with s1:
+            st.info(f"**Audit Mode:** For the past period, the floor yielded **{int(df_past['actual_traffic'].sum()):,}** guests. The engine successfully explained the variance with **{past_acc}** confidence.")
+        with s2:
+            if future_demand > 0:
+                peak_day = df_future.loc[df_future['expected'].idxmax()]
+                st.success(f"**Forecast Mode:** Anticipating **{future_demand:,}** guests in the upcoming window. Peak demand is expected on **{peak_day['entry_date'].strftime('%A, %b %d')}** with **{int(peak_day['expected']):,}** guests.")
 # =================================================================
 # 8. PAGE 2: DAILY LEDGER VAULT (FULL HARD ROCK LIVE LOGIC)
 # =================================================================
