@@ -274,14 +274,13 @@ if not st.session_state.authenticated:
                     st.error("Access Denied: Invalid credentials or connection error.")
     st.stop() # Prevents dashboard from rendering until authenticated
 
-# --- AUTHORIZED SIDEBAR MENU ---
-page = st.sidebar.radio("Navigation Workspace", [
+# --- SECTION 2: NAVIGATION ---
+page = st.sidebar.radio("Navigate:", [
     "📈 Executive Dashboard", 
     "📑 Daily Ledger Vault", 
     "📊 Attribution Analytics", 
-    "📋 Master Audit Report",
-    "🧠 FloorCast AI Analyst", 
-    "⚙️ Engine Calibration"
+    "📋 Master Audit Report", 
+    "🧠 FloorCast AI Analyst"
 ])
 
 st.sidebar.divider()
