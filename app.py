@@ -204,6 +204,18 @@ except:
 # =================================================================
 # 6. SIDEBAR NAVIGATION & AUTH (GATEKEEPER OVERHAUL)
 # =================================================================
+# CSS Injection for Button Text Color
+st.markdown("""
+    <style>
+    /* Targeted fix for button text within Section 6 */
+    div.stButton > button > div > p,
+    div.stButton > button span,
+    div.stButton > button p {
+        color: #FFFFFF !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 st.sidebar.markdown("<h1 style='color:#0047AB; font-size: 28px; margin-bottom: 0;'>🎰 FloorCast</h1><p style='color:#888;'>Hard Rock Ottawa v4.0</p>", unsafe_allow_html=True)
 st.sidebar.divider()
 
