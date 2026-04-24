@@ -354,7 +354,7 @@ if page == "📈 Executive Dashboard":
         ))
         
         # Vertical Line for "Today"
-        fig_pulse.add_vline(x=today, line_dash="dash", line_color="#666", annotation_text="Today")
+        fig_pulse.add_vline(x=str(today), line_dash="dash", line_color="#666", annotation_text="Today")
 
         fig_pulse.update_layout(
             plot_bgcolor='rgba(0,0,0,0)', height=500, margin=dict(l=0, r=0, t=10, b=0),
