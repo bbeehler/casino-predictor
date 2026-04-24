@@ -660,7 +660,7 @@ elif page == "🧠 FloorCast AI Analyst":
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">🕵️ FloorCast Strategic AI Analyst</h2>
-            <p style="color: #444; margin: 0;">Executive Intelligence: Correlating Forensic Predictions with Actual Results.</p>
+            <p style="color: #444; margin: 0;">Executive Intelligence: Correlating redictions with Actual Results.</p>
         </div>
     """, unsafe_allow_html=True)
     
@@ -691,7 +691,7 @@ elif page == "🧠 FloorCast AI Analyst":
         )
 
     # 3. CHAT INPUT
-    prompt = st.chat_input("Chief, what are you looking for in the data?")
+    prompt = st.chat_input("What are you looking for in the data?")
     
     if prompt:
         history_str = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages[-8:]])
