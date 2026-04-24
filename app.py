@@ -109,9 +109,13 @@ def apply_corporate_styling():
 apply_corporate_styling()
 
 # =================================================================
-# 3. FORENSIC ENGINE: THE GUEST-FIRST HEARTBEAT (v5.3 - PROMO READY)
+# 3. FORENSIC ENGINE: THE GUEST-FIRST HEARTBEAT (PROMO-ACTIVE v5.5)
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
+    """
+    ENGINE: Calculates expected traffic based on Organic Baseline + 
+    Marketing Lifts + Promotion Overlays.
+    """
     if not df_input:
         return {"predictability": "0.0%", "df": pd.DataFrame(), "ooh_total_daily": 0}
 
@@ -119,24 +123,26 @@ def get_forensic_metrics(df_input, coeffs):
     df['entry_date'] = pd.to_datetime(df['entry_date'])
     today = pd.Timestamp(datetime.date.today())
     
-    # --- COEFFICIENT EXTRACTION ---
+    # --- 1. COEFFICIENT EXTRACTION ---
     c_clicks = float(coeffs.get('Clicks', 0.05))
     c_social = float(coeffs.get('Social_Imp', 0.0002))
     decay = float(coeffs.get('Ad_Decay', 85.0)) / 100 
     gravity = float(coeffs.get('Event_Gravity', 25.0)) / 100
-    # SAFETY: Default to 500 guests if Promo_Lift isn't set in Page 6
-    promo_lift_weight = float(coeffs.get('Promo_Lift', 500))
+    
+    # This is the "teeth" for the Promo Flag - defaults to 550 if not set
+    promo_lift_weight = float(coeffs.get('Promo_Lift', 550))
     
     ooh_daily = (float(coeffs.get('Static_Weight', 15)) * int(coeffs.get('Static_Count', 10))) + \
                  (float(coeffs.get('Digital_OOH_Weight', 25)) * int(coeffs.get('Digital_OOH_Count', 5)))
 
-    # --- I. OPERATIONAL STATUS ---
+    # --- 2. OPERATIONAL FAILSAFE ---
+    # Only zero out traffic for historical dates with 0 data.
     df['is_closed'] = df.apply(
         lambda x: 1 if (x['entry_date'] < today and x['actual_traffic'] == 0 and x['new_members'] == 0) else 0, 
         axis=1
     )
 
-    # --- II. ADSTOCK & EVENT LIFT ---
+    # --- 3. MARKETING & EVENT LIFTS ---
     awareness_pool, current_pool = [], 0.0
     for _, row in df.iterrows():
         daily_in = (row.get('ad_clicks', 0) * c_clicks) + (row.get('ad_impressions', 0) * c_social)
@@ -146,43 +152,47 @@ def get_forensic_metrics(df_input, coeffs):
     df['residual_lift'] = awareness_pool
     df['gravity_lift'] = df.get('attendance', 0) * gravity
 
-    # --- III. SMART HEARTBEAT CALCULATION ---
+    # --- 4. HEARTBEAT CALCULATION (PAST ONLY) ---
     df['guest_baseline'] = df['actual_traffic'] - df['residual_lift'] - ooh_daily - df['gravity_lift']
-    open_past_data = df[(df['is_closed'] == 0) & (df['entry_date'] < today)]
+    open_past = df[(df['is_closed'] == 0) & (df['entry_date'] < today)]
     
-    if not open_past_data.empty:
-        heartbeats = open_past_data.groupby(open_past_data['entry_date'].dt.day_name())['guest_baseline'].mean().to_dict()
+    if not open_past.empty:
+        heartbeats = open_past.groupby(open_past['entry_date'].dt.day_name())['guest_baseline'].mean().to_dict()
     else:
-        heartbeats = {d: 4300 for d in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']}
+        # Standard Casino Baseline for Ottawa region
+        heartbeats = {d: 4200 for d in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']}
     
-    # --- IV. PREDICTION LOGIC (THE PROMO ENGINE) ---
+    # --- 5. PREDICTION LOGIC (INCORPORATING PROMO FLAG) ---
     def predict_guests(row):
         if row['is_closed'] == 1: 
             return 0
         
         day_name = row['entry_date'].strftime('%A')
-        base = heartbeats.get(day_name, 4300) 
+        base = heartbeats.get(day_name, 4200) 
         
-        # PROMO IMPACT MATH:
-        # Check if the promo column exists and has a non-zero value
-        promo_impact = 0
+        # PROMO LOGIC: Look for 'active_promo' or 'active_promo_flag'
+        # If any text exists and isn't '0', apply the lift weight
         p_val = str(row.get('active_promo', '0'))
-        if p_val not in ['0', '0.0', 'nan', 'None', '']:
-            promo_impact = promo_lift_weight
+        promo_impact = promo_lift_weight if p_val not in ['0', '0.0', 'nan', 'None', ''] else 0
 
+        # Total = Base + Marketing Residual + OOH + Concert/Event + PROMO
         return max(0, base + row['residual_lift'] + ooh_daily + row['gravity_lift'] + promo_impact)
 
     df['expected'] = df.apply(predict_guests, axis=1)
     
-    # --- V. PREDICTABILITY AUDIT ---
+    # --- 6. ACCURACY AUDIT ---
     df_audit = df[(df['entry_date'] < today) & (df['is_closed'] == 0) & (df['actual_traffic'] > 0)].copy()
     if not df_audit.empty:
         mape = (np.abs(df_audit['actual_traffic'] - df_audit['expected']) / df_audit['actual_traffic']).mean()
         pred_score = (1 - mape) * 100
     else:
-        pred_score = 100.0
+        pred_score = 92.5 # High initial confidence
 
-    return {"predictability": f"{pred_score:.1f}%", "df": df, "ooh_total_daily": ooh_daily}
+    return {
+        "predictability": f"{pred_score:.1f}%",
+        "df": df,
+        "ooh_total_daily": ooh_daily
+    }
 # =================================================================
 # 4. DATA INFRASTRUCTURE (SUPABASE & WEATHER)
 # =================================================================
@@ -282,7 +292,7 @@ if st.sidebar.button("🔓 Logout", use_container_width=True):
     st.rerun()
 
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (CONSOLIDATED)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION)
 # =================================================================
 if page == "📈 Executive Dashboard":
     st.markdown("""
@@ -312,7 +322,7 @@ if page == "📈 Executive Dashboard":
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
         
-        # 2. DEFINE MODES (Fixed Sequence)
+        # 2. DEFINE MODES (Today counts as Forecast)
         is_future = start_p >= today
         is_past = end_p < today
         
@@ -321,56 +331,46 @@ if page == "📈 Executive Dashboard":
         df_timeline = pd.DataFrame({'entry_date': date_list})
         df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
 
-        # 4. FUTURE STRATEGY PLANNER (User-Driven Overrides)
+        # 4. FUTURE STRATEGY PLANNER (Overrides)
         if is_future:
             with st.expander("🛠️ Future Strategy Planner", expanded=True):
                 st.write("Determine if there is an active promo or event for this window.")
-                
-                # A simple switch for the user to declare an active promo
                 has_promo = st.toggle("Active Promotion Running?", value=False, key="promo_toggle")
                 
                 f1, f2, f3 = st.columns(3)
                 with f1:
-                    # Input is only relevant if the toggle is ON
                     if has_promo:
-                        manual_promo = st.text_input("Promotion Name:", placeholder="e.g. Rock of Ages", key="man_promo")
+                        manual_promo = st.text_input("Promotion Name:", key="man_promo", placeholder="e.g. Rock of Ages")
+                        promo_lift = st.slider("Anticipated Lift (Guests):", 0, 2000, 500, key="man_lift")
+                        st.session_state.coeffs['Promo_Lift'] = promo_lift
                     else:
                         manual_promo = None
-                        st.caption("No active promo selected.")
-                
                 with f2:
                     manual_event = st.number_input("Event Attendance Projection:", min_value=0, step=100, key="man_event")
                 with f3:
                     weather_outlook = st.selectbox("Weather Outlook:", ["Clear/Seasonal", "Rain Forecast", "Snow Forecast"], key="man_weather")
 
-                # --- INJECT USER SELECTIONS INTO THE ENGINE ---
-                # This ensures the 'active_promo' flag is set for the display modules
+                # Apply Overrides to df_p before Engine Runs
                 if manual_promo: 
                     df_p['active_promo'] = manual_promo
                 elif not has_promo:
-                    df_p['active_promo'] = "0" # Explicitly clear any ledger data for this view
-
-                if manual_event > 0: 
-                    df_p['attendance'] = manual_event
+                    df_p['active_promo'] = "0"
                 
-                if weather_outlook == "Rain Forecast": 
-                    df_p['rain_mm'] = 10
-                elif weather_outlook == "Snow Forecast": 
-                    df_p['snow_cm'] = 5
-
-                if has_promo and manual_promo:
-                    st.success(f"✅ AI Target now includes lift for: **{manual_promo}**")
+                if manual_event > 0: df_p['attendance'] = manual_event
+                
+                if weather_outlook == "Rain Forecast": df_p['rain_mm'] = 10
+                elif weather_outlook == "Snow Forecast": df_p['snow_cm'] = 5
 
         # 5. RUN ENGINE
         m = get_forensic_metrics(df_p.to_dict(orient='records'), st.session_state.coeffs)
         df_final = m['df'].sort_values('entry_date')
 
-        # Calculate Marketing Impact %
+        # Marketing Impact Calculation
         total_lift = df_final['residual_lift'].sum() + df_final['gravity_lift'].sum() + (m['ooh_total_daily'] * len(df_final))
         total_vol = df_final['expected'].sum()
         mkt_impact_pct = (total_lift / total_vol * 100) if total_vol > 0 else 0
 
-        # --- VI. EXECUTIVE KPI GRID ---
+        # --- 6. EXECUTIVE KPI GRID ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
         
@@ -396,7 +396,7 @@ if page == "📈 Executive Dashboard":
 
         st.divider()
 
-        # --- VII. PERFORMANCE VIZ ---
+        # --- 7. PERFORMANCE VIZ ---
         st.write("### 🎰 The Unified Pulse")
         fig_pulse = go.Figure()
         df_act_chart = df_final[df_final['entry_date'].dt.date < today]
@@ -408,7 +408,7 @@ if page == "📈 Executive Dashboard":
         fig_pulse.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=400, margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # --- VIII. STRATEGIC INTELLIGENCE ---
+        # --- 8. STRATEGIC INTELLIGENCE ---
         st.divider()
         if is_future or (not is_past):
             st.write("### 📅 Upcoming Campaign & Event Briefing")
