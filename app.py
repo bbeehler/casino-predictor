@@ -212,48 +212,31 @@ if 'authenticated' not in st.session_state:
 
 # --- THE GATEKEEPER ---
 if not st.session_state.authenticated:
-    # Shift login to the main area for a smoother single-click experience
+    # Centered Login UI
     st.markdown("<h1 style='color:#0047AB; text-align:center;'>Executive Access Required</h1>", unsafe_allow_html=True)
     
-    with st.container():
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            with st.form("login_form"):
-                e_mail = st.text_input("Email")
-                p_word = st.text_input("Password", type="password")
-                submit = st.form_submit_button("Unlock Engine", use_container_width=True)
-                
-                if submit:
-                    try:
-                        res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
-                        if res.user:
-                            # CRITICAL: Update state and force an immediate rerun
-                            st.session_state.authenticated = True
-                            st.session_state.user_email = res.user.email
-                            st.rerun() 
-                        else:
-                            st.error("Authentication failed.")
-                    except Exception as e:
-                        st.error(f"Access Denied: {str(e)}")
-    st.stop() # Prevents any dashboard code from running until auth is True
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        with st.form("login_form"):
+            e_mail = st.text_input("Email")
+            p_word = st.text_input("Password", type="password")
+            submit = st.form_submit_button("Unlock Engine", use_container_width=True)
+            
+            if submit:
+                try:
+                    res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
+                    if res.user:
+                        # Update session state and force a re-run to clear the login screen
+                        st.session_state.authenticated = True
+                        st.session_state.user_email = res.user.email
+                        st.rerun() 
+                    else:
+                        st.error("Authentication failed. Please check credentials.")
+                except Exception as e:
+                    st.error("Access Denied: Invalid credentials or connection error.")
+    st.stop() # Prevents dashboard from rendering until authenticated
 
-/* 1. Target ALL buttons in the app */
-.stButton>button {
-    color: #FFFFFF !important; /* Force text to white */
-}
-
-/* 2. Target the text inside the button specifically */
-.stButton>button p {
-    color: #FFFFFF !important;
-}
-
-/* 3. Handle Hover State (Ensures text stays white when you mouse over) */
-.stButton>button:hover {
-    color: #FFFFFF !important;
-    border-color: #0047AB !important;
-}
-
-# --- POST-AUTH SIDEBAR ---
+# --- AUTHORIZED SIDEBAR MENU ---
 page = st.sidebar.radio("Navigation Workspace", [
     "📈 Executive Dashboard", 
     "📑 Daily Ledger Vault", 
@@ -266,7 +249,6 @@ page = st.sidebar.radio("Navigation Workspace", [
 
 st.sidebar.divider()
 if st.sidebar.button("🔓 Logout", use_container_width=True):
-    # Reset state for a clean logout
     st.session_state.authenticated = False
     st.session_state.user_email = None
     st.rerun()
