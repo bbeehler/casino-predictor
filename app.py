@@ -670,7 +670,7 @@ elif page == "🧠 FloorCast AI Analyst":
         
         try:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model = genai.GenerativeModel('gemini-2.0-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash')
             
             with st.status("🕵️ Auditing Ledger...", expanded=True) as status:
                 full_prompt = f"Role: Senior Strategist. Vault:\n{dossier}\nHistory:\n{history_str}\nQuestion: {prompt}"
