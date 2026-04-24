@@ -444,27 +444,6 @@ if page == "📈 Executive Dashboard":
             else:
                 st.write("No specific marketing overlays detected for this window.")
 
-        # 2. OPERATIONAL RISK & OPPORTUNITY
-        st.divider()
-        st.write("#### 🛡️ Operational Risk & Opportunity")
-        o1, o2, o3 = st.columns(3)
-        
-        with o1:
-            # Weather Friction Calculation
-            snow_impact = df_final['snow_cm'].sum() * float(st.session_state.coeffs.get('Snow_cm', -45))
-            rain_impact = df_final['rain_mm'].sum() * float(st.session_state.coeffs.get('Rain_mm', -12))
-            st.metric("Weather Friction", f"-{abs(snow_impact + rain_impact):,.0f}", help="Volume lost to weather.")
-            
-        with o2:
-            # Opportunity Check (Non-Members)
-            potential = int(df_final['expected'].sum() - df_final['new_members'].sum())
-            st.metric("Conversion Opportunity", f"{max(0, potential):,.0f}", help="Guests available for Unity enrollment.")
-            
-        with o3:
-            # Staffing Intensity
-            max_val = df_final['expected'].max()
-            intensity = "Critical Peak" if max_val > 5500 else ("High" if max_val > 4500 else "Moderate")
-            st.metric("Staffing Intensity", intensity)
         # 2. PERFORMANCE NARRATIVE
         st.divider()
         s_col1, s_col2 = st.columns(2)
