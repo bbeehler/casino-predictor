@@ -988,32 +988,35 @@ elif page == "⚙️ AI Calibration":
             n_snow = st.slider("Snow Impact (per cm)", -500, 0, int(st.session_state.coeffs.get('Snow_cm', -45)))
 
         if st.form_submit_button("🚀 Recalibrate Property Engine", use_container_width=True):
-            # 1. Update Session State immediately (Forces Page 1 to see it)
+            # 1. Update Session State
+            # We ensure OOH_Count is at least 1 if we are setting a weight
             updated_coeffs = {
                 "Clicks": float(n_clicks),
                 "Social_Imp": float(n_social),
                 "Ad_Decay": int(n_decay),
                 "Broadcast_Weight": float(n_broad),
                 "OOH_Weight": float(n_ooh),
+                "OOH_Count": 1 if n_ooh > 0 else 0, # Force count to 1 so the math works
                 "Print_Lift": float(n_print),
                 "PR_Weight": float(n_earned),
                 "Event_Gravity": float(n_grav),
-                "Promo": float(n_promo), # This is the 1500 you are changing
+                "Promo_Lift": float(n_promo),
                 "Rain_mm": float(n_rain),
-                "Snow_cm": float(n_snow)
+                "Snow_cm": float(n_snow),
+                "Static_Weight": float(n_ooh), # Syncing to legacy OOH column for safety
+                "Static_Count": 1 if n_ooh > 0 else 0
             }
             
-            # 2. Update the Global State
             st.session_state.coeffs.update(updated_coeffs)
             
             try:
-                # 3. Force Push to Supabase
-                # We use the 'id' (usually 1) to ensure we are overwriting the same row
+                # 2. Push to Supabase
+                # Ensure your coefficients table has an 'id' or 'key' to upsert correctly
                 supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
                 
-                st.success(f"✅ Weights Saved.")
+                st.success(f"✅ Weights Saved. Billboard Impact: {n_ooh} guests/day.")
                 
-                # 4. CRITICAL: Clear cache and rerun to force Page 1 to pull the new data
+                # 3. Force Refresh
                 st.cache_data.clear()
                 st.rerun()
             except Exception as e:
