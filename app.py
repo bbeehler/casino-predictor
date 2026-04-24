@@ -460,7 +460,7 @@ if page == "📈 Executive Dashboard":
 # 8. PAGE 2: DAILY LEDGER VAULT (FULL HARD ROCK LIVE LOGIC)
 # =================================================================
 elif page == "📑 Daily Ledger Vault":
-    st.header("📑 Forensic Ledger Management")
+    st.header("📑 Daily Ledger Entry")
     
     col_l, col_r = st.columns(2)
     with col_l:
