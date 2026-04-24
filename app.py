@@ -109,18 +109,19 @@ def apply_corporate_styling():
 apply_corporate_styling()
 
 # =================================================================
-# 3. FORENSIC ENGINE: THE GUEST-FIRST HEARTBEAT
+# 3. FORENSIC ENGINE: THE GUEST-FIRST HEARTBEAT (v5.2)
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
     """
-    ENGINE v5.0: Prioritizes 'Guests on the Floor' (Members) over Revenue.
-    Features: Operational Status Failsafe & Future Baseline Projection.
+    ENGINE: Prioritizes 'Guests on the Floor' (Traffic) over Revenue.
+    Includes Smart Future Baselines & 'Today' Forecast Persistence.
     """
     if not df_input:
         return {"predictability": "0.0%", "df": pd.DataFrame(), "ooh_total_daily": 0}
 
     df = pd.DataFrame(df_input).copy()
     df['entry_date'] = pd.to_datetime(df['entry_date'])
+    # Set 'today' as a normalized timestamp for comparison
     today = pd.Timestamp(datetime.date.today())
     
     # --- COEFFICIENT EXTRACTION ---
@@ -129,15 +130,15 @@ def get_forensic_metrics(df_input, coeffs):
     decay = float(coeffs.get('Ad_Decay', 85.0)) / 100 
     gravity = float(coeffs.get('Event_Gravity', 25.0)) / 100
     
-    # OOH is a fixed daily "Inertia" based on Billboard counts
+    # OOH is a fixed daily "Inertia" (Billboards/Static)
     ooh_daily = (float(coeffs.get('Static_Weight', 15)) * int(coeffs.get('Static_Count', 10))) + \
                  (float(coeffs.get('Digital_OOH_Weight', 25)) * int(coeffs.get('Digital_OOH_Count', 5)))
 
-    # --- I. OPERATIONAL STATUS (THE FAILSAFE) ---
-    # Only flag as 'Closed' if it's in the PAST and has zero guests.
-    # Future dates are NEVER flagged as closed automatically.
+    # --- I. OPERATIONAL STATUS (FAILSAFE) ---
+    # Only flag as 'Closed' if it's strictly BEFORE today. 
+    # This ensures TODAY still shows a prediction even if traffic is currently 0.
     df['is_closed'] = df.apply(
-        lambda x: 1 if (x['entry_date'] <= today and x['actual_traffic'] == 0 and x['new_members'] == 0) else 0, 
+        lambda x: 1 if (x['entry_date'] < today and x['actual_traffic'] == 0 and x['new_members'] == 0) else 0, 
         axis=1
     )
 
@@ -152,70 +153,48 @@ def get_forensic_metrics(df_input, coeffs):
     df['gravity_lift'] = df.get('attendance', 0) * gravity
 
     # --- III. SMART HEARTBEAT CALCULATION ---
-    # Isolate 'Organic' traffic (Actual - Marketing Lifts)
+    # Calculate 'Organic' traffic (Actuals minus Marketing Lifts)
     df['guest_baseline'] = df['actual_traffic'] - df['residual_lift'] - ooh_daily - df['gravity_lift']
     
-    # Calculate Day-of-Week averages using only OPEN PAST days
-    open_past_data = df[(df['is_closed'] == 0) & (df['entry_date'] <= today)]
+    # Generate Day-of-Week averages using only OPEN PAST days
+    open_past_data = df[(df['is_closed'] == 0) & (df['entry_date'] < today)]
     
     if not open_past_data.empty:
         heartbeats = open_past_data.groupby(open_past_data['entry_date'].dt.day_name())['guest_baseline'].mean().to_dict()
     else:
-        # Emergency Fallback Baseline
-        heartbeats = {d: 4200 for d in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']}
+        # Fallback if the ledger is new
+        heartbeats = {d: 4300 for d in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']}
     
     # --- IV. PREDICTION LOGIC (FUTURE-READY) ---
     def predict_guests(row):
+        # Override to zero only if we confirmed a past closure
         if row['is_closed'] == 1: 
             return 0
+        
+        # Pull the average for this specific day (Friday, Saturday, etc.)
         day_name = row['entry_date'].strftime('%A')
-        base = heartbeats.get(day_name, 4200) 
+        base = heartbeats.get(day_name, 4300) 
+        
+        # Total Prediction = Heartbeat + Billboard Inertia + Ad Lift + Event Gravity
         return max(0, base + row['residual_lift'] + ooh_daily + row['gravity_lift'])
 
-    # THE FIX: Ensure this column is created BEFORE the audit code below runs
     df['expected'] = df.apply(predict_guests, axis=1)
     
-    # --- V. PREDICTABILITY AUDIT (JUDGING THE PAST) ---
-    df_past = df[df['entry_date'] <= today]
-    if not df_past.empty:
-        # Filter for days that were open and actually have traffic to avoid division by zero
-        df_audit = df_past[(df_past['is_closed'] == 0) & (df_past['actual_traffic'] > 0)].copy()
-        
-        if not df_audit.empty:
-            # Now 'expected' definitely exists because we created it on line 196
-            mape = (np.abs(df_audit['actual_traffic'] - df_audit['expected']) / df_audit['actual_traffic']).mean()
-            pred_score = (1 - mape) * 100
-        else:
-            pred_score = 100.0 # Default if no past open days exist
-    else:
-        pred_score = 100.0
-
-    return {
-        "predictability": f"{pred_score:.1f}%",
-        "df": df,
-        "ooh_total_daily": ooh_daily
-    }
+    # --- V. PREDICTABILITY AUDIT (GRADES THE PAST) ---
+    # Only calculate accuracy for completed days
+    df_audit = df[(df['entry_date'] < today) & (df['is_closed'] == 0) & (df['actual_traffic'] > 0)].copy()
     
-    # --- V. PREDICTABILITY AUDIT ---
-    # Only judge AI accuracy on the past
-    df_past = df[df['entry_date'] <= today]
-    if not df_past.empty and df_past['actual_traffic'].sum() > 0:
-        # Exclude closed days from accuracy score to avoid skewing data
-        df_audit = df_past[df_past['is_closed'] == 0]
-        if not df_audit.empty:
-            mape = (np.abs(df_audit['actual_traffic'] - df_audit['expected']) / df_audit['actual_traffic']).mean()
-            pred_score = (1 - mape) * 100
-        else:
-            pred_score = 90.0
+    if not df_audit.empty:
+        mape = (np.abs(df_audit['actual_traffic'] - df_audit['expected']) / df_audit['actual_traffic']).mean()
+        pred_score = (1 - mape) * 100
     else:
-        pred_score = 90.0
+        pred_score = 100.0 # Standard start score
 
     return {
         "predictability": f"{pred_score:.1f}%",
         "df": df,
         "ooh_total_daily": ooh_daily
     }
-
 # =================================================================
 # 4. DATA INFRASTRUCTURE (SUPABASE & WEATHER)
 # =================================================================
@@ -315,7 +294,7 @@ if st.sidebar.button("🔓 Logout", use_container_width=True):
     st.rerun()
 
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (NON-FINANCIAL / GUEST-CENTRIC)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (SITUATIONAL INTELLIGENCE)
 # =================================================================
 if page == "📈 Executive Dashboard":
     st.markdown("""
@@ -326,44 +305,51 @@ if page == "📈 Executive Dashboard":
     """, unsafe_allow_html=True)
 
     today = datetime.date.today()
+    if not ledger_data:
+        st.warning("Forensic Vault is empty. Please populate the Ledger.")
+        st.stop()
+
     df_raw = pd.DataFrame(ledger_data)
     df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
     
+    # 1. DATE RANGE SELECTOR
     col_date, _ = st.columns([1, 2])
     with col_date:
-        pulse_range = st.date_input("Select Analysis Window:", 
-                                   value=(today - datetime.timedelta(days=3), today + datetime.timedelta(days=3)), 
-                                   key="pulse_dynamic_v2")
+        pulse_range = st.date_input(
+            "Select Analysis Window:", 
+            value=(today - datetime.timedelta(days=3), today + datetime.timedelta(days=3)), 
+            key="pulse_executive_final"
+        )
 
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
         
-        # 1. GENERATE TIMELINE
+        # Build Unified Timeline (Past + Future)
         date_list = pd.date_range(start=start_p, end=end_p)
         df_timeline = pd.DataFrame({'entry_date': date_list})
         df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
         
-        # 2. RUN ENGINE
+        # Run Forensic Engine
         m = get_forensic_metrics(df_p.to_dict(orient='records'), st.session_state.coeffs)
         df_final = m['df'].sort_values('entry_date')
 
-        # Logic for Mode
-        is_future = start_p > today
-        is_past = end_p <= today
+        # Logic for Reporting Mode (Today is counted as a Forecast Day)
+        is_future = start_p >= today
+        is_past = end_p < today
         
-        # Calculate Marketing Impact %
+        # Calculate Marketing Impact % (Lifts / Total Expected)
         total_lift = df_final['residual_lift'].sum() + df_final['gravity_lift'].sum() + (m['ooh_total_daily'] * len(df_final))
         total_vol = df_final['expected'].sum()
         mkt_impact_pct = (total_lift / total_vol * 100) if total_vol > 0 else 0
 
-        # --- EXECUTIVE KPI GRID (NO DOLLARS) ---
+        # --- II. EXECUTIVE KPI GRID (NON-FINANCIAL) ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
         
         if is_future:
             total_projected = df_final['expected'].sum()
             k1.metric("Projected Demand", f"{total_projected:,.0f} Guests")
-            k2.metric("Target Member Signups", f"{(total_projected * 0.05):,.0f}", help="Based on 5% Target Conversion")
+            k2.metric("Target Signups", f"{(total_projected * 0.05):,.0f}", help="Based on 5% Target Conversion")
             k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
             k4.metric("AI Confidence", m['predictability'])
         elif is_past:
@@ -373,91 +359,76 @@ if page == "📈 Executive Dashboard":
             k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
             k4.metric("Audited Accuracy", m['predictability'])
         else:
-            past_t = df_final[df_final['entry_date'].dt.date <= today]['actual_traffic'].sum()
-            future_e = df_final[df_final['entry_date'].dt.date > today]['expected'].sum()
-            k1.metric("Total Window Guests", f"{(past_t + future_e):,.0f}")
+            # Mixed Mode: Combine Actuals (Past) with AI Target (Today + Future)
+            past_traffic = df_final[df_final['entry_date'].dt.date < today]['actual_traffic'].sum()
+            future_expected = df_final[df_final['entry_date'].dt.date >= today]['expected'].sum()
+            combined_total = past_traffic + future_expected
+            
+            k1.metric("Total Window Guests", f"{combined_total:,.0f}")
             k2.metric("Window New Members", f"{df_final['new_members'].sum():,.0f}")
             k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
             k4.metric("Current Accuracy", m['predictability'])
 
         st.divider()
 
-        # --- PERFORMANCE VIZ ---
+        # --- III. PERFORMANCE VIZ ---
+        st.write("### 🎰 The Unified Pulse: Actuals & Projections")
         fig_pulse = go.Figure()
         
-        df_act = df_final[df_final['entry_date'].dt.date <= today]
-        # Past Actuals
-        fig_pulse.add_trace(go.Scatter(x=df_act['entry_date'], y=df_act['actual_traffic'], name="Actual Guests", line=dict(color='#0047AB', width=4)))
+        # Actuals (Strictly before Today)
+        df_act = df_final[df_final['entry_date'].dt.date < today]
+        fig_pulse.add_trace(go.Scatter(
+            x=df_act['entry_date'], y=df_act['actual_traffic'], 
+            name="Actual Guests", line=dict(color='#0047AB', width=4), connectgaps=True
+        ))
         
-        # Future AI Target
-        fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Prediction", line=dict(color='#FFCC00', width=2, dash='dot')))
+        # AI Target (Whole Range)
+        fig_pulse.add_trace(go.Scatter(
+            x=df_final['entry_date'], y=df_final['expected'].round(0), 
+            name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')
+        ))
         
         # Today Marker
         today_ts = pd.Timestamp(today)
-        fig_pulse.add_shape(type="line", x0=today_ts, x1=today_ts, y0=0, y1=1, yref="paper", line=dict(color="#666", width=1, dash="dash"))
-        fig_pulse.add_annotation(x=today_ts, y=1, yref="paper", text="Today", showarrow=False, textangle=-90, xanchor="right")
+        fig_pulse.add_shape(
+            type="line", x0=today_ts, x1=today_ts, y0=0, y1=1, yref="paper",
+            line=dict(color="#666", width=2, dash="dash")
+        )
+        fig_pulse.add_annotation(
+            x=today_ts, y=1, yref="paper", text="Today", showarrow=False, 
+            textangle=-90, xanchor="right", font=dict(color="#666")
+        )
 
-        fig_pulse.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=450, margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
+        fig_pulse.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)', height=450, margin=dict(l=0, r=0, t=10, b=0),
+            hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
         st.plotly_chart(fig_pulse, use_container_width=True)
-        # 4. STRATEGIC INTELLIGENCE SUITE
+
+        # --- IV. STRATEGIC INTELLIGENCE SUITE ---
         st.divider()
         st.write("### 🧠 Strategic Intelligence")
         
-        # A. Performance Narrative
-        if is_future:
-            # We use idxmax() to find the date with the highest predicted guests
-            peak_day_idx = df_final['expected'].idxmax()
-            peak_day = df_final.loc[peak_day_idx]
-            avg_future = df_final[df_final['entry_date'].dt.date > today]['expected'].mean()
-            
-            # Logic to determine intensity
-            intensity = "High" if avg_future > 4500 else "Standard"
-            
-            st.success(f"""
-                **Forecast Outlook:** {intensity} Demand Window. 
-                Expecting **{total_projected:,.0f}** total guests. 
-                The primary volume driver is **{peak_day['entry_date'].strftime('%A, %b %d')}** with a projected ceiling of **{int(peak_day['expected']):,.0f}** guests.
-            """)
-        else:
-            st.info(f"""
-                **Audit Summary:** The floor maintained an average guest count of **{int(df_final['actual_traffic'].mean()):,.0f}** per day for this period. 
-                Marketing efforts successfully captured **{mkt_impact_pct:.1f}%** of total volume.
-            """)
+        s_col1, s_col2 = st.columns(2)
+        with s_col1:
+            if is_future or (not is_past):
+                peak_day = df_final.loc[df_final['expected'].idxmax()]
+                st.success(f"**Forecast Outlook:** Expecting **{df_final['expected'].sum():,.0f}** total guests. Peak demand projected for **{peak_day['entry_date'].strftime('%A, %b %d')}**.")
+            else:
+                st.info(f"**Audit Summary:** The floor averaged **{int(df_final['actual_traffic'].mean()):,.0f}** daily guests. Marketing drove **{mkt_impact_pct:.1f}%** of volume.")
 
-        # B. Operational Anticipation
         st.write("#### 🛡️ Operational Risk & Opportunity")
         o1, o2, o3 = st.columns(3)
-        
         with o1:
-            # Calculate Weather Friction (Sum of Snow and Rain impact)
-            # Pulling from your calibration coefficients
             snow_impact = df_final['snow_cm'].sum() * float(st.session_state.coeffs.get('Snow_cm', -45))
             rain_impact = df_final['rain_mm'].sum() * float(st.session_state.coeffs.get('Rain_mm', -12))
-            total_friction = abs(snow_impact + rain_impact)
-            
-            st.metric("Weather Friction", f"-{total_friction:,.0f}", 
-                      help="Estimated guest volume lost to historical or forecasted weather conditions.")
-            
+            st.metric("Weather Friction", f"-{abs(snow_impact + rain_impact):,.0f}", help="Volume lost to weather.")
         with o2:
-            # Growth Opportunity: Total guests predicted minus those already in the system
-            # Since we don't have 'existing_members' in the future, we look at the 'Non-Signup' pool
-            potential_members = int(df_final['expected'].sum() - df_final['new_members'].sum())
-            st.metric("Conversion Opportunity", f"{potential_members:,.0f}", 
-                      help="Predicted guests on the floor available for Unity Member enrollment.")
-            
+            potential = int(df_final['expected'].sum() - df_final['new_members'].sum())
+            st.metric("Conversion Opportunity", f"{potential:,.0f}", help="Guests available for Unity enrollment.")
         with o3:
-            # Staffing Intensity: Practical advice for the floor manager
-            max_expected = df_final['expected'].max()
-            if max_expected > 5500:
-                intensity_score = "Critical Peak"
-            elif max_expected > 4500:
-                intensity_score = "High"
-            else:
-                intensity_score = "Moderate"
-                
-            st.metric("Staffing Intensity", intensity_score, 
-                      help="Recommended property readiness based on peak demand spikes.")
-
+            intensity = "Critical Peak" if df_final['expected'].max() > 5500 else ("High" if df_final['expected'].max() > 4500 else "Moderate")
+            st.metric("Staffing Intensity", intensity)
 # =================================================================
 # 8. PAGE 2: DAILY LEDGER VAULT (FULL HARD ROCK LIVE LOGIC)
 # =================================================================
