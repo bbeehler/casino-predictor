@@ -281,8 +281,7 @@ page = st.sidebar.radio("Navigation Workspace", [
     "📊 Attribution Analytics", 
     "📋 Master Audit Report",
     "🧠 FloorCast AI Analyst", 
-    "⚙️ Engine Calibration", 
-    "🧪 Forecast Sandbox"
+    "⚙️ Engine Calibration"
 ])
 
 st.sidebar.divider()
