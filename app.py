@@ -506,131 +506,79 @@ if page == "📈 Executive Dashboard":
             st.stop()
 
 # =================================================================
-# 📑 PAGE 2: DAILY LEDGER AUDIT (HARD ROCK LIVE SYNC)
+# 8. PAGE 2: DAILY LEDGER AUDIT (v12 - NAME SYNCED)
 # =================================================================
-elif page == "📑 Daily Ledger Audit":
+elif page == "Daily Ledger Audit":  # <--- THIS MUST MATCH YOUR SIDEBAR LIST EXACTLY
     st.markdown("""
-        <div style="background-color:#E1E8F0;padding:20px;border-radius:12px;border-left:6px solid #0047AB;margin-bottom:20px;">
-            <h2 style="color:#0047AB;margin:0;">📑 Daily Ledger Audit</h2>
-            <p style="color:#333;margin:0;">The Source of Truth: Manage historical traffic, financials, and event data.</p>
+        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
+            <h2 style="color: #0047AB; margin: 0;">🎰 Daily Property Ledger</h2>
+            <p style="color: #444; margin: 0;">Ground Truth Data: Financials, Foot Traffic, and Marketing Spend.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    col_l, col_r = st.columns(2)
+    # 1. LEDGER TOP ACTIONS
+    l1, l2 = st.columns([2, 1])
+    with l1:
+        st.write("### 📂 Property Data Entry")
+        st.caption("Update actuals to calibrate the engine. Changes sync to the cloud.")
     
-    with col_l:
-        with st.form("vault_entry_form"):
-            st.subheader("✍️ Add Daily Metrics")
-            d_entry = st.date_input("Entry Date", datetime.date.today())
-            
-            # Row 1: Core Financials
-            f1, f2, f3 = st.columns(3)
-            with f1: traffic = st.number_input("Traffic (Headcount)", min_value=0)
-            with f2: coin_in = st.number_input("Coin-In ($)", min_value=0.0, format="%.2f")
-            with f3: new_mems = st.number_input("New Members", min_value=0)
-            
-            st.divider()
-            
-            # Row 2: Environment
-            st.write("**🌦️ Environment & Promotion**")
-            w1, w2, w3, w4 = st.columns(4)
-            with w1: temp = st.number_input("Temp (°C)", value=15.0)
-            with w2: snow = st.number_input("Snow (cm)", min_value=0.0)
-            with w3: rain = st.number_input("Rain (mm)", min_value=0.0)
-            with w4: promo = st.checkbox("Major Promo?")
+    with l2:
+        # Simple date filter for the ledger view
+        view_days = st.slider("View Last X Days:", 7, 60, 30, key="ledger_view_slider")
 
-            st.divider()
+    # 2. DATA PREPARATION
+    if not ledger_data:
+        df_ledger = pd.DataFrame(columns=[
+            'entry_date', 'actual_traffic', 'new_members', 'active_promo', 
+            'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm'
+        ])
+    else:
+        df_ledger = pd.DataFrame(ledger_data)
+        df_ledger['entry_date'] = pd.to_datetime(df_ledger['entry_date'])
+        # Sort by date so today is at the top
+        df_ledger = df_ledger.sort_values('entry_date', ascending=False).head(view_days)
 
-            # Row 3: HARD ROCK LIVE Data
-            st.write("**🎸 Hard Rock LIVE Event Data**")
-            e1, e2 = st.columns(2)
-            with e1: 
-                event_type = st.selectbox("Event Setup", ["None", "GA (2,200)", "Seated (1,900)"])
-            with e2: 
-                attendance = st.number_input("Actual Attendance", min_value=0, max_value=2200)
-
-            st.divider()
-
-            # Row 4: Marketing
-            st.write("**📣 Marketing Metrics**")
-            m1, m2, m3 = st.columns(3)
-            with m1: clicks = st.number_input("Ad Clicks", min_value=0)
-            with m2: imps = st.number_input("Ad Impressions", min_value=0)
-            with m3: social = st.number_input("Social Engagements", min_value=0)
-            
-            if st.form_submit_button("🔒 Sync to Vault", use_container_width=True):
-                payload = {
-                    "entry_date": d_entry.isoformat(), 
-                    "actual_traffic": int(traffic),
-                    "actual_coin_in": float(coin_in), 
-                    "new_members": int(new_mems),
-                    "temp_c": float(temp),
-                    "snow_cm": float(snow),
-                    "rain_mm": float(rain),
-                    "active_promo": bool(promo),
-                    "event_type": event_type,
-                    "attendance": int(attendance),
-                    "ad_clicks": int(clicks),
-                    "ad_impressions": int(imps),
-                    "social_engagements": int(social)
-                }
-                # Syncing to Supabase
-                try:
-                    supabase.table("ledger").upsert(payload, on_conflict="entry_date").execute()
-                    st.success(f"Vault state updated for {d_entry.strftime('%Y-%m-%d')}.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Sync Failed: {e}")
-
-    with col_r:
-        st.subheader("📤 Bulk Systems Import")
-        st.write("Upload exported CSVs from casino management systems.")
-        csv_file = st.file_uploader("Drop Ledger CSV here", type="csv")
-        if csv_file and st.button("🚀 Execute Bulk Sync"):
-            try:
-                df_up = pd.read_csv(csv_file)
-                supabase.table("ledger").upsert(df_up.to_dict(orient='records')).execute()
-                st.success("Bulk synchronization complete.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Bulk Import Failed: {e}")
-
-    st.divider()
-    
-    # UNIVERSAL LEDGER EDITOR
-    st.subheader("📜 Universal Ledger Editor")
-    if ledger_data:
-        df_edit = pd.DataFrame(ledger_data)
-        df_edit['entry_date'] = pd.to_datetime(df_edit['entry_date'])
-        df_edit = df_edit.sort_values('entry_date', ascending=False)
-        
-        # Interactive table for manual cleaning
-        edited_df = st.data_editor(
-            df_edit, 
-            use_container_width=True, 
-            hide_index=True,
+    # 3. THE INTERACTIVE LEDGER (DATA EDITOR)
+    with st.form("ledger_update_form_v12"):
+        edited_ledger = st.data_editor(
+            df_ledger,
             column_config={
-                "entry_date": st.column_config.DateColumn("Date", disabled=True),
-                "actual_traffic": st.column_config.NumberColumn("Traffic"),
-                "actual_coin_in": st.column_config.NumberColumn("Coin-In ($)"),
-            }
+                "entry_date": st.column_config.DateColumn("Date", required=True),
+                "actual_traffic": st.column_config.NumberColumn("Actual Traffic", min_value=0, format="%d"),
+                "new_members": st.column_config.NumberColumn("New Members", min_value=0),
+                "active_promo": st.column_config.TextColumn("Promo/Campaign Name"),
+                "attendance": st.column_config.NumberColumn("Concert Attendance", min_value=0),
+                "ad_clicks": st.column_config.NumberColumn("Google Clicks"),
+                "ad_impressions": st.column_config.NumberColumn("Social Impressions"),
+                "rain_mm": st.column_config.NumberColumn("Rain (mm)"),
+                "snow_cm": st.column_config.NumberColumn("Snow (cm)"),
+            },
+            hide_index=True,
+            use_container_width=True,
+            num_rows="dynamic",
+            key="daily_audit_editor_v12"
         )
         
-        if st.button("✅ Confirm Manual Overwrites"):
-            final_p = edited_df.to_dict(orient='records')
-            # Sanitize dates back to strings for the database
-            for p in final_p:
-                if isinstance(p['entry_date'], (datetime.datetime, pd.Timestamp)):
-                    p['entry_date'] = p['entry_date'].strftime('%Y-%m-%d')
-            
-            try:
-                supabase.table("ledger").upsert(final_p).execute()
-                st.success("Universal Ledger state synced.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Overwrite Failed: {e}")
-    else:
-        st.info("The Ledger is currently empty. Add your first entry above.")
+        save_btn = st.form_submit_button("💾 Sync Ledger to Cloud", use_container_width=True)
+
+    # 4. SYNC LOGIC
+    if save_btn:
+        try:
+            with st.spinner("Writing to Supabase..."):
+                # Ensure the dataframe isn't empty
+                if not edited_ledger.empty:
+                    # Convert dates to strings for JSON compatibility
+                    edited_ledger['entry_date'] = edited_ledger['entry_date'].astype(str)
+                    data_to_sync = edited_ledger.to_dict(orient='records')
+                    
+                    # Upsert to Supabase
+                    supabase.table("ledger").upsert(data_to_sync).execute()
+                    
+                    st.success("✅ Ledger synced successfully. AI Engine re-calibrating...")
+                    st.cache_data.clear()
+                    st.rerun()
+        except Exception as e:
+            st.error(f"Sync Failed: {e}")
 
 # =================================================================
 # 3. PAGE 3: ATTRIBUTION ANALYTICS
