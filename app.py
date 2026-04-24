@@ -164,20 +164,18 @@ def get_forensic_metrics(df_input, coeffs):
         # Emergency Fallback Baseline
         heartbeats = {d: 4200 for d in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']}
     
-    # --- IV. PREDICTION LOGIC (FUTURE-READY) ---
+    # IV. PREDICTION LOGIC (FUTURE-READY)
     def predict_guests(row):
-        # Override to zero if we recorded it as closed in the past
         if row['is_closed'] == 1: 
             return 0
         
-        # Pull baseline for the specific day name (e.g., 'Friday')
+        # Pull the average guest baseline for this day of the week
         day_name = row['entry_date'].strftime('%A')
         base = heartbeats.get(day_name, 4200) 
         
-        # Predicted = Baseline + OOH + Adstock + Event Gravity
+        # Ensure we add OOH and any scheduled lifts to the future baseline
+        # Even if clicks/impressions are 0 in the future, OOH is a fixed constant
         return max(0, base + row['residual_lift'] + ooh_daily + row['gravity_lift'])
-
-    df['expected'] = df.apply(predict_guests, axis=1)
     
     # --- V. PREDICTABILITY AUDIT ---
     # Only judge AI accuracy on the past
@@ -298,13 +296,13 @@ if st.sidebar.button("🔓 Logout", use_container_width=True):
     st.rerun()
 
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (SITUATIONAL AWARENESS)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (NON-FINANCIAL / GUEST-CENTRIC)
 # =================================================================
 if page == "📈 Executive Dashboard":
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">📈 Executive Performance Pulse</h2>
-            <p style="color: #444; margin: 0;">Context-Aware Analysis: Historical Audits & Future Projections.</p>
+            <p style="color: #444; margin: 0;">Predictive Guest Volume & Loyalty Acquisition Tracking.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -316,12 +314,12 @@ if page == "📈 Executive Dashboard":
     with col_date:
         pulse_range = st.date_input("Select Analysis Window:", 
                                    value=(today - datetime.timedelta(days=3), today + datetime.timedelta(days=3)), 
-                                   key="pulse_dynamic_v1")
+                                   key="pulse_dynamic_v2")
 
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
         
-        # 1. GENERATE THE TIMELINE
+        # 1. GENERATE TIMELINE
         date_list = pd.date_range(start=start_p, end=end_p)
         df_timeline = pd.DataFrame({'entry_date': date_list})
         df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
@@ -330,72 +328,58 @@ if page == "📈 Executive Dashboard":
         m = get_forensic_metrics(df_p.to_dict(orient='records'), st.session_state.coeffs)
         df_final = m['df'].sort_values('entry_date')
 
-        # 3. SITUATIONAL LOGIC: Determine the "Flavor" of the Report
+        # Logic for Mode
         is_future = start_p > today
         is_past = end_p <= today
-        is_mixed = start_p <= today <= end_p
-
-        # --- EXECUTIVE KPI GRID (DYNAMIC & IMPACT FOCUSED) ---
-        st.write("### 🏛️ Property Vital Signs")
-        k1, k2, k3, k4 = st.columns(4)
         
-        c = st.session_state.coeffs
-        avg_spend = float(c.get('Avg_Coin_In', 112.50))
-        hold = float(c.get('Hold_Pct', 10.0)) / 100
-
-        # Calculate Marketing Impact % (Lifts / Total Expected)
+        # Calculate Marketing Impact %
         total_lift = df_final['residual_lift'].sum() + df_final['gravity_lift'].sum() + (m['ooh_total_daily'] * len(df_final))
         total_vol = df_final['expected'].sum()
         mkt_impact_pct = (total_lift / total_vol * 100) if total_vol > 0 else 0
 
+        # --- EXECUTIVE KPI GRID (NO DOLLARS) ---
+        st.write("### 🏛️ Property Vital Signs")
+        k1, k2, k3, k4 = st.columns(4)
+        
         if is_future:
-            # FUTURE MODE
             total_projected = df_final['expected'].sum()
             k1.metric("Projected Demand", f"{total_projected:,.0f} Guests")
-            k2.metric("Projected GGR", f"${(total_projected * avg_spend * hold):,.0f}")
-            k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%", help="Percentage of future traffic driven by active marketing & OOH.")
+            k2.metric("Target Member Signups", f"{(total_projected * 0.05):,.0f}", help="Based on 5% Target Conversion")
+            k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
             k4.metric("AI Confidence", m['predictability'])
         elif is_past:
-            # AUDIT MODE
             total_actual = df_final['actual_traffic'].sum()
             k1.metric("Actual Guest Flow", f"{total_actual:,.0f}")
-            k2.metric("Audited Accuracy", m['predictability'])
-            k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%", help="Percentage of historical traffic attributed to marketing vs. organic.")
-            k4.metric("Revenue Yield", f"${(df_final['actual_coin_in'].sum() * hold):,.0f}")
-        else:
-            # MIXED MODE: Combine what happened (Past) with what AI says (Future)
-            # THE FIX: We calculate past_traffic and future_expected directly from df_final
-            past_traffic = df_final[df_final['entry_date'].dt.date <= today]['actual_traffic'].sum()
-            future_expected = df_final[df_final['entry_date'].dt.date > today]['expected'].sum()
-            combined_guests = past_traffic + future_expected
-            
-            k1.metric("Total Window Guests", f"{combined_guests:,.0f}")
-            k2.metric("Current Accuracy", m['predictability'])
+            k2.metric("New Unity Members", f"{df_final['new_members'].sum():,.0f}")
             k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
-            k4.metric("Est. Window GGR", f"${(df_final['expected'].sum() * avg_spend * hold):,.0f}")
+            k4.metric("Audited Accuracy", m['predictability'])
+        else:
+            past_t = df_final[df_final['entry_date'].dt.date <= today]['actual_traffic'].sum()
+            future_e = df_final[df_final['entry_date'].dt.date > today]['expected'].sum()
+            k1.metric("Total Window Guests", f"{(past_t + future_e):,.0f}")
+            k2.metric("Window New Members", f"{df_final['new_members'].sum():,.0f}")
+            k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
+            k4.metric("Current Accuracy", m['predictability'])
+
+        st.divider()
 
         # --- PERFORMANCE VIZ ---
         fig_pulse = go.Figure()
         
-        # Actuals (Up to Today)
         df_act = df_final[df_final['entry_date'].dt.date <= today]
+        # Past Actuals
         fig_pulse.add_trace(go.Scatter(x=df_act['entry_date'], y=df_act['actual_traffic'], name="Actual Guests", line=dict(color='#0047AB', width=4)))
         
-        # Predictions (Full Range)
+        # Future AI Target
         fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Prediction", line=dict(color='#FFCC00', width=2, dash='dot')))
         
-        # Marker for Today
+        # Today Marker
         today_ts = pd.Timestamp(today)
-        fig_pulse.add_shape(type="line", x0=today_ts, x1=today_ts, y0=0, y1=1, yref="paper", line=dict(color="#666", width=2, dash="dash"))
+        fig_pulse.add_shape(type="line", x0=today_ts, x1=today_ts, y0=0, y1=1, yref="paper", line=dict(color="#666", width=1, dash="dash"))
+        fig_pulse.add_annotation(x=today_ts, y=1, yref="paper", text="Today", showarrow=False, textangle=-90, xanchor="right")
 
         fig_pulse.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=450, margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
         st.plotly_chart(fig_pulse, use_container_width=True)
-
-        # --- THE BRIEFING ---
-        if is_future:
-            st.success(f"**Forecast Briefing:** The property is anticipating a total volume of **{total_projected:,.0f}** guests. Peak activity is projected for **{df_final.loc[df_final['expected'].idxmax()]['entry_date'].strftime('%A')}**.")
-        else:
-            st.info(f"**Audit Briefing:** Historical guest flow for this period was **{df_final['actual_traffic'].sum():,.0f}**. The AI model maintained a **{m['predictability']}** accuracy rate against your manual ledger entries.")
 
 # =================================================================
 # 8. PAGE 2: DAILY LEDGER VAULT (FULL HARD ROCK LIVE LOGIC)
