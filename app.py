@@ -610,56 +610,75 @@ elif page == "📋 Master Audit Report":
 
         st.divider()
 
-       # 5. FORENSIC ATTRIBUTION (TRUE SCALE OVERLAY)
-        st.write("### 🧬 Multi-Channel Attribution: True Scale")
+      # 5. FORENSIC ATTRIBUTION (TRUE SCALE + INTEGER ROUNDING)
+        st.write("### 🧬 Multi-Channel Attribution: Absolute Guest Volume")
         df_final['OOH_Pressure'] = m['ooh_total_daily']
+        
+        # Ensure all components are rounded to whole numbers for the chart
+        df_final['guest_baseline_int'] = df_final['guest_baseline'].round(0)
+        df_final['residual_lift_int'] = df_final['residual_lift'].round(0)
+        df_final['gravity_lift_int'] = df_final['gravity_lift'].round(0)
         
         fig_audit = go.Figure()
 
         # 1. THE FOUNDATION: Organic Heartbeat (Area)
         fig_audit.add_trace(go.Scatter(
             x=df_final['entry_date'], 
-            y=df_final['guest_baseline'], 
+            y=df_final['guest_baseline_int'], 
             name='Organic Heartbeat', 
-            fill='tozeroy', # Fills from the line down to zero
+            fill='tozeroy',
             fillcolor='rgba(200, 210, 225, 0.4)', 
             line=dict(width=2, color='#8E9AAF', shape='spline'),
+            hovertemplate='%{y:,d} Guests' # Force integer formatting in hover
         ))
         
-        # 2. THE LIFTS: Plotted as distinct lines (not stacked)
-        # This shows their ACTUAL size relative to the baseline
-        
+        # 2. THE LIFTS: Plotted as distinct lines
         # Digital ROI
         fig_audit.add_trace(go.Scatter(
             x=df_final['entry_date'], 
-            y=df_final['residual_lift'], 
+            y=df_final['residual_lift_int'], 
             name='Digital ROI Lift', 
-            line=dict(width=3, color='#0047AB', shape='spline'), # Bold Cobalt
+            line=dict(width=3, color='#0047AB', shape='spline'),
+            hovertemplate='%{y:,d} Guests'
         ))
         
         # OOH Pressure
         fig_audit.add_trace(go.Scatter(
             x=df_final['entry_date'], 
-            y=df_final['OOH_Pressure'], 
+            y=df_final['OOH_Pressure'].round(0), 
             name='OOH Passive Inertia', 
             line=dict(width=3, color='#5D707F', dash='dot', shape='spline'),
+            hovertemplate='%{y:,d} Guests'
         ))
         
         # Event Gravity
         fig_audit.add_trace(go.Scatter(
             x=df_final['entry_date'], 
-            y=df_final['gravity_lift'], 
+            y=df_final['gravity_lift_int'], 
             name='Hard Rock LIVE Gravity', 
-            line=dict(width=4, color='#FFCC00', shape='spline'), # Bold Gold
+            line=dict(width=4, color='#FFCC00', shape='spline'),
+            hovertemplate='%{y:,d} Guests'
         ))
         
         fig_audit.update_layout(
             plot_bgcolor='rgba(0,0,0,0)', 
             height=550,
             margin=dict(l=10, r=10, t=10, b=10),
-            legend=dict(orientation="h", yanchor="top", y=-0.12, xanchor="center", x=0.5),
+            legend=dict(
+                orientation="h", 
+                yanchor="top", 
+                y=-0.15, 
+                xanchor="center", 
+                x=0.5,
+                bgcolor='rgba(255,255,255,0.8)'
+            ),
             hovermode="x unified",
-            yaxis=dict(title="Guest Volume (Absolute)", showgrid=True, gridcolor='#F0F2F6')
+            yaxis=dict(
+                title="Guest Volume (Absolute)", 
+                showgrid=True, 
+                gridcolor='#F0F2F6',
+                tickformat=',d' # Ensures Y-axis ticks are also whole numbers
+            )
         )
         st.plotly_chart(fig_audit, use_container_width=True)
         
