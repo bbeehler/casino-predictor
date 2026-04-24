@@ -991,7 +991,7 @@ elif page == "⚙️ AI Calibration":
         with c2:
             n_ooh = st.number_input("Road Signage (OOH) Daily Lift", value=int(st.session_state.coeffs.get('OOH_Weight', 100)))
         with c3:
-            n_print = st.number_input("Print (Mag/News) Daily Lift", value=int(st.session_state.coeffs.get('Print_Lift', 75)))
+            n_print = st.number_input("Print (Mag/News) Daily Lift", value=int(st.session_state.coeffs.get('Promo', 75)))
 
         st.divider()
 
@@ -1003,7 +1003,7 @@ elif page == "⚙️ AI Calibration":
         with f2:
             n_grav = st.slider("Event Gravity %", 0, 100, int(float(st.session_state.coeffs.get('Event_Gravity', 0.25)) * 100)) / 100
         with f3:
-            n_promo = st.number_input("Standard Promo Lift", value=int(st.session_state.coeffs.get('active_promo', 550)))
+            n_promo = st.number_input("Standard Promo Lift", value=int(st.session_state.coeffs.get('Promo', 550)))
 
         # SECTION 4: FRICTION
         st.divider()
@@ -1017,8 +1017,8 @@ elif page == "⚙️ AI Calibration":
         if st.form_submit_button("🚀 Recalibrate Property Engine", use_container_width=True):
             st.session_state.coeffs.update({
                 "Clicks": n_clicks, "Social_Imp": n_social, "Ad_Decay": n_decay,
-                "Broadcast_Weight": n_broad, "OOH_Weight": n_ooh, "active_promo": n_print,
-                "PR_Weight": n_earned, "Event_Gravity": n_grav, "active_promo": n_promo,
+                "Broadcast_Weight": n_broad, "OOH_Weight": n_ooh, "Promo": n_print,
+                "PR_Weight": n_earned, "Event_Gravity": n_grav, "Promo": n_promo,
                 "Rain_mm": n_rain, "Snow_cm": n_snow
             })
             
