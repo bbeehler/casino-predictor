@@ -305,7 +305,7 @@ st.sidebar.caption(f"**FloorCast AI v6.0**")
 st.sidebar.caption(f"Status: Operational | {datetime.date.today().strftime('%b %Y')}")
 
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION - STAFFING UPDATED)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION - FULL SPECTRUM)
 # =================================================================
 if page == "📈 Executive Dashboard":
     st.markdown("""
@@ -364,7 +364,7 @@ if page == "📈 Executive Dashboard":
                     df_plan,
                     column_config={
                         "entry_date": st.column_config.Column("Date", disabled=True),
-                        "active_promo": st.column_config.TextColumn("Active Promo", help="Type name to trigger fixed lift"),
+                        "active_promo": st.column_config.TextColumn("Active Promo/PR hit", help="Type 'PR' in name to trigger PR Multiplier"),
                         "ad_clicks": st.column_config.NumberColumn("Google/FB Clicks", help="Driven by Clicks coefficient"),
                         "ad_impressions": st.column_config.NumberColumn("Social Impressions", help="Driven by Social coefficient"),
                         "attendance": st.column_config.NumberColumn("Event Attendance", min_value=0),
@@ -384,12 +384,14 @@ if page == "📈 Executive Dashboard":
                 df_p['rain_mm'] = edited_df['rain_mm'].values
                 df_p['snow_cm'] = edited_df['snow_cm'].values
 
-        # 5. RUN ENGINE
+        # 5. RUN ENGINE (Using the Full-Spectrum Logic)
         m = get_forensic_metrics(df_p.to_dict(orient='records'), st.session_state.coeffs)
         df_final = m['df'].sort_values('entry_date')
 
-        # Marketing Impact Calculation
-        total_lift = df_final['residual_lift'].sum() + df_final['gravity_lift'].sum() + (m.get('total_inertia', 0) * len(df_final))
+        # Marketing Impact Calculation (Now including Total Inertia: OOH, TV, Radio)
+        # We multiply daily inertia by the length of the window
+        total_inertia_window = m.get('total_inertia', 0) * len(df_final)
+        total_lift = df_final['residual_lift'].sum() + df_final['gravity_lift'].sum() + total_inertia_window
         total_vol = df_final['expected'].sum()
         mkt_impact_pct = (total_lift / total_vol * 100) if total_vol > 0 else 0
 
@@ -474,14 +476,16 @@ if page == "📈 Executive Dashboard":
             st.write("#### 🛡️ Operational Risk & Opportunity")
             o1, o2, o3 = st.columns(3)
             with o1:
+                # Weather Friction using current calibration weights
                 s_imp = df_final['snow_cm'].sum() * float(st.session_state.coeffs.get('Snow_cm', -45))
                 r_imp = df_final['rain_mm'].sum() * float(st.session_state.coeffs.get('Rain_mm', -12))
                 st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
             with o2:
+                # Conversion Opportunity
                 potential = int(df_final['expected'].sum() - df_final['new_members'].sum())
                 st.metric("Conversion Opportunity", f"{max(0, potential):,.0f}")
             with o3:
-                # Peak Day Intensity (Only for future/current windows)
+                # DAILY STAFFING INTENSITY (Fixed to day-specific peak)
                 peak_day_volume = df_final['expected'].max()
                 intensity_label = "🔴 Critical Peak" if peak_day_volume > 6200 else ("🟡 High" if peak_day_volume > 5200 else "🟢 Stable")
                 st.metric("Staffing Intensity", intensity_label)
