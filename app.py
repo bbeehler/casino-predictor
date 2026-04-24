@@ -237,6 +237,22 @@ if not st.session_state.authenticated:
                         st.error(f"Access Denied: {str(e)}")
     st.stop() # Prevents any dashboard code from running until auth is True
 
+/* 1. Target ALL buttons in the app */
+.stButton>button {
+    color: #FFFFFF !important; /* Force text to white */
+}
+
+/* 2. Target the text inside the button specifically */
+.stButton>button p {
+    color: #FFFFFF !important;
+}
+
+/* 3. Handle Hover State (Ensures text stays white when you mouse over) */
+.stButton>button:hover {
+    color: #FFFFFF !important;
+    border-color: #0047AB !important;
+}
+
 # --- POST-AUTH SIDEBAR ---
 page = st.sidebar.radio("Navigation Workspace", [
     "📈 Executive Dashboard", 
