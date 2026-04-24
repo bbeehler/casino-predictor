@@ -363,8 +363,12 @@ if page == "📈 Executive Dashboard":
             k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%", help="Percentage of historical traffic attributed to marketing vs. organic.")
             k4.metric("Revenue Yield", f"${(df_final['actual_coin_in'].sum() * hold):,.0f}")
         else:
-            # MIXED MODE
-            combined_guests = df_act['actual_traffic'].sum() + df_final[df_final['entry_date'].dt.date > today]['expected'].sum()
+            # MIXED MODE: Combine what happened (Past) with what AI says (Future)
+            # THE FIX: We calculate past_traffic and future_expected directly from df_final
+            past_traffic = df_final[df_final['entry_date'].dt.date <= today]['actual_traffic'].sum()
+            future_expected = df_final[df_final['entry_date'].dt.date > today]['expected'].sum()
+            combined_guests = past_traffic + future_expected
+            
             k1.metric("Total Window Guests", f"{combined_guests:,.0f}")
             k2.metric("Current Accuracy", m['predictability'])
             k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
