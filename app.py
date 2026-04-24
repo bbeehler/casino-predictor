@@ -501,6 +501,14 @@ if page == "📈 Executive Dashboard":
                 peak_day_volume = df_final['expected'].max()
                 intensity_label = "🔴 Critical Peak" if peak_day_volume > 6200 else ("🟡 High" if peak_day_volume > 5200 else "🟢 Stable")
                 st.metric("Staffing Intensity", intensity_label)
+        
+        # --- THE CRITICAL FIX ---
+        # This else belongs to the 'if isinstance(pulse_range...)' check.
+        # It ensures that if the date range is incomplete, we only stop Page 1,
+        # not the entire app navigation.
+        else:
+            st.info("Please select both a Start and End date in the calendar above.")
+            st.stop()
 
 # =================================================================
 # 📑 PAGE 2: DAILY LEDGER AUDIT (HARD ROCK LIVE SYNC)
