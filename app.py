@@ -610,15 +610,51 @@ elif page == "📋 Master Audit Report":
 
         st.divider()
 
-        # 5. ATTRIBUTION STACK (LEGEND FIXED)
+        # 5. ATTRIBUTION STACK (UPDATED KEYS FOR GUEST-FIRST ENGINE)
         st.write("### 📊 Forensic Attribution Stack")
         df_final['OOH_Pressure'] = m['ooh_total_daily']
         
         fig_audit = go.Figure()
-        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['baseline_isolated'], name='Purified Baseline', stackgroup='one', fillcolor='#E1E8F0', line=dict(width=0.5, color='#B0C4DE')))
-        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['OOH_Pressure'], name='OOH Pressure', stackgroup='one', fillcolor='#B0C4DE', line=dict(width=0.5, color='#8FA9C7')))
-        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['residual_lift'], name='Digital ROI', stackgroup='one', fillcolor='#0047AB', line=dict(width=0.5, color='#003380')))
-        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['gravity_lift'], name='Event Gravity', stackgroup='one', fillcolor='#FFCC00', line=dict(width=0.5, color='#CCA300')))
+        
+        # 1. CHANGE: baseline_isolated -> guest_baseline
+        fig_audit.add_trace(go.Scatter(
+            x=df_final['entry_date'], 
+            y=df_final['guest_baseline'], # FIX APPLIED HERE
+            name='Purified Baseline', 
+            stackgroup='one', 
+            fillcolor='#E1E8F0', 
+            line=dict(width=0.5, color='#B0C4DE')
+        ))
+        
+        # 2. OOH Pressure (Already synced)
+        fig_audit.add_trace(go.Scatter(
+            x=df_final['entry_date'], 
+            y=df_final['OOH_Pressure'], 
+            name='OOH Pressure', 
+            stackgroup='one', 
+            fillcolor='#B0C4DE', 
+            line=dict(width=0.5, color='#8FA9C7')
+        ))
+        
+        # 3. Digital ROI (Already synced)
+        fig_audit.add_trace(go.Scatter(
+            x=df_final['entry_date'], 
+            y=df_final['residual_lift'], 
+            name='Digital ROI', 
+            stackgroup='one', 
+            fillcolor='#0047AB', 
+            line=dict(width=0.5, color='#003380')
+        ))
+        
+        # 4. Event Gravity (Already synced)
+        fig_audit.add_trace(go.Scatter(
+            x=df_final['entry_date'], 
+            y=df_final['gravity_lift'], 
+            name='Event Gravity', 
+            stackgroup='one', 
+            fillcolor='#FFCC00', 
+            line=dict(width=0.5, color='#CCA300')
+        ))
         
         fig_audit.update_layout(
             plot_bgcolor='rgba(0,0,0,0)', 
@@ -628,9 +664,6 @@ elif page == "📋 Master Audit Report":
             hovermode="x unified"
         )
         st.plotly_chart(fig_audit, use_container_width=True)
-
-        st.divider()
-
         # 6. DATA LOG & EXPORT
         st.write("### 📋 Detailed Forensic Ledger")
         df_final['Variance'] = df_final['actual_traffic'] - df_final['expected']
