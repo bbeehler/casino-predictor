@@ -600,27 +600,54 @@ elif page == "📋 Master Audit Report":
 
         st.divider()
 
-        # 4. ATTRIBUTION VISUALIZATION
+# 4. ATTRIBUTION VISUALIZATION (ENHANCED LEGEND)
         st.write("### 📊 Forensic Attribution Stack")
         df_final['OOH_Pressure'] = m['ooh_total_daily']
         df_final['Weather_Impact'] = (df_final['snow_cm'] * float(c.get('Snow_cm', -45))) + \
                                      (df_final['rain_mm'] * float(c.get('Rain_mm', -12)))
         
         fig_audit = go.Figure()
-        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['baseline_isolated'], name='Purified Baseline', stackgroup='one', fillcolor='#E1E8F0', line=dict(width=0)))
-        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['OOH_Pressure'], name='OOH Pressure', stackgroup='one', fillcolor='#B0C4DE', line=dict(width=0)))
-        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['residual_lift'], name='Digital ROI', stackgroup='one', fillcolor='#0047AB', line=dict(width=0)))
-        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['gravity_lift'], name='Event Gravity', stackgroup='one', fillcolor='#FFCC00', line=dict(width=0)))
+        
+        # We use explicit colors to ensure the "Wholesome" executive look
+        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['baseline_isolated'], 
+                                     name='Purified Baseline', stackgroup='one', 
+                                     fillcolor='#E1E8F0', line=dict(width=0.5, color='#B0C4DE')))
+        
+        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['OOH_Pressure'], 
+                                     name='OOH Pressure', stackgroup='one', 
+                                     fillcolor='#B0C4DE', line=dict(width=0.5, color='#8FA9C7')))
+        
+        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['residual_lift'], 
+                                     name='Digital ROI', stackgroup='one', 
+                                     fillcolor='#0047AB', line=dict(width=0.5, color='#003380')))
+        
+        fig_audit.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['gravity_lift'], 
+                                     name='Event Gravity', stackgroup='one', 
+                                     fillcolor='#FFCC00', line=dict(width=0.5, color='#CCA300')))
         
         fig_audit.update_layout(
             plot_bgcolor='rgba(0,0,0,0)', 
-            margin=dict(l=0, r=0, t=20, b=0), 
-            height=450,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            margin=dict(l=10, r=10, t=10, b=10), # Tight margins to give chart more room
+            height=500,
+            # IMPROVED LEGEND: Bottom-centered and horizontal
+            legend=dict(
+                orientation="h", 
+                yanchor="top", 
+                y=-0.15, # Moves it below the X-axis
+                xanchor="center", 
+                x=0.5,
+                bgcolor='rgba(255,255,255,0.8)',
+                bordercolor="Black",
+                borderwidth=1
+            ),
+            hovermode="x unified"
         )
+        
+        # Clean up the axes for high-end look
+        fig_audit.update_xaxes(showgrid=False, zeroline=False)
+        fig_audit.update_yaxes(showgrid=True, gridcolor='#DEE2E6', zeroline=False)
+        
         st.plotly_chart(fig_audit, use_container_width=True)
-
-        st.divider()
 
         # 5. DATA LOG & EXPORT
         st.write("### 📋 Detailed Forensic Ledger")
