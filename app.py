@@ -938,13 +938,23 @@ elif page == "🧠 FloorCast AI Analyst":
             st.markdown(m["content"])
 
 # =================================================================
-# 12. PAGE 6: ENGINE CALIBRATION
+# ⚙️ PAGE 5: ENGINE CALIBRATION (HARD ROCK FINANCIAL DNA)
 # =================================================================
-elif page == "⚙️ Engine Calibration":
-    st.header("⚙️ Engine Weight Calibration")
+elif page == "⚙️ AI Calibration":
+    st.markdown("""
+        <div style="background-color:#F8F9FA;padding:20px;border-radius:12px;border-left:6px solid #FFCC00;margin-bottom:20px;">
+            <h2 style="color:#343a40;margin:0;">⚙️ Engine Weight Calibration</h2>
+            <p style="color:#666;margin:0;">Fine-tune OOH Inertia and Financial DNA anchors to align AI with property performance.</p>
+        </div>
+    """, unsafe_allow_html=True)
     
+    # Run a quick audit to show current accuracy before recalibrating
+    m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
+    st.metric("Current Model Predictability", m_audit.get('predictability', '0%'))
+
     with st.form("calibration_form"):
         st.subheader("🏢 OOH Inertia Weights")
+        st.caption("Adjust the baseline 'pull' of static and digital outdoor boards.")
         c1, c2 = st.columns(2)
         with c1:
             n_sc = st.number_input("Static Board Count", value=int(st.session_state.coeffs.get('Static_Count', 10)))
@@ -954,7 +964,9 @@ elif page == "⚙️ Engine Calibration":
             n_dw = st.slider("Weight per Digital Face", 0.0, 200.0, float(st.session_state.coeffs.get('Digital_OOH_Weight', 25.0)))
 
         st.divider()
+        
         st.subheader("💰 Financial DNA Anchors")
+        st.caption("Baseline revenue and event impact metrics.")
         f1, f2, f3, f4 = st.columns(4)
         with f1: n_spend = st.number_input("Avg Spend ($)", value=float(st.session_state.coeffs.get('Avg_Coin_In', 112.50)))
         with f2: n_theo = st.number_input("Property Theo ($)", value=float(st.session_state.coeffs.get('Property_Theo', 450.00)))
@@ -962,14 +974,29 @@ elif page == "⚙️ Engine Calibration":
         with f4: n_grav = st.slider("Event Gravity %", 0.0, 100.0, float(st.session_state.coeffs.get('Event_Gravity', 25.0)))
         
         if st.form_submit_button("🚀 Recalibrate Engine", use_container_width=True):
+            # Update local session state
             st.session_state.coeffs.update({
-                "Static_Count": n_sc, "Static_Weight": n_sw,
-                "Digital_OOH_Count": n_dc, "Digital_OOH_Weight": n_dw,
-                "Avg_Coin_In": n_spend, "Property_Theo": n_theo,
-                "Hold_Pct": n_hold, "Event_Gravity": n_grav
+                "Static_Count": n_sc, 
+                "Static_Weight": n_sw,
+                "Digital_OOH_Count": n_dc, 
+                "Digital_OOH_Weight": n_dw,
+                "Avg_Coin_In": n_spend, 
+                "Property_Theo": n_theo,
+                "Hold_Pct": n_hold, 
+                "Event_Gravity": n_grav
             })
-            supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
-            st.success("Weights saved.")
+            
+            # Sync to Supabase coefficients table
+            try:
+                supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
+                st.success("Weights saved to Vault and Engine updated.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to sync coefficients: {e}")
+
+    # Optional: Display current coefficient state for verification
+    with st.expander("🔍 View Active Weight Manifest"):
+        st.json(st.session_state.coeffs)
 
 # =================================================================
 # 13. PAGE 7: FORECAST SANDBOX
