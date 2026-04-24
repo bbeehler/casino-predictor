@@ -654,36 +654,81 @@ elif page == "📋 Master Audit Report":
     else:
         st.info("Please select a range (Start and End date) to generate the audit report.")
 # =================================================================
-# 11. PAGE 5: AI ANALYST (MEMORY INTEGRATED)
+# 11. PAGE 5: AI ANALYST (REVERSED CHRONOLOGY)
 # =================================================================
 elif page == "🧠 FloorCast AI Analyst":
-    st.header("🧠 FloorCast Strategic AI")
+    st.markdown("""
+        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
+            <h2 style="color: #0047AB; margin: 0;">🧠 FloorCast Strategic AI Analyst</h2>
+            <p style="color: #444; margin: 0;">Executive Intelligence: Correlating Ledger History with Strategic Goals.</p>
+        </div>
+    """, unsafe_allow_html=True)
     
+    # 1. PREP THE DATA DOSSIER
+    if not ledger_data:
+        st.warning("Forensic Vault is empty. AI Analyst has no data to audit.")
+        st.stop()
+        
     df_ai = pd.DataFrame(ledger_data)
-    dossier = "".join([f"Date: {r.get('entry_date')} | Traffic: {r.get('actual_traffic')} | Signups: {r.get('new_members')} | Promo: {r.get('active_promo')} | Weather: {r.get('temp_c')}C\n" for _, r in df_ai.iterrows()])
+    # Creating a condensed but data-rich string for the AI's context
+    dossier = "".join([
+        f"Date: {r.get('entry_date')} | Traffic: {r.get('actual_traffic')} | "
+        f"Signups: {r.get('new_members')} | Coin-In: ${r.get('actual_coin_in'):,.2f} | "
+        f"Weather: {r.get('temp_c')}C, {r.get('snow_cm')}cm snow\n" 
+        for _, r in df_ai.sort_values('entry_date', ascending=False).head(60).iterrows()
+    ])
 
-    prompt = st.chat_input("What do you need to know?")
+    # 2. CHAT INPUT (STAYS AT BOTTOM OF UI BUT LOGICALLY SEPARATE)
+    prompt = st.chat_input("Chief, what are you looking for in the data?")
     
     if prompt:
+        # History Context Bridge (Last 8 messages for continuity)
         history_str = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages[-8:]])
+        
+        # Add User message to state
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         try:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            with st.status("🕵️ Auditing Ledger...", expanded=True) as status:
-                full_prompt = f"Role: Senior Strategist. Vault:\n{dossier}\nHistory:\n{history_str}\nQuestion: {prompt}"
+            with st.status("🕵️ Auditing Ledger & Correlating Trends...", expanded=True) as status:
+                full_prompt = f"""
+                You are the Chief Strategic Analyst for Hard Rock Casino Ottawa. 
+                Reference the following DATA DOSSIER to answer the user.
+                
+                DATA DOSSIER:
+                {dossier}
+                
+                CONVERSATION HISTORY:
+                {history_str}
+                
+                USER QUESTION: {prompt}
+                
+                INSTRUCTIONS:
+                - Use a professional, data-driven executive tone.
+                - If the user asks for trends, compare specific dates.
+                - Be concise.
+                """
                 response = model.generate_content(full_prompt)
-                status.update(label="✅ Analysis Complete!", state="complete")
+                status.update(label="✅ Strategic Analysis Finalized!", state="complete", expanded=False)
             
+            # Add Assistant message to state
             st.session_state.messages.append({"role": "assistant", "content": response.text})
             st.rerun()
+            
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Brain Sync Error: {str(e)}")
 
+    # 3. DISPLAY THREAD: NEWEST AT THE TOP
+    # By reversing the list, the latest interaction appears immediately under the header
     for m in reversed(st.session_state.messages):
-        with st.chat_message(m["role"]): st.markdown(m["content"])
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
+
+    # 4. UTILITY: CLEAR CHAT
+    if st.session_state.messages:
+        st.sidebar.button("🗑️ Reset Analyst Memory", on_click=lambda: st.session_state.update({"messages": []}))
 
 # =================================================================
 # 12. PAGE 6: ENGINE CALIBRATION
