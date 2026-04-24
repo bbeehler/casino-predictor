@@ -328,6 +328,30 @@ if page == "📈 Executive Dashboard":
         date_list = pd.date_range(start=start_p, end=end_p)
         df_timeline = pd.DataFrame({'entry_date': date_list})
         df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
+
+        # --- FUTURE PLANNER: MANUAL OVERRIDES ---
+        if is_future:
+            with st.expander("🛠️ Future Strategy Planner", expanded=True):
+                st.write("Incorporate upcoming marketing or operational factors to adjust the AI Target.")
+                f1, f2, f3 = st.columns(3)
+                
+                with f1:
+                    manual_promo = st.text_input("Active Promotion Name:", placeholder="e.g. Rock of Ages May")
+                with f2:
+                    manual_event = st.number_input("Event Attendance Projection:", min_value=0, step=100)
+                with f3:
+                    weather_outlook = st.selectbox("Weather Outlook:", ["Clear/Seasonal", "Rain Forecast", "Snow Forecast"])
+
+                # Inject these values into the dataframe before the engine runs
+                df_p['active_promo'] = manual_promo
+                df_p['attendance'] = manual_event
+                
+                if weather_outlook == "Rain Forecast":
+                    df_p['rain_mm'] = 10 # Sample friction value
+                elif weather_outlook == "Snow Forecast":
+                    df_p['snow_cm'] = 5  # Sample friction value
+                    
+                st.caption("⚠️ These values are for 'What-If' analysis and are not saved to the permanent Ledger.")
         
         # Run Forensic Engine
         m = get_forensic_metrics(df_p.to_dict(orient='records'), st.session_state.coeffs)
