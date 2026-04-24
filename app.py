@@ -331,48 +331,48 @@ if page == "📈 Executive Dashboard":
         df_timeline = pd.DataFrame({'entry_date': date_list})
         df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
 
-        # 4. FUTURE STRATEGY PLANNER (Overrides)
+        # 4. FUTURE STRATEGY PLANNER (Corrected Indentation)
         if is_future:
             with st.expander("🛠️ Future Strategy Planner", expanded=True):
                 st.write("Determine if there is an active promo or event for this window.")
                 has_promo = st.toggle("Active Promotion Running?", value=False, key="promo_toggle")
                 
                 f1, f2, f3 = st.columns(3)
+                
                 with f1:
                     if has_promo:
                         manual_promo = st.text_input("Promotion Name:", key="man_promo", placeholder="e.g. Rock of Ages")
+                        # These must be indented exactly 4 spaces from the 'if' above
                         promo_lift = st.slider("Anticipated Lift (Guests):", 0, 2000, 500, key="man_lift")
                         st.session_state.coeffs['Promo_Lift'] = promo_lift
                     else:
                         manual_promo = None
+
                 with f2:
                     manual_event = st.number_input("Event Attendance Projection:", min_value=0, step=100, key="man_event")
+                
                 with f3:
-                    # --- DYNAMIC WEATHER OVERRIDES ---
-                # Pull the actual sensitivity from your Page 6 coefficients
-                rain_sensitivity = float(st.session_state.coeffs.get('Rain_mm', -12))
-                snow_sensitivity = float(st.session_state.coeffs.get('Snow_cm', -45))
-
-                if weather_outlook == "Rain Forecast":
-                    # We inject enough rain to see a noticeable dip based on your Page 6 math
-                    df_p['rain_mm'] = 10 
-                    st.caption(f"🌧️ Applying Rain Friction: {rain_sensitivity * 10:,.0f} guests")
+                    weather_outlook = st.selectbox("Weather Outlook:", ["Clear/Seasonal", "Rain Forecast", "Snow Forecast"], key="man_weather")
                     
-                elif weather_outlook == "Snow Forecast":
-                    # We inject enough snow to trigger the friction
-                    df_p['snow_cm'] = 5
-                    st.caption(f"❄️ Applying Snow Friction: {snow_sensitivity * 5:,.0f} guests")
+                    # WEATHER LOGIC: Correctly indented inside the 'with f3' block
+                    rain_sensitivity = float(st.session_state.coeffs.get('Rain_mm', -12))
+                    snow_sensitivity = float(st.session_state.coeffs.get('Snow_cm', -45))
 
-                # Apply Overrides to df_p before Engine Runs
+                    if weather_outlook == "Rain Forecast":
+                        df_p['rain_mm'] = 10 
+                        st.caption(f"🌧️ Projected Impact: {rain_sensitivity * 10:,.0f} guests")
+                    elif weather_outlook == "Snow Forecast":
+                        df_p['snow_cm'] = 5
+                        st.caption(f"❄️ Projected Impact: {snow_sensitivity * 5:,.0f} guests")
+
+                # Apply final overrides to df_p
                 if manual_promo: 
                     df_p['active_promo'] = manual_promo
                 elif not has_promo:
                     df_p['active_promo'] = "0"
                 
-                if manual_event > 0: df_p['attendance'] = manual_event
-                
-                if weather_outlook == "Rain Forecast": df_p['rain_mm'] = 10
-                elif weather_outlook == "Snow Forecast": df_p['snow_cm'] = 5
+                if manual_event > 0: 
+                    df_p['attendance'] = manual_event
 
         # 5. RUN ENGINE
         m = get_forensic_metrics(df_p.to_dict(orient='records'), st.session_state.coeffs)
