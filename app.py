@@ -148,7 +148,7 @@ def get_forensic_metrics(df_input, coeffs):
     c_social = float(coeffs.get('Social_Imp', 0.0002))
     decay = float(coeffs.get('Ad_Decay', 85.0)) / 100 
     gravity = float(coeffs.get('Event_Gravity', 25.0)) / 100
-    promo_lift_weight = float(coeffs.get('Promo_Lift', 550))
+    promo_lift_weight = float(coeffs.get('Promo', 550))
     
     # NEW: Mass Media & Brand Inertia weights
     c_broadcast = float(coeffs.get('Broadcast_Weight', 150)) # TV/Radio
