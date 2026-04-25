@@ -351,6 +351,15 @@ with st.sidebar:
     
     st.divider()
 
+    # Logout Button
+if st.sidebar.button("🚪 Logout / Reset Session", use_container_width=True):
+    # 1. Clear the local session state
+    st.session_state.clear()
+    
+    # 2. Force a rerun to the starting state
+    # This will trigger the app to re-initialize 'coeffs' from the DB
+    st.rerun()
+
     # THE FIX: Ensure these two lines are indented exactly like this
     if page == "🤖 FloorCast AI Analyst" and st.session_state.get('messages'):
         if st.sidebar.button("🗑️ Reset Analyst Thread", use_container_width=True, key="sidebar_reset"):
