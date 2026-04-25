@@ -593,7 +593,7 @@ elif page == "Daily Ledger Audit":
 # =================================================================
 # 3. PAGE 3: ATTRIBUTION ANALYTICS
 # =================================================================
-elif page == "📊 Attribution Analytics":
+elif page == "Attribution Analytics":
     st.markdown("""
         <div style="background-color:#F8F9FA;padding:20px;border-radius:12px;border-left:6px solid #6c757d;margin-bottom:20px;">
             <h2 style="color:#343a40;margin:0;">📊 Attribution Analytics</h2>
