@@ -24,25 +24,25 @@ except Exception as e:
     st.stop()
 
 # =================================================================
-# 2. PERMANENT INITIALIZATION & STATE LOCK (v7.0 - DB FIRST)
+# 2. PERMANENT INITIALIZATION & STATE LOCK (v7.5 - ID-1 TARGET)
 # =================================================================
 if 'coeffs' not in st.session_state:
     try:
-        # Pull the Master Weights from Supabase
-        response = supabase.table("coefficients").select("*").limit(1).execute()
+        # 🟢 TARGETED PULL: We look specifically for the record we save on Page 5
+        response = supabase.table("coefficients").select("*").eq("id", 1).execute()
         
         if response.data and len(response.data) > 0:
+            # Found our saved weights
             st.session_state.coeffs = response.data[0]
-            # Safety check for multipliers
-            if st.session_state.coeffs.get('OOH_Count') is None:
-                st.session_state.coeffs['OOH_Count'] = 1
-            if st.session_state.coeffs.get('Static_Count') is None:
-                st.session_state.coeffs['Static_Count'] = 1
+            
+            # Ensure OOH/Static counts are never null to prevent math errors
+            st.session_state.coeffs['OOH_Count'] = st.session_state.coeffs.get('OOH_Count', 1) or 1
+            st.session_state.coeffs['Static_Count'] = st.session_state.coeffs.get('Static_Count', 1) or 1
         else:
-            # Fallback - Database is empty, use Hard Rock Defaults
+            # 🟡 INITIAL SEED: ID 1 doesn't exist yet, so we create the master record
             st.session_state.coeffs = {
-                'id': 1,
-                'Promo_Lift': 500.0, # Checked: ensure naming matches your Engine
+                'id': 1, # <--- THE ANCHOR
+                'Promo_Lift': 500.0,
                 'Broadcast_Weight': 150.0,
                 'OOH_Weight': 100.0,
                 'OOH_Count': 1,
@@ -59,12 +59,18 @@ if 'coeffs' not in st.session_state:
                 'Digital_OOH_Weight': 25.0,
                 'Digital_OOH_Count': 5
             }
+            # Create the master record in Supabase
             supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
             
     except Exception as e:
         st.error(f"Initialization Error: {e}")
-        # Failsafe defaults so the app doesn't stay blank
-        st.session_state.coeffs = {'Promo_Lift': 500.0, 'OOH_Weight': 100.0, 'OOH_Count': 1}
+        # Failsafe defaults so the app remains functional
+        st.session_state.coeffs = {
+            'id': 1, 
+            'Promo_Lift': 500.0, 
+            'OOH_Weight': 100.0, 
+            'OOH_Count': 1
+        }
 
 # =================================================================
 # 2. GLOBAL PAGE CONFIG & EXECUTIVE THEME
@@ -986,35 +992,33 @@ elif page == "AI Calibration":
             n_snow = st.slider("Snow Impact (per cm)", -500, 0, int(st.session_state.coeffs.get('Snow_cm', -45)))
 
         if st.form_submit_button("🚀 Recalibrate Property Engine", use_container_width=True):
-            # 1. Update Session State
-            # We ensure OOH_Count is at least 1 if we are setting a weight
+            # Explicitly lock this to Record ID 1
             updated_coeffs = {
+                "id": 1,
                 "Clicks": float(n_clicks),
                 "Social_Imp": float(n_social),
                 "Ad_Decay": int(n_decay),
                 "Broadcast_Weight": float(n_broad),
                 "OOH_Weight": float(n_ooh),
-                "OOH_Count": 1 if n_ooh > 0 else 0, # Force count to 1 so the math works
+                "OOH_Count": 1 if n_ooh > 0 else 0,
                 "Print_Lift": float(n_print),
                 "PR_Weight": float(n_earned),
                 "Event_Gravity": float(n_grav),
                 "Promo": float(n_promo),
                 "Rain_mm": float(n_rain),
                 "Snow_cm": float(n_snow),
-                "Static_Weight": float(n_ooh), # Syncing to legacy OOH column for safety
+                "Static_Weight": float(n_ooh),
                 "Static_Count": 1 if n_ooh > 0 else 0
             }
             
+            # Update session state
             st.session_state.coeffs.update(updated_coeffs)
             
             try:
-                # 2. Push to Supabase
-                # Ensure your coefficients table has an 'id' or 'key' to upsert correctly
-                supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
+                # Push to Supabase - specifically targeting ID 1
+                supabase.table("coefficients").upsert(updated_coeffs).execute()
                 
-                st.success(f"✅ Weights Saved.")
-                
-                # 3. Force Refresh
+                st.success(f"✅ Weights Hard-Saved to Database.")
                 st.cache_data.clear()
                 st.rerun()
             except Exception as e:
