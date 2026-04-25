@@ -638,7 +638,7 @@ elif page == "Daily Ledger Audit":
         st.write(f"**Database Audit:** {len(df_ledger)} total records in vault.")
 
 # =================================================================
-# 3. PAGE 3: ATTRIBUTION ANALYTICS
+# 3. PAGE 3: ATTRIBUTION ANALYTICS (FIXED ALIGNMENT)
 # =================================================================
 elif page == "Attribution Analytics":
     st.markdown("""
@@ -653,65 +653,51 @@ elif page == "Attribution Analytics":
         st.stop()
 
     # 1. RUN ENGINE
-    # This processes your Supabase data through the AI math weights defined in Calibration
-    m_full = get_forensic_metrics(ledger_data, st.session_state.coeffs)
+    m_full = get_forensic_metrics(ledger_data, st.session_state.get('coeffs', {}))
     df_attr = m_full['df']
 
     if df_attr.empty:
-        st.warning("No historical metrics available to attribute. Check your Ledger date range.")
+        st.warning("No historical metrics available to attribute.")
     else:
         # 2. EXECUTIVE SCORECARD
         st.write("### 🧠 Performance Attribution Scorecard")
         c1, c2, c3, c4 = st.columns(4)
         
         with c1:
-            st.metric("Model Predictability", m_full.get('predictability', '0%'), 
-                      help="Accuracy of AI Target vs. Actual Floor Traffic")
+            st.metric("Model Predictability", m_full.get('predictability', '0%'))
         with c2:
             org_vol = df_attr['guest_baseline'].sum()
-            st.metric("Organic Heartbeat", f"{org_vol:,.0f}", 
-                      help="Estimated traffic without any marketing or digital spend.")
+            st.metric("Organic Heartbeat", f"{org_vol:,.0f}")
         with c3:
-            # Lift = Awareness Tail + Event Gravity + Promo Overlays
             mkt_vol = df_attr['residual_lift'].sum() + df_attr['gravity_lift'].sum()
-            st.metric("Marketing Lift", f"{mkt_vol:,.0f}", 
-                      help="Total guests attributed to Clicks, Social, and Events.")
+            st.metric("Marketing Lift", f"{mkt_vol:,.0f}")
         with c4:
             total_act = df_attr['actual_traffic'].sum()
             lift_perc = (mkt_vol / total_act * 100) if total_act > 0 else 0
             st.metric("Marketing Yield %", f"{lift_perc:.1f}%")
 
-    st.divider()
+        st.divider()
 
-    # 3. VOLUME STACK CHART (The "Why" Behind the Numbers)
-    st.write("### 🔍 Volume Layer Breakdown")
-    st.caption("This chart stacks the guest layers to show what drove traffic each day.")
-    
-    # Prepare Chart Data
-    chart_data = df_attr.copy()
-    chart_data = chart_data.set_index('entry_date')[['guest_baseline', 'residual_lift', 'gravity_lift']]
-    chart_data.columns = ['Organic Heartbeat', 'Digital Awareness (Adstock)', 'Hard Rock LIVE Gravity']
-    
-    # Display the Area Chart (Stacked)
-    st.area_chart(chart_data, use_container_width=True)
+        # 3. VOLUME STACK CHART
+        st.write("### 🔍 Volume Layer Breakdown")
+        chart_data = df_attr.copy()
+        chart_data = chart_data.set_index('entry_date')[['guest_baseline', 'residual_lift', 'gravity_lift']]
+        chart_data.columns = ['Organic Heartbeat', 'Digital Awareness', 'Hard Rock LIVE Gravity']
+        st.area_chart(chart_data, use_container_width=True)
 
-    st.divider()
+        st.divider()
 
-# --- DIGITAL AWARENESS POOL (ENHANCED VIZ) ---
+        # 4. DIGITAL AWARENESS POOL (NOW ALIGNED)
         st.write("### 📡 Digital Awareness Pool")
         st.caption("Tracking the conversion of Digital Impressions into Physical Property Traffic.")
 
-        # 1. Prepare Data
-        df_pulse = df_final.copy()
-        # Clean naming: ad_clicks and ad_impressions
+        # Prepare Signal Data
+        df_pulse = df_attr.copy()
         df_pulse['Digital_Signal'] = (df_pulse['ad_clicks'] * 10) + (df_pulse['ad_impressions'] * 0.05)
 
-        # 2. Build the Chart
         fig_digital = go.Figure()
-
-        # Awareness Pool Trace
         fig_digital.add_trace(go.Scatter(
-            x=df_pulse['entry_date'], 
+            x=df_pulse.index if 'entry_date' not in df_pulse.columns else df_pulse['entry_date'], 
             y=df_pulse['Digital_Signal'],
             fill='tozeroy',
             name="Awareness Volume",
@@ -719,29 +705,18 @@ elif page == "Attribution Analytics":
             fillcolor='rgba(0, 71, 171, 0.2)'
         ))
 
-        # AI Target Trace
         fig_digital.add_trace(go.Scatter(
-            x=df_pulse['entry_date'], 
+            x=df_pulse.index if 'entry_date' not in df_pulse.columns else df_pulse['entry_date'], 
             y=df_pulse['expected'],
             name="AI Target Volume",
             line=dict(color='#FFCC00', width=3)
         ))
 
-        # Formatting
-        fig_digital.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            height=400,
-            margin=dict(l=0, r=0, t=10, b=0),
-            hovermode="x unified"
-        )
-
+        fig_digital.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=400, margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
         st.plotly_chart(fig_digital, use_container_width=True)
 
-        # Ensure the following lines match the EXACT same indentation as the st.write above
-        st.plotly_chart(fig_pulse, use_container_width=True)
-
         with st.expander("📝 Strategic Interpretation"):
-            st.write("Current AI Analysis of property trends...")
+            st.write("AI Analysis: Attribution layers confirm which channels are driving current floor traffic.")
 
 # =================================================================
 # 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v11 - REPAIRED)
