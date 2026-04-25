@@ -751,15 +751,13 @@ fig_digital.update_layout(
 
 st.plotly_chart(fig_digital, use_container_width=True)
 
-    # 5. STRATEGIC INSIGHTS
-    with st.expander("📝 Strategic Interpretation"):
-        avg_organic = df_attr['guest_baseline'].mean()
-        max_lift_day = df_attr.loc[df_attr['residual_lift'].idxmax(), 'entry_date']
-        
-        st.write(f"**Organic Baseline:** On average, your floor carries a heartbeat of **{avg_organic:,.0f}** organic guests per day.")
-        st.write(f"**Peak Marketing Impact:** Your highest digital awareness impact was recorded on **{max_lift_day.strftime('%B %d, %Y')}**.")
-        st.write("---")
-        st.caption("Note: These calculations are derived from the coefficients set in the AI Calibration panel.")
+# --- 6. PERFORMANCE VIZ (End of previous section) ---
+        st.plotly_chart(fig_pulse, use_container_width=True)
+
+        # FIX: Ensure 'with' is perfectly aligned with 'st.plotly_chart'
+        with st.expander("📝 Strategic Interpretation"):
+            st.write("Current AI Analysis of property trends...")
+            # Your commentary logic here
 
 # =================================================================
 # 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v11 - REPAIRED)
