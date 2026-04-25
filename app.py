@@ -697,64 +697,62 @@ elif page == "Attribution Analytics":
 
     st.divider()
 
-    # --- DIGITAL AWARENESS POOL (ENHANCED VIZ) ---
-st.write("### 📡 Digital Awareness Pool")
-st.caption("Tracking the conversion of Digital Impressions into Physical Property Traffic.")
+# --- DIGITAL AWARENESS POOL (ENHANCED VIZ) ---
+        st.write("### 📡 Digital Awareness Pool")
+        st.caption("Tracking the conversion of Digital Impressions into Physical Property Traffic.")
 
-# 1. Prepare Data
-# We blend Clicks and Impressions into a 'Digital Signal'
-df_pulse = df_final.copy()
-df_pulse['Digital_Signal'] = (df_pulse['ad_clicks'] * 10) + (df_pulse['ad_impressions'] * 0.05)
+        # 1. Prepare Data
+        df_pulse = df_final.copy()
+        df_pulse['Digital_Signal'] = (df_pulse['ad_clicks'] * 10) + (df_pulse['ad_impressions'] * 0.05)
 
-# 2. Build the Chart
-fig_digital = go.Figure()
+        # 2. Build the Chart
+        fig_digital = go.Figure()
 
-# Add the 'Awareness Pool' as a filled area (Adstock representation)
-fig_digital.add_trace(go.Scatter(
-    x=df_pulse['entry_date'], 
-    y=df_pulse['Digital_Signal'],
-    fill='tozeroy',
-    name="Awareness Volume",
-    line=dict(color='#0047AB', width=0),
-    fillcolor='rgba(0, 71, 171, 0.2)'
-))
+        # Add the 'Awareness Pool' as a filled area
+        fig_digital.add_trace(go.Scatter(
+            x=df_pulse['entry_date'], 
+            y=df_pulse['Digital_Signal'],
+            fill='tozeroy',
+            name="Awareness Volume",
+            line=dict(color='#0047AB', width=0),
+            fillcolor='rgba(0, 71, 171, 0.2)'
+        ))
 
-# Add the AI Target as a high-contrast line
-fig_digital.add_trace(go.Scatter(
-    x=df_pulse['entry_date'], 
-    y=df_pulse['expected'],
-    name="AI Target Volume",
-    line=dict(color='#FFCC00', width=3)
-))
+        # Add the AI Target
+        fig_digital.add_trace(go.Scatter(
+            x=df_pulse['entry_date'], 
+            y=df_pulse['expected'],
+            name="AI Target Volume",
+            line=dict(color='#FFCC00', width=3)
+        ))
 
-# Add Actual Traffic (for past dates)
-df_past = df_pulse[df_pulse['entry_date'].dt.date < today]
-fig_digital.add_trace(go.Scatter(
-    x=df_past['entry_date'], 
-    y=df_past['actual_traffic'],
-    name="Actual Guests",
-    mode='markers',
-    marker=dict(color='#0047AB', size=8, symbol='diamond')
-))
+        # Add Actual Traffic
+        df_past = df_pulse[df_pulse['entry_date'].dt.date < today]
+        fig_digital.add_trace(go.Scatter(
+            x=df_past['entry_date'], 
+            y=df_past['actual_traffic'],
+            name="Actual Guests",
+            mode='markers',
+            marker=dict(color='#0047AB', size=8, symbol='diamond')
+        ))
 
-# Formatting
-fig_digital.update_layout(
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    height=400,
-    margin=dict(l=0, r=0, t=10, b=0),
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    hovermode="x unified",
-    xaxis=dict(showgrid=False),
-    yaxis=dict(showgrid=True, gridcolor='#EEE')
-)
+        # Formatting
+        fig_digital.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            height=400,
+            margin=dict(l=0, r=0, t=10, b=0),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            hovermode="x unified",
+            xaxis=dict(showgrid=False),
+            yaxis=dict(showgrid=True, gridcolor='#EEE')
+        )
 
-st.plotly_chart(fig_digital, use_container_width=True)
+        st.plotly_chart(fig_digital, use_container_width=True)
 
-# --- 6. PERFORMANCE VIZ (End of previous section) ---
+        # --- 6. PERFORMANCE VIZ (Aligned with the chart above) ---
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # FIX: Ensure 'with' is perfectly aligned with 'st.plotly_chart'
         with st.expander("📝 Strategic Interpretation"):
             st.write("Current AI Analysis of property trends...")
             # Your commentary logic here
