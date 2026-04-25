@@ -5,3 +5,4 @@ supabase
 env-canada
 google-generativeai
 plotly
+statsmodels
