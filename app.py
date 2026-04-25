@@ -548,24 +548,26 @@ elif page == "Daily Ledger Audit":
             submit_new = st.form_submit_button("🚀 Submit to Database", use_container_width=True)
             
             if submit_new:
+                # Ensure the data is clean before sending to Supabase
                 new_row = {
                     "entry_date": str(e_date),
-                    "actual_traffic": e_traffic,
-                    "new_members": e_members,
-                    "active_promo": e_promo,
-                    "attendance": e_event,
-                    "ad_clicks": e_clicks,
-                    "ad_impressions": e_imps,
-                    "rain_mm": e_rain,
-                    "snow_cm": e_snow
+                    "actual_traffic": int(e_traffic),
+                    "new_members": int(e_members),
+                    "active_promo": str(e_promo).strip() if e_promo else None, # Forces string or Null
+                    "attendance": int(e_event),
+                    "ad_clicks": int(e_clicks),
+                    "ad_impressions": int(e_imps),
+                    "rain_mm": float(e_rain),
+                    "snow_cm": float(e_snow)
                 }
                 try:
                     supabase.table("ledger").upsert(new_row).execute()
-                    st.success(f"Successfully logged data for {e_date}")
+                    st.success(f"✅ Successfully logged: {e_promo if e_promo else 'General Day'}")
                     st.cache_data.clear()
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Error: {e}")
+                    # This will catch if the DB column is still set to Boolean
+                    st.error(f"Database Error: {e}")
 
     st.divider()
 
