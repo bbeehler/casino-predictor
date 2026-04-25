@@ -505,7 +505,7 @@ if page == "Executive Dashboard":
         st.stop() 
 
 # =================================================================
-# 8. PAGE 2: DAILY LEDGER AUDIT (FULL RESTORATION)
+# 8. PAGE 2: DAILY LEDGER AUDIT (FORM + TABLE HYBRID)
 # =================================================================
 elif page == "Daily Ledger Audit":
     st.markdown("""
@@ -515,81 +515,104 @@ elif page == "Daily Ledger Audit":
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. THE DATA RESTORATION ENGINE
+    # --- 1. THE DATA ENGINE ---
     if not ledger_data:
-        df_ledger = pd.DataFrame(columns=[
-            'entry_date', 'actual_traffic', 'new_members', 'active_promo', 
-            'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm'
-        ])
+        df_ledger = pd.DataFrame(columns=['entry_date', 'actual_traffic', 'new_members', 'active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm'])
     else:
-        # Pulling the raw data
         df_ledger = pd.DataFrame(ledger_data)
-        
-        # FIXING THE TYPES WITHOUT STRIPPING DATA
         df_ledger['entry_date'] = pd.to_datetime(df_ledger['entry_date']).dt.date
-        
-        # Ensure all marketing columns exist and are numeric
         marketing_cols = ['actual_traffic', 'new_members', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
         for col in marketing_cols:
             if col in df_ledger.columns:
                 df_ledger[col] = pd.to_numeric(df_ledger[col], errors='coerce').fillna(0)
-            else:
-                df_ledger[col] = 0 # Create it if it went missing
-        
-        # Ensure the text column is preserved
         df_ledger['active_promo'] = df_ledger['active_promo'].astype(str).replace(['nan', 'None', '0', '0.0'], '')
-        
-        # Sort newest first
         df_ledger = df_ledger.sort_values('entry_date', ascending=False)
 
-    # 2. ACTIONS
+    # --- 2. RAPID ENTRY FORM ---
+    with st.expander("➕ Log New Daily Actuals", expanded=True):
+        with st.form("rapid_entry_form", clear_on_submit=True):
+            f1, f2, f3 = st.columns(3)
+            with f1:
+                e_date = st.date_input("Date", value=datetime.date.today())
+                e_traffic = st.number_input("Actual Traffic", min_value=0, step=1)
+                e_members = st.number_input("New Members", min_value=0, step=1)
+            with f2:
+                e_promo = st.text_input("Active Promo Name", placeholder="e.g. Rock of Ages")
+                e_event = st.number_input("Event Attendance", min_value=0, step=1)
+                e_clicks = st.number_input("Ad Clicks", min_value=0, step=1)
+            with f3:
+                e_imps = st.number_input("Social Impressions", min_value=0, step=1)
+                e_rain = st.number_input("Rain (mm)", min_value=0.0, step=0.1)
+                e_snow = st.number_input("Snow (cm)", min_value=0.0, step=0.1)
+            
+            submit_new = st.form_submit_button("🚀 Submit to Database", use_container_width=True)
+            
+            if submit_new:
+                new_row = {
+                    "entry_date": str(e_date),
+                    "actual_traffic": e_traffic,
+                    "new_members": e_members,
+                    "active_promo": e_promo,
+                    "attendance": e_event,
+                    "ad_clicks": e_clicks,
+                    "ad_impressions": e_imps,
+                    "rain_mm": e_rain,
+                    "snow_cm": e_snow
+                }
+                try:
+                    supabase.table("ledger").upsert(new_row).execute()
+                    st.success(f"Successfully logged data for {e_date}")
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    st.divider()
+
+    # --- 3. THE HISTORICAL EDITABLE LEDGER ---
     l1, l2 = st.columns([2, 1])
     with l1:
-        st.write("### 📂 Property Data Entry")
-        st.caption("Update actuals and marketing spend to calibrate the AI engine.")
-    
+        st.write("### 📂 Bulk Audit & Corrections")
+        st.caption("Use this table to fix past errors or update older data.")
     with l2:
-        view_limit = st.slider("View History (Days):", 7, 100, 30)
+        view_limit = st.slider("Historical View:", 7, 100, 30)
 
-    # 3. THE RESTORED DATA EDITOR (All Inputs Active)
-    with st.form("ledger_master_sync"):
+    with st.form("bulk_ledger_sync"):
         edited_ledger = st.data_editor(
             df_ledger.head(view_limit),
             column_config={
                 "entry_date": st.column_config.DateColumn("Date", required=True),
-                "actual_traffic": st.column_config.NumberColumn("Actual Traffic", format="%d", help="Total guest count"),
-                "new_members": st.column_config.NumberColumn("New Members", format="%d", help="Unity signups"),
-                "active_promo": st.column_config.TextColumn("Promo Name", help="Name of current campaign"),
-                "attendance": st.column_config.NumberColumn("Event Attendance", format="%d", help="Concert/Show counts"),
-                "ad_clicks": st.column_config.NumberColumn("Google/FB Clicks", help="Paid traffic clicks"),
-                "ad_impressions": st.column_config.NumberColumn("Social Imps", help="Organic/Paid reach"),
-                "rain_mm": st.column_config.NumberColumn("Rain (mm)", help="Precipitation factor"),
-                "snow_cm": st.column_config.NumberColumn("Snow (cm)", help="Winter friction factor"),
+                "actual_traffic": st.column_config.NumberColumn("Actual Traffic", format="%d"),
+                "new_members": st.column_config.NumberColumn("New Members", format="%d"),
+                "active_promo": st.column_config.TextColumn("Promo Name"),
+                "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
+                "ad_clicks": st.column_config.NumberColumn("Ad Clicks"),
+                "ad_impressions": st.column_config.NumberColumn("Social Imps"),
+                "rain_mm": st.column_config.NumberColumn("Rain (mm)"),
+                "snow_cm": st.column_config.NumberColumn("Snow (cm)"),
             },
             hide_index=True,
             use_container_width=True,
             num_rows="dynamic",
-            key="property_ledger_restored_v1" # New key to clear errors
+            key="property_ledger_restored_v2"
         )
         
-        if st.form_submit_button("💾 Sync Ledger to Cloud", use_container_width=True):
+        if st.form_submit_button("💾 Sync Table Updates", use_container_width=True):
             try:
-                # Prepare for Supabase
                 df_sync = edited_ledger.copy()
                 df_sync['entry_date'] = df_sync['entry_date'].astype(str)
                 sync_payload = df_sync.to_dict(orient='records')
-                
                 supabase.table("ledger").upsert(sync_payload).execute()
-                st.success("✅ Ledger Synced. Page 1 updated.")
+                st.success("✅ Bulk updates synced successfully.")
                 st.cache_data.clear()
                 st.rerun()
             except Exception as e:
-                st.error(f"Sync Error: {e}")
+                st.error(f"Bulk Sync Error: {e}")
 
-    # 4. DATA INTEGRITY CHECK
-    st.divider()
+    # 4. DATABASE STATS
     if not df_ledger.empty:
-        st.write(f"**Database Audit:** {len(df_ledger)} total records found.")
+        st.write(f"**Database Audit:** {len(df_ledger)} total records in vault.")
+
 # =================================================================
 # 3. PAGE 3: ATTRIBUTION ANALYTICS
 # =================================================================
