@@ -8,30 +8,41 @@ import plotly.graph_objects as go
 import plotly.express as px
 from env_canada import ECWeather
 import google.generativeai as genai
-from supabase import create_client
+from supabase import create_client, Client # Added Client for type hinting
 from io import BytesIO
 
 # =================================================================
-# 1. PERMANENT INITIALIZATION & STATE LOCK (v7.0 - DB FIRST)
+# 1. DATABASE CONNECTION (MUST BE FIRST)
+# =================================================================
+# Ensure these match your Streamlit Secrets exactly
+try:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    supabase: Client = create_client(url, key)
+except Exception as e:
+    st.error(f"Critical System Error: Connection secrets missing. {e}")
+    st.stop()
+
+# =================================================================
+# 2. PERMANENT INITIALIZATION & STATE LOCK (v7.0 - DB FIRST)
 # =================================================================
 if 'coeffs' not in st.session_state:
     try:
-        # 🟢 STEP 1: Attempt to pull the Master Weights from Supabase
-        # We assume there is a single row of coefficients (ID=1)
+        # Pull the Master Weights from Supabase
         response = supabase.table("coefficients").select("*").limit(1).execute()
         
         if response.data and len(response.data) > 0:
-            # 🟢 STEP 2: Database Found - Lock these values in
             st.session_state.coeffs = response.data[0]
-            # Ensure OOH_Count and Static_Count are at least 1 if weights exist
-            if st.session_state.coeffs.get('OOH_Weight', 0) > 0:
+            # Safety check for multipliers
+            if st.session_state.coeffs.get('OOH_Count') is None:
                 st.session_state.coeffs['OOH_Count'] = 1
+            if st.session_state.coeffs.get('Static_Count') is None:
                 st.session_state.coeffs['Static_Count'] = 1
         else:
-            # 🟡 STEP 3: Fallback - Database is empty, use Hard Rock Defaults
+            # Fallback - Database is empty, use Hard Rock Defaults
             st.session_state.coeffs = {
                 'id': 1,
-                'Promo': 500.0,
+                'Promo_Lift': 500.0, # Checked: ensure naming matches your Engine
                 'Broadcast_Weight': 150.0,
                 'OOH_Weight': 100.0,
                 'OOH_Count': 1,
@@ -48,12 +59,11 @@ if 'coeffs' not in st.session_state:
                 'Digital_OOH_Weight': 25.0,
                 'Digital_OOH_Count': 5
             }
-            # Optional: Seed the DB with these defaults if it's the first run
             supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
             
     except Exception as e:
-        # 🔴 STEP 4: Failsafe - If DB connection fails, use basic defaults so app doesn't crash
-        st.error(f"Database Connection Error: {e}")
+        st.error(f"Initialization Error: {e}")
+        # Failsafe defaults so the app doesn't stay blank
         st.session_state.coeffs = {'Promo_Lift': 500.0, 'OOH_Weight': 100.0, 'OOH_Count': 1}
 
 # =================================================================
