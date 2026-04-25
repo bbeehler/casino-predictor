@@ -685,7 +685,7 @@ elif page == "Attribution Analytics":
 # =================================================================
 # 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v11 - REPAIRED)
 # =================================================================
-elif page == "📋 Master Audit Report":
+elif page == "Master Audit Report":
     # Custom CSS to shrink KPI labels for a dense, professional look
     st.markdown("""
         <style>
@@ -871,7 +871,7 @@ elif page == "📋 Master Audit Report":
 # =================================================================
 # ⚙️ PAGE 5: AI CALIBRATION & ENGINE WEIGHTS
 # =================================================================
-elif page == "⚙️ AI Calibration":
+elif page == "AI Calibration":
     st.markdown("""
         <div style="background-color:#F8F9FA;padding:20px;border-radius:12px;border-left:6px solid #FFCC00;margin-bottom:20px;">
             <h2 style="color:#343a40;margin:0;">⚙️ Engine Weight Calibration</h2>
@@ -969,7 +969,7 @@ elif page == "⚙️ AI Calibration":
 # =================================================================
 # 11. PAGE 6: AI STRATEGIC ANALYST (EXECUTIVE UPGRADE v12)
 # =================================================================
-elif page == "🤖 FloorCast AI Analyst":
+elif page == "FloorCast AI Analyst":
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">🕵️ FloorCast Strategic AI Analyst</h2>
