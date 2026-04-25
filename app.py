@@ -348,9 +348,9 @@ with st.sidebar:
             st.rerun()
 
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION - FULLY SYNCED)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION - LIVE SYNCED)
 # =================================================================
-if page == "Executive Dashboard":
+if page == "📈 Executive Dashboard":
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">📈 Executive Performance Pulse</h2>
@@ -359,6 +359,11 @@ if page == "Executive Dashboard":
     """, unsafe_allow_html=True)
 
     today = datetime.date.today()
+    
+    # --- 1. THE LIVE BRIDGE (CRITICAL FIX) ---
+    # We pull this at the very top of the page logic to ensure every widget below sees the current sliders
+    current_weights = st.session_state.get('coeffs', {})
+
     if not ledger_data:
         st.warning("Forensic Vault is empty. Please populate the Ledger.")
         st.stop()
@@ -366,7 +371,7 @@ if page == "Executive Dashboard":
     df_raw = pd.DataFrame(ledger_data)
     df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
     
-    # 1. DATE SELECTION
+    # 2. DATE SELECTION
     col_date, _ = st.columns([1, 2])
     with col_date:
         pulse_range = st.date_input(
@@ -375,7 +380,6 @@ if page == "Executive Dashboard":
             key="pulse_exec_vfinal_synced"
         )
 
-    # CHECK: Ensure we have a valid range before running the dashboard logic
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
         is_future = start_p >= today
@@ -386,7 +390,7 @@ if page == "Executive Dashboard":
         df_timeline = pd.DataFrame({'entry_date': date_list})
         df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
 
-        # 2. STRATEGIC DAILY PLANNER
+        # 3. STRATEGIC DAILY PLANNER
         if is_future:
             with st.expander("📅 Daily Strategy Planner", expanded=True):
                 st.write("Plan your digital spend and PR events to see the projected lift.")
@@ -416,12 +420,12 @@ if page == "Executive Dashboard":
                 df_p['rain_mm'] = edited_df['rain_mm'].values
                 df_p['snow_cm'] = edited_df['snow_cm'].values
 
-        # --- 3. THE BRIDGE: CONNECTING LIVE COEFFICIENTS ---
-        current_weights = st.session_state.get('coeffs', {})
+        # --- 4. THE ENGINE EXECUTION (LIVE SYNC) ---
+        # We pass the 'current_weights' dictionary directly into the engine
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
 
-        # CALCULATE MARKETING IMPACT
+        # CALCULATE MARKETING IMPACT (Live calculation based on session state)
         daily_brand_inertia = (
             float(current_weights.get('Broadcast_Weight', 150)) + 
             float(current_weights.get('OOH_Weight', 100)) + 
@@ -437,7 +441,7 @@ if page == "Executive Dashboard":
         total_vol = df_final['expected'].sum()
         mkt_impact_pct = (total_lift_vol / total_vol * 100) if total_vol > 0 else 0
 
-        # --- 4. EXECUTIVE KPI GRID ---
+        # --- 5. EXECUTIVE KPI GRID ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
         
@@ -462,7 +466,7 @@ if page == "Executive Dashboard":
 
         st.divider()
 
-        # --- 5. PERFORMANCE VIZ ---
+        # --- 6. PERFORMANCE VIZ ---
         st.write("### 🎰 The Unified Pulse")
         fig_pulse = go.Figure()
         df_act_chart = df_final[df_final['entry_date'].dt.date < today]
@@ -474,7 +478,7 @@ if page == "Executive Dashboard":
         fig_pulse.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=400, margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # --- 6. OPERATIONAL RISK vs. HISTORICAL AUDIT ---
+        # --- 7. OPERATIONAL RISK vs. HISTORICAL AUDIT ---
         st.divider()
         if is_past:
             st.write("#### 🔍 Historical Performance Audit")
@@ -487,6 +491,7 @@ if page == "Executive Dashboard":
             st.write("#### 🛡️ Operational Risk & Opportunity")
             o1, o2, o3 = st.columns(3)
             with o1:
+                # Force dynamic weather friction from sliders
                 s_imp = df_final['snow_cm'].sum() * float(current_weights.get('Snow_cm', -45))
                 r_imp = df_final['rain_mm'].sum() * float(current_weights.get('Rain_mm', -12))
                 st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
@@ -498,11 +503,9 @@ if page == "Executive Dashboard":
                 intensity_label = "🔴 Critical Peak" if peak_day_volume > 6200 else ("🟡 High" if peak_day_volume > 5200 else "🟢 Stable")
                 st.metric("Staffing Intensity", intensity_label)
 
-    # --- THE DATE RANGE FIX ---
-    # This else is aligned with 'if isinstance(pulse_range, tuple)...'
     else:
         st.info("Please select a complete Start and End date range to view the Dashboard.")
-        st.stop() 
+        st.stop()
 
 # =================================================================
 # 8. PAGE 2: DAILY LEDGER AUDIT (FORM + TABLE HYBRID)
