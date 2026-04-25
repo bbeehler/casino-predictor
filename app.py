@@ -638,85 +638,93 @@ elif page == "Daily Ledger Audit":
         st.write(f"**Database Audit:** {len(df_ledger)} total records in vault.")
 
 # =================================================================
-# 3. PAGE 3: ATTRIBUTION ANALYTICS (FIXED ALIGNMENT)
+# 3. PAGE 3: ATTRIBUTION ANALYTICS (PRO-MARKETING SUITE)
 # =================================================================
 elif page == "Attribution Analytics":
     st.markdown("""
-        <div style="background-color:#F8F9FA;padding:20px;border-radius:12px;border-left:6px solid #6c757d;margin-bottom:20px;">
-            <h2 style="color:#343a40;margin:0;">📊 Attribution Analytics</h2>
-            <p style="color:#666;margin:0;">Analyzing the layers of guest demand: Organic Heartbeat vs. Marketing-Driven Lift.</p>
+        <div style="background-color:#F8F9FA;padding:20px;border-radius:12px;border-left:6px solid #0047AB;margin-bottom:20px;">
+            <h2 style="color:#0047AB;margin:0;">📊 Marketing Attribution & ROI</h2>
+            <p style="color:#666;margin:0;">Deconstructing the Guest Journey: From Digital Signal to Casino Floor.</p>
         </div>
     """, unsafe_allow_html=True)
 
     if not ledger_data:
-        st.info("💡 The Vault is empty. Please ensure data is synced in the Daily Ledger Audit to view attribution.")
+        st.info("💡 Forensic Vault empty. Populate the Ledger to unlock attribution.")
         st.stop()
 
-    # 1. RUN ENGINE
-    m_full = get_forensic_metrics(ledger_data, st.session_state.get('coeffs', {}))
+    # 1. DATA PREP
+    current_weights = st.session_state.get('coeffs', {})
+    m_full = get_forensic_metrics(ledger_data, current_weights)
     df_attr = m_full['df']
 
-    if df_attr.empty:
-        st.warning("No historical metrics available to attribute.")
-    else:
-        # 2. EXECUTIVE SCORECARD
-        st.write("### 🧠 Performance Attribution Scorecard")
-        c1, c2, c3, c4 = st.columns(4)
-        
-        with c1:
-            st.metric("Model Predictability", m_full.get('predictability', '0%'))
-        with c2:
-            org_vol = df_attr['guest_baseline'].sum()
-            st.metric("Organic Heartbeat", f"{org_vol:,.0f}")
-        with c3:
-            mkt_vol = df_attr['residual_lift'].sum() + df_attr['gravity_lift'].sum()
-            st.metric("Marketing Lift", f"{mkt_vol:,.0f}")
-        with c4:
-            total_act = df_attr['actual_traffic'].sum()
-            lift_perc = (mkt_vol / total_act * 100) if total_act > 0 else 0
-            st.metric("Marketing Yield %", f"{lift_perc:.1f}%")
+    # Calculate Total Totals
+    total_guests = df_attr['actual_traffic'].sum()
+    organic_base = df_attr['guest_baseline'].sum()
+    digital_lift = df_attr['residual_lift'].sum()
+    event_lift = df_attr['gravity_lift'].sum()
+    other_marketing = total_guests - (organic_base + digital_lift + event_lift)
 
-        st.divider()
+    # 2. THE TOP-LINE WATERFALL
+    st.write("### 🪜 Growth Waterfall: Baseline to Total")
+    fig_water = go.Figure(go.Waterfall(
+        name = "Attribution", orientation = "v",
+        measure = ["relative", "relative", "relative", "relative", "total"],
+        x = ["Baseline (Organic)", "Digital Adstock", "Live Events", "Brand/Mass Media", "Actual Traffic"],
+        textposition = "outside",
+        text = [f"+{organic_base:,.00f}", f"+{digital_lift:,.0f}", f"+{event_lift:,.0f}", f"+{max(0, other_marketing):,.0f}", f"{total_guests:,.0f}"],
+        y = [organic_base, digital_lift, event_lift, max(0, other_marketing), total_guests],
+        connector = {"line":{"color":"rgb(63, 63, 63)"}},
+        increasing = {"marker":{"color": "#0047AB"}},
+        totals = {"marker":{"color": "#FFCC00"}}
+    ))
+    fig_water.update_layout(height=450, plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=10, r=10, t=10, b=10))
+    st.plotly_chart(fig_water, use_container_width=True)
 
-        # 3. VOLUME STACK CHART
-        st.write("### 🔍 Volume Layer Breakdown")
-        chart_data = df_attr.copy()
-        chart_data = chart_data.set_index('entry_date')[['guest_baseline', 'residual_lift', 'gravity_lift']]
-        chart_data.columns = ['Organic Heartbeat', 'Digital Awareness', 'Hard Rock LIVE Gravity']
-        st.area_chart(chart_data, use_container_width=True)
+    st.divider()
 
-        st.divider()
+    # 3. CHANNEL EFFICIENCY & CORRELATION
+    col_left, col_right = st.columns([1, 1])
 
-        # 4. DIGITAL AWARENESS POOL (NOW ALIGNED)
-        st.write("### 📡 Digital Awareness Pool")
-        st.caption("Tracking the conversion of Digital Impressions into Physical Property Traffic.")
+    with col_left:
+        st.write("### 🎯 Channel Contribution")
+        pie_labels = ['Organic', 'Digital Clicks/Social', 'Event Gravity', 'Mass Media']
+        pie_values = [organic_base, digital_lift, event_lift, max(0, other_marketing)]
+        fig_pie = px.pie(names=pie_labels, values=pie_values, 
+                         color_discrete_sequence=['#E1E8F0', '#0047AB', '#FFCC00', '#333'],
+                         hole=0.4)
+        fig_pie.update_layout(showlegend=True, height=350, margin=dict(l=0,r=0,t=0,b=0))
+        st.plotly_chart(fig_pie, use_container_width=True)
 
-        # Prepare Signal Data
-        df_pulse = df_attr.copy()
-        df_pulse['Digital_Signal'] = (df_pulse['ad_clicks'] * 10) + (df_pulse['ad_impressions'] * 0.05)
+    with col_right:
+        st.write("### 📈 Lift Correlation")
+        # Scatter to show if Clicks actually drive Traffic
+        fig_scatter = px.scatter(df_attr, x='ad_clicks', y='actual_traffic', 
+                                 trendline="ols", 
+                                 title="Ad Click Correlation",
+                                 color_discrete_sequence=['#0047AB'])
+        fig_scatter.update_layout(height=350, plot_bgcolor='rgba(248,249,250,1)')
+        st.plotly_chart(fig_scatter, use_container_width=True)
 
-        fig_digital = go.Figure()
-        fig_digital.add_trace(go.Scatter(
-            x=df_pulse.index if 'entry_date' not in df_pulse.columns else df_pulse['entry_date'], 
-            y=df_pulse['Digital_Signal'],
-            fill='tozeroy',
-            name="Awareness Volume",
-            line=dict(color='#0047AB', width=0),
-            fillcolor='rgba(0, 71, 171, 0.2)'
-        ))
+    st.divider()
 
-        fig_digital.add_trace(go.Scatter(
-            x=df_pulse.index if 'entry_date' not in df_pulse.columns else df_pulse['entry_date'], 
-            y=df_pulse['expected'],
-            name="AI Target Volume",
-            line=dict(color='#FFCC00', width=3)
-        ))
+    # 4. WEEKEND VS WEEKDAY ATTRIBUTION
+    st.write("### 🗓️ Weekend vs. Weekday Yield")
+    df_attr['is_weekend'] = pd.to_datetime(df_attr['entry_date']).dt.dayofweek >= 5
+    day_mix = df_attr.groupby('is_weekend')[['residual_lift', 'gravity_lift']].mean()
+    day_mix.index = ['Weekday', 'Weekend']
+    
+    st.bar_chart(day_mix)
+    st.caption("Average guest lift per day type. Weekends typically show higher 'Event Gravity'.")
 
-        fig_digital.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=400, margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
-        st.plotly_chart(fig_digital, use_container_width=True)
-
-        with st.expander("📝 Strategic Interpretation"):
-            st.write("AI Analysis: Attribution layers confirm which channels are driving current floor traffic.")
+    # 5. STRATEGIC INSIGHTS
+    with st.expander("📝 Strategic Interpretation & ROI Audit", expanded=True):
+        yield_per_click = digital_lift / df_attr['ad_clicks'].sum() if df_attr['ad_clicks'].sum() > 0 else 0
+        st.info(f"""
+        **AI Attribution Audit:**
+        * **Top Channel:** {'Organic' if organic_base > mkt_vol else 'Marketing'} is currently the primary driver.
+        * **Digital Efficiency:** Every 100 ad clicks are generating approximately **{yield_per_click * 100:.1f}** additional guests.
+        * **Event Strength:** Hard Rock Live events are currently providing a **{ (event_lift/organic_base)*100:.1f}%** lift over baseline traffic.
+        """)
 
 # =================================================================
 # 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v11 - REPAIRED)
