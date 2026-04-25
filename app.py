@@ -590,7 +590,6 @@ elif page == "Daily Ledger Audit":
     st.divider()
     if not df_ledger.empty:
         st.write(f"**Database Audit:** {len(df_ledger)} total records found.")
-
 # =================================================================
 # 3. PAGE 3: ATTRIBUTION ANALYTICS
 # =================================================================
