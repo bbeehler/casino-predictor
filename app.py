@@ -740,105 +740,190 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for Strategic Interpretation.")
 
 # =================================================================
-# 4. PAGE 4: MULTI-CHANNEL MASTERY
+# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v11 - REPAIRED)
 # =================================================================
 elif page == "Master Audit Report":
+    # Custom CSS to shrink KPI labels for a dense, professional look
     st.markdown("""
-        <div style="background-color:#E1E8F0;padding:20px;border-radius:12px;border-left:6px solid #FFCC00;margin-bottom:20px;">
-            <h2 style="color:#0047AB;margin:0;">🎯 Channel Synergy Analysis</h2>
-            <p style="color:#444;margin:0;">Visualizing how marketing channels stack to drive property volume.</p>
+        <style>
+        [data-testid="stMetricLabel"] p {
+            font-size: 0.75rem !important;
+            white-space: nowrap !important;
+        }
+        [data-testid="stMetricValue"] > div {
+            font-size: 1.5rem !important;
+        }
+        </style>
+        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
+            <h2 style="color: #0047AB; margin: 0;">📋 Master Property Audit</h2>
+            <p style="color: #444; margin: 0;">Comprehensive Forensic Ledger: Financials, Loyalty, & Marketing Attribution.</p>
         </div>
     """, unsafe_allow_html=True)
+    
+    if not ledger_data:
+        st.warning("Audit Vault is empty. Please populate the Ledger.")
+        st.stop()
 
-    # 1. LOAD DATA & WEIGHTS
-    current_weights = st.session_state.get('coeffs', {})
-    m_data = get_forensic_metrics(ledger_data, current_weights)
-    df_mc = m_data['df']
+    df_audit_raw = pd.DataFrame(ledger_data)
+    df_audit_raw['entry_date'] = pd.to_datetime(df_audit_raw['entry_date'])
+    
+    # 1. AUDIT RANGE SELECTOR
+    min_audit = df_audit_raw['entry_date'].min().date()
+    max_audit = df_audit_raw['entry_date'].max().date()
 
-    # 2. CREATE THE ATTRIBUTION STACK
-    # We define our channels clearly for the execs
-    df_stack = pd.DataFrame({
-        'Date': df_mc['entry_date'],
-        'Organic Base': df_mc['guest_baseline'],
-        'Digital (Clicks/Social)': df_mc['residual_lift'],
-        'Live Events': df_mc['gravity_lift'],
-        'Mass Media (OOH/Print)': (
-            float(current_weights.get('Broadcast_Weight', 150)) + 
-            float(current_weights.get('OOH_Weight', 100)) +
-            (float(current_weights.get('Static_Weight', 15)) * int(current_weights.get('Static_Count', 1)))
+    col_date, col_export = st.columns([2, 1])
+    with col_date:
+        audit_range = st.date_input(
+            "Audit Selection Window:", 
+            value=(min_audit, max_audit),
+            min_value=min_audit,
+            max_value=max_audit,
+            key="master_audit_v11_fixed"
         )
-    })
 
-    # 3. THE CHART: THE ATTRIBUTION FLOW
-    st.write("### 🌊 Attribution Flow: Channel Contribution Over Time")
-    st.caption("This chart shows how marketing layers sit on top of your organic baseline.")
-    
-    # Using Plotly for a better "Executive" look than standard Streamlit charts
-    fig_stack = go.Figure()
+    # 2. DATE FILTERING
+    if isinstance(audit_range, tuple) and len(audit_range) == 2:
+        s_date, e_date = audit_range
+        mask = (df_audit_raw['entry_date'].dt.date >= s_date) & (df_audit_raw['entry_date'].dt.date <= e_date)
+        df_audit_filtered = df_audit_raw.loc[mask].copy()
+        
+        if df_audit_filtered.empty:
+            st.error(f"No records found between {s_date} and {e_date}.")
+            st.stop()
 
-    channels = ['Organic Base', 'Digital (Clicks/Social)', 'Live Events', 'Mass Media (OOH/Print)']
-    colors = ['#E1E8F0', '#0047AB', '#FFCC00', '#333333']
+        # RUN ENGINE ON FILTERED DATA
+        m = get_forensic_metrics(df_audit_filtered.to_dict(orient='records'), st.session_state.coeffs)
+        df_final = m['df'] 
+        c = st.session_state.coeffs
+        num_days = len(df_final)
 
-    for i, channel in enumerate(channels):
-        fig_stack.add_trace(go.Scatter(
-            x=df_stack['Date'], 
-            y=df_stack[channel],
-            mode='lines',
-            line=dict(width=0.5, color=colors[i]),
-            stackgroup='one', # This creates the "Stack"
-            name=channel,
-            fillcolor=colors[i]
+        # 3. THE WHOLESOME KPI GRID
+        st.write("### 💰 Financial & Loyalty Integrity")
+        k1, k2, k3, k4, k5 = st.columns(5)
+        
+        t_traffic = df_final['actual_traffic'].sum()
+        avg_coin = float(c.get('Avg_Coin_In', 112.50))
+        hold_pct = float(c.get('Hold_Pct', 10.0)) / 100
+        
+        t_rev = t_traffic * avg_coin
+        actual_ggr = t_rev * hold_pct
+        t_mems = df_final['new_members'].sum()
+        conv_rate = (t_mems / t_traffic * 100) if t_traffic > 0 else 0
+
+        k1.metric("Total Traffic", f"{t_traffic:,}")
+        k2.metric("Est. Total Revenue", f"${t_rev:,.0f}")
+        k3.metric("Actual GGR (Hold)", f"${actual_ggr:,.0f}")
+        k4.metric("New Unity Members", f"{t_mems:,}")
+        k5.metric("Member Conv. %", f"{conv_rate:.2f}%")
+
+        # 4. MARKETING & FRICTION
+        st.write("### 🧬 Marketing Equity & Friction")
+        k6, k7, k8, k9, k10 = st.columns(5)
+        
+        # REPAIR: Use new 'total_inertia' key from upgraded Section 3
+        t_digital = df_final['residual_lift'].sum()
+        t_inertia_total = m.get('total_inertia', 0) * num_days
+        t_gravity = df_final['gravity_lift'].sum()
+        
+        # Calculate Total Marketing Lift
+        t_mkt = t_digital + t_inertia_total + t_gravity
+        mkt_share = (t_mkt / t_traffic * 100) if t_traffic > 0 else 0
+        
+        # Weather Friction Logic
+        t_snow_loss = (df_final['snow_cm'].sum() * float(c.get('Snow_cm', -45)))
+        t_rain_loss = (df_final['rain_mm'].sum() * float(c.get('Rain_mm', -12)))
+        friction_total = abs(t_snow_loss + t_rain_loss)
+
+        k6.metric("Marketing Guests", f"{t_mkt:,.0f}")
+        k7.metric("Marketing Share", f"{mkt_share:.1f}%")
+        k8.metric("Digital ROI Lift", f"{t_digital:,.0f}")
+        k9.metric("Weather Friction", f"-{friction_total:,.0f}")
+        k10.metric("AI Confidence", m['predictability'])
+
+        st.divider()
+
+        # 5. FORENSIC ATTRIBUTION (TRUE SCALE + INTEGER ROUNDING)
+        st.write("### 🧬 Multi-Channel Attribution: Absolute Guest Volume")
+        
+        # REPAIR: Align local column with new Engine key
+        df_final['Brand_Inertia_Layer'] = m.get('total_inertia', 0)
+        
+        df_final['guest_baseline_int'] = df_final['guest_baseline'].round(0)
+        df_final['residual_lift_int'] = df_final['residual_lift'].round(0)
+        df_final['gravity_lift_int'] = df_final['gravity_lift'].round(0)
+        
+        fig_audit = go.Figure()
+
+        # 1. THE FOUNDATION: Organic Heartbeat
+        fig_audit.add_trace(go.Scatter(
+            x=df_final['entry_date'], 
+            y=df_final['guest_baseline_int'], 
+            name='Organic Heartbeat', 
+            fill='tozeroy',
+            fillcolor='rgba(200, 210, 225, 0.4)', 
+            line=dict(width=2, color='#8E9AAF', shape='spline'),
+            hovertemplate='%{y:,d} Guests'
         ))
+        
+        # 2. Digital ROI
+        fig_audit.add_trace(go.Scatter(
+            x=df_final['entry_date'], 
+            y=df_final['residual_lift_int'], 
+            name='Digital ROI Lift', 
+            line=dict(width=3, color='#0047AB', shape='spline'),
+            hovertemplate='%{y:,d} Guests'
+        ))
+        
+        # 3. Brand Inertia (REPAIRED: TV, Radio, Signage combined)
+        fig_audit.add_trace(go.Scatter(
+            x=df_final['entry_date'], 
+            y=df_final['Brand_Inertia_Layer'].round(0), 
+            name='Brand Inertia (OOH/TV/Radio)', 
+            line=dict(width=3, color='#5D707F', dash='dot', shape='spline'),
+            hovertemplate='%{y:,d} Guests'
+        ))
+        
+        # 4. Event Gravity
+        fig_audit.add_trace(go.Scatter(
+            x=df_final['entry_date'], 
+            y=df_final['gravity_lift_int'], 
+            name='Hard Rock LIVE Gravity', 
+            line=dict(width=4, color='#FFCC00', shape='spline'),
+            hovertemplate='%{y:,d} Guests'
+        ))
+        
+        fig_audit.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)', 
+            height=550,
+            margin=dict(l=10, r=10, t=10, b=10),
+            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
+            hovermode="x unified",
+            yaxis=dict(title="Guest Volume", showgrid=True, gridcolor='#F0F2F6', tickformat=',d')
+        )
+        st.plotly_chart(fig_audit, use_container_width=True)
+        
+        # 6. DATA LOG & EXPORT
+        st.write("### 📋 Detailed Forensic Ledger")
+        df_final['Variance'] = df_final['actual_traffic'] - df_final['expected']
+        
+        display_cols = ['entry_date', 'actual_traffic', 'expected', 'Variance', 'residual_lift', 'gravity_lift', 'new_members']
+        st.dataframe(
+            df_final[display_cols].sort_values('entry_date', ascending=False),
+            use_container_width=True,
+            hide_index=True
+        )
 
-    fig_stack.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        hovermode="x unified",
-        xaxis=dict(showgrid=False),
-        yaxis=dict(title="Guest Volume", showgrid=True, gridcolor="#EEE"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-
-    st.plotly_chart(fig_stack, use_container_width=True)
-
-    st.divider()
-
-    # 4. CHANNEL BALANCE (RADAR CHART)
-    # This shows if you are "Over-indexed" on one channel
-    st.write("### 🧭 Marketing Balance Radar")
-    
-    avg_contributions = [
-        df_stack['Organic Base'].mean(),
-        df_stack['Digital (Clicks/Social)'].mean(),
-        df_stack['Live Events'].mean(),
-        df_stack['Mass Media (OOH/Print)'].mean()
-    ]
-
-    fig_radar = go.Figure(data=go.Scatterpolar(
-      r=avg_contributions,
-      theta=channels,
-      fill='toself',
-      line_color='#0047AB'
-    ))
-
-    fig_radar.update_layout(
-      polar=dict(radialaxis=dict(visible=True, range=[0, max(avg_contributions)*1.2])),
-      showlegend=False,
-      height=400
-    )
-
-    r_col1, r_col2 = st.columns([1, 1])
-    with r_col1:
-        st.plotly_chart(fig_radar, use_container_width=True)
-    with r_col2:
-        st.write("#### 🧠 AI Channel Audit")
-        # Logic to provide a quick text audit
-        max_idx = avg_contributions.index(max(avg_contributions))
-        st.info(f"**Dominant Force:** {channels[max_idx]}")
-        st.write("""
-            The radar chart shows your marketing 'shape'. 
-            * A **balanced** shape means consistent growth across all funnels. 
-            * A **skewed** shape suggests high dependency on a single source (e.g., relying only on Events).
-        """)
+        with col_export:
+            csv_data = df_final.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Export Audit to CSV",
+                data=csv_data,
+                file_name=f"HR_Audit_{s_date}_{e_date}.csv",
+                mime='text/csv',
+                use_container_width=True
+            )
+    else:
+        st.info("Please select a range (Start and End date) to generate the audit report.")
 
 # =================================================================
 # ⚙️ PAGE 5: AI CALIBRATION & ENGINE WEIGHTS
