@@ -350,7 +350,7 @@ with st.sidebar:
 # =================================================================
 # 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION - LIVE SYNCED)
 # =================================================================
-if page == "📈 Executive Dashboard":
+if page == "Executive Dashboard":
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">📈 Executive Performance Pulse</h2>
