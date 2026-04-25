@@ -717,14 +717,27 @@ elif page == "Attribution Analytics":
     st.caption("Average guest lift per day type. Weekends typically show higher 'Event Gravity'.")
 
     # 5. STRATEGIC INSIGHTS
-    with st.expander("📝 Strategic Interpretation & ROI Audit", expanded=True):
-        yield_per_click = digital_lift / df_attr['ad_clicks'].sum() if df_attr['ad_clicks'].sum() > 0 else 0
-        st.info(f"""
-        **AI Attribution Audit:**
-        * **Top Channel:** {'Organic' if organic_base > mkt_vol else 'Marketing'} is currently the primary driver.
-        * **Digital Efficiency:** Every 100 ad clicks are generating approximately **{yield_per_click * 100:.1f}** additional guests.
-        * **Event Strength:** Hard Rock Live events are currently providing a **{ (event_lift/organic_base)*100:.1f}%** lift over baseline traffic.
-        """)
+    if not df_attr.empty:
+        # Re-verify variables are calculated in this scope
+        mkt_vol = df_attr['residual_lift'].sum() + df_attr['gravity_lift'].sum()
+        organic_base = df_attr['guest_baseline'].sum()
+        total_clicks = df_attr['ad_clicks'].sum()
+        digital_lift = df_attr['residual_lift'].sum()
+        
+        with st.expander("📝 Strategic Interpretation & ROI Audit", expanded=True):
+            yield_per_click = digital_lift / total_clicks if total_clicks > 0 else 0
+            
+            # Determine the Top Channel string for the display
+            top_channel_label = "Organic" if organic_base > mkt_vol else "Marketing"
+            
+            st.info(f"""
+            **AI Attribution Audit:**
+            * **Top Channel:** {top_channel_label} is currently the primary driver.
+            * **Digital Efficiency:** Every 100 ad clicks are generating approximately **{yield_per_click * 100:.1f}** additional guests.
+            * **Event Strength:** Hard Rock Live events are currently providing a **{ (event_lift/organic_base)*100:.1f}%** lift over baseline traffic.
+            """)
+    else:
+        st.warning("Insufficient data for Strategic Interpretation.")
 
 # =================================================================
 # 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v11 - REPAIRED)
