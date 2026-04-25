@@ -742,7 +742,7 @@ elif page == "Attribution Analytics":
 # =================================================================
 # 4. PAGE 4: MULTI-CHANNEL MASTERY
 # =================================================================
-elif page == "Multi-Channel Attribution":
+elif page == "Master Audit Report":
     st.markdown("""
         <div style="background-color:#E1E8F0;padding:20px;border-radius:12px;border-left:6px solid #FFCC00;margin-bottom:20px;">
             <h2 style="color:#0047AB;margin:0;">🎯 Channel Synergy Analysis</h2>
