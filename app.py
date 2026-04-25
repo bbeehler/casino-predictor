@@ -505,7 +505,7 @@ if page == "📈 Executive Dashboard":
         st.stop() 
 
 # =================================================================
-# 8. PAGE 2: DAILY LEDGER AUDIT (FULL RECOVERY VERSION)
+# 8. PAGE 2: DAILY LEDGER AUDIT (TYPE-STRIPPER VERSION)
 # =================================================================
 elif page == "Daily Ledger Audit":
     st.markdown("""
@@ -515,89 +515,76 @@ elif page == "Daily Ledger Audit":
         </div>
     """, unsafe_allow_html=True)
 
-    # 1. LOAD & HARDEN DATA
+    # 1. HARDEN DATA TYPES (The "Type-Stripper")
     if not ledger_data:
-        # Template for empty state
-        df_ledger = pd.DataFrame(columns=[
-            'entry_date', 'actual_traffic', 'new_members', 'active_promo', 
-            'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm'
-        ])
+        df_ledger = pd.DataFrame(columns=['entry_date', 'actual_traffic', 'new_members', 'active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm'])
     else:
-        df_ledger = pd.DataFrame(ledger_data)
+        df_raw_data = pd.DataFrame(ledger_data)
         
-        # --- DATA SANITY CHECK (The Fix for the API Exception) ---
-        # 1. Convert Date strings to actual Date Objects
-        df_ledger['entry_date'] = pd.to_datetime(df_ledger['entry_date']).dt.date
+        # We create a brand new dataframe to ensure no hidden metadata remains
+        df_ledger = pd.DataFrame()
         
-        # 2. Force numeric columns to be numbers (handles None/NaN errors)
-        num_cols = ['actual_traffic', 'new_members', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
-        for col in num_cols:
-            if col in df_ledger.columns:
-                df_ledger[col] = pd.to_numeric(df_ledger[col], errors='coerce').fillna(0)
+        # DATE: Must be actual datetime objects, then converted to dates
+        df_ledger['entry_date'] = pd.to_datetime(df_raw_data['entry_date']).dt.date
         
-        # 3. Sort by date newest first
+        # NUMBERS: Force everything to float, then fill NaN with 0.0
+        # The editor needs these to be pure numeric types to match NumberColumn
+        numeric_map = {
+            'actual_traffic': 0,
+            'new_members': 0,
+            'attendance': 0,
+            'ad_clicks': 0.0,
+            'ad_impressions': 0.0,
+            'rain_mm': 0.0,
+            'snow_cm': 0.0
+        }
+        
+        for col, default_val in numeric_map.items():
+            if col in df_raw_data.columns:
+                df_ledger[col] = pd.to_numeric(df_raw_data[col], errors='coerce').fillna(default_val)
+            else:
+                df_ledger[col] = default_val
+        
+        # TEXT: Force to string
+        df_ledger['active_promo'] = df_raw_data['active_promo'].astype(str).replace(['nan', 'None', '0', '0.0'], '')
+
         df_ledger = df_ledger.sort_values('entry_date', ascending=False)
 
-    # 2. ACTIONS & FILTERS
-    l1, l2 = st.columns([2, 1])
-    with l1:
-        st.write("### 📂 Property Data Entry")
-        st.caption("Syncing with Supabase Production Vault.")
-    
-    with l2:
-        view_limit = st.slider("Historical Lookback:", 7, 90, 30, key="audit_lookback")
-
-    # 3. THE INTERACTIVE TABLE
-    with st.form("ledger_update_v12_final"):
-        # Apply the lookback limit to the dataframe
-        df_to_edit = df_ledger.head(view_limit)
+    # 2. RENDER THE EDITOR WITH A NEW UNIQUE KEY
+    # Changing the key 'vRESET_101' forces Streamlit to forget previous type-clashes
+    with st.form("ledger_vault_sync_form"):
+        view_limit = st.slider("Lookback Days", 7, 100, 30)
         
         edited_ledger = st.data_editor(
-            df_to_edit,
+            df_ledger.head(view_limit),
             column_config={
                 "entry_date": st.column_config.DateColumn("Date", required=True),
-                "actual_traffic": st.column_config.NumberColumn("Actual Traffic", format="%d", min_value=0),
-                "new_members": st.column_config.NumberColumn("New Members", format="%d", min_value=0),
-                "active_promo": st.column_config.TextColumn("Campaign/Promo"),
-                "attendance": st.column_config.NumberColumn("Event/Concert", format="%d"),
-                "ad_clicks": st.column_config.NumberColumn("Digital Clicks"),
+                "actual_traffic": st.column_config.NumberColumn("Actual Traffic", format="%d"),
+                "new_members": st.column_config.NumberColumn("New Members", format="%d"),
+                "active_promo": st.column_config.TextColumn("Campaign Name"),
+                "attendance": st.column_config.NumberColumn("Event Count", format="%d"),
+                "ad_clicks": st.column_config.NumberColumn("Google Clicks"),
                 "ad_impressions": st.column_config.NumberColumn("Social Imps"),
-                "rain_mm": st.column_config.NumberColumn("Rain (mm)"),
-                "snow_cm": st.column_config.NumberColumn("Snow (cm)"),
+                "rain_mm": st.column_config.NumberColumn("Rain mm"),
+                "snow_cm": st.column_config.NumberColumn("Snow cm"),
             },
             hide_index=True,
             use_container_width=True,
             num_rows="dynamic",
-            key="property_ledger_editor_vFINAL"
+            key="ledger_editor_vRESET_101" 
         )
         
-        save_btn = st.form_submit_button("💾 Sync Ledger to Cloud", use_container_width=True)
-
-    # 4. SYNC LOGIC
-    if save_btn:
-        try:
-            with st.spinner("Pushing Actuals to Database..."):
-                if not edited_ledger.empty:
-                    # Final cleanup for DB storage
-                    temp_sync = edited_ledger.copy()
-                    temp_sync['entry_date'] = temp_sync['entry_date'].astype(str)
-                    sync_data = temp_sync.to_dict(orient='records')
-                    
-                    supabase.table("ledger").upsert(sync_data).execute()
-                    
-                    st.success("✅ Ledger Sync Complete. Dashboard calibrated.")
-                    st.cache_data.clear()
-                    st.rerun()
-        except Exception as e:
-            st.error(f"Vault Sync Error: {e}")
-
-    # 5. UTILITY SECTION
-    st.divider()
-    with st.expander("🛠️ Advanced Data Tools"):
-        st.write("Current Row Count:", len(df_ledger))
-        if st.button("Force Global Recalculation"):
-            st.cache_data.clear()
-            st.rerun()
+        if st.form_submit_button("💾 Sync Actuals to Cloud", use_container_width=True):
+            try:
+                # Convert back to strings for JSON/Supabase storage
+                df_sync = edited_ledger.copy()
+                df_sync['entry_date'] = df_sync['entry_date'].astype(str)
+                supabase.table("ledger").upsert(df_sync.to_dict(orient='records')).execute()
+                st.success("Vault Updated!")
+                st.cache_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Sync Error: {e}")
 
 # =================================================================
 # 3. PAGE 3: ATTRIBUTION ANALYTICS
