@@ -767,7 +767,7 @@ elif page == "Attribution Analytics":
 # 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v12)
 # =================================================================
 elif page == "Master Audit Report":
-    # Custom CSS for dense, professional KPIs
+    # Keep your original CSS and Header
     st.markdown("""
         <style>
         [data-testid="stMetricLabel"] p { font-size: 0.75rem !important; white-space: nowrap !important; }
@@ -786,7 +786,6 @@ elif page == "Master Audit Report":
     df_audit_raw = pd.DataFrame(ledger_data)
     df_audit_raw['entry_date'] = pd.to_datetime(df_audit_raw['entry_date'])
     
-    # 1. AUDIT RANGE SELECTOR
     min_audit = df_audit_raw['entry_date'].min().date()
     max_audit = df_audit_raw['entry_date'].max().date()
 
@@ -800,7 +799,6 @@ elif page == "Master Audit Report":
             key="master_audit_v12_yield"
         )
 
-    # 2. DATE FILTERING
     if isinstance(audit_range, tuple) and len(audit_range) == 2:
         s_date, e_date = audit_range
         mask = (df_audit_raw['entry_date'].dt.date >= s_date) & (df_audit_raw['entry_date'].dt.date <= e_date)
@@ -810,20 +808,19 @@ elif page == "Master Audit Report":
             st.error(f"No records found between {s_date} and {e_date}.")
             st.stop()
 
-        # RUN ENGINE ON FILTERED DATA
+        # RUN ENGINE
         m = get_forensic_metrics(df_audit_filtered.to_dict(orient='records'), st.session_state.coeffs)
         df_final = m['df'] 
         c = st.session_state.coeffs
         num_days = len(df_final)
 
-        # 3. FINANCIAL & LOYALTY GRID
+        # 3. YOUR ORIGINAL KPI GRID
         st.write("### 💰 Financial & Loyalty Integrity")
         k1, k2, k3, k4, k5 = st.columns(5)
         
         t_traffic = df_final['actual_traffic'].sum()
         avg_coin = float(c.get('Avg_Coin_In', 112.50))
         hold_pct = float(c.get('Hold_Pct', 10.0)) / 100
-        
         t_rev = t_traffic * avg_coin
         actual_ggr = t_rev * hold_pct
         t_mems = df_final['new_members'].sum()
@@ -835,7 +832,7 @@ elif page == "Master Audit Report":
         k4.metric("New Unity Members", f"{t_mems:,}")
         k5.metric("Member Conv. %", f"{conv_rate:.2f}%")
 
-        # 4. MARKETING EQUITY
+        # 4. YOUR ORIGINAL MARKETING & FRICTION
         st.write("### 🧬 Marketing Equity & Friction")
         k6, k7, k8, k9, k10 = st.columns(5)
         
@@ -843,9 +840,69 @@ elif page == "Master Audit Report":
         t_inertia_val = m.get('total_inertia', 0)
         t_inertia_total = t_inertia_val * num_days
         t_gravity = df_final['gravity_lift'].sum()
-        
         t_mkt = t_digital + t_inertia_total + t_gravity
         mkt_share = (t_mkt / t_traffic * 100) if t_traffic > 0 else 0
+        
+        t_snow_loss = (df_final['snow_cm'].sum() * float(c.get('Snow_cm', -45)))
+        t_rain_loss = (df_final['rain_mm'].sum() * float(c.get('Rain_mm', -12)))
+        friction_total = abs(t_snow_loss + t_rain_loss)
+
+        k6.metric("Marketing Guests", f"{t_mkt:,.0f}")
+        k7.metric("Marketing Share", f"{mkt_share:.1f}%")
+        k8.metric("Digital ROI Lift", f"{t_digital:,.0f}")
+        k9.metric("Weather Friction", f"-{friction_total:,.0f}")
+        k10.metric("AI Confidence", m['predictability'])
+
+        st.divider()
+
+        # 5. NEW INCORPORATED CHART: MULTI-CHANNEL YIELD FLOW
+        st.write("### 🌊 Multi-Channel Yield Flow")
+        st.caption("Percentage contribution of each marketing channel relative to property volume.")
+        
+        df_final['Brand_Layer'] = t_inertia_val
+        df_final['Total_Theoretical'] = df_final['guest_baseline'] + df_final['residual_lift'] + df_final['gravity_lift'] + df_final['Brand_Layer']
+
+        fig_yield = go.Figure()
+        yield_map = [
+            ('Organic Heartbeat', 'guest_baseline', '#E1E8F0'),
+            ('Digital Adstock', 'residual_lift', '#0047AB'),
+            ('Brand (OOH/TV)', 'Brand_Layer', '#5D707F'),
+            ('Event Gravity', 'gravity_lift', '#FFCC00')
+        ]
+
+        for label, col, color in yield_map:
+            y_vals = (df_final[col] / df_final['Total_Theoretical']) * 100
+            fig_yield.add_trace(go.Scatter(
+                x=df_final['entry_date'], y=y_vals, name=label,
+                mode='lines', line=dict(width=0.5, color=color),
+                stackgroup='one', fillcolor=color, hovertemplate='%{y:.1f}%'
+            ))
+
+        fig_yield.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)', height=500, hovermode="x unified",
+            yaxis=dict(title="Yield % Contribution", range=[0, 100], ticksuffix="%"),
+            legend=dict(orientation="h", yanchor="top", y=-0.1, xanchor="center", x=0.5)
+        )
+        st.plotly_chart(fig_yield, use_container_width=True)
+        
+        st.divider()
+
+        # 6. YOUR ORIGINAL LEDGER & EXPORT
+        st.write("### 📋 Detailed Forensic Ledger")
+        df_final['Variance'] = df_final['actual_traffic'] - df_final['expected']
+        display_cols = ['entry_date', 'actual_traffic', 'expected', 'Variance', 'residual_lift', 'gravity_lift', 'new_members']
+        st.dataframe(
+            df_final[display_cols].sort_values('entry_date', ascending=False),
+            use_container_width=True, hide_index=True
+        )
+
+        with col_export:
+            csv_data = df_final.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Export Audit to CSV", data=csv_data,
+                file_name=f"HR_Audit_{s_date}_{e_date}.csv",
+                mime='text/csv', use_container_width=True
+            )
 
 # =================================================================
 # ⚙️ PAGE 5: AI CALIBRATION & ENGINE WEIGHTS
