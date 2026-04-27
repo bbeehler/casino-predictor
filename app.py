@@ -855,14 +855,14 @@ elif page == "Master Audit Report":
 
         st.divider()
 
-        # --- 5. FORENSIC ATTRIBUTION (UPGRADED TO MULTI-CHANNEL YIELD FLOW) ---
-        st.write("### 🌊 Multi-Channel Yield Flow")
-        st.caption("Percentage contribution of each marketing channel relative to total daily property volume.")
+        # --- 5. FORENSIC ATTRIBUTION (STACKED BAR YIELD) ---
+        st.write("### 📊 Multi-Channel Yield Mix")
+        st.caption("Daily percentage contribution of each marketing channel.")
         
         # Pull Brand Inertia from engine results
         df_final['Brand_Layer'] = m.get('total_inertia', 0)
         
-        # Calculate the Daily Mix Total (Foundation for the 100% stack)
+        # Calculate the Daily Mix Total
         df_final['Total_Theoretical'] = (
             df_final['guest_baseline'] + 
             df_final['residual_lift'] + 
@@ -870,9 +870,9 @@ elif page == "Master Audit Report":
             df_final['Brand_Layer']
         )
 
-        fig_yield = go.Figure()
+        fig_bar_yield = go.Figure()
 
-        # Define the stack order: Organic on bottom, High-impact on top
+        # Define the stack order
         yield_map = [
             ('Organic Heartbeat', 'guest_baseline', '#E1E8F0'),
             ('Brand (OOH/TV/Radio)', 'Brand_Layer', '#5D707F'),
@@ -881,21 +881,19 @@ elif page == "Master Audit Report":
         ]
 
         for label, col, color in yield_map:
-            # Convert raw volume to percentage of the daily theoretical mix
+            # Convert to percentage
             y_percent = (df_final[col] / df_final['Total_Theoretical']) * 100
             
-            fig_yield.add_trace(go.Scatter(
+            fig_bar_yield.add_trace(go.Bar(
                 x=df_final['entry_date'], 
                 y=y_percent,
                 name=label,
-                mode='lines',
-                line=dict(width=0.5, color=color),
-                stackgroup='one', # This creates the "Stacked" effect
-                fillcolor=color,
+                marker_color=color,
                 hovertemplate='%{y:.1f}% Contribution'
             ))
 
-        fig_yield.update_layout(
+        fig_bar_yield.update_layout(
+            barmode='stack', # This is the critical setting for the stack
             plot_bgcolor='rgba(0,0,0,0)',
             height=550,
             margin=dict(l=10, r=10, t=10, b=10),
@@ -908,10 +906,10 @@ elif page == "Master Audit Report":
                 showgrid=True, 
                 gridcolor='#F0F2F6'
             ),
-            xaxis=dict(showgrid=False)
+            xaxis=dict(type='category', tickangle=-45) # Categorical axis makes bars look cleaner
         )
         
-        st.plotly_chart(fig_yield, use_container_width=True)
+        st.plotly_chart(fig_bar_yield, use_container_width=True)
 
         # 6. YOUR ORIGINAL LEDGER & EXPORT
         st.write("### 📋 Detailed Forensic Ledger")
