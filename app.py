@@ -764,19 +764,14 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for Strategic Interpretation.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v11 - REPAIRED)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v12)
 # =================================================================
 elif page == "Master Audit Report":
-    # Custom CSS to shrink KPI labels for a dense, professional look
+    # Custom CSS for dense, professional KPIs
     st.markdown("""
         <style>
-        [data-testid="stMetricLabel"] p {
-            font-size: 0.75rem !important;
-            white-space: nowrap !important;
-        }
-        [data-testid="stMetricValue"] > div {
-            font-size: 1.5rem !important;
-        }
+        [data-testid="stMetricLabel"] p { font-size: 0.75rem !important; white-space: nowrap !important; }
+        [data-testid="stMetricValue"] > div { font-size: 1.5rem !important; }
         </style>
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">📋 Master Property Audit</h2>
@@ -802,7 +797,7 @@ elif page == "Master Audit Report":
             value=(min_audit, max_audit),
             min_value=min_audit,
             max_value=max_audit,
-            key="master_audit_v11_fixed"
+            key="master_audit_v12_yield"
         )
 
     # 2. DATE FILTERING
@@ -821,7 +816,7 @@ elif page == "Master Audit Report":
         c = st.session_state.coeffs
         num_days = len(df_final)
 
-        # 3. THE WHOLESOME KPI GRID
+        # 3. FINANCIAL & LOYALTY GRID
         st.write("### 💰 Financial & Loyalty Integrity")
         k1, k2, k3, k4, k5 = st.columns(5)
         
@@ -840,114 +835,19 @@ elif page == "Master Audit Report":
         k4.metric("New Unity Members", f"{t_mems:,}")
         k5.metric("Member Conv. %", f"{conv_rate:.2f}%")
 
-        # 4. MARKETING & FRICTION
+        # 4. MARKETING EQUITY
         st.write("### 🧬 Marketing Equity & Friction")
         k6, k7, k8, k9, k10 = st.columns(5)
         
-        # REPAIR: Use new 'total_inertia' key from upgraded Section 3
         t_digital = df_final['residual_lift'].sum()
-        t_inertia_total = m.get('total_inertia', 0) * num_days
+        t_inertia_val = m.get('total_inertia', 0)
+        t_inertia_total = t_inertia_val * num_days
         t_gravity = df_final['gravity_lift'].sum()
         
-        # Calculate Total Marketing Lift
         t_mkt = t_digital + t_inertia_total + t_gravity
         mkt_share = (t_mkt / t_traffic * 100) if t_traffic > 0 else 0
         
-        # Weather Friction Logic
-        t_snow_loss = (df_final['snow_cm'].sum() * float(c.get('Snow_cm', -45)))
-        t_rain_loss = (df_final['rain_mm'].sum() * float(c.get('Rain_mm', -12)))
-        friction_total = abs(t_snow_loss + t_rain_loss)
-
-        k6.metric("Marketing Guests", f"{t_mkt:,.0f}")
-        k7.metric("Marketing Share", f"{mkt_share:.1f}%")
-        k8.metric("Digital ROI Lift", f"{t_digital:,.0f}")
-        k9.metric("Weather Friction", f"-{friction_total:,.0f}")
-        k10.metric("AI Confidence", m['predictability'])
-
-        st.divider()
-
-        # 5. FORENSIC ATTRIBUTION (TRUE SCALE + INTEGER ROUNDING)
-        st.write("### 🧬 Multi-Channel Attribution: Absolute Guest Volume")
-        
-        # REPAIR: Align local column with new Engine key
-        df_final['Brand_Inertia_Layer'] = m.get('total_inertia', 0)
-        
-        df_final['guest_baseline_int'] = df_final['guest_baseline'].round(0)
-        df_final['residual_lift_int'] = df_final['residual_lift'].round(0)
-        df_final['gravity_lift_int'] = df_final['gravity_lift'].round(0)
-        
-        fig_audit = go.Figure()
-
-        # 1. THE FOUNDATION: Organic Heartbeat
-        fig_audit.add_trace(go.Scatter(
-            x=df_final['entry_date'], 
-            y=df_final['guest_baseline_int'], 
-            name='Organic Heartbeat', 
-            fill='tozeroy',
-            fillcolor='rgba(200, 210, 225, 0.4)', 
-            line=dict(width=2, color='#8E9AAF', shape='spline'),
-            hovertemplate='%{y:,d} Guests'
-        ))
-        
-        # 2. Digital ROI
-        fig_audit.add_trace(go.Scatter(
-            x=df_final['entry_date'], 
-            y=df_final['residual_lift_int'], 
-            name='Digital ROI Lift', 
-            line=dict(width=3, color='#0047AB', shape='spline'),
-            hovertemplate='%{y:,d} Guests'
-        ))
-        
-        # 3. Brand Inertia (REPAIRED: TV, Radio, Signage combined)
-        fig_audit.add_trace(go.Scatter(
-            x=df_final['entry_date'], 
-            y=df_final['Brand_Inertia_Layer'].round(0), 
-            name='Brand Inertia (OOH/TV/Radio)', 
-            line=dict(width=3, color='#5D707F', dash='dot', shape='spline'),
-            hovertemplate='%{y:,d} Guests'
-        ))
-        
-        # 4. Event Gravity
-        fig_audit.add_trace(go.Scatter(
-            x=df_final['entry_date'], 
-            y=df_final['gravity_lift_int'], 
-            name='Hard Rock LIVE Gravity', 
-            line=dict(width=4, color='#FFCC00', shape='spline'),
-            hovertemplate='%{y:,d} Guests'
-        ))
-        
-        fig_audit.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)', 
-            height=550,
-            margin=dict(l=10, r=10, t=10, b=10),
-            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
-            hovermode="x unified",
-            yaxis=dict(title="Guest Volume", showgrid=True, gridcolor='#F0F2F6', tickformat=',d')
-        )
-        st.plotly_chart(fig_audit, use_container_width=True)
-        
-        # 6. DATA LOG & EXPORT
-        st.write("### 📋 Detailed Forensic Ledger")
-        df_final['Variance'] = df_final['actual_traffic'] - df_final['expected']
-        
-        display_cols = ['entry_date', 'actual_traffic', 'expected', 'Variance', 'residual_lift', 'gravity_lift', 'new_members']
-        st.dataframe(
-            df_final[display_cols].sort_values('entry_date', ascending=False),
-            use_container_width=True,
-            hide_index=True
-        )
-
-        with col_export:
-            csv_data = df_final.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Export Audit to CSV",
-                data=csv_data,
-                file_name=f"HR_Audit_{s_date}_{e_date}.csv",
-                mime='text/csv',
-                use_container_width=True
-            )
-    else:
-        st.info("Please select a range (Start and End date) to generate the audit report.")
+        t
 
 # =================================================================
 # ⚙️ PAGE 5: AI CALIBRATION & ENGINE WEIGHTS
