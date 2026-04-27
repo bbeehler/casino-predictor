@@ -855,37 +855,63 @@ elif page == "Master Audit Report":
 
         st.divider()
 
-        # 5. NEW INCORPORATED CHART: MULTI-CHANNEL YIELD FLOW
+        # --- 5. FORENSIC ATTRIBUTION (UPGRADED TO MULTI-CHANNEL YIELD FLOW) ---
         st.write("### 🌊 Multi-Channel Yield Flow")
-        st.caption("Percentage contribution of each marketing channel relative to property volume.")
+        st.caption("Percentage contribution of each marketing channel relative to total daily property volume.")
         
-        df_final['Brand_Layer'] = t_inertia_val
-        df_final['Total_Theoretical'] = df_final['guest_baseline'] + df_final['residual_lift'] + df_final['gravity_lift'] + df_final['Brand_Layer']
+        # Pull Brand Inertia from engine results
+        df_final['Brand_Layer'] = m.get('total_inertia', 0)
+        
+        # Calculate the Daily Mix Total (Foundation for the 100% stack)
+        df_final['Total_Theoretical'] = (
+            df_final['guest_baseline'] + 
+            df_final['residual_lift'] + 
+            df_final['gravity_lift'] + 
+            df_final['Brand_Layer']
+        )
 
         fig_yield = go.Figure()
+
+        # Define the stack order: Organic on bottom, High-impact on top
         yield_map = [
             ('Organic Heartbeat', 'guest_baseline', '#E1E8F0'),
+            ('Brand (OOH/TV/Radio)', 'Brand_Layer', '#5D707F'),
             ('Digital Adstock', 'residual_lift', '#0047AB'),
-            ('Brand (OOH/TV)', 'Brand_Layer', '#5D707F'),
-            ('Event Gravity', 'gravity_lift', '#FFCC00')
+            ('Hard Rock LIVE Gravity', 'gravity_lift', '#FFCC00')
         ]
 
         for label, col, color in yield_map:
-            y_vals = (df_final[col] / df_final['Total_Theoretical']) * 100
+            # Convert raw volume to percentage of the daily theoretical mix
+            y_percent = (df_final[col] / df_final['Total_Theoretical']) * 100
+            
             fig_yield.add_trace(go.Scatter(
-                x=df_final['entry_date'], y=y_vals, name=label,
-                mode='lines', line=dict(width=0.5, color=color),
-                stackgroup='one', fillcolor=color, hovertemplate='%{y:.1f}%'
+                x=df_final['entry_date'], 
+                y=y_percent,
+                name=label,
+                mode='lines',
+                line=dict(width=0.5, color=color),
+                stackgroup='one', # This creates the "Stacked" effect
+                fillcolor=color,
+                hovertemplate='%{y:.1f}% Contribution'
             ))
 
         fig_yield.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)', height=500, hovermode="x unified",
-            yaxis=dict(title="Yield % Contribution", range=[0, 100], ticksuffix="%"),
-            legend=dict(orientation="h", yanchor="top", y=-0.1, xanchor="center", x=0.5)
+            plot_bgcolor='rgba(0,0,0,0)',
+            height=550,
+            margin=dict(l=10, r=10, t=10, b=10),
+            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
+            hovermode="x unified",
+            yaxis=dict(
+                title="Yield % Contribution", 
+                range=[0, 100], 
+                ticksuffix="%",
+                showgrid=True, 
+                gridcolor='#F0F2F6'
+            ),
+            xaxis=dict(showgrid=False)
         )
-        st.plotly_chart(fig_yield, use_container_width=True)
         
-        st.divider()
+        st.plotly_chart(fig_yield, use_container_width=True)
 
         # 6. YOUR ORIGINAL LEDGER & EXPORT
         st.write("### 📋 Detailed Forensic Ledger")
