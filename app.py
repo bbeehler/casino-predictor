@@ -855,61 +855,55 @@ elif page == "Master Audit Report":
 
         st.divider()
 
-        # --- 5. FORENSIC ATTRIBUTION (STACKED BAR YIELD) ---
-        st.write("### 📊 Multi-Channel Yield Mix")
-        st.caption("Daily percentage contribution of each marketing channel.")
+        # --- 5. FORENSIC ATTRIBUTION (HEATMAP VERSION) ---
+        st.write("### 🌡️ Channel Performance Heatmap")
+        st.caption("Darker colors indicate higher percentage contribution to the property total.")
         
-        # Pull Brand Inertia from engine results
-        df_final['Brand_Layer'] = m.get('total_inertia', 0)
+        # 1. Prepare Heatmap Data
+        df_heat = df_final.copy()
+        df_heat['Brand_Layer'] = m.get('total_inertia', 0)
+        df_heat['Total_Theoretical'] = (df_heat['guest_baseline'] + df_heat['residual_lift'] + 
+                                        df_heat['gravity_lift'] + df_heat['Brand_Layer'])
         
-        # Calculate the Daily Mix Total
-        df_final['Total_Theoretical'] = (
-            df_final['guest_baseline'] + 
-            df_final['residual_lift'] + 
-            df_final['gravity_lift'] + 
-            df_final['Brand_Layer']
+        # Calculate Percentages for each channel
+        channels = {
+            'Organic': 'guest_baseline',
+            'Digital': 'residual_lift',
+            'Brand (OOH)': 'Brand_Layer',
+            'Events': 'gravity_lift'
+        }
+        
+        heat_data = []
+        for label, col in channels.items():
+            for _, row in df_heat.iterrows():
+                perc = (row[col] / row['Total_Theoretical']) * 100
+                heat_data.append({
+                    'Day': row['entry_date'].strftime('%b %d'),
+                    'Channel': label,
+                    'Contribution %': round(perc, 1)
+                })
+        
+        df_heat_plot = pd.DataFrame(heat_data)
+
+        # 2. Build the Plotly Heatmap
+        fig_heat = px.density_heatmap(
+            df_heat_plot, 
+            x="Day", 
+            y="Channel", 
+            z="Contribution %",
+            color_continuous_scale="Viridis",
+            text_auto='.1f'
         )
 
-        fig_bar_yield = go.Figure()
-
-        # Define the stack order
-        yield_map = [
-            ('Organic Heartbeat', 'guest_baseline', '#E1E8F0'),
-            ('Brand (OOH/TV/Radio)', 'Brand_Layer', '#5D707F'),
-            ('Digital Adstock', 'residual_lift', '#0047AB'),
-            ('Hard Rock LIVE Gravity', 'gravity_lift', '#FFCC00')
-        ]
-
-        for label, col, color in yield_map:
-            # Convert to percentage
-            y_percent = (df_final[col] / df_final['Total_Theoretical']) * 100
-            
-            fig_bar_yield.add_trace(go.Bar(
-                x=df_final['entry_date'], 
-                y=y_percent,
-                name=label,
-                marker_color=color,
-                hovertemplate='%{y:.1f}% Contribution'
-            ))
-
-        fig_bar_yield.update_layout(
-            barmode='stack', # This is the critical setting for the stack
+        fig_heat.update_layout(
+            height=400,
             plot_bgcolor='rgba(0,0,0,0)',
-            height=550,
             margin=dict(l=10, r=10, t=10, b=10),
-            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
-            hovermode="x unified",
-            yaxis=dict(
-                title="Yield % Contribution", 
-                range=[0, 100], 
-                ticksuffix="%",
-                showgrid=True, 
-                gridcolor='#F0F2F6'
-            ),
-            xaxis=dict(type='category', tickangle=-45) # Categorical axis makes bars look cleaner
+            xaxis=dict(title=None),
+            yaxis=dict(title=None)
         )
         
-        st.plotly_chart(fig_bar_yield, use_container_width=True)
+        st.plotly_chart(fig_heat, use_container_width=True)
 
         # 6. YOUR ORIGINAL LEDGER & EXPORT
         st.write("### 📋 Detailed Forensic Ledger")
