@@ -846,8 +846,6 @@ elif page == "Master Audit Report":
         
         t_mkt = t_digital + t_inertia_total + t_gravity
         mkt_share = (t_mkt / t_traffic * 100) if t_traffic > 0 else 0
-        
-        t
 
 # =================================================================
 # ⚙️ PAGE 5: AI CALIBRATION & ENGINE WEIGHTS
