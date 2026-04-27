@@ -855,55 +855,55 @@ elif page == "Master Audit Report":
 
         st.divider()
 
-        # --- 5. FORENSIC ATTRIBUTION (HEATMAP VERSION) ---
-        st.write("### 🌡️ Channel Performance Heatmap")
-        st.caption("Darker colors indicate higher percentage contribution to the property total.")
+        # --- 5. FORENSIC ATTRIBUTION (REFINED STACKED AREA) ---
+        st.write("### 🌊 Multi-Channel Attribution Flow")
+        st.caption("Visualizing the cumulative layers of guest demand.")
         
-        # 1. Prepare Heatmap Data
-        df_heat = df_final.copy()
-        df_heat['Brand_Layer'] = m.get('total_inertia', 0)
-        df_heat['Total_Theoretical'] = (df_heat['guest_baseline'] + df_heat['residual_lift'] + 
-                                        df_heat['gravity_lift'] + df_heat['Brand_Layer'])
+        # 1. Prepare Data
+        df_stack = df_final.copy()
+        df_stack['Brand_Inertia_Layer'] = m.get('total_inertia', 0)
         
-        # Calculate Percentages for each channel
-        channels = {
-            'Organic': 'guest_baseline',
-            'Digital': 'residual_lift',
-            'Brand (OOH)': 'Brand_Layer',
-            'Events': 'gravity_lift'
-        }
-        
-        heat_data = []
-        for label, col in channels.items():
-            for _, row in df_heat.iterrows():
-                perc = (row[col] / row['Total_Theoretical']) * 100
-                heat_data.append({
-                    'Day': row['entry_date'].strftime('%b %d'),
-                    'Channel': label,
-                    'Contribution %': round(perc, 1)
-                })
-        
-        df_heat_plot = pd.DataFrame(heat_data)
+        # 2. Build the Chart
+        fig_stack = go.Figure()
 
-        # 2. Build the Plotly Heatmap
-        fig_heat = px.density_heatmap(
-            df_heat_plot, 
-            x="Day", 
-            y="Channel", 
-            z="Contribution %",
-            color_continuous_scale="Viridis",
-            text_auto='.1f'
-        )
+        # Define layers from bottom to top
+        layers = [
+            ('Organic Heartbeat', 'guest_baseline', 'rgba(200, 210, 225, 0.5)', '#8E9AAF'),
+            ('Brand (OOH/TV/Radio)', 'Brand_Inertia_Layer', 'rgba(93, 112, 127, 0.5)', '#5D707F'),
+            ('Digital ROI Lift', 'residual_lift', 'rgba(0, 71, 171, 0.5)', '#0047AB'),
+            ('Hard Rock LIVE Gravity', 'gravity_lift', 'rgba(255, 204, 0, 0.6)', '#FFCC00')
+        ]
 
-        fig_heat.update_layout(
-            height=400,
+        for name, col, fill_color, line_color in layers:
+            fig_stack.add_trace(go.Scatter(
+                x=df_stack['entry_date'], 
+                y=df_stack[col],
+                name=name,
+                mode='lines',
+                line=dict(width=0.5, color=line_color, shape='spline'), # 'spline' smooths the curves
+                stackgroup='one', # This creates the stack
+                fillcolor=fill_color,
+                hovertemplate='%{y:,.0f} Guests'
+            ))
+
+        # 3. Formatting for the Boardroom
+        fig_stack.update_layout(
             plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            height=500,
             margin=dict(l=10, r=10, t=10, b=10),
-            xaxis=dict(title=None),
-            yaxis=dict(title=None)
+            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
+            hovermode="x unified",
+            yaxis=dict(
+                title="Total Guest Volume", 
+                showgrid=True, 
+                gridcolor='#F0F2F6',
+                tickformat=',d'
+            ),
+            xaxis=dict(showgrid=False)
         )
         
-        st.plotly_chart(fig_heat, use_container_width=True)
+        st.plotly_chart(fig_stack, use_container_width=True)
 
         # 6. YOUR ORIGINAL LEDGER & EXPORT
         st.write("### 📋 Detailed Forensic Ledger")
