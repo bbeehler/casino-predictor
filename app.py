@@ -628,20 +628,26 @@ elif page == "Daily Ledger Audit":
         
         if st.form_submit_button("💾 Sync Table Updates", use_container_width=True):
             try:
-                # SCRUBBING DATA: Converting NaN to 0 to prevent JSON compliance errors
+                # 1. Scrub the data
                 df_sync = edited_ledger.copy()
-                
-                # Fill any blanks created by user deletion with 0
                 df_sync = df_sync.fillna(0)
                 
-                # Ensure date is string for Supabase
+                # 2. Date conversion
                 df_sync['entry_date'] = df_sync['entry_date'].astype(str)
                 
-                # Ensure numeric columns are forced to proper types
-                num_cols = ['actual_traffic', 'new_members', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
-                for col in num_cols:
-                    df_sync[col] = pd.to_numeric(df_sync[col]).astype(float)
+                # 3. THE FIX: Force Integer columns to be Integers (removes the .0)
+                int_cols = ['actual_traffic', 'new_members', 'attendance', 'ad_clicks', 'ad_impressions']
+                for col in int_cols:
+                    if col in df_sync.columns:
+                        df_sync[col] = df_sync[col].astype(int)
 
+                # 4. Force Weather columns to be Floats (decimals are okay here)
+                float_cols = ['rain_mm', 'snow_cm']
+                for col in float_cols:
+                    if col in df_sync.columns:
+                        df_sync[col] = df_sync[col].astype(float)
+
+                # 5. Push to Supabase
                 sync_payload = df_sync.to_dict(orient='records')
                 supabase.table("ledger").upsert(sync_payload).execute()
                 
