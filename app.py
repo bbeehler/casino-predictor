@@ -533,7 +533,7 @@ if page == "Executive Dashboard":
         st.stop()
 
 # =================================================================
-# 8. PAGE 2: DAILY LEDGER AUDIT (FORM + TABLE HYBRID)
+# 8. PAGE 2: DAILY LEDGER AUDIT (HARDENED v7.2)
 # =================================================================
 elif page == "Daily Ledger Audit":
     st.markdown("""
@@ -581,7 +581,7 @@ elif page == "Daily Ledger Audit":
                     "entry_date": str(e_date),
                     "actual_traffic": int(e_traffic),
                     "new_members": int(e_members),
-                    "active_promo": str(e_promo).strip() if e_promo else None, # Forces string or Null
+                    "active_promo": str(e_promo).strip() if e_promo else None,
                     "attendance": int(e_event),
                     "ad_clicks": int(e_clicks),
                     "ad_impressions": int(e_imps),
@@ -594,7 +594,6 @@ elif page == "Daily Ledger Audit":
                     st.cache_data.clear()
                     st.rerun()
                 except Exception as e:
-                    # This will catch if the DB column is still set to Boolean
                     st.error(f"Database Error: {e}")
 
     st.divider()
@@ -629,10 +628,23 @@ elif page == "Daily Ledger Audit":
         
         if st.form_submit_button("💾 Sync Table Updates", use_container_width=True):
             try:
+                # SCRUBBING DATA: Converting NaN to 0 to prevent JSON compliance errors
                 df_sync = edited_ledger.copy()
+                
+                # Fill any blanks created by user deletion with 0
+                df_sync = df_sync.fillna(0)
+                
+                # Ensure date is string for Supabase
                 df_sync['entry_date'] = df_sync['entry_date'].astype(str)
+                
+                # Ensure numeric columns are forced to proper types
+                num_cols = ['actual_traffic', 'new_members', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
+                for col in num_cols:
+                    df_sync[col] = pd.to_numeric(df_sync[col]).astype(float)
+
                 sync_payload = df_sync.to_dict(orient='records')
                 supabase.table("ledger").upsert(sync_payload).execute()
+                
                 st.success("✅ Bulk updates synced successfully.")
                 st.cache_data.clear()
                 st.rerun()
