@@ -1019,13 +1019,13 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 11. PAGE 6: AI STRATEGIC ANALYST (EXECUTIVE UPGRADE v12)
+# 11. PAGE 6: AI STRATEGIC ANALYST (EXECUTIVE UPGRADE v13)
 # =================================================================
 elif page == "FloorCast AI Analyst":
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">🕵️ FloorCast Strategic AI Analyst</h2>
-            <p style="color: #444; margin: 0;">Executive Intelligence: Correlating Predictions with Actual Results.</p>
+            <p style="color: #444; margin: 0;">Executive Intelligence: Correlating Predictions with Full Historical Results.</p>
         </div>
     """, unsafe_allow_html=True)
     
@@ -1033,15 +1033,21 @@ elif page == "FloorCast AI Analyst":
         st.warning("Forensic Vault is empty. Analyst cannot audit performance without a ledger.")
         st.stop()
 
-    # 2. RUN FORENSIC ENGINE FOR DOSSIER
+    # 1. RUN ENGINE ON FULL DATASET
     m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
     df_ai = m_audit['df']
     
-    # 3. BUILD THE EXECUTIVE DOSSIER (Includes Weights + Variance)
-    # We feed the AI the 'Whys' so it can diagnose the Saturday gaps
+    # 2. CALCULATE FULL YEAR SUMMARY FOR THE AI
+    total_days = len(df_ai)
+    start_date = df_ai['entry_date'].min().strftime('%Y-%m-%d')
+    end_date = df_ai['entry_date'].max().strftime('%Y-%m-%d')
+    
+    # 3. BUILD THE EXPANDED DOSSIER (ACCESS TO ALL DATES)
     c = st.session_state.coeffs
     dossier = f"""
     PROPERTY: Hard Rock Hotel & Casino Ottawa
+    LEDGER SCOPE: {start_date} to {end_date} ({total_days} total days)
+    
     CURRENT CALIBRATION WEIGHTS:
     - Promo Lift: {c.get('Promo_Lift')}
     - Billboard Weight: {c.get('OOH_Weight')}
@@ -1050,24 +1056,19 @@ elif page == "FloorCast AI Analyst":
     - Event Gravity: {c.get('Event_Gravity')}
     - AI Predictability: {m_audit.get('predictability')}
 
-    RECENT PERFORMANCE DATA (Last 30 Days):
+    FULL LEDGER DATA (CSV Format for deep analysis):
     """
     
-    for _, r in df_ai.sort_values('entry_date', ascending=False).head(30).iterrows():
-        actual = r.get('actual_traffic', 0)
-        expected = int(r.get('expected', 0))
-        variance = actual - expected
-        dossier += (
-            f"Date: {r.get('entry_date').strftime('%Y-%m-%d')} ({r.get('entry_date').day_name()}) | "
-            f"Actual: {actual} | Target: {expected} | Variance: {variance:+d} | "
-            f"Promo: {r.get('active_promo')} | Lift: {r.get('residual_lift', 0):.0f}\n"
-        )
+    # THE FIX: We send the WHOLE ledger as a CSV string inside the prompt.
+    # We remove the .head(30) to ensure Jan-April is included.
+    csv_context = df_ai[['entry_date', 'actual_traffic', 'expected', 'active_promo', 'residual_lift']].to_csv(index=False)
+    dossier += csv_context
 
     # 4. CHAT INPUT
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    prompt = st.chat_input("Ask about Saturday demand or marketing ROI...")
+    prompt = st.chat_input("Ask about demand trends since January or marketing ROI...")
     
     if prompt:
         history_str = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages[-8:]])
@@ -1076,16 +1077,20 @@ elif page == "FloorCast AI Analyst":
         try:
             import google.generativeai as genai
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            # Using 1.5-flash for stability and speed
+            
+            # Using 'gemini-2.5-flash'
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            with st.status("🕵️ Auditing Property Patterns...", expanded=True) as status:
-                # Optimized System Prompt for Hard Rock Ottawa Context
+            with st.status("🕵️ Auditing Full Property History...", expanded=True) as status:
                 full_prompt = f"""
                 You are the Senior Strategy Analyst for Hard Rock Hotel & Casino Ottawa. 
-                Your task is to analyze the following Ledger and Weights to find growth opportunities or calibration errors.
+                You have been provided with the FULL property ledger starting from {start_date}.
                 
-                CONTEXT:
+                TASK:
+                Analyze the patterns in the data provided. Look for seasonality, Saturday gaps, 
+                and how the calibration weights align with actual floor traffic.
+                
+                DATASET:
                 {dossier}
                 
                 CONVERSATION HISTORY:
@@ -1101,7 +1106,7 @@ elif page == "FloorCast AI Analyst":
         except Exception as e:
             st.error(f"AI Error: {e}")
 
-    # 5. DISPLAY THREAD: NEWEST AT THE TOP
+    # 5. DISPLAY THREAD
     for m in reversed(st.session_state.messages):
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
