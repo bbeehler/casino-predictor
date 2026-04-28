@@ -10,6 +10,7 @@ from env_canada import ECWeather
 import google.generativeai as genai
 from supabase import create_client, Client # Added Client for type hinting
 from io import BytesIO
+from dateutil.relativedelta import relativedelta
 
 # =================================================================
 # 1. DATABASE CONNECTION (MUST BE FIRST)
