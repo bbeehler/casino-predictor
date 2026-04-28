@@ -253,17 +253,14 @@ def get_forensic_metrics(df_input, coeffs):
     }
 
 # =================================================================
-# 3.1 BL-ROAS CALCULATION ENGINE (NEW)
+# 3.1 BL-ROAS CALCULATION ENGINE
 # =================================================================
 def calculate_and_save_roas(data_dict):
     """
-    Implements the 5-Step BL-ROAS logic:
-    1. Traffic Score | 2. Engagement | 3. Sentiment | 4. Geo Lift | 5. ROAS
+    Implements the 5-Step BL-ROAS logic and saves to Supabase.
     """
-    # --- STEP 1: Traffic Score ---
+    # Math logic based on Brian's Copilot instructions
     traffic_score = (data_dict['utm_sessions'] + data_dict['organic_sessions']) * 8.00
-    
-    # --- STEP 2: Engagement Score ---
     eng_score = (
         (data_dict['social_likes'] * 0.50) + 
         (data_dict['social_comments'] * 1.00) + 
@@ -272,26 +269,19 @@ def calculate_and_save_roas(data_dict):
         (data_dict['site_time_sessions'] * 1.50) + 
         (data_dict['booking_clicks'] * 2.50)
     )
-    
-    # --- STEP 3: Sentiment Score ---
     sentiment_score = data_dict['pos_reviews'] * 30.00
-    
-    # --- STEP 4: Geo Lift Score ---
     geo_lift_score = data_dict['geo_lift_traffic'] * 8.00
     
-    # --- STEP 5: Final BL-ROAS & Brand Value ---
     brand_value = traffic_score + eng_score + sentiment_score + geo_lift_score
     bl_roas = brand_value / data_dict['ad_spend'] if data_dict['ad_spend'] > 0 else 0
     
-    # --- Enhanced Revenue Calculation ---
-    # Enhanced Revenue = Brand Value + (Foot Traffic * Avg Spend) + (Signups * LTV)
+    # Enhanced Revenue logic using Brian's benchmarks
     enhanced_revenue = (
         brand_value + 
         (data_dict['ledger_traffic'] * data_dict['avg_spend']) + 
         (data_dict['ledger_signups'] * data_dict['ltv_member'])
     )
 
-    # Prepare Payload for Supabase table 'monthly_roi'
     payload = {
         "report_month": data_dict['report_month'],
         "utm_sessions": int(data_dict['utm_sessions']),
@@ -310,7 +300,8 @@ def calculate_and_save_roas(data_dict):
         "enhanced_revenue": round(float(enhanced_revenue), 2)
     }
 
-    return supabase.table("monthly_roi").upsert(payload).execute()
+    # THE CRITICAL FIX: Add 'on_conflict="report_month"'
+    return supabase.table("monthly_roi").upsert(payload, on_conflict="report_month").execute()
 
 # =================================================================
 # 4. DATA INFRASTRUCTURE (SUPABASE & WEATHER)
