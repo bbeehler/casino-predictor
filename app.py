@@ -1226,7 +1226,7 @@ elif page == "BL-ROAS Calculator":
     selected_label = st.selectbox("Select Audit Month:", month_labels)
     selected_month = month_options[month_labels.index(selected_label)]
 
-    # --- 2. DYNAMIC LEDGER AGGREGATION (THE "PARITY" FIX) ---
+    # --- 2. DYNAMIC LEDGER AGGREGATION (WITH ZERO GUARD) ---
     df_roas = pd.DataFrame(ledger_data)
     df_roas['entry_date'] = pd.to_datetime(df_roas['entry_date'])
     
@@ -1234,14 +1234,22 @@ elif page == "BL-ROAS Calculator":
              (df_roas['entry_date'].dt.year == selected_month.year)
     selected_month_df = df_roas.loc[m_mask].copy()
 
-    # Group by date and take the MAX value for each day to ensure full month coverage
-    monthly_summary = selected_month_df.groupby(selected_month_df['entry_date'].dt.date).max()
-    
-    ledger_traffic = int(monthly_summary['actual_traffic'].sum())
-    ledger_signups = int(monthly_summary['new_members'].sum())
-    ledger_coin_in = float(monthly_summary['actual_coin_in'].sum())
-    
-    avg_spend_actual = float(ledger_coin_in / ledger_traffic) if ledger_traffic > 0 else DEFAULT_AVG_SPEND
+    if not selected_month_df.empty:
+        monthly_summary = selected_month_df.groupby(selected_month_df['entry_date'].dt.date).max()
+        ledger_traffic = int(monthly_summary['actual_traffic'].sum())
+        ledger_signups = int(monthly_summary['new_members'].sum())
+        ledger_coin_in = float(monthly_summary['actual_coin_in'].sum())
+    else:
+        # Fallback for months with no data yet (like the current month)
+        ledger_traffic = 0
+        ledger_signups = 0
+        ledger_coin_in = 0.0
+
+    # THE FIX: Zero Guard for Average Spend
+    if ledger_traffic > 0:
+        avg_spend_actual = float(ledger_coin_in / ledger_traffic)
+    else:
+        avg_spend_actual = DEFAULT_AVG_SPEND
 
     # --- 3. THE INPUT FORM ---
     with st.form("roas_input_form"):
