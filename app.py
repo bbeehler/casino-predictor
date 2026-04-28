@@ -1223,7 +1223,7 @@ elif page == "FloorCast AI Analyst":
             st.markdown(m["content"])
 
 # =================================================================
-# 13. PAGE 7: BL-ROAS COMMAND CENTER (v15 - Historical Support)
+# 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v16)
 # =================================================================
 elif page == "BL-ROAS Calculator":
     st.markdown("""
@@ -1233,9 +1233,8 @@ elif page == "BL-ROAS Calculator":
         </div>
     """, unsafe_allow_html=True)
 
-    # --- 1. MONTH SELECTION (Look back 12 months) ---
+    # --- 1. MONTH SELECTION ---
     today = datetime.date.today()
-    # Create list of months: [April 2026, March 2026, Feb 2026...]
     month_options = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
     month_labels = [m.strftime("%B %Y") for m in month_options]
 
@@ -1246,7 +1245,6 @@ elif page == "BL-ROAS Calculator":
     df_roas = pd.DataFrame(ledger_data)
     df_roas['entry_date'] = pd.to_datetime(df_roas['entry_date'])
     
-    # Filter ledger for the SELECTED month
     m_mask = (df_roas['entry_date'].dt.month == selected_month.month) & \
              (df_roas['entry_date'].dt.year == selected_month.year)
     selected_month_df = df_roas.loc[m_mask]
@@ -1285,8 +1283,8 @@ elif page == "BL-ROAS Calculator":
 
         submit = st.form_submit_button("🚀 Save ROI Analysis", use_container_width=True)
 
+    # --- 4. EXECUTION & SCOREBOARD ---
     if submit:
-        # Construct payload using the logic engine function
         input_payload = {
             "report_month": str(selected_month),
             "utm_sessions": utm_s, "organic_sessions": org_s, "ad_spend": ad_spend,
@@ -1300,34 +1298,32 @@ elif page == "BL-ROAS Calculator":
             calculate_and_save_roas(input_payload)
             st.success(f"✅ ROI for {selected_label} saved successfully!")
             
-            # --- 4. THE SCOREBOARD (DISPLAYED ON SUBMIT) ---
-            st.divider()
+            # Local Scores for immediate Display
             t_score = (utm_s + org_s) * 8.00
             e_score = (likes * 0.5) + (comments * 1.0) + (shares * 1.25) + (views * 0.25) + (time_site * 1.5) + (cta_clicks * 2.5)
             brand_val = t_score + e_score + (reviews * 30.00) + (geo_lift * 8.00)
             final_roas = brand_val / ad_spend if ad_spend > 0 else 0
             
+            st.divider()
             m1, m2, m3 = st.columns(3)
             m1.metric("Monthly BL-ROAS", f"{final_roas:.2f}x")
             m2.metric("Total Brand Value", f"${brand_val:,.2f}")
             m3.metric("Enhanced Revenue (20% Attr)", f"${brand_val + ((ledger_traffic * 112.5 + ledger_signups * 450) * 0.2):,.2f}")
             
-            st.rerun() # Refresh to update charts
+            st.rerun() 
         except Exception as e:
             st.error(f"Sync Failure: {e}")
 
-    # --- 5. HISTORICAL PERFORMANCE SECTION ---
+    # --- 5. HISTORICAL AUDIT & CUMULATIVE SECTION ---
     st.divider()
-
     try:
-        # 1. Pull the data from Supabase
         history_res = supabase.table("monthly_roi").select("*").order("report_month", desc=True).execute()
         
         if history_res.data:
             df_hist = pd.DataFrame(history_res.data)
             df_hist['Month'] = pd.to_datetime(df_hist['report_month']).dt.strftime('%B %Y')
 
-            # 2. CUMULATIVE PERFORMANCE TILES
+            # Cumulative Performance Tiles
             total_brand_value = df_hist['brand_value'].sum()
             total_ad_spend = df_hist['ad_spend'].sum()
             cumulative_roas = total_brand_value / total_ad_spend if total_ad_spend > 0 else 0
@@ -1338,9 +1334,10 @@ elif page == "BL-ROAS Calculator":
             c1.metric("YTD Cumulative ROAS", f"{cumulative_roas:.2f}x")
             c2.metric("Total Brand Equity", f"${total_brand_value:,.2f}")
             c3.metric("Total Enhanced Impact", f"${total_enhanced:,.2f}")
+            
             st.divider()
 
-            # 3. HISTORICAL LEDGER TABLE
+            # Historical Ledger Table
             st.write("### 📜 Historical ROI Audit Ledger")
             display_df = df_hist[[
                 'Month', 'calculated_bl_roas', 'brand_value', 'ad_spend', 'enhanced_revenue'
@@ -1362,44 +1359,7 @@ elif page == "BL-ROAS Calculator":
             st.info("No historical ROI audits found yet.")
 
     except Exception as e:
-        # THIS IS THE PART THAT WAS MISSING
         st.error(f"Historical Audit Error: {e}")
-
-    # --- 6. CUMULATIVE PERFORMANCE TILES ---
-    if history_res.data:
-        total_brand_value = df_hist['brand_value'].sum()
-        total_ad_spend = df_hist['ad_spend'].sum()
-        # Cumulative ROAS = Total Value Created / Total Spend
-        cumulative_roas = total_brand_value / total_ad_spend if total_ad_spend > 0 else 0
-        total_enhanced = df_hist['enhanced_revenue'].sum()
-
-        st.write("### 🏛️ YTD Cumulative Performance")
-        c1, c2, c3 = st.columns(3)
-        
-        c1.metric("YTD Cumulative ROAS", f"{cumulative_roas:.2f}x")
-        c2.metric("Total Brand Equity", f"${total_brand_value:,.2f}")
-        c3.metric("Total Enhanced Impact", f"${total_enhanced:,.2f}")
-        
-        st.caption(f"Aggregated performance data from {df_hist['Month'].iloc[-1]} to {df_hist['Month'].iloc[0]}")
-        st.divider()
-            
-            # Apply currency and multiplier formatting
-            st.dataframe(
-                display_df.style.format({
-                    'BL-ROAS': '{:.2f}x',
-                    'Brand Value': '${:,.2f}',
-                    'Ad Spend': '${:,.2f}',
-                    'Total Enhanced Revenue': '${:,.2f}'
-                }),
-                use_container_width=True,
-                hide_index=True
-            )
-            
-        else:
-            st.info("No historical ROI audits found. Save your first calculation to populate this ledger.")
-            
-    except Exception as e:
-        st.error(f"Ledger Load Error: {e}")
 
 # =================================================================
 # 14. FOOTER
