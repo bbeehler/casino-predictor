@@ -1222,23 +1222,27 @@ elif page == "BL-ROAS Calculator":
     selected_label = st.selectbox("Select Audit Month:", month_labels)
     selected_month = month_options[month_labels.index(selected_label)]
 
-    # --- 2. DYNAMIC LEDGER AGGREGATION ---
+    # --- 2. DYNAMIC LEDGER AGGREGATION (FIXED FOR JANUARY) ---
     df_roas = pd.DataFrame(ledger_data)
     df_roas['entry_date'] = pd.to_datetime(df_roas['entry_date'])
     
-    m_mask = (df_roas['entry_date'].dt.month == selected_month.month) & \
-             (df_roas['entry_date'].dt.year == selected_month.year)
-    selected_month_df = df_roas.loc[m_mask]
+    # STRICT FILTER: Ensure we only get the exact month and year
+    # This prevents January from accidentally pulling Dec or Feb data
+    selected_month_df = df_roas[
+        (df_roas['entry_date'].dt.month == selected_month.month) & 
+        (df_roas['entry_date'].dt.year == selected_month.year)
+    ].copy()
+
+    # REMOVE POTENTIAL DUPLICATES: 
+    # If the ledger has two rows for the same day, this keeps only the last entry
+    selected_month_df = selected_month_df.sort_values('entry_date').drop_duplicates('entry_date', keep='last')
     
     ledger_traffic = selected_month_df['actual_traffic'].sum()
     ledger_signups = selected_month_df['new_members'].sum()
-    
-    # FIX: Using 'actual_coin_in' from your Ledger
     ledger_coin_in = selected_month_df['actual_coin_in'].sum()
     
-    # Calculate Dynamic Benchmarks
-    avg_spend_actual = ledger_coin_in / ledger_traffic if ledger_traffic > 0 else 1279.33
-    ltv_benchmark = 1900.00 
+    # Calculate Average Spend based on the cleaned/deduplicated data
+    avg_spend_actual = ledger_coin_in / ledger_traffic if ledger_traffic > 0 else 1279.33 
 
     # --- 3. THE INPUT FORM ---
     with st.form("roas_input_form"):
