@@ -1223,7 +1223,7 @@ elif page == "FloorCast AI Analyst":
             st.markdown(m["content"])
 
 # =================================================================
-# 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v16)
+# 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v17)
 # =================================================================
 elif page == "BL-ROAS Calculator":
     st.markdown("""
@@ -1241,48 +1241,18 @@ elif page == "BL-ROAS Calculator":
     selected_label = st.selectbox("Select Audit Month:", month_labels)
     selected_month = month_options[month_labels.index(selected_label)]
 
-    # 2. CUMULATIVE PERFORMANCE TILES
-            total_brand_value = df_hist['brand_value'].sum()
-            total_ad_spend = df_hist['ad_spend'].sum()
-            cumulative_roas = total_brand_value / total_ad_spend if total_ad_spend > 0 else 0
-            total_enhanced = df_hist['enhanced_revenue'].sum()
+    # --- 2. DYNAMIC LEDGER AGGREGATION ---
+    df_roas = pd.DataFrame(ledger_data)
+    df_roas['entry_date'] = pd.to_datetime(df_roas['entry_date'])
+    
+    m_mask = (df_roas['entry_date'].dt.month == selected_month.month) & \
+             (df_roas['entry_date'].dt.year == selected_month.year)
+    selected_month_df = df_roas.loc[m_mask]
+    
+    ledger_traffic = selected_month_df['actual_traffic'].sum()
+    ledger_signups = selected_month_df['new_members'].sum()
 
-            st.write("### 🏛️ YTD Cumulative Performance")
-            
-            # Contextual descriptions for the "non-data" people
-            st.caption("Aggregated performance metrics from January to Present.")
-            
-            c1, c2, c3 = st.columns(3)
-            
-            c1.metric(
-                label="YTD Cumulative ROAS", 
-                value=f"{cumulative_roas:.2f}x",
-                help="The Multiplier (x) represents the Brand Value generated for every $1 spent. For example, 5.00x means $5 in brand equity created per $1 ad spend."
-            )
-            
-            c2.metric(
-                label="Total Brand Equity", 
-                value=f"${total_brand_value:,.2f}",
-                help="The combined financial value of all digital traffic, social engagement, sentiment (reviews), and regional growth scores."
-            )
-            
-            c3.metric(
-                label="Total Enhanced Impact", 
-                value=f"${total_enhanced:,.2f}",
-                help="The total estimated economic impact including Brand Value + Actual Guest Spend + Loyalty Member Lifetime Value (LTV)."
-            )
-            
-            # Small key/legend for stakeholders
-            with st.expander("📖 Glossary of Terms"):
-                st.markdown("""
-                * **#x (ROAS Multiplier):** A ratio showing marketing efficiency. Anything above **1.0x** means the marketing is generating more value than its cost.
-                * **Brand Value:** The 'Digital Footprint' converted to currency based on industry-standard engagement weights.
-                * **Enhanced Revenue:** The true holistic value of the casino's performance, merging floor revenue with digital brand growth.
-                """)
-            
-            st.divider()
-
-    # --- 3. THE INPUT FORM (WITH DATA PERSISTENCE) ---
+    # --- 3. THE INPUT FORM ---
     with st.form("roas_input_form"):
         st.subheader(f"📊 {selected_label} Metrics")
         
@@ -1313,7 +1283,7 @@ elif page == "BL-ROAS Calculator":
 
         submit = st.form_submit_button("🚀 Save ROI Analysis", use_container_width=True)
 
-    # --- 4. EXECUTION & SCOREBOARD ---
+    # --- 4. EXECUTION ---
     if submit:
         input_payload = {
             "report_month": str(selected_month),
@@ -1327,24 +1297,11 @@ elif page == "BL-ROAS Calculator":
         try:
             calculate_and_save_roas(input_payload)
             st.success(f"✅ ROI for {selected_label} saved successfully!")
-            
-            # Local Scores for immediate Display
-            t_score = (utm_s + org_s) * 8.00
-            e_score = (likes * 0.5) + (comments * 1.0) + (shares * 1.25) + (views * 0.25) + (time_site * 1.5) + (cta_clicks * 2.5)
-            brand_val = t_score + e_score + (reviews * 30.00) + (geo_lift * 8.00)
-            final_roas = brand_val / ad_spend if ad_spend > 0 else 0
-            
-            st.divider()
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Monthly BL-ROAS", f"{final_roas:.2f}x")
-            m2.metric("Total Brand Value", f"${brand_val:,.2f}")
-            m3.metric("Enhanced Revenue (20% Attr)", f"${brand_val + ((ledger_traffic * 112.5 + ledger_signups * 450) * 0.2):,.2f}")
-            
             st.rerun() 
         except Exception as e:
             st.error(f"Sync Failure: {e}")
 
-    # --- 5. HISTORICAL AUDIT & CUMULATIVE SECTION ---
+    # --- 5. CUMULATIVE & HISTORICAL SECTION ---
     st.divider()
     try:
         history_res = supabase.table("monthly_roi").select("*").order("report_month", desc=True).execute()
@@ -1360,33 +1317,48 @@ elif page == "BL-ROAS Calculator":
             total_enhanced = df_hist['enhanced_revenue'].sum()
 
             st.write("### 🏛️ YTD Cumulative Performance")
+            st.caption("Aggregated performance metrics from January to Present.")
+            
             c1, c2, c3 = st.columns(3)
-            c1.metric("YTD Cumulative ROAS", f"{cumulative_roas:.2f}x")
-            c2.metric("Total Brand Equity", f"${total_brand_value:,.2f}")
-            c3.metric("Total Enhanced Impact", f"${total_enhanced:,.2f}")
+            c1.metric(
+                label="YTD Cumulative ROAS", 
+                value=f"{cumulative_roas:.2f}x",
+                help="The Multiplier (x) represents the Brand Value generated for every $1 spent. e.g., 5.00x = $5 in equity per $1 spend."
+            )
+            c2.metric(
+                label="Total Brand Equity", 
+                value=f"${total_brand_value:,.2f}",
+                help="Sum of all digital, social, and sentiment value created YTD."
+            )
+            c3.metric(
+                label="Total Enhanced Impact", 
+                value=f"${total_enhanced:,.2f}",
+                help="Total Brand Value + Actual Floor Revenue + Member LTV."
+            )
+
+            with st.expander("📖 Glossary of Terms"):
+                st.markdown("""
+                * **#x (ROAS Multiplier):** Efficiency ratio. >1.0x means you are creating more value than you are spending.
+                * **Brand Value:** Digital footprint converted to currency via industry weights.
+                * **Enhanced Revenue:** Holistic value merging floor cash with brand growth.
+                """)
             
             st.divider()
 
             # Historical Ledger Table
             st.write("### 📜 Historical ROI Audit Ledger")
-            display_df = df_hist[[
-                'Month', 'calculated_bl_roas', 'brand_value', 'ad_spend', 'enhanced_revenue'
-            ]].copy()
-            
+            display_df = df_hist[['Month', 'calculated_bl_roas', 'brand_value', 'ad_spend', 'enhanced_revenue']].copy()
             display_df.columns = ['Audit Month', 'BL-ROAS', 'Brand Value', 'Ad Spend', 'Total Enhanced Revenue']
             
             st.dataframe(
                 display_df.style.format({
-                    'BL-ROAS': '{:.2f}x',
-                    'Brand Value': '${:,.2f}',
-                    'Ad Spend': '${:,.2f}',
-                    'Total Enhanced Revenue': '${:,.2f}'
+                    'BL-ROAS': '{:.2f}x', 'Brand Value': '${:,.2f}', 
+                    'Ad Spend': '${:,.2f}', 'Total Enhanced Revenue': '${:,.2f}'
                 }),
-                use_container_width=True,
-                hide_index=True
+                use_container_width=True, hide_index=True
             )
         else:
-            st.info("No historical ROI audits found yet.")
+            st.info("No historical ROI audits found yet. Run your first calculation to begin tracking.")
 
     except Exception as e:
         st.error(f"Historical Audit Error: {e}")
