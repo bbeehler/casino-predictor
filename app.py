@@ -1226,21 +1226,24 @@ elif page == "BL-ROAS Calculator":
     selected_label = st.selectbox("Select Audit Month:", month_labels)
     selected_month = month_options[month_labels.index(selected_label)]
 
-    # --- 2. DYNAMIC LEDGER AGGREGATION (WITH DEDUPLICATION) ---
+    # --- 2. DYNAMIC LEDGER AGGREGATION (THE "PARITY" FIX) ---
     df_roas = pd.DataFrame(ledger_data)
     df_roas['entry_date'] = pd.to_datetime(df_roas['entry_date'])
     
-    # Strict Filter & Deduplication to prevent January spikes
-    selected_month_df = df_roas[
-        (df_roas['entry_date'].dt.month == selected_month.month) & 
-        (df_roas['entry_date'].dt.year == selected_month.year)
-    ].copy()
+    # 1. Filter for the selected month
+    m_mask = (df_roas['entry_date'].dt.month == selected_month.month) & \
+             (df_roas['entry_date'].dt.year == selected_month.year)
+    selected_month_df = df_roas.loc[m_mask].copy()
+
+    # 2. THE FIX: Group by date and take the MAX value for each day.
+    # This ensures that if you have multiple ledger rows for Feb 10th, 
+    # it only counts the highest one (avoiding duplicates) 
+    # but still captures EVERY day of the month.
+    monthly_summary = selected_month_df.groupby(selected_month_df['entry_date'].dt.date).max()
     
-    selected_month_df = selected_month_df.sort_values('entry_date').drop_duplicates('entry_date', keep='last')
-    
-    ledger_traffic = int(selected_month_df['actual_traffic'].sum())
-    ledger_signups = int(selected_month_df['new_members'].sum())
-    ledger_coin_in = float(selected_month_df['actual_coin_in'].sum())
+    ledger_traffic = int(monthly_summary['actual_traffic'].sum())
+    ledger_signups = int(monthly_summary['new_members'].sum())
+    ledger_coin_in = float(monthly_summary['actual_coin_in'].sum())
     
     # Use actual average coin-in from ledger, or fallback to default
     avg_spend_actual = float(ledger_coin_in / ledger_traffic) if ledger_traffic > 0 else DEFAULT_AVG_SPEND
