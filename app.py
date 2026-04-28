@@ -1204,7 +1204,7 @@ elif page == "FloorCast AI Analyst":
             st.error(f"AI Error: {e}")
 
 # =================================================================
-# 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v19 - Coin-In Logic)
+# 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v20 - Scope & Filter Fix)
 # =================================================================
 elif page == "BL-ROAS Calculator":
     st.markdown("""
@@ -1214,6 +1214,10 @@ elif page == "BL-ROAS Calculator":
         </div>
     """, unsafe_allow_html=True)
 
+    # --- 0. GLOBAL PAGE BENCHMARKS ---
+    LTV_BENCHMARK = 1900.00 
+    DEFAULT_AVG_SPEND = 1279.33
+
     # --- 1. MONTH SELECTION ---
     today = datetime.date.today()
     month_options = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
@@ -1222,27 +1226,24 @@ elif page == "BL-ROAS Calculator":
     selected_label = st.selectbox("Select Audit Month:", month_labels)
     selected_month = month_options[month_labels.index(selected_label)]
 
-    # --- 2. DYNAMIC LEDGER AGGREGATION (FIXED FOR JANUARY) ---
+    # --- 2. DYNAMIC LEDGER AGGREGATION (WITH DEDUPLICATION) ---
     df_roas = pd.DataFrame(ledger_data)
     df_roas['entry_date'] = pd.to_datetime(df_roas['entry_date'])
     
-    # STRICT FILTER: Ensure we only get the exact month and year
-    # This prevents January from accidentally pulling Dec or Feb data
+    # Strict Filter & Deduplication to prevent January spikes
     selected_month_df = df_roas[
         (df_roas['entry_date'].dt.month == selected_month.month) & 
         (df_roas['entry_date'].dt.year == selected_month.year)
     ].copy()
-
-    # REMOVE POTENTIAL DUPLICATES: 
-    # If the ledger has two rows for the same day, this keeps only the last entry
+    
     selected_month_df = selected_month_df.sort_values('entry_date').drop_duplicates('entry_date', keep='last')
     
     ledger_traffic = selected_month_df['actual_traffic'].sum()
     ledger_signups = selected_month_df['new_members'].sum()
     ledger_coin_in = selected_month_df['actual_coin_in'].sum()
     
-    # Calculate Average Spend based on the cleaned/deduplicated data
-    avg_spend_actual = ledger_coin_in / ledger_traffic if ledger_traffic > 0 else 1279.33 
+    # Use actual average coin-in from ledger, or fallback to default
+    avg_spend_actual = ledger_coin_in / ledger_traffic if ledger_traffic > 0 else DEFAULT_AVG_SPEND
 
     # --- 3. THE INPUT FORM ---
     with st.form("roas_input_form"):
@@ -1282,10 +1283,11 @@ elif page == "BL-ROAS Calculator":
             "social_likes": likes, "social_comments": comments, "social_shares": shares, "post_views": views,
             "site_time_sessions": time_site, "booking_clicks": cta_clicks, "pos_reviews": reviews, "geo_lift_traffic": geo_lift,
             "ledger_traffic": ledger_traffic, "ledger_signups": ledger_signups,
-            "avg_spend": avg_spend_actual, "ltv_member": ltv_benchmark
+            "avg_spend": avg_spend_actual, "ltv_member": LTV_BENCHMARK
         }
         
         try:
+            # Note: Ensure calculate_and_save_roas uses upsert with on_conflict
             calculate_and_save_roas(input_payload)
             st.success(f"✅ ROI for {selected_label} saved successfully!")
             st.rerun() 
@@ -1303,12 +1305,12 @@ elif page == "BL-ROAS Calculator":
             st.divider()
             total_brand_value = df_hist['brand_value'].sum()
             total_ad_spend = df_hist['ad_spend'].sum()
-            cumulative_roas = total_brand_value / total_ad_spend if total_ad_spend > 0 else 0
+            cumulative_roas_val = total_brand_value / total_ad_spend if total_ad_spend > 0 else 0
             total_enhanced = df_hist['enhanced_revenue'].sum()
 
             st.write("### 🏛️ YTD Cumulative Performance")
             c1, c2, c3 = st.columns(3)
-            c1.metric("YTD Cumulative ROAS", f"{cumulative_roas:.2f}x", help="Calculated as Total Brand Value / Total Ad Spend.")
+            c1.metric("YTD Cumulative ROAS", f"{cumulative_roas_val:.2f}x", help="Calculated as Total Brand Value / Total Ad Spend.")
             c2.metric("Total Brand Equity", f"${total_brand_value:,.2f}")
             c3.metric("Total Enhanced Impact", f"${total_enhanced:,.2f}")
 
@@ -1320,9 +1322,8 @@ elif page == "BL-ROAS Calculator":
             prev = df_hist.iloc[1] if len(df_hist) > 1 else curr
             mom_roas = ((curr['calculated_bl_roas'] / prev['calculated_bl_roas']) - 1) * 100 if prev['calculated_bl_roas'] > 0 else 0
             
-            # Recalculate Attributed Impact based on Coin-In Benchmarks
-            # prop_potential = Actual Coin-In + (Signups * $1,900 LTV)
-            prop_potential = ledger_coin_in + (ledger_signups * ltv_benchmark)
+            # Use dynamically aggregated ledger coin-in and signups
+            prop_potential = ledger_coin_in + (ledger_signups * LTV_BENCHMARK)
             
             attr_10 = prop_potential * 0.10
             attr_20 = prop_potential * 0.20
@@ -1333,7 +1334,7 @@ elif page == "BL-ROAS Calculator":
 Brand Health Performance
 
 BL-ROAS = ${curr['calculated_bl_roas']:.2f} ({mom_roas:+.1f}% MoM)
-BL-ROAS YTD = ${cumulative_roas:.2f}
+BL-ROAS YTD = ${cumulative_roas_val:.2f}
 For every $1 spent in advertising (including OOH), we generated ${curr['calculated_bl_roas']:.2f} in measurable brand value.
 
 🎯 Attributed Revenue Impact – {selected_label}
