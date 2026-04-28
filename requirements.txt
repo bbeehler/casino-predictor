@@ -6,3 +6,4 @@ env-canada
 google-generativeai
 plotly
 statsmodels
+python-dateutil
