@@ -1363,6 +1363,52 @@ elif page == "BL-ROAS Calculator":
     except Exception as e:
         st.error(f"Historical Audit Error: {e}")
 
+# --- 7. SHAREPOINT EXECUTIVE SUMMARY GENERATOR ---
+    st.divider()
+    if history_res.data and len(df_hist) >= 1:
+        st.write("### 📄 SharePoint Report Generator")
+        st.caption("Copy and paste this summary directly into your SharePoint site.")
+
+        # Get current and previous month for MoM calculations
+        curr = df_hist.iloc[0]
+        prev = df_hist.iloc[1] if len(df_hist) > 1 else curr
+        
+        # Calculations for your specific report format
+        mom_roas = ((curr['calculated_bl_roas'] / prev['calculated_bl_roas']) - 1) * 100 if prev['calculated_bl_roas'] > 0 else 0
+        avg_spend_march = 1279.33 # Your specific March benchmark
+        
+        # Attribution values
+        prop_potential = (ledger_traffic * 112.50) + (ledger_signups * 450.00)
+        attr_10 = prop_potential * 0.10
+        attr_20 = prop_potential * 0.20
+        attr_30 = prop_potential * 0.30
+        
+        report_text = f"""
+{selected_label} ROAS Results
+Brand Health Performance
+
+BL-ROAS = ${curr['calculated_bl_roas']:.2f} ({mom_roas:+.1f}% MoM)
+BL-ROAS YTD = ${cumulative_roas:.2f}
+For every $1 spent in advertising (including OOH), we generated ${curr['calculated_bl_roas']:.2f} in measurable brand value.
+
+🎯 Attributed Revenue Impact – {selected_label}
+• 10% (Conservative): ${attr_10:,.0f} | ROAS: {(attr_10/ad_spend):,.0f}x
+• 20% (Typical): ${attr_20:,.0f} | ROAS: {(attr_20/ad_spend):,.0f}x
+• 30% (High Impact): ${attr_30:,.0f} | ROAS: {(attr_30/ad_spend):,.0f}x
+
+Guest Trip Equivalent (based on ${avg_spend_march:,.2f} avg spend):
+• 10% → {attr_10/avg_spend_march:,.0f} visits
+• 20% → {attr_20/avg_spend_march:,.0f} visits
+• 30% → {attr_30/avg_spend_march:,.0f} visits
+
+Enhanced Revenue ROAS
+Enhanced Revenue = ${curr['enhanced_revenue']:,.0f}
+Enhanced ROAS = {curr['enhanced_revenue']/ad_spend:,.1f}x
+        """
+        
+        st.text_area("SharePoint Ready Text:", value=report_text, height=400)
+        st.button("📋 Copy to Clipboard", on_click=lambda: st.write("Text copied! (Use Ctrl+C)"))
+
 # =================================================================
 # 14. FOOTER
 # =================================================================
