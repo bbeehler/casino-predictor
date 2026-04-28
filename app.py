@@ -1204,7 +1204,7 @@ elif page == "FloorCast AI Analyst":
             st.error(f"AI Error: {e}")
 
 # =================================================================
-# 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v20 - Scope & Filter Fix)
+# 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v21 - Strict Typology Fix)
 # =================================================================
 elif page == "BL-ROAS Calculator":
     st.markdown("""
@@ -1238,12 +1238,12 @@ elif page == "BL-ROAS Calculator":
     
     selected_month_df = selected_month_df.sort_values('entry_date').drop_duplicates('entry_date', keep='last')
     
-    ledger_traffic = selected_month_df['actual_traffic'].sum()
-    ledger_signups = selected_month_df['new_members'].sum()
-    ledger_coin_in = selected_month_df['actual_coin_in'].sum()
+    ledger_traffic = int(selected_month_df['actual_traffic'].sum())
+    ledger_signups = int(selected_month_df['new_members'].sum())
+    ledger_coin_in = float(selected_month_df['actual_coin_in'].sum())
     
     # Use actual average coin-in from ledger, or fallback to default
-    avg_spend_actual = ledger_coin_in / ledger_traffic if ledger_traffic > 0 else DEFAULT_AVG_SPEND
+    avg_spend_actual = float(ledger_coin_in / ledger_traffic) if ledger_traffic > 0 else DEFAULT_AVG_SPEND
 
     # --- 3. THE INPUT FORM ---
     with st.form("roas_input_form"):
@@ -1275,19 +1275,29 @@ elif page == "BL-ROAS Calculator":
 
         submit = st.form_submit_button("🚀 Save ROI Analysis", use_container_width=True)
 
-    # --- 4. EXECUTION ---
+    # --- 4. EXECUTION (STRICT MATH) ---
     if submit:
+        # Construct payload with strict type forcing to prevent January inflation
         input_payload = {
             "report_month": str(selected_month),
-            "utm_sessions": utm_s, "organic_sessions": org_s, "ad_spend": ad_spend,
-            "social_likes": likes, "social_comments": comments, "social_shares": shares, "post_views": views,
-            "site_time_sessions": time_site, "booking_clicks": cta_clicks, "pos_reviews": reviews, "geo_lift_traffic": geo_lift,
-            "ledger_traffic": ledger_traffic, "ledger_signups": ledger_signups,
-            "avg_spend": avg_spend_actual, "ltv_member": LTV_BENCHMARK
+            "utm_sessions": int(utm_s), 
+            "organic_sessions": int(org_s), 
+            "ad_spend": float(ad_spend),
+            "social_likes": int(likes), 
+            "social_comments": int(comments), 
+            "social_shares": int(shares), 
+            "post_views": int(views),
+            "site_time_sessions": int(time_site), 
+            "booking_clicks": int(cta_clicks), 
+            "pos_reviews": int(reviews), 
+            "geo_lift_traffic": int(geo_lift),
+            "ledger_traffic": int(ledger_traffic), 
+            "ledger_signups": int(ledger_signups),
+            "avg_spend": float(avg_spend_actual), 
+            "ltv_member": float(LTV_BENCHMARK)
         }
         
         try:
-            # Note: Ensure calculate_and_save_roas uses upsert with on_conflict
             calculate_and_save_roas(input_payload)
             st.success(f"✅ ROI for {selected_label} saved successfully!")
             st.rerun() 
@@ -1310,7 +1320,7 @@ elif page == "BL-ROAS Calculator":
 
             st.write("### 🏛️ YTD Cumulative Performance")
             c1, c2, c3 = st.columns(3)
-            c1.metric("YTD Cumulative ROAS", f"{cumulative_roas_val:.2f}x", help="Calculated as Total Brand Value / Total Ad Spend.")
+            c1.metric("YTD Cumulative ROAS", f"{cumulative_roas_val:.2f}x", help="Brand Value / Total Ad Spend.")
             c2.metric("Total Brand Equity", f"${total_brand_value:,.2f}")
             c3.metric("Total Enhanced Impact", f"${total_enhanced:,.2f}")
 
@@ -1322,20 +1332,20 @@ elif page == "BL-ROAS Calculator":
             prev = df_hist.iloc[1] if len(df_hist) > 1 else curr
             mom_roas = ((curr['calculated_bl_roas'] / prev['calculated_bl_roas']) - 1) * 100 if prev['calculated_bl_roas'] > 0 else 0
             
-            # Use dynamically aggregated ledger coin-in and signups
-            prop_potential = ledger_coin_in + (ledger_signups * LTV_BENCHMARK)
+            # Logic matches SharePoint Template: Coin-In + (Signups * $1,900)
+            prop_potential = float(ledger_coin_in) + (int(ledger_signups) * LTV_BENCHMARK)
             
             attr_10 = prop_potential * 0.10
             attr_20 = prop_potential * 0.20
             attr_30 = prop_potential * 0.30
-            enhanced_revenue_val = curr['brand_value'] + prop_potential
+            enhanced_revenue_val = float(curr['brand_value']) + prop_potential
 
             report_text = f"""{selected_label} ROAS Results
 Brand Health Performance
 
 BL-ROAS = ${curr['calculated_bl_roas']:.2f} ({mom_roas:+.1f}% MoM)
 BL-ROAS YTD = ${cumulative_roas_val:.2f}
-For every $1 spent in advertising (including OOH), we generated ${curr['calculated_bl_roas']:.2f} in measurable brand value.
+For every $1 spent in advertising, we generated ${curr['calculated_bl_roas']:.2f} in measurable brand value.
 
 🎯 Attributed Revenue Impact – {selected_label}
 • 10% (Conservative): ${attr_10:,.0f} | ROAS: {(attr_10/ad_spend):,.0f}x
