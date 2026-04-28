@@ -1130,13 +1130,13 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 11. PAGE 6: AI STRATEGIC ANALYST (EXECUTIVE UPGRADE v13)
+# 11. PAGE 6: AI STRATEGIC ANALYST (EXECUTIVE UPGRADE v14)
 # =================================================================
 elif page == "FloorCast AI Analyst":
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">🕵️ FloorCast Strategic AI Analyst</h2>
-            <p style="color: #444; margin: 0;">Executive Intelligence: Correlating Predictions with Full Historical Results.</p>
+            <p style="color: #444; margin: 0;">Executive Intelligence: Correlating Ledger Traffic with Monthly ROAS Audit.</p>
         </div>
     """, unsafe_allow_html=True)
     
@@ -1144,83 +1144,73 @@ elif page == "FloorCast AI Analyst":
         st.warning("Forensic Vault is empty. Analyst cannot audit performance without a ledger.")
         st.stop()
 
-    # 1. RUN ENGINE ON FULL DATASET
+    # --- 1. GATHER ALL CONTEXTUAL DATA ---
     m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
     df_ai = m_audit['df']
     
-    # 2. CALCULATE FULL YEAR SUMMARY FOR THE AI
-    total_days = len(df_ai)
-    start_date = df_ai['entry_date'].min().strftime('%Y-%m-%d')
-    end_date = df_ai['entry_date'].max().strftime('%Y-%m-%d')
-    
-    # 3. BUILD THE EXPANDED DOSSIER (ACCESS TO ALL COLUMNS & DATES)
+    # NEW: Fetch the Monthly ROI data from Page 7 for the AI to see
+    roi_data_res = supabase.table("monthly_roi").select("*").order("report_month", desc=True).execute()
+    roi_context = pd.DataFrame(roi_data_res.data).to_csv(index=False) if roi_data_res.data else "No ROI data available yet."
+
+    # --- 2. BUILD THE STRATEGIC DOSSIER ---
     c = st.session_state.coeffs
     dossier = f"""
     PROPERTY: Hard Rock Hotel & Casino Ottawa
-    LEDGER SCOPE: {start_date} to {end_date} ({total_days} total days)
+    AI PREDICTABILITY SCORE: {m_audit.get('predictability')}
     
     CURRENT CALIBRATION WEIGHTS:
-    - Promo Lift: {c.get('Promo_Lift')}
-    - Billboard Weight: {c.get('OOH_Weight')}
-    - Broadcast/TV Lift: {c.get('Broadcast_Weight')}
-    - PR Multiplier: {c.get('PR_Weight')}
-    - Event Gravity: {c.get('Event_Gravity')}
-    - AI Predictability: {m_audit.get('predictability')}
-
-    FULL LEDGER DATASET:
-    """
+    - Promo Lift: {c.get('Promo_Lift')} | Billboard: {c.get('OOH_Weight')} | PR: {c.get('PR_Weight')}
     
-    # THE FIX: We remove the list filter so EVERY column (new_members, rain, etc.) is sent.
-    # We use to_csv without a column list to ensure nothing is hidden from the AI.
-    csv_context = df_ai.to_csv(index=False) 
-    dossier += csv_context
+    --- MONTHLY ROI & BRAND HEALTH AUDIT (PAGE 7 DATA) ---
+    {roi_context}
 
-    # 4. CHAT INPUT
+    --- FULL DAILY LEDGER DATASET (PAGE 2 DATA) ---
+    {df_ai.to_csv(index=False)}
+    """
+
+    # --- 3. CHAT INTERFACE ---
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    prompt = st.chat_input("Ask about demand trends since January or marketing ROI...")
+    # Display thread (Reversed for better UI)
+    for m in reversed(st.session_state.messages):
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
+
+    prompt = st.chat_input("Ask about March ROI vs. actual Saturday traffic patterns...")
     
     if prompt:
-        history_str = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages[-8:]])
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         try:
             import google.generativeai as genai
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            model = genai.GenerativeModel('gemini-2.5-flash') # Or your specific version
             
-            # Using 'gemini-2.5-flash'
-            model = genai.GenerativeModel('gemini-2.5-flash')
-            
-            with st.status("🕵️ Auditing Full Property History...", expanded=True) as status:
+            with st.status("🕵️ Correlating Brand Value with Floor Cash...", expanded=True) as status:
                 full_prompt = f"""
                 You are the Senior Strategy Analyst for Hard Rock Hotel & Casino Ottawa. 
-                You have been provided with the FULL property ledger starting from {start_date}.
-                
+                You have two main datasets:
+                1. THE MONTHLY ROI AUDIT: Contains BL-ROAS, Brand Value, and Ad Spend.
+                2. THE DAILY LEDGER: Contains Actual Coin-In, Traffic, and Member Signups.
+
                 TASK:
-                Analyze the patterns in the data provided. Look for seasonality, Saturday gaps, 
-                and how the calibration weights align with actual floor traffic.
-                
-                DATASET:
+                Correlate the digital 'Brand Value' from the ROI audit with actual floor performance. 
+                If BL-ROAS is high, do we see a corresponding lift in 'actual_coin_in' or 'new_members'?
+                Identify if marketing spend is driving quality trips (high spend) or just volume.
+
+                STRATEGIC DOSSIER:
                 {dossier}
-                
-                CONVERSATION HISTORY:
-                {history_str}
                 
                 EXECUTIVE QUERY: {prompt}
                 """
                 response = model.generate_content(full_prompt)
-                status.update(label="✅ Analysis Finalized", state="complete")
+                status.update(label="✅ Strategic Insight Ready", state="complete")
             
             st.session_state.messages.append({"role": "assistant", "content": response.text})
             st.rerun()
         except Exception as e:
             st.error(f"AI Error: {e}")
-
-    # 5. DISPLAY THREAD
-    for m in reversed(st.session_state.messages):
-        with st.chat_message(m["role"]):
-            st.markdown(m["content"])
 
 # =================================================================
 # 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v19 - Coin-In Logic)
