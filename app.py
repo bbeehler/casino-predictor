@@ -1204,7 +1204,7 @@ elif page == "FloorCast AI Analyst":
             st.error(f"AI Error: {e}")
 
 # =================================================================
-# 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v22 - Help Text Restore)
+# 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v23 - Zero-Proof Edition)
 # =================================================================
 elif page == "BL-ROAS Calculator":
     st.markdown("""
@@ -1235,21 +1235,17 @@ elif page == "BL-ROAS Calculator":
     selected_month_df = df_roas.loc[m_mask].copy()
 
     if not selected_month_df.empty:
+        # Group by date and take the MAX value for each day to ensure full month coverage
         monthly_summary = selected_month_df.groupby(selected_month_df['entry_date'].dt.date).max()
         ledger_traffic = int(monthly_summary['actual_traffic'].sum())
         ledger_signups = int(monthly_summary['new_members'].sum())
         ledger_coin_in = float(monthly_summary['actual_coin_in'].sum())
     else:
-        # Fallback for months with no data yet (like the current month)
-        ledger_traffic = 0
-        ledger_signups = 0
-        ledger_coin_in = 0.0
+        # Fallback values if the ledger is empty for this month
+        ledger_traffic, ledger_signups, ledger_coin_in = 0, 0, 0.0
 
-    # THE FIX: Zero Guard for Average Spend
-    if ledger_traffic > 0:
-        avg_spend_actual = float(ledger_coin_in / ledger_traffic)
-    else:
-        avg_spend_actual = DEFAULT_AVG_SPEND
+    # SAFETY: Prevent division by zero for avg_spend_actual
+    avg_spend_actual = float(ledger_coin_in / ledger_traffic) if ledger_traffic > 0 else DEFAULT_AVG_SPEND
 
     # --- 3. THE INPUT FORM ---
     with st.form("roas_input_form"):
@@ -1263,25 +1259,21 @@ elif page == "BL-ROAS Calculator":
             utm_s = st.number_input("UTM Sessions", value=int(existing.get('utm_sessions', 0)), 
                                     help="Directly attributed website sessions from tagged digital campaigns.")
             org_s = st.number_input("Organic Sessions", value=int(existing.get('organic_sessions', 0)), 
-                                    help="Non-paid search traffic and direct site visits.")
+                                    help="Non-paid search traffic.")
             ad_spend = st.number_input("Total Ad Spend ($)", value=float(existing.get('ad_spend', 0.0)), step=100.0, 
                                        help="Total marketing investment including OOH, Digital, and Broadcast.")
         
         with c2:
-            likes = st.number_input("Social Likes", value=int(existing.get('social_likes', 0)), help="Total likes across FB/IG/TikTok.")
-            comments = st.number_input("Social Comments", value=int(existing.get('social_comments', 0)), help="Total community replies.")
-            shares = st.number_input("Social Shares", value=int(existing.get('social_shares', 0)), help="Content virality multiplier.")
-            views = st.number_input("Post Views", value=int(existing.get('post_views', 0)), help="Total impressions/reach.")
+            likes = st.number_input("Social Likes", value=int(existing.get('social_likes', 0)))
+            comments = st.number_input("Social Comments", value=int(existing.get('social_comments', 0)))
+            shares = st.number_input("Social Shares", value=int(existing.get('social_shares', 0)))
+            views = st.number_input("Post Views", value=int(existing.get('post_views', 0)))
 
         with c3:
-            time_site = st.number_input("Time on Site Sessions", value=int(existing.get('site_time_sessions', 0)), 
-                                        help="Sessions where users spent >2 minutes, indicating high intent.")
-            cta_clicks = st.number_input("Booking CTA Clicks", value=int(existing.get('booking_clicks', 0)), 
-                                         help="Clicks on 'Book Now' or 'Join Unity' buttons.")
-            reviews = st.number_input("Net Positive Reviews", value=int(existing.get('pos_reviews', 0)), 
-                                      help="Net total of positive Google/TripAdvisor reviews.")
-            geo_lift = st.number_input("Incremental Geo Traffic", value=int(existing.get('geo_lift_traffic', 0)), 
-                                       help="Foot traffic increase from specific regional target zones.")
+            time_site = st.number_input("Time on Site Sessions", value=int(existing.get('site_time_sessions', 0)))
+            cta_clicks = st.number_input("Booking CTA Clicks", value=int(existing.get('booking_clicks', 0)))
+            reviews = st.number_input("Net Positive Reviews", value=int(existing.get('pos_reviews', 0)))
+            geo_lift = st.number_input("Incremental Geo Traffic", value=int(existing.get('geo_lift_traffic', 0)))
 
         st.divider()
         st.info(f"**Ledger Sync ({selected_label}):** Coin-In: ${ledger_coin_in:,.2f} | Traffic: {ledger_traffic:,} | Signups: {ledger_signups:,}")
@@ -1306,42 +1298,51 @@ elif page == "BL-ROAS Calculator":
         except Exception as e:
             st.error(f"Sync Failure: {e}")
 
-    # --- 5. DATA RETRIEVAL FOR REPORTS ---
+    # --- 5. DATA RETRIEVAL ---
     try:
         history_res = supabase.table("monthly_roi").select("*").order("report_month", desc=True).execute()
         if history_res.data:
             df_hist = pd.DataFrame(history_res.data)
             df_hist['Month'] = pd.to_datetime(df_hist['report_month']).dt.strftime('%B %Y')
 
-            # --- 6. CUMULATIVE TILES ---
+            # --- 6. CUMULATIVE TILES (ZERO GUARDS) ---
             st.divider()
             total_brand_value = df_hist['brand_value'].sum()
-            total_ad_spend = df_hist['ad_spend'].sum()
-            cumulative_roas_val = total_brand_value / total_ad_spend if total_ad_spend > 0 else 0
+            total_ad_spend_ytd = df_hist['ad_spend'].sum()
+            cumulative_roas_val = total_brand_value / total_ad_spend_ytd if total_ad_spend_ytd > 0 else 0
             total_enhanced = df_hist['enhanced_revenue'].sum()
 
             st.write("### 🏛️ YTD Cumulative Performance")
             c1, c2, c3 = st.columns(3)
-            c1.metric("YTD Cumulative ROAS", f"{cumulative_roas_val:.2f}x", help="Calculated as Total Brand Value / Total Ad Spend.")
-            c2.metric("Total Brand Equity", f"${total_brand_value:,.2f}", help="The monetary value of digital traffic, engagement, and reviews.")
-            c3.metric("Total Enhanced Impact", f"${total_enhanced:,.2f}", help="Holistic ROI: Brand Value + Actual Coin-In + Member LTV.")
+            c1.metric("YTD Cumulative ROAS", f"{cumulative_roas_val:.2f}x", help="Brand Value / Total Ad Spend.")
+            c2.metric("Total Brand Equity", f"${total_brand_value:,.2f}")
+            c3.metric("Total Enhanced Impact", f"${total_enhanced:,.2f}")
 
-            # --- 7. SHAREPOINT REPORT GENERATOR ---
+            # --- 7. SHAREPOINT GENERATOR (STRICT MATCHING) ---
             st.divider()
             st.write("### 📄 SharePoint Report Generator")
             
-            curr = df_hist.iloc[0]
-            prev = df_hist.iloc[1] if len(df_hist) > 1 else curr
-            mom_roas = ((curr['calculated_bl_roas'] / prev['calculated_bl_roas']) - 1) * 100 if prev['calculated_bl_roas'] > 0 else 0
+            # Find the specific row for the selected month in the historical record
+            curr_row = df_hist[df_hist['report_month'] == str(selected_month)]
             
-            prop_potential = float(ledger_coin_in) + (int(ledger_signups) * LTV_BENCHMARK)
-            
-            attr_10 = prop_potential * 0.10
-            attr_20 = prop_potential * 0.20
-            attr_30 = prop_potential * 0.30
-            enhanced_revenue_val = float(curr['brand_value']) + prop_potential
+            if not curr_row.empty:
+                curr = curr_row.iloc[0]
+                prev = df_hist.iloc[1] if len(df_hist) > 1 else curr
+                mom_roas = ((curr['calculated_bl_roas'] / prev['calculated_bl_roas']) - 1) * 100 if prev['calculated_bl_roas'] > 0 else 0
+                
+                # Math Parity logic
+                prop_potential = float(ledger_coin_in) + (int(ledger_signups) * LTV_BENCHMARK)
+                attr_10, attr_20, attr_30 = prop_potential * 0.10, prop_potential * 0.20, prop_potential * 0.30
+                enhanced_revenue_val = float(curr['brand_value']) + prop_potential
 
-            report_text = f"""{selected_label} ROAS Results
+                # ROAS Guards for SharePoint
+                ad_spend_val = curr['ad_spend']
+                roas_10 = (attr_10 / ad_spend_val) if ad_spend_val > 0 else 0
+                roas_20 = (attr_20 / ad_spend_val) if ad_spend_val > 0 else 0
+                roas_30 = (attr_30 / ad_spend_val) if ad_spend_val > 0 else 0
+                enh_roas = (enhanced_revenue_val / ad_spend_val) if ad_spend_val > 0 else 0
+
+                report_text = f"""{selected_label} ROAS Results
 Brand Health Performance
 
 BL-ROAS = ${curr['calculated_bl_roas']:.2f} ({mom_roas:+.1f}% MoM)
@@ -1349,29 +1350,29 @@ BL-ROAS YTD = ${cumulative_roas_val:.2f}
 For every $1 spent in advertising, we generated ${curr['calculated_bl_roas']:.2f} in measurable brand value.
 
 🎯 Attributed Revenue Impact – {selected_label}
-• 10% (Conservative): ${attr_10:,.0f} | ROAS: {(attr_10/ad_spend):,.0f}x
-• 20% (Typical): ${attr_20:,.0f} | ROAS: {(attr_20/ad_spend):,.0f}x
-• 30% (High Impact): ${attr_30:,.0f} | ROAS: {(attr_30/ad_spend):,.0f}x
+• 10%: ${attr_10:,.0f} | ROAS: {roas_10:,.0f}x
+• 20%: ${attr_20:,.0f} | ROAS: {roas_20:,.0f}x
+• 30%: ${attr_30:,.0f} | ROAS: {roas_30:,.0f}x
 
 Guest Trip Equivalent (based on ${avg_spend_actual:,.2f} avg spend):
-• 10% → {attr_10/avg_spend_actual:,.0f} visits
-• 20% → {attr_20/avg_spend_actual:,.0f} visits
-• 30% → {attr_30/avg_spend_actual:,.0f} visits
+• 10% → {attr_10/avg_spend_actual if avg_spend_actual > 0 else 0:,.0f} visits
+• 20% → {attr_20/avg_spend_actual if avg_spend_actual > 0 else 0:,.0f} visits
+• 30% → {attr_30/avg_spend_actual if avg_spend_actual > 0 else 0:,.0f} visits
 
-Enhanced Revenue ROAS
 Enhanced Revenue = ${enhanced_revenue_val:,.0f}
-Enhanced ROAS = {enhanced_revenue_val/ad_spend:,.1f}x"""
-            
-            st.text_area("SharePoint Ready Text:", value=report_text, height=350)
+Enhanced ROAS = {enh_roas:,.1f}x"""
+                
+                st.text_area("SharePoint Ready Text:", value=report_text, height=350)
+            else:
+                st.info(f"Please save the ROI analysis for {selected_label} to generate the SharePoint report.")
 
             # --- 8. HISTORICAL LEDGER ---
             st.divider()
             st.write("### 📜 Historical ROI Audit Ledger")
-            display_df = df_hist[['Month', 'calculated_bl_roas', 'brand_value', 'ad_spend',]].copy()
-            display_df.columns = ['Audit Month', 'BL-ROAS', 'Brand Value', 'Ad Spend']
+            display_df = df_hist[['Month', 'calculated_bl_roas', 'brand_value', 'ad_spend', 'enhanced_revenue']].copy()
             st.dataframe(display_df.style.format({
-                'BL-ROAS': '{:.2f}x', 'Brand Value': '${:,.2f}', 
-                'Ad Spend': '${:,.2f}'
+                'calculated_bl_roas': '{:.2f}x', 'brand_value': '${:,.2f}', 
+                'ad_spend': '${:,.2f}', 'enhanced_revenue': '${:,.2f}'
             }), use_container_width=True, hide_index=True)
 
         else:
