@@ -1042,7 +1042,7 @@ elif page == "FloorCast AI Analyst":
     start_date = df_ai['entry_date'].min().strftime('%Y-%m-%d')
     end_date = df_ai['entry_date'].max().strftime('%Y-%m-%d')
     
-    # 3. BUILD THE EXPANDED DOSSIER (ACCESS TO ALL DATES)
+    # 3. BUILD THE EXPANDED DOSSIER (ACCESS TO ALL COLUMNS & DATES)
     c = st.session_state.coeffs
     dossier = f"""
     PROPERTY: Hard Rock Hotel & Casino Ottawa
@@ -1056,12 +1056,12 @@ elif page == "FloorCast AI Analyst":
     - Event Gravity: {c.get('Event_Gravity')}
     - AI Predictability: {m_audit.get('predictability')}
 
-    FULL LEDGER DATA (CSV Format for deep analysis):
+    FULL LEDGER DATASET:
     """
     
-    # THE FIX: We send the WHOLE ledger as a CSV string inside the prompt.
-    # We remove the .head(30) to ensure Jan-April is included.
-    csv_context = df_ai[['entry_date', 'actual_traffic', 'expected', 'active_promo', 'residual_lift']].to_csv(index=False)
+    # THE FIX: We remove the list filter so EVERY column (new_members, rain, etc.) is sent.
+    # We use to_csv without a column list to ensure nothing is hidden from the AI.
+    csv_context = df_ai.to_csv(index=False) 
     dossier += csv_context
 
     # 4. CHAT INPUT
