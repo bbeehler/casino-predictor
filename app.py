@@ -1316,19 +1316,49 @@ elif page == "BL-ROAS Calculator":
         except Exception as e:
             st.error(f"Sync Failure: {e}")
 
-    # --- 5. PERFORMANCE HISTORY CHARTS (ALWAYS VISIBLE) ---
+    # --- 5. HISTORICAL ROI PERFORMANCE LEDGER (REPLACING CHARTS) ---
     st.divider()
+    st.write("### 📜 Historical ROI Audit Ledger")
+    st.caption("A month-by-month breakdown of calculated brand performance.")
+
     try:
-        history_res = supabase.table("monthly_roi").select("*").order("report_month").execute()
+        # Pull historical reports
+        history_res = supabase.table("monthly_roi").select("*").order("report_month", desc=True).execute()
+        
         if history_res.data:
             df_hist = pd.DataFrame(history_res.data)
-            df_hist['month_label'] = pd.to_datetime(df_hist['report_month']).dt.strftime('%b %Y')
             
-            fig_trend = px.line(df_hist, x='month_label', y='calculated_bl_roas', 
-                                title="Historical BL-ROAS Trend", markers=True, line_shape="spline")
-            st.plotly_chart(fig_trend, use_container_width=True)
-    except:
-        pass
+            # Formatting for Executive Readability
+            df_hist['Month'] = pd.to_datetime(df_hist['report_month']).dt.strftime('%B %Y')
+            
+            # Select and rename columns for the final display
+            display_df = df_hist[[
+                'Month', 
+                'calculated_bl_roas', 
+                'brand_value', 
+                'ad_spend', 
+                'enhanced_revenue'
+            ]].copy()
+            
+            display_df.columns = ['Audit Month', 'BL-ROAS', 'Brand Value', 'Ad Spend', 'Total Enhanced Revenue']
+            
+            # Apply currency and multiplier formatting
+            st.dataframe(
+                display_df.style.format({
+                    'BL-ROAS': '{:.2f}x',
+                    'Brand Value': '${:,.2f}',
+                    'Ad Spend': '${:,.2f}',
+                    'Total Enhanced Revenue': '${:,.2f}'
+                }),
+                use_container_width=True,
+                hide_index=True
+            )
+            
+        else:
+            st.info("No historical ROI audits found. Save your first calculation to populate this ledger.")
+            
+    except Exception as e:
+        st.error(f"Ledger Load Error: {e}")
 
 # =================================================================
 # 14. FOOTER
