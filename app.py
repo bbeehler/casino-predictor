@@ -1359,11 +1359,11 @@ Enhanced ROAS = {enhanced_revenue_val/ad_spend:,.1f}x"""
             # --- 8. HISTORICAL LEDGER ---
             st.divider()
             st.write("### 📜 Historical ROI Audit Ledger")
-            display_df = df_hist[['Month', 'calculated_bl_roas', 'brand_value', 'ad_spend', 'enhanced_revenue']].copy()
-            display_df.columns = ['Audit Month', 'BL-ROAS', 'Brand Value', 'Ad Spend', 'Total Enhanced Revenue']
+            display_df = df_hist[['Month', 'calculated_bl_roas', 'brand_value', 'ad_spend',]].copy()
+            display_df.columns = ['Audit Month', 'BL-ROAS', 'Brand Value', 'Ad Spend']
             st.dataframe(display_df.style.format({
                 'BL-ROAS': '{:.2f}x', 'Brand Value': '${:,.2f}', 
-                'Ad Spend': '${:,.2f}', 'Total Enhanced Revenue': '${:,.2f}'
+                'Ad Spend': '${:,.2f}'
             }), use_container_width=True, hide_index=True)
 
         else:
