@@ -1204,7 +1204,7 @@ elif page == "FloorCast AI Analyst":
             st.error(f"AI Error: {e}")
 
 # =================================================================
-# 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v21 - Strict Typology Fix)
+# 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v22 - Help Text Restore)
 # =================================================================
 elif page == "BL-ROAS Calculator":
     st.markdown("""
@@ -1230,22 +1230,17 @@ elif page == "BL-ROAS Calculator":
     df_roas = pd.DataFrame(ledger_data)
     df_roas['entry_date'] = pd.to_datetime(df_roas['entry_date'])
     
-    # 1. Filter for the selected month
     m_mask = (df_roas['entry_date'].dt.month == selected_month.month) & \
              (df_roas['entry_date'].dt.year == selected_month.year)
     selected_month_df = df_roas.loc[m_mask].copy()
 
-    # 2. THE FIX: Group by date and take the MAX value for each day.
-    # This ensures that if you have multiple ledger rows for Feb 10th, 
-    # it only counts the highest one (avoiding duplicates) 
-    # but still captures EVERY day of the month.
+    # Group by date and take the MAX value for each day to ensure full month coverage
     monthly_summary = selected_month_df.groupby(selected_month_df['entry_date'].dt.date).max()
     
     ledger_traffic = int(monthly_summary['actual_traffic'].sum())
     ledger_signups = int(monthly_summary['new_members'].sum())
     ledger_coin_in = float(monthly_summary['actual_coin_in'].sum())
     
-    # Use actual average coin-in from ledger, or fallback to default
     avg_spend_actual = float(ledger_coin_in / ledger_traffic) if ledger_traffic > 0 else DEFAULT_AVG_SPEND
 
     # --- 3. THE INPUT FORM ---
@@ -1257,21 +1252,28 @@ elif page == "BL-ROAS Calculator":
 
         c1, c2, c3 = st.columns(3)
         with c1:
-            utm_s = st.number_input("UTM Sessions", value=int(existing.get('utm_sessions', 0)))
-            org_s = st.number_input("Organic Sessions", value=int(existing.get('organic_sessions', 0)))
-            ad_spend = st.number_input("Total Ad Spend ($)", value=float(existing.get('ad_spend', 0.0)), step=100.0)
+            utm_s = st.number_input("UTM Sessions", value=int(existing.get('utm_sessions', 0)), 
+                                    help="Directly attributed website sessions from tagged digital campaigns.")
+            org_s = st.number_input("Organic Sessions", value=int(existing.get('organic_sessions', 0)), 
+                                    help="Non-paid search traffic and direct site visits.")
+            ad_spend = st.number_input("Total Ad Spend ($)", value=float(existing.get('ad_spend', 0.0)), step=100.0, 
+                                       help="Total marketing investment including OOH, Digital, and Broadcast.")
         
         with c2:
-            likes = st.number_input("Social Likes", value=int(existing.get('social_likes', 0)))
-            comments = st.number_input("Social Comments", value=int(existing.get('social_comments', 0)))
-            shares = st.number_input("Social Shares", value=int(existing.get('social_shares', 0)))
-            views = st.number_input("Post Views", value=int(existing.get('post_views', 0)))
+            likes = st.number_input("Social Likes", value=int(existing.get('social_likes', 0)), help="Total likes across FB/IG/TikTok.")
+            comments = st.number_input("Social Comments", value=int(existing.get('social_comments', 0)), help="Total community replies.")
+            shares = st.number_input("Social Shares", value=int(existing.get('social_shares', 0)), help="Content virality multiplier.")
+            views = st.number_input("Post Views", value=int(existing.get('post_views', 0)), help="Total impressions/reach.")
 
         with c3:
-            time_site = st.number_input("Time on Site Sessions", value=int(existing.get('site_time_sessions', 0)))
-            cta_clicks = st.number_input("Booking CTA Clicks", value=int(existing.get('booking_clicks', 0)))
-            reviews = st.number_input("Net Positive Reviews", value=int(existing.get('pos_reviews', 0)))
-            geo_lift = st.number_input("Incremental Geo Traffic", value=int(existing.get('geo_lift_traffic', 0)))
+            time_site = st.number_input("Time on Site Sessions", value=int(existing.get('site_time_sessions', 0)), 
+                                        help="Sessions where users spent >2 minutes, indicating high intent.")
+            cta_clicks = st.number_input("Booking CTA Clicks", value=int(existing.get('booking_clicks', 0)), 
+                                         help="Clicks on 'Book Now' or 'Join Unity' buttons.")
+            reviews = st.number_input("Net Positive Reviews", value=int(existing.get('pos_reviews', 0)), 
+                                      help="Net total of positive Google/TripAdvisor reviews.")
+            geo_lift = st.number_input("Incremental Geo Traffic", value=int(existing.get('geo_lift_traffic', 0)), 
+                                       help="Foot traffic increase from specific regional target zones.")
 
         st.divider()
         st.info(f"**Ledger Sync ({selected_label}):** Coin-In: ${ledger_coin_in:,.2f} | Traffic: {ledger_traffic:,} | Signups: {ledger_signups:,}")
@@ -1280,24 +1282,13 @@ elif page == "BL-ROAS Calculator":
 
     # --- 4. EXECUTION (STRICT MATH) ---
     if submit:
-        # Construct payload with strict type forcing to prevent January inflation
         input_payload = {
             "report_month": str(selected_month),
-            "utm_sessions": int(utm_s), 
-            "organic_sessions": int(org_s), 
-            "ad_spend": float(ad_spend),
-            "social_likes": int(likes), 
-            "social_comments": int(comments), 
-            "social_shares": int(shares), 
-            "post_views": int(views),
-            "site_time_sessions": int(time_site), 
-            "booking_clicks": int(cta_clicks), 
-            "pos_reviews": int(reviews), 
-            "geo_lift_traffic": int(geo_lift),
-            "ledger_traffic": int(ledger_traffic), 
-            "ledger_signups": int(ledger_signups),
-            "avg_spend": float(avg_spend_actual), 
-            "ltv_member": float(LTV_BENCHMARK)
+            "utm_sessions": int(utm_s), "organic_sessions": int(org_s), "ad_spend": float(ad_spend),
+            "social_likes": int(likes), "social_comments": int(comments), "social_shares": int(shares), "post_views": int(views),
+            "site_time_sessions": int(time_site), "booking_clicks": int(cta_clicks), "pos_reviews": int(reviews), "geo_lift_traffic": int(geo_lift),
+            "ledger_traffic": int(ledger_traffic), "ledger_signups": int(ledger_signups),
+            "avg_spend": float(avg_spend_actual), "ltv_member": float(LTV_BENCHMARK)
         }
         
         try:
@@ -1323,9 +1314,9 @@ elif page == "BL-ROAS Calculator":
 
             st.write("### 🏛️ YTD Cumulative Performance")
             c1, c2, c3 = st.columns(3)
-            c1.metric("YTD Cumulative ROAS", f"{cumulative_roas_val:.2f}x", help="Brand Value / Total Ad Spend.")
-            c2.metric("Total Brand Equity", f"${total_brand_value:,.2f}")
-            c3.metric("Total Enhanced Impact", f"${total_enhanced:,.2f}")
+            c1.metric("YTD Cumulative ROAS", f"{cumulative_roas_val:.2f}x", help="Calculated as Total Brand Value / Total Ad Spend.")
+            c2.metric("Total Brand Equity", f"${total_brand_value:,.2f}", help="The monetary value of digital traffic, engagement, and reviews.")
+            c3.metric("Total Enhanced Impact", f"${total_enhanced:,.2f}", help="Holistic ROI: Brand Value + Actual Coin-In + Member LTV.")
 
             # --- 7. SHAREPOINT REPORT GENERATOR ---
             st.divider()
@@ -1335,7 +1326,6 @@ elif page == "BL-ROAS Calculator":
             prev = df_hist.iloc[1] if len(df_hist) > 1 else curr
             mom_roas = ((curr['calculated_bl_roas'] / prev['calculated_bl_roas']) - 1) * 100 if prev['calculated_bl_roas'] > 0 else 0
             
-            # Logic matches SharePoint Template: Coin-In + (Signups * $1,900)
             prop_potential = float(ledger_coin_in) + (int(ledger_signups) * LTV_BENCHMARK)
             
             attr_10 = prop_potential * 0.10
