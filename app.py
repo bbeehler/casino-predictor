@@ -1241,16 +1241,46 @@ elif page == "BL-ROAS Calculator":
     selected_label = st.selectbox("Select Audit Month:", month_labels)
     selected_month = month_options[month_labels.index(selected_label)]
 
-    # --- 2. DYNAMIC LEDGER AGGREGATION ---
-    df_roas = pd.DataFrame(ledger_data)
-    df_roas['entry_date'] = pd.to_datetime(df_roas['entry_date'])
-    
-    m_mask = (df_roas['entry_date'].dt.month == selected_month.month) & \
-             (df_roas['entry_date'].dt.year == selected_month.year)
-    selected_month_df = df_roas.loc[m_mask]
-    
-    ledger_traffic = selected_month_df['actual_traffic'].sum()
-    ledger_signups = selected_month_df['new_members'].sum()
+    # 2. CUMULATIVE PERFORMANCE TILES
+            total_brand_value = df_hist['brand_value'].sum()
+            total_ad_spend = df_hist['ad_spend'].sum()
+            cumulative_roas = total_brand_value / total_ad_spend if total_ad_spend > 0 else 0
+            total_enhanced = df_hist['enhanced_revenue'].sum()
+
+            st.write("### 🏛️ YTD Cumulative Performance")
+            
+            # Contextual descriptions for the "non-data" people
+            st.caption("Aggregated performance metrics from January to Present.")
+            
+            c1, c2, c3 = st.columns(3)
+            
+            c1.metric(
+                label="YTD Cumulative ROAS", 
+                value=f"{cumulative_roas:.2f}x",
+                help="The Multiplier (x) represents the Brand Value generated for every $1 spent. For example, 5.00x means $5 in brand equity created per $1 ad spend."
+            )
+            
+            c2.metric(
+                label="Total Brand Equity", 
+                value=f"${total_brand_value:,.2f}",
+                help="The combined financial value of all digital traffic, social engagement, sentiment (reviews), and regional growth scores."
+            )
+            
+            c3.metric(
+                label="Total Enhanced Impact", 
+                value=f"${total_enhanced:,.2f}",
+                help="The total estimated economic impact including Brand Value + Actual Guest Spend + Loyalty Member Lifetime Value (LTV)."
+            )
+            
+            # Small key/legend for stakeholders
+            with st.expander("📖 Glossary of Terms"):
+                st.markdown("""
+                * **#x (ROAS Multiplier):** A ratio showing marketing efficiency. Anything above **1.0x** means the marketing is generating more value than its cost.
+                * **Brand Value:** The 'Digital Footprint' converted to currency based on industry-standard engagement weights.
+                * **Enhanced Revenue:** The true holistic value of the casino's performance, merging floor revenue with digital brand growth.
+                """)
+            
+            st.divider()
 
     # --- 3. THE INPUT FORM (WITH DATA PERSISTENCE) ---
     with st.form("roas_input_form"):
