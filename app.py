@@ -252,6 +252,66 @@ def get_forensic_metrics(df_input, coeffs):
     }
 
 # =================================================================
+# 3.1 BL-ROAS CALCULATION ENGINE (NEW)
+# =================================================================
+def calculate_and_save_roas(data_dict):
+    """
+    Implements the 5-Step BL-ROAS logic:
+    1. Traffic Score | 2. Engagement | 3. Sentiment | 4. Geo Lift | 5. ROAS
+    """
+    # --- STEP 1: Traffic Score ---
+    traffic_score = (data_dict['utm_sessions'] + data_dict['organic_sessions']) * 8.00
+    
+    # --- STEP 2: Engagement Score ---
+    eng_score = (
+        (data_dict['social_likes'] * 0.50) + 
+        (data_dict['social_comments'] * 1.00) + 
+        (data_dict['social_shares'] * 1.25) + 
+        (data_dict['post_views'] * 0.25) + 
+        (data_dict['site_time_sessions'] * 1.50) + 
+        (data_dict['booking_clicks'] * 2.50)
+    )
+    
+    # --- STEP 3: Sentiment Score ---
+    sentiment_score = data_dict['pos_reviews'] * 30.00
+    
+    # --- STEP 4: Geo Lift Score ---
+    geo_lift_score = data_dict['geo_lift_traffic'] * 8.00
+    
+    # --- STEP 5: Final BL-ROAS & Brand Value ---
+    brand_value = traffic_score + eng_score + sentiment_score + geo_lift_score
+    bl_roas = brand_value / data_dict['ad_spend'] if data_dict['ad_spend'] > 0 else 0
+    
+    # --- Enhanced Revenue Calculation ---
+    # Enhanced Revenue = Brand Value + (Foot Traffic * Avg Spend) + (Signups * LTV)
+    enhanced_revenue = (
+        brand_value + 
+        (data_dict['ledger_traffic'] * data_dict['avg_spend']) + 
+        (data_dict['ledger_signups'] * data_dict['ltv_member'])
+    )
+
+    # Prepare Payload for Supabase table 'monthly_roi'
+    payload = {
+        "report_month": data_dict['report_month'],
+        "utm_sessions": int(data_dict['utm_sessions']),
+        "organic_sessions": int(data_dict['organic_sessions']),
+        "ad_spend": float(data_dict['ad_spend']),
+        "social_likes": int(data_dict['social_likes']),
+        "social_comments": int(data_dict['social_comments']),
+        "social_shares": int(data_dict['social_shares']),
+        "post_views": int(data_dict['post_views']),
+        "site_time_sessions": int(data_dict['site_time_sessions']),
+        "booking_clicks": int(data_dict['booking_clicks']),
+        "pos_reviews": int(data_dict['pos_reviews']),
+        "geo_lift_traffic": int(data_dict['geo_lift_traffic']),
+        "calculated_bl_roas": round(float(bl_roas), 2),
+        "brand_value": round(float(brand_value), 2),
+        "enhanced_revenue": round(float(enhanced_revenue), 2)
+    }
+
+    return supabase.table("monthly_roi").upsert(payload).execute()
+
+# =================================================================
 # 4. DATA INFRASTRUCTURE (SUPABASE & WEATHER)
 # =================================================================
 try:
@@ -350,6 +410,7 @@ with st.sidebar:
             "Master Audit Report", 
             "AI Calibration",
             "FloorCast AI Analyst"
+            "BL-ROAS Calculator"
         ],
         index=0,
         key="nav_list_v12"
@@ -656,6 +717,55 @@ elif page == "Daily Ledger Audit":
                 st.rerun()
             except Exception as e:
                 st.error(f"Bulk Sync Error: {e}")
+
+    # --- 3. THE SCOREBOARD (IMMEDIATE FEEDBACK) ---
+            st.divider()
+            
+            # Recalculate local variables for the display
+            t_score = (utm_s + org_s) * 8.00
+            e_score = (likes * 0.50) + (comments * 1.00) + (shares * 1.25) + \
+                        (views * 0.25) + (time_site * 1.50) + (cta_clicks * 2.50)
+            s_score = reviews * 30.00
+            g_score = geo_lift * 8.00
+            
+            final_brand_val = t_score + e_score + s_score + g_score
+            final_roas = final_brand_val / ad_spend if ad_spend > 0 else 0
+            
+            # KPI Metrics
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Monthly BL-ROAS", f"{final_roas:.2f}x", delta=f"{final_roas - 1.0:.1f} vs Baseline")
+            m2.metric("Total Brand Value", f"${final_brand_val:,.2f}")
+            m3.metric("Property Potential", f"${(ledger_traffic * 112.5) + (ledger_signups * 450):,.0f}")
+
+            # --- 4. SCENARIO ATTRIBUTION MATRIX ---
+            st.write("### 📍 Attribution Scenarios")
+            st.caption("Applying attribution percentages to Foot Traffic and Signups for Attributed ROAS.")
+            
+            # Total potential value of property actuals
+            prop_val = (ledger_traffic * 112.50) + (ledger_signups * 450.00)
+            
+            scenarios = {
+                "Attribution Level": ["Conservative (10%)", "Moderate (20%)", "Aggressive (30%)"],
+                "Calculated Brand Value": [f"${final_brand_val:,.2f}"] * 3,
+                "Attributed Property Lift": [
+                    f"${prop_val * 0.1:,.2f}", 
+                    f"${prop_val * 0.2:,.2f}", 
+                    f"${prop_val * 0.3:,.2f}"
+                ],
+                "Total Enhanced Revenue": [
+                    f"${final_brand_val + (prop_val * 0.1):,.2f}",
+                    f"${final_brand_val + (prop_val * 0.2):,.2f}",
+                    f"${final_brand_val + (prop_val * 0.3):,.2f}"
+                ]
+            }
+            
+            st.table(pd.DataFrame(scenarios))
+            
+            # --- 5. EXECUTIVE SUMMARY ---
+            st.info(f"""
+            **Senior Strategy Analyst Summary:** For {this_month_start.strftime('%B %Y')}, the marketing efforts at Hard Rock Ottawa yielded a **{final_roas:.2f}x** return on brand equity. 
+            When applying a moderate 20% attribution to floor traffic, the total enhanced revenue impact is estimated at **${final_brand_val + (prop_val * 0.2):,.2f}**.
+            """)
 
     # 4. DATABASE STATS
     if not df_ledger.empty:
@@ -1112,40 +1222,124 @@ elif page == "FloorCast AI Analyst":
             st.markdown(m["content"])
 
 # =================================================================
-# 13. PAGE 7: FORECAST SANDBOX
+# 13. PAGE 7: BL-ROAS COMMAND CENTER
 # =================================================================
-elif page == "🧪 Forecast Sandbox":
-    st.header("🧪 Strategic Forecast Simulator")
-    
-    c = st.session_state.coeffs
-    ooh_inertia = (float(c['Static_Count']) * float(c['Static_Weight'])) + \
-                  (float(c['Digital_OOH_Count']) * float(c['Digital_OOH_Weight']))
+elif page == "BL-ROAS Calculator":
+    st.markdown("""
+        <div style="background-color: #F8F9FA; padding: 20px; border-radius: 12px; border-left: 6px solid #28A745; margin-bottom: 25px;">
+            <h2 style="color: #28A745; margin: 0;">💰 BL-ROAS Command Center</h2>
+            <p style="color: #444; margin: 0;">Monthly ROI Engine: Brand Lift & Enhanced Revenue.</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-    col_l, col_r = st.columns(2)
-    with col_l:
-        st.subheader("🎛️ Market Inputs")
-        s_clicks = st.number_input("Planned Ad Clicks", 500)
-        s_imp = st.number_input("Planned Impressions", 10000)
-        sim_attend = st.number_input("Projected Concert Attendance", 1800)
+    # --- 1. AUTOMATIC LEDGER AGGREGATION ---
+    df_roas = pd.DataFrame(ledger_data)
+    df_roas['entry_date'] = pd.to_datetime(df_roas['entry_date'])
     
-    with col_r:
-        st.subheader("❄️ Environment Friction")
-        s_snow = st.slider("Snow Forecast (cm)", 0, 50, 0)
-        s_rain = st.slider("Rain Forecast (mm)", 0, 50, 0)
-
-    # SIMULATION ENGINE
-    m_lift = (s_clicks * c['Clicks']) + (s_imp * c['Social_Imp'])
-    e_lift = sim_attend * (c['Event_Gravity']/100)
-    w_loss = (s_snow * c['Snow_cm']) + (s_rain * c['Rain_mm'])
+    # Identify the current month
+    this_month_start = datetime.date.today().replace(day=1)
     
-    pred_head = max(0, 4365 + ooh_inertia + m_lift + e_lift + w_loss)
-    pred_win = pred_head * c['Avg_Coin_In'] * (c['Hold_Pct']/100)
+    # Filter ledger for current month only
+    m_mask = (df_roas['entry_date'].dt.month == this_month_start.month) & \
+             (df_roas['entry_date'].dt.year == this_month_start.year)
+    this_month_df = df_roas.loc[m_mask]
+    
+    # Sum the actuals from Page 2
+    ledger_traffic = this_month_df['actual_traffic'].sum()
+    ledger_signups = this_month_df['new_members'].sum()
 
+    # --- 2. THE INPUT FORM ---
+    with st.form("roas_input_form"):
+        st.subheader(f"📊 Digital & Social Metrics: {this_month_start.strftime('%B %Y')}")
+        
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            utm_s = st.number_input("UTM Sessions", min_value=0, step=1)
+            org_s = st.number_input("Organic Sessions", min_value=0, step=1)
+            ad_spend = st.number_input("Total Ad Spend ($)", min_value=0.0, step=100.0)
+        
+        with c2:
+            likes = st.number_input("Social Likes", min_value=0)
+            comments = st.number_input("Social Comments", min_value=0)
+            shares = st.number_input("Social Shares", min_value=0)
+            views = st.number_input("Post Views", min_value=0)
+
+        with c3:
+            time_site = st.number_input("Time on Site Sessions", min_value=0)
+            cta_clicks = st.number_input("Booking CTA Clicks", min_value=0)
+            reviews = st.number_input("Net Positive Reviews", min_value=0)
+            geo_lift = st.number_input("Incremental Geo Traffic", min_value=0)
+
+        st.divider()
+        st.info(f"**Ledger Sync:** For {this_month_start.strftime('%B')}, the system has detected **{ledger_traffic:,}** guests and **{ledger_signups:,}** signups.")
+
+        # Triggering the calculation
+        if st.form_submit_button("🚀 Run ROI Analysis", use_container_width=True):
+            input_payload = {
+                "report_month": str(this_month_start),
+                "utm_sessions": utm_s,
+                "organic_sessions": org_s,
+                "ad_spend": ad_spend,
+                "social_likes": likes,
+                "social_comments": comments,
+                "social_shares": shares,
+                "post_views": views,
+                "site_time_sessions": time_site,
+                "booking_clicks": cta_clicks,
+                "pos_reviews": reviews,
+                "geo_lift_traffic": geo_lift,
+                "ledger_traffic": ledger_traffic,
+                "ledger_signups": ledger_signups,
+                "avg_spend": 112.50, # Brian's property baseline
+                "ltv_member": 450.00  # Brian's loyalty baseline
+            }
+            
+            try:
+                # Call the Logic Engine from Step 2
+                calculate_and_save_roas(input_payload)
+                st.success(f"✅ ROI calculations for {this_month_start.strftime('%B')} archived in Supabase.")
+                # After success, we move to the Scoreboard (Step 4)
+            except Exception as e:
+                st.error(f"Sync Failure: {e}")
+
+# --- 5. HISTORICAL ROI PERFORMANCE TRACKER ---
     st.divider()
-    res1, res2, res3 = st.columns(3)
-    res1.metric("Predicted Daily Traffic", f"{int(pred_head):,} Guests")
-    res2.metric("Projected Daily Win", f"${pred_win:,.2f}")
-    res3.metric("OOH Passive Inertia", f"+{int(ooh_inertia)} Guests")
+    st.write("### 📈 Monthly ROI Performance History")
+
+    try:
+        # Pull all historical reports from our new table
+        history_res = supabase.table("monthly_roi").select("*").order("report_month").execute()
+        
+        if history_res.data:
+            df_history = pd.DataFrame(history_res.data)
+            df_history['report_month'] = pd.to_datetime(df_history['report_month']).dt.strftime('%b %Y')
+            
+            # Chart 1: BL-ROAS Trend
+            fig_roi_trend = px.line(
+                df_history, 
+                x='report_month', 
+                y='calculated_bl_roas',
+                title="Monthly BL-ROAS Trend",
+                markers=True,
+                line_shape="spline",
+                color_discrete_sequence=["#28A745"]
+            )
+            fig_roi_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title="ROAS Multiplier")
+            st.plotly_chart(fig_roi_trend, use_container_width=True)
+            
+            # Chart 2: Brand Value vs Ad Spend
+            fig_value = go.Figure()
+            fig_value.add_trace(go.Bar(x=df_history['report_month'], y=df_history['ad_spend'], name='Ad Spend', marker_color='#6c757d'))
+            fig_value.add_trace(go.Bar(x=df_history['report_month'], y=df_history['brand_value'], name='Brand Value', marker_color='#0047AB'))
+            
+            fig_value.update_layout(barmode='group', title="Spend vs. Brand Equity Created", plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_value, use_container_width=True)
+            
+        else:
+            st.info("No historical ROI data found. Run your first calculation to begin tracking.")
+            
+    except Exception as e:
+        st.error(f"History Load Error: {e}")
 
 # =================================================================
 # 14. FOOTER
