@@ -1316,31 +1316,54 @@ elif page == "BL-ROAS Calculator":
         except Exception as e:
             st.error(f"Sync Failure: {e}")
 
-    # --- 5. HISTORICAL ROI PERFORMANCE LEDGER (REPLACING CHARTS) ---
+    # --- 5. HISTORICAL PERFORMANCE SECTION ---
     st.divider()
-    st.write("### 📜 Historical ROI Audit Ledger")
-    st.caption("A month-by-month breakdown of calculated brand performance.")
 
     try:
-        # Pull historical reports
+        # 1. Pull the data from Supabase
         history_res = supabase.table("monthly_roi").select("*").order("report_month", desc=True).execute()
         
         if history_res.data:
             df_hist = pd.DataFrame(history_res.data)
-            
-            # Formatting for Executive Readability
             df_hist['Month'] = pd.to_datetime(df_hist['report_month']).dt.strftime('%B %Y')
-            
-            # Select and rename columns for the final display
+
+            # 2. CUMULATIVE PERFORMANCE TILES
+            total_brand_value = df_hist['brand_value'].sum()
+            total_ad_spend = df_hist['ad_spend'].sum()
+            cumulative_roas = total_brand_value / total_ad_spend if total_ad_spend > 0 else 0
+            total_enhanced = df_hist['enhanced_revenue'].sum()
+
+            st.write("### 🏛️ YTD Cumulative Performance")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("YTD Cumulative ROAS", f"{cumulative_roas:.2f}x")
+            c2.metric("Total Brand Equity", f"${total_brand_value:,.2f}")
+            c3.metric("Total Enhanced Impact", f"${total_enhanced:,.2f}")
+            st.divider()
+
+            # 3. HISTORICAL LEDGER TABLE
+            st.write("### 📜 Historical ROI Audit Ledger")
             display_df = df_hist[[
-                'Month', 
-                'calculated_bl_roas', 
-                'brand_value', 
-                'ad_spend', 
-                'enhanced_revenue'
+                'Month', 'calculated_bl_roas', 'brand_value', 'ad_spend', 'enhanced_revenue'
             ]].copy()
             
             display_df.columns = ['Audit Month', 'BL-ROAS', 'Brand Value', 'Ad Spend', 'Total Enhanced Revenue']
+            
+            st.dataframe(
+                display_df.style.format({
+                    'BL-ROAS': '{:.2f}x',
+                    'Brand Value': '${:,.2f}',
+                    'Ad Spend': '${:,.2f}',
+                    'Total Enhanced Revenue': '${:,.2f}'
+                }),
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("No historical ROI audits found yet.")
+
+    except Exception as e:
+        # THIS IS THE PART THAT WAS MISSING
+        st.error(f"Historical Audit Error: {e}")
 
     # --- 6. CUMULATIVE PERFORMANCE TILES ---
     if history_res.data:
