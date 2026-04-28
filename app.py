@@ -1341,6 +1341,24 @@ elif page == "BL-ROAS Calculator":
             ]].copy()
             
             display_df.columns = ['Audit Month', 'BL-ROAS', 'Brand Value', 'Ad Spend', 'Total Enhanced Revenue']
+
+    # --- 6. CUMULATIVE PERFORMANCE TILES ---
+    if history_res.data:
+        total_brand_value = df_hist['brand_value'].sum()
+        total_ad_spend = df_hist['ad_spend'].sum()
+        # Cumulative ROAS = Total Value Created / Total Spend
+        cumulative_roas = total_brand_value / total_ad_spend if total_ad_spend > 0 else 0
+        total_enhanced = df_hist['enhanced_revenue'].sum()
+
+        st.write("### 🏛️ YTD Cumulative Performance")
+        c1, c2, c3 = st.columns(3)
+        
+        c1.metric("YTD Cumulative ROAS", f"{cumulative_roas:.2f}x")
+        c2.metric("Total Brand Equity", f"${total_brand_value:,.2f}")
+        c3.metric("Total Enhanced Impact", f"${total_enhanced:,.2f}")
+        
+        st.caption(f"Aggregated performance data from {df_hist['Month'].iloc[-1]} to {df_hist['Month'].iloc[0]}")
+        st.divider()
             
             # Apply currency and multiplier formatting
             st.dataframe(
