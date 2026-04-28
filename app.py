@@ -1305,7 +1305,7 @@ elif page == "BL-ROAS Calculator":
             df_hist = pd.DataFrame(history_res.data)
             df_hist['Month'] = pd.to_datetime(df_hist['report_month']).dt.strftime('%B %Y')
 
-            # --- 6. CUMULATIVE TILES (ZERO GUARDS) ---
+            # --- 6. CUMULATIVE TILES (WITH HELP TEXT RESTORED) ---
             st.divider()
             total_brand_value = df_hist['brand_value'].sum()
             total_ad_spend_ytd = df_hist['ad_spend'].sum()
@@ -1313,10 +1313,24 @@ elif page == "BL-ROAS Calculator":
             total_enhanced = df_hist['enhanced_revenue'].sum()
 
             st.write("### 🏛️ YTD Cumulative Performance")
+            st.caption("Aggregated performance metrics from January to Present.")
+            
             c1, c2, c3 = st.columns(3)
-            c1.metric("YTD Cumulative ROAS", f"{cumulative_roas_val:.2f}x", help="Brand Value / Total Ad Spend.")
-            c2.metric("Total Brand Equity", f"${total_brand_value:,.2f}")
-            c3.metric("Total Enhanced Impact", f"${total_enhanced:,.2f}")
+            c1.metric(
+                label="YTD Cumulative ROAS", 
+                value=f"{cumulative_roas_val:.2f}x", 
+                help="The efficiency ratio of total Brand Value created vs. total Ad Spend. >1.0x indicates value creation exceeding investment."
+            )
+            c2.metric(
+                label="Total Brand Equity", 
+                value=f"${total_brand_value:,.2f}", 
+                help="The calculated monetary value of all digital sessions, social engagements, and sentiment shifts tracked YTD."
+            )
+            c3.metric(
+                label="Total Enhanced Impact", 
+                value=f"${total_enhanced:,.2f}", 
+                help="The holistic revenue impact: Sum of Brand Value + Actual Floor Coin-In + New Member Lifetime Value ($1,900/member)."
+            )
 
             # --- 7. SHAREPOINT GENERATOR (STRICT MATCHING) ---
             st.divider()
