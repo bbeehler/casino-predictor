@@ -409,7 +409,7 @@ with st.sidebar:
             "Attribution Analytics", 
             "Master Audit Report", 
             "AI Calibration",
-            "FloorCast AI Analyst"
+            "FloorCast AI Analyst",
             "BL-ROAS Calculator"
         ],
         index=0,
