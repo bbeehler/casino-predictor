@@ -1223,7 +1223,7 @@ elif page == "FloorCast AI Analyst":
             st.markdown(m["content"])
 
 # =================================================================
-# 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v18 - SharePoint Ready)
+# 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v19 - Coin-In Logic)
 # =================================================================
 elif page == "BL-ROAS Calculator":
     st.markdown("""
@@ -1251,11 +1251,13 @@ elif page == "BL-ROAS Calculator":
     
     ledger_traffic = selected_month_df['actual_traffic'].sum()
     ledger_signups = selected_month_df['new_members'].sum()
-    ledger_revenue = selected_month_df['actual_revenue'].sum()
+    
+    # FIX: Using 'actual_coin_in' from your Ledger
+    ledger_coin_in = selected_month_df['actual_coin_in'].sum()
     
     # Calculate Dynamic Benchmarks
-    avg_spend_actual = ledger_revenue / ledger_traffic if ledger_traffic > 0 else 1279.33
-    ltv_benchmark = 1900.00 # Updated to Brian's SharePoint benchmark
+    avg_spend_actual = ledger_coin_in / ledger_traffic if ledger_traffic > 0 else 1279.33
+    ltv_benchmark = 1900.00 
 
     # --- 3. THE INPUT FORM ---
     with st.form("roas_input_form"):
@@ -1283,7 +1285,7 @@ elif page == "BL-ROAS Calculator":
             geo_lift = st.number_input("Incremental Geo Traffic", value=int(existing.get('geo_lift_traffic', 0)))
 
         st.divider()
-        st.info(f"**Ledger Sync ({selected_label}):** Revenue: ${ledger_revenue:,.2f} | Traffic: {ledger_traffic:,} | Signups: {ledger_signups:,}")
+        st.info(f"**Ledger Sync ({selected_label}):** Coin-In: ${ledger_coin_in:,.2f} | Traffic: {ledger_traffic:,} | Signups: {ledger_signups:,}")
 
         submit = st.form_submit_button("🚀 Save ROI Analysis", use_container_width=True)
 
@@ -1333,11 +1335,13 @@ elif page == "BL-ROAS Calculator":
             prev = df_hist.iloc[1] if len(df_hist) > 1 else curr
             mom_roas = ((curr['calculated_bl_roas'] / prev['calculated_bl_roas']) - 1) * 100 if prev['calculated_bl_roas'] > 0 else 0
             
-            # Recalculate Attributed Impact based on Brian's benchmarks
-            # prop_potential is ledger cash + signups * $1,900
-            prop_potential = ledger_revenue + (ledger_signups * ltv_benchmark)
+            # Recalculate Attributed Impact based on Coin-In Benchmarks
+            # prop_potential = Actual Coin-In + (Signups * $1,900 LTV)
+            prop_potential = ledger_coin_in + (ledger_signups * ltv_benchmark)
             
-            attr_10, attr_20, attr_30 = prop_potential * 0.10, prop_potential * 0.20, prop_potential * 0.30
+            attr_10 = prop_potential * 0.10
+            attr_20 = prop_potential * 0.20
+            attr_30 = prop_potential * 0.30
             enhanced_revenue_val = curr['brand_value'] + prop_potential
 
             report_text = f"""{selected_label} ROAS Results
