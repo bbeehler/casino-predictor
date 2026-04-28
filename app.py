@@ -1222,124 +1222,112 @@ elif page == "FloorCast AI Analyst":
             st.markdown(m["content"])
 
 # =================================================================
-# 13. PAGE 7: BL-ROAS COMMAND CENTER
+# 13. PAGE 7: BL-ROAS COMMAND CENTER (v15 - Historical Support)
 # =================================================================
 elif page == "BL-ROAS Calculator":
     st.markdown("""
         <div style="background-color: #F8F9FA; padding: 20px; border-radius: 12px; border-left: 6px solid #28A745; margin-bottom: 25px;">
             <h2 style="color: #28A745; margin: 0;">💰 BL-ROAS Command Center</h2>
-            <p style="color: #444; margin: 0;">Monthly ROI Engine: Brand Lift & Enhanced Revenue.</p>
+            <p style="color: #444; margin: 0;">Audit past performance or calculate current monthly ROI.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # --- 1. AUTOMATIC LEDGER AGGREGATION ---
+    # --- 1. MONTH SELECTION (Look back 12 months) ---
+    today = datetime.date.today()
+    # Create list of months: [April 2026, March 2026, Feb 2026...]
+    month_options = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
+    month_labels = [m.strftime("%B %Y") for m in month_options]
+
+    selected_label = st.selectbox("Select Audit Month:", month_labels)
+    selected_month = month_options[month_labels.index(selected_label)]
+
+    # --- 2. DYNAMIC LEDGER AGGREGATION ---
     df_roas = pd.DataFrame(ledger_data)
     df_roas['entry_date'] = pd.to_datetime(df_roas['entry_date'])
     
-    # Identify the current month
-    this_month_start = datetime.date.today().replace(day=1)
+    # Filter ledger for the SELECTED month
+    m_mask = (df_roas['entry_date'].dt.month == selected_month.month) & \
+             (df_roas['entry_date'].dt.year == selected_month.year)
+    selected_month_df = df_roas.loc[m_mask]
     
-    # Filter ledger for current month only
-    m_mask = (df_roas['entry_date'].dt.month == this_month_start.month) & \
-             (df_roas['entry_date'].dt.year == this_month_start.year)
-    this_month_df = df_roas.loc[m_mask]
-    
-    # Sum the actuals from Page 2
-    ledger_traffic = this_month_df['actual_traffic'].sum()
-    ledger_signups = this_month_df['new_members'].sum()
+    ledger_traffic = selected_month_df['actual_traffic'].sum()
+    ledger_signups = selected_month_df['new_members'].sum()
 
-    # --- 2. THE INPUT FORM ---
+    # --- 3. THE INPUT FORM (WITH DATA PERSISTENCE) ---
     with st.form("roas_input_form"):
-        st.subheader(f"📊 Digital & Social Metrics: {this_month_start.strftime('%B %Y')}")
+        st.subheader(f"📊 {selected_label} Metrics")
         
+        # Pull existing data from Supabase if it exists for this month
+        existing_res = supabase.table("monthly_roi").select("*").eq("report_month", str(selected_month)).execute()
+        existing = existing_res.data[0] if existing_res.data else {}
+
         c1, c2, c3 = st.columns(3)
         with c1:
-            utm_s = st.number_input("UTM Sessions", min_value=0, step=1)
-            org_s = st.number_input("Organic Sessions", min_value=0, step=1)
-            ad_spend = st.number_input("Total Ad Spend ($)", min_value=0.0, step=100.0)
+            utm_s = st.number_input("UTM Sessions", value=int(existing.get('utm_sessions', 0)))
+            org_s = st.number_input("Organic Sessions", value=int(existing.get('organic_sessions', 0)))
+            ad_spend = st.number_input("Total Ad Spend ($)", value=float(existing.get('ad_spend', 0.0)), step=100.0)
         
         with c2:
-            likes = st.number_input("Social Likes", min_value=0)
-            comments = st.number_input("Social Comments", min_value=0)
-            shares = st.number_input("Social Shares", min_value=0)
-            views = st.number_input("Post Views", min_value=0)
+            likes = st.number_input("Social Likes", value=int(existing.get('social_likes', 0)))
+            comments = st.number_input("Social Comments", value=int(existing.get('social_comments', 0)))
+            shares = st.number_input("Social Shares", value=int(existing.get('social_shares', 0)))
+            views = st.number_input("Post Views", value=int(existing.get('post_views', 0)))
 
         with c3:
-            time_site = st.number_input("Time on Site Sessions", min_value=0)
-            cta_clicks = st.number_input("Booking CTA Clicks", min_value=0)
-            reviews = st.number_input("Net Positive Reviews", min_value=0)
-            geo_lift = st.number_input("Incremental Geo Traffic", min_value=0)
+            time_site = st.number_input("Time on Site Sessions", value=int(existing.get('site_time_sessions', 0)))
+            cta_clicks = st.number_input("Booking CTA Clicks", value=int(existing.get('booking_clicks', 0)))
+            reviews = st.number_input("Net Positive Reviews", value=int(existing.get('pos_reviews', 0)))
+            geo_lift = st.number_input("Incremental Geo Traffic", value=int(existing.get('geo_lift_traffic', 0)))
 
         st.divider()
-        st.info(f"**Ledger Sync:** For {this_month_start.strftime('%B')}, the system has detected **{ledger_traffic:,}** guests and **{ledger_signups:,}** signups.")
+        st.info(f"**Ledger Sync:** Detected **{ledger_traffic:,}** guests and **{ledger_signups:,}** signups for {selected_label}.")
 
-        # Triggering the calculation
-        if st.form_submit_button("🚀 Run ROI Analysis", use_container_width=True):
-            input_payload = {
-                "report_month": str(this_month_start),
-                "utm_sessions": utm_s,
-                "organic_sessions": org_s,
-                "ad_spend": ad_spend,
-                "social_likes": likes,
-                "social_comments": comments,
-                "social_shares": shares,
-                "post_views": views,
-                "site_time_sessions": time_site,
-                "booking_clicks": cta_clicks,
-                "pos_reviews": reviews,
-                "geo_lift_traffic": geo_lift,
-                "ledger_traffic": ledger_traffic,
-                "ledger_signups": ledger_signups,
-                "avg_spend": 112.50, # Brian's property baseline
-                "ltv_member": 450.00  # Brian's loyalty baseline
-            }
-            
-            try:
-                # Call the Logic Engine from Step 2
-                calculate_and_save_roas(input_payload)
-                st.success(f"✅ ROI calculations for {this_month_start.strftime('%B')} archived in Supabase.")
-                # After success, we move to the Scoreboard (Step 4)
-            except Exception as e:
-                st.error(f"Sync Failure: {e}")
+        submit = st.form_submit_button("🚀 Save ROI Analysis", use_container_width=True)
 
-# --- 5. HISTORICAL ROI PERFORMANCE TRACKER ---
-    st.divider()
-    st.write("### 📈 Monthly ROI Performance History")
-
-    try:
-        # Pull all historical reports from our new table
-        history_res = supabase.table("monthly_roi").select("*").order("report_month").execute()
+    if submit:
+        # Construct payload using the logic engine function
+        input_payload = {
+            "report_month": str(selected_month),
+            "utm_sessions": utm_s, "organic_sessions": org_s, "ad_spend": ad_spend,
+            "social_likes": likes, "social_comments": comments, "social_shares": shares, "post_views": views,
+            "site_time_sessions": time_site, "booking_clicks": cta_clicks, "pos_reviews": reviews, "geo_lift_traffic": geo_lift,
+            "ledger_traffic": ledger_traffic, "ledger_signups": ledger_signups,
+            "avg_spend": 112.50, "ltv_member": 450.00
+        }
         
+        try:
+            calculate_and_save_roas(input_payload)
+            st.success(f"✅ ROI for {selected_label} saved successfully!")
+            
+            # --- 4. THE SCOREBOARD (DISPLAYED ON SUBMIT) ---
+            st.divider()
+            t_score = (utm_s + org_s) * 8.00
+            e_score = (likes * 0.5) + (comments * 1.0) + (shares * 1.25) + (views * 0.25) + (time_site * 1.5) + (cta_clicks * 2.5)
+            brand_val = t_score + e_score + (reviews * 30.00) + (geo_lift * 8.00)
+            final_roas = brand_val / ad_spend if ad_spend > 0 else 0
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Monthly BL-ROAS", f"{final_roas:.2f}x")
+            m2.metric("Total Brand Value", f"${brand_val:,.2f}")
+            m3.metric("Enhanced Revenue (20% Attr)", f"${brand_val + ((ledger_traffic * 112.5 + ledger_signups * 450) * 0.2):,.2f}")
+            
+            st.rerun() # Refresh to update charts
+        except Exception as e:
+            st.error(f"Sync Failure: {e}")
+
+    # --- 5. PERFORMANCE HISTORY CHARTS (ALWAYS VISIBLE) ---
+    st.divider()
+    try:
+        history_res = supabase.table("monthly_roi").select("*").order("report_month").execute()
         if history_res.data:
-            df_history = pd.DataFrame(history_res.data)
-            df_history['report_month'] = pd.to_datetime(df_history['report_month']).dt.strftime('%b %Y')
+            df_hist = pd.DataFrame(history_res.data)
+            df_hist['month_label'] = pd.to_datetime(df_hist['report_month']).dt.strftime('%b %Y')
             
-            # Chart 1: BL-ROAS Trend
-            fig_roi_trend = px.line(
-                df_history, 
-                x='report_month', 
-                y='calculated_bl_roas',
-                title="Monthly BL-ROAS Trend",
-                markers=True,
-                line_shape="spline",
-                color_discrete_sequence=["#28A745"]
-            )
-            fig_roi_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title="ROAS Multiplier")
-            st.plotly_chart(fig_roi_trend, use_container_width=True)
-            
-            # Chart 2: Brand Value vs Ad Spend
-            fig_value = go.Figure()
-            fig_value.add_trace(go.Bar(x=df_history['report_month'], y=df_history['ad_spend'], name='Ad Spend', marker_color='#6c757d'))
-            fig_value.add_trace(go.Bar(x=df_history['report_month'], y=df_history['brand_value'], name='Brand Value', marker_color='#0047AB'))
-            
-            fig_value.update_layout(barmode='group', title="Spend vs. Brand Equity Created", plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_value, use_container_width=True)
-            
-        else:
-            st.info("No historical ROI data found. Run your first calculation to begin tracking.")
-            
-    except Exception as e:
-        st.error(f"History Load Error: {e}")
+            fig_trend = px.line(df_hist, x='month_label', y='calculated_bl_roas', 
+                                title="Historical BL-ROAS Trend", markers=True, line_shape="spline")
+            st.plotly_chart(fig_trend, use_container_width=True)
+    except:
+        pass
 
 # =================================================================
 # 14. FOOTER
