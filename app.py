@@ -482,64 +482,65 @@ if page == "Executive Dashboard":
         start_p, end_p = pulse_range
         is_future = start_p >= today
         
-        # --- 4. TIMELINE GENERATION & SCAFFOLDING (STABLE v30) ---
+        # --- 4. TIMELINE GENERATION & FORCE-SCAFFOLDING ---
         date_list = pd.date_range(start=start_p, end=end_p)
         df_p = pd.DataFrame({'entry_date': date_list})
         df_p['dow'] = df_p['entry_date'].dt.day_name()
         df_p['baseline'] = df_p['dow'].map(master_baselines)
         
+        # Merge with existing ledger
         df_p = pd.merge(df_p, df_raw, on='entry_date', how='left')
 
-        # ENSURE ALL COLUMNS EXIST (Including verified 'attendance')
-        required_cols = {
-            'active_promo': '', 
-            'attendance': 0, 
-            'ad_clicks': 0, 
-            'ad_impressions': 0, 
-            'rain_mm': 0.0, 
-            'snow_cm': 0.0,
-            'actual_traffic': 0, 
-            'actual_coin_in': 0.0, 
-            'new_members': 0
-        }
-        
-        for col, default_val in required_cols.items():
-            if col not in df_p.columns:
-                df_p[col] = default_val
-            else:
-                # FIXED: Using 'default_val' to match the loop variable
-                df_p[col] = df_p[col].fillna(default_val)
+        # THE "COLUMNS OF TRUTH" - These MUST match the planner exactly
+        planner_cols = [
+            'entry_date', 'dow', 'active_promo', 'attendance', 
+            'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm'
+        ]
 
-        # --- 5. STRATEGIC DAILY PLANNER (SYNCED v31) ---
+        # FORCE REBUILD: If a column is missing from the merge, create it now.
+        for col in planner_cols:
+            if col not in df_p.columns:
+                if col in ['active_promo']:
+                    df_p[col] = ""
+                else:
+                    df_p[col] = 0.0
+            else:
+                # Clean up NaNs from the merge
+                if col in ['active_promo']:
+                    df_p[col] = df_p[col].fillna("")
+                else:
+                    df_p[col] = pd.to_numeric(df_p[col], errors='coerce').fillna(0)
+
+        # --- 5. STRATEGIC DAILY PLANNER ---
         if is_future:
             live_weather = get_live_ottawa_forecast()
             with st.expander("📅 Daily Strategy Planner", expanded=True):
                 st.write("Plan your lift. Weather below is synced from Environment Canada.")
                 
-                # THE FIX: Added 'attendance' back into this list 
-                # It must match the columns scaffolded in Section 4 exactly
-                planner_cols = [
-                    'entry_date', 'dow', 'active_promo', 'attendance', 
-                    'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm'
-                ]
-                
+                # This line is now bulletproof because of the loop above
                 df_plan = df_p[planner_cols].copy()
                 
+                # Display Formatting
                 df_plan_display = df_plan.copy()
                 df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
                 
                 edited_df = st.data_editor(
                     df_plan_display, 
                     column_config={
-                        "dow": None, 
+                        "dow": None, # Hide day of week
                         "entry_date": st.column_config.Column("Date", disabled=True),
                         "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
+                        "active_promo": st.column_config.TextColumn("Promo/PR Hit"),
                     },
-                    hide_index=True, use_container_width=True, key="p1_planner_v31_stable"
+                    hide_index=True, 
+                    use_container_width=True, 
+                    key="p1_planner_v32_final"
                 )
                 
-                # Ensure the sync loop also handles 'attendance'
-                for col in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
+                # Map edited values back to the main df_p for the engine
+                # We skip entry_date and dow because they aren't editable
+                editable_fields = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
+                for col in editable_fields:
                     df_p[col] = edited_df[col].values
 
         # --- 6. ENGINE EXECUTION ---
