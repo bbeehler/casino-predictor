@@ -425,7 +425,7 @@ if st.sidebar.button("🚪 Logout / Reset Session", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (v34 - Hard-Synced & Hardened)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (v37 - Universal Scoped Fix)
 # =================================================================
 if page == "Executive Dashboard":
     st.markdown("""
@@ -450,13 +450,11 @@ if page == "Executive Dashboard":
 
     # --- 2. ENVIRONMENT CANADA BRIDGE ---
     def get_live_ottawa_forecast():
-        """Fetches 7-day forecast from Environment Canada (Ottawa CDA Station)"""
         try:
             from env_canada import ECWeather
             import asyncio
             ec = ECWeather(station_id="ON/s0000430")
             asyncio.run(ec.update())
-            
             forecast_data = {}
             for day in ec.daily_forecasts:
                 period = day['period'] 
@@ -477,25 +475,25 @@ if page == "Executive Dashboard":
             key="pulse_exec_vfinal_synced"
         )
 
-    # CHECK: Ensure pulse_range is a valid selection before running logic
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
-        is_future = start_p >= today
         
-        # --- 4. THE INTEGER-LOCK SYNC (v35 - Final "Jan 1" Destroyer) ---
-        # 1. Generate the timeline
+        # --- 4. THE UNIVERSAL SYNC (DEFINITIONS) ---
+        # Defining columns here ensures no NameError in the planner
+        planner_cols = [
+            'entry_date', 'dow', 'active_promo', 'attendance', 
+            'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm'
+        ]
+        
+        # 1. Timeline Scaffolding
         date_list = pd.date_range(start=start_p, end=end_p)
         df_p = pd.DataFrame({'entry_date': date_list})
         
-        # 2. CREATE INTEGER KEYS (e.g., 20260429)
-        # This bypasses all datetime/timestamp/date object conflicts
+        # 2. Integer-Lock Merge (The Jan 1st Destroyer)
         df_p['int_key'] = df_p['entry_date'].dt.strftime('%Y%m%d').astype(int)
-        
-        # 3. PREPARE THE LEDGER (Ensure it has the same Integer Key)
         df_raw_sync = df_raw.copy()
         df_raw_sync['int_key'] = pd.to_datetime(df_raw_sync['entry_date']).dt.strftime('%Y%m%d').astype(int)
         
-        # 4. THE MERGE (Drop the messy date columns from ledger first)
         df_p = pd.merge(
             df_p, 
             df_raw_sync.drop(columns=['entry_date', 'dow'], errors='ignore'), 
@@ -503,55 +501,60 @@ if page == "Executive Dashboard":
             how='left'
         )
         
-        # --- 5. UNIVERSAL STRATEGY PLANNER (FIXED) ---
-        # 1. Fetch live weather (it returns None if outside the 7-day window)
+        # Restore Proper Column Names and Types
+        df_p['entry_date'] = pd.to_datetime(df_p['int_key'].astype(str), format='%Y%m%d')
+        df_p['dow'] = df_p['entry_date'].dt.day_name()
+        df_p['baseline'] = df_p['dow'].map(master_baselines)
+
+        # 3. Force-Scaffold to prevent KeyError
+        for col in planner_cols:
+            if col not in df_p.columns:
+                df_p[col] = "" if col == 'active_promo' else 0.0
+            else:
+                if col == 'active_promo':
+                    df_p[col] = df_p[col].fillna("")
+                else:
+                    df_p[col] = pd.to_numeric(df_p[col], errors='coerce').fillna(0)
+
+        # --- 5. UNIVERSAL STRATEGIC PLANNER ---
         live_weather = get_live_ottawa_forecast()
         
         with st.expander("📅 Strategic Daily Planner & Simulator", expanded=True):
-            st.write("Edit cells below to simulate marketing lift or record planned events.")
+            st.write("Plan your lift. Data entered here updates the Vital Signs below.")
             
-            # Prepare the data for the editor
             df_plan = df_p[planner_cols].copy()
             df_plan['entry_date'] = pd.to_datetime(df_plan['entry_date'])
-            
             df_plan_display = df_plan.copy()
             df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
             
-            # The Data Editor
             edited_df = st.data_editor(
                 df_plan_display, 
                 column_config={
                     "dow": None, 
                     "entry_date": st.column_config.Column("Date", disabled=True),
-                    "attendance": st.column_config.NumberColumn("Event Attendance", format="%d", help="Planned concert/event crowd size"),
+                    "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
                     "active_promo": st.column_config.TextColumn("Promo/PR Hit"),
-                    "ad_clicks": st.column_config.NumberColumn("Target Clicks"),
-                    "ad_impressions": st.column_config.NumberColumn("Target Impressions"),
                 },
-                hide_index=True, 
-                use_container_width=True, 
-                key="p1_universal_planner_v36"
+                hide_index=True, use_container_width=True, key="p1_planner_v37_final"
             )
             
-            # Sync back to the main engine dataframe
+            # Sync back to the main engine
             editable_fields = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
             for col in editable_fields:
                 df_p[col] = edited_df[col].values
 
-        # --- 5b. AUTOMATIC WEATHER SYNC ---
+        # --- 6. ENGINE EXECUTION ---
+        # Weather overlay (only for future dates)
         if live_weather:
-            # We only apply live weather to dates that are today or in the future
             for i, row in df_p.iterrows():
                 if row['entry_date'].date() >= today:
                     day_name = row.get('dow')
                     if day_name in live_weather:
-                        # Only auto-fill if the user hasn't typed a manual value yet
                         if df_p.at[i, 'rain_mm'] == 0:
                             df_p.at[i, 'rain_mm'] = live_weather[day_name]['rain']
                         if df_p.at[i, 'snow_cm'] == 0:
                             df_p.at[i, 'snow_cm'] = live_weather[day_name]['snow']
 
-        # --- 6. ENGINE EXECUTION ---
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
 
@@ -574,7 +577,7 @@ if page == "Executive Dashboard":
         k1, k2, k3, k4 = st.columns(4)
         LTV_VAL, AVG_SPEND = 1900.00, 1279.33
 
-        if is_future:
+        if start_p >= today:
             proj_rev = (total_vol * AVG_SPEND) + ((total_vol * 0.05) * LTV_VAL) + (daily_brand_inertia * len(df_final))
             k1.metric("Projected Demand", f"{total_vol:,.0f} Guests")
             k2.metric("Target Signups", f"{(total_vol * 0.05):,.0f}")
@@ -600,12 +603,11 @@ if page == "Executive Dashboard":
         # --- 9. RISK & SOCIAL PULSE ---
         st.divider()
         o_col, s_col = st.columns(2)
-        
         with o_col:
             st.write("#### 🛡️ Operational Risk")
             s_imp = df_final['snow_cm'].sum() * float(current_weights.get('Snow_cm', -45))
             r_imp = df_final['rain_mm'].sum() * float(current_weights.get('Rain_mm', -12))
-            st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}", help="Based on forecast friction weights.")
+            st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
         
         with s_col:
             st.write("#### 📱 Social Engagement")
