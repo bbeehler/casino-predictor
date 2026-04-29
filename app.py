@@ -425,7 +425,7 @@ if st.sidebar.button("🚪 Logout / Reset Session", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL v29 - Full Logic Sync)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL v30 - Indentation & Logic Sync)
 # =================================================================
 if page == "Executive Dashboard":
     st.markdown("""
@@ -442,27 +442,11 @@ if page == "Executive Dashboard":
         st.warning("Forensic Vault is empty. Please populate the Ledger.")
         st.stop()
 
-    # 1. Force entry_date to datetime (The fix for your AttributeError)
-                df_plan['entry_date'] = pd.to_datetime(df_plan['entry_date'])
-                
-                # 2. Create the display version
-                df_plan_display = df_plan.copy()
-                
-                # NOW .dt.strftime will work because we forced the type above
-                df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
-                
-                edited_df = st.data_editor(
-                    df_plan_display, 
-                    column_config={
-                        "dow": None, 
-                        "entry_date": st.column_config.Column("Date", disabled=True),
-                        "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
-                        "active_promo": st.column_config.TextColumn("Promo/PR Hit"),
-                    },
-                    hide_index=True, 
-                    use_container_width=True, 
-                    key="p1_planner_v32_final"
-                )
+    # --- 1. THE DEEP HISTORY ENGINE ---
+    df_raw = pd.DataFrame(ledger_data)
+    df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
+    df_raw['dow'] = df_raw['entry_date'].dt.day_name()
+    master_baselines = df_raw.groupby('dow')['actual_traffic'].mean().to_dict()
 
     # --- 2. ENVIRONMENT CANADA BRIDGE ---
     def get_live_ottawa_forecast():
@@ -504,25 +488,18 @@ if page == "Executive Dashboard":
         df_p['dow'] = df_p['entry_date'].dt.day_name()
         df_p['baseline'] = df_p['dow'].map(master_baselines)
         
-        # Merge with existing ledger
         df_p = pd.merge(df_p, df_raw, on='entry_date', how='left')
 
-        # THE "COLUMNS OF TRUTH" - These MUST match the planner exactly
         planner_cols = [
             'entry_date', 'dow', 'active_promo', 'attendance', 
             'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm'
         ]
 
-        # FORCE REBUILD: If a column is missing from the merge, create it now.
         for col in planner_cols:
             if col not in df_p.columns:
-                if col in ['active_promo']:
-                    df_p[col] = ""
-                else:
-                    df_p[col] = 0.0
+                df_p[col] = "" if col == 'active_promo' else 0.0
             else:
-                # Clean up NaNs from the merge
-                if col in ['active_promo']:
+                if col == 'active_promo':
                     df_p[col] = df_p[col].fillna("")
                 else:
                     df_p[col] = pd.to_numeric(df_p[col], errors='coerce').fillna(0)
@@ -533,13 +510,9 @@ if page == "Executive Dashboard":
             with st.expander("📅 Daily Strategy Planner", expanded=True):
                 st.write("Plan your lift. Weather below is synced from Environment Canada.")
                 
-                # Bulletproof subsetting
                 df_plan = df_p[planner_cols].copy()
+                df_plan['entry_date'] = pd.to_datetime(df_plan['entry_date']) # Fix AttributeError
                 
-                # FORCE DATE TYPE (The fix for the previous AttributeError)
-                df_plan['entry_date'] = pd.to_datetime(df_plan['entry_date'])
-                
-                # Create display version
                 df_plan_display = df_plan.copy()
                 df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
                 
@@ -551,12 +524,9 @@ if page == "Executive Dashboard":
                         "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
                         "active_promo": st.column_config.TextColumn("Promo/PR Hit"),
                     },
-                    hide_index=True, 
-                    use_container_width=True, 
-                    key="p1_planner_v32_final"
+                    hide_index=True, use_container_width=True, key="p1_planner_v32_final"
                 )
                 
-                # Map edited values back
                 editable_fields = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
                 for col in editable_fields:
                     df_p[col] = edited_df[col].values
@@ -613,7 +583,7 @@ if page == "Executive Dashboard":
             st.write("#### 🛡️ Operational Risk")
             s_imp = df_final['snow_cm'].sum() * float(current_weights.get('Snow_cm', -45))
             r_imp = df_final['rain_mm'].sum() * float(current_weights.get('Rain_mm', -12))
-            st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}", help="Projected loss from snow/rain.")
+            st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
         
         with s_col:
             st.write("#### 📱 Social Engagement")
