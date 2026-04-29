@@ -493,29 +493,45 @@ if page == "Executive Dashboard":
         # 4. LIVE WEATHER INTEGRATION
         if is_future:
             live_weather = get_live_ottawa_forecast()
+            
+            with st.expander("📅 Daily Strategy Planner", expanded=True):
+                st.write("Plan your lift. Weather below is synced from Environment Canada.")
+                
+                # We keep 'dow' in the dataframe but hide it from the editor
+                df_plan = df_p[['entry_date', 'dow', 'active_promo', 'attendance', 
+                                'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']].copy()
+                
+                # Format date for display ONLY
+                df_plan_display = df_plan.copy()
+                df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
+                
+                edited_df = st.data_editor(
+                    df_plan_display, 
+                    column_config={
+                        "dow": None, # This HIDES the column from the user but keeps it in the data
+                        "entry_date": st.column_config.Column("Date", disabled=True),
+                    },
+                    hide_index=True, 
+                    use_container_width=True, 
+                    key="p1_planner_v26_fixed"
+                )
+                
+                # THE CRITICAL FIX: Map the edited values back to df_p
+                # We ensure all columns, including 'dow', are preserved
+                for col in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
+                    df_p[col] = edited_df[col].values
+            
+            # Now that df_p is updated, apply the Live Weather logic
             if live_weather:
                 st.sidebar.success("📡 Environment Canada Feed Active")
                 for i, row in df_p.iterrows():
-                    day_name = row['dow']
-                    if day_name in live_weather:
-                        # Only overwrite if manual data isn't already there
+                    # We use .get() as a safety net
+                    day_name = row.get('dow') 
+                    if day_name and day_name in live_weather:
                         if df_p.at[i, 'rain_mm'] == 0:
                             df_p.at[i, 'rain_mm'] = live_weather[day_name]['rain']
                         if df_p.at[i, 'snow_cm'] == 0:
                             df_p.at[i, 'snow_cm'] = live_weather[day_name]['snow']
-
-            with st.expander("📅 Daily Strategy Planner", expanded=True):
-                st.write("Plan your lift. Weather below is synced from Environment Canada.")
-                df_plan = df_p[['entry_date', 'active_promo', 'attendance', 
-                                'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']].copy()
-                
-                df_plan['entry_date'] = df_plan['entry_date'].dt.strftime('%a, %b %d')
-                edited_df = st.data_editor(df_plan, hide_index=True, use_container_width=True, key="p1_planner_v26")
-                
-                # Sync back to df_p
-                for col in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
-                    df_p[col] = edited_df[col].values
-
         # --- 5. ENGINE EXECUTION ---
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
