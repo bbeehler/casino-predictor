@@ -562,6 +562,41 @@ if page == "Executive Dashboard":
     else:
         st.info("Select a date range to view the Dashboard.")
 
+# --- 9. SOCIAL MEDIA PERFORMANCE PULSE ---
+        st.divider()
+        st.write("### 📱 Social Media Engagement Pulse")
+        st.caption(f"Aggregated digital footprint for {start_p.strftime('%b %d')} - {end_p.strftime('%b %d, %Y')}")
+        
+        # Aggregate the planned or actual social metrics from your scaffolded dataframe
+        total_clicks = df_final['ad_clicks'].sum()
+        total_imps = df_final['ad_impressions'].sum()
+        
+        # Calculate CTR (Click-Through Rate) safely
+        ctr = (total_clicks / total_imps * 100) if total_imps > 0 else 0.0
+        
+        s1, s2, s3, s4 = st.columns(4)
+        
+        s1.metric(
+            label="Total Campaign Clicks", 
+            value=f"{total_clicks:,.0f}", 
+            help="Total clicks from Google Ads, Facebook, and Instagram campaigns."
+        )
+        s2.metric(
+            label="Digital Impressions", 
+            value=f"{total_imps:,.0f}", 
+            help="Total number of times your content was displayed on social feeds."
+        )
+        s3.metric(
+            label="Avg. CTR", 
+            value=f"{ctr:.2f}%", 
+            help="Click-Through Rate: Effectiveness of your creative at driving traffic."
+        )
+        s4.metric(
+            label="Engagement Velocity", 
+            value="High" if ctr > 1.5 else "Stable", 
+            help="Based on current casino industry benchmarks for digital engagement."
+        )
+
 # =================================================================
 # 8. PAGE 2: DAILY LEDGER AUDIT (HARDENED v7.4 - NameError & Scope Fix)
 # =================================================================
