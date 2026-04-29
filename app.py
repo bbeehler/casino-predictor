@@ -196,7 +196,7 @@ def get_forensic_metrics(df_input, coeffs):
         heartbeats = open_past.groupby(open_past['entry_date'].dt.day_name())['organic_baseline_raw'].mean().to_dict()
     else:
         # These are the "Floor" numbers for Ottawa
-        heartbeats = {'Monday': 3400, 'Tuesday': 3800, 'Wednesday': 5500, 'Thursday': 4000, 'Friday': 7600, 'Saturday': 9800, 'Sunday': 5800}
+        heartbeats = {'Monday': 3454, 'Tuesday': 3250, 'Wednesday': 4682, 'Thursday': 4683, 'Friday': 7249, 'Saturday': 7208, 'Sunday': 4629}
 
     # --- 4. PREDICTION LOGIC ---
     def predict_guests(row):
