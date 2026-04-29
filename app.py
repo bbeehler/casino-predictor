@@ -425,7 +425,7 @@ if st.sidebar.button("🚪 Logout / Reset Session", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (v42 - Hardened Direct-Sync)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (v44 - THE FINAL STABLE VERSION)
 # =================================================================
 if page == "Executive Dashboard":
     st.markdown("""
@@ -442,69 +442,53 @@ if page == "Executive Dashboard":
         st.warning("Forensic Vault is empty. Please populate the Ledger.")
         st.stop()
 
-    # --- 1. THE DEEP HISTORY ENGINE ---
+    # --- 1. PREPARE RAW DATA ---
     df_raw = pd.DataFrame(ledger_data)
     df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
     df_raw['dow'] = df_raw['entry_date'].dt.day_name()
+    # Build baselines from historical actuals
     master_baselines = df_raw.groupby('dow')['actual_traffic'].mean().to_dict()
 
-    # --- 2. DATE SELECTION ---
+    # --- 2. DATE SELECTION (Unique Key v44) ---
     col_date, _ = st.columns([1, 2])
     with col_date:
         pulse_range = st.date_input(
             "Select Analysis Window:", 
             value=(today, today + datetime.timedelta(days=7)), 
-            key="pulse_exec_vfinal_synced"
+            key="pulse_exec_v44_unique" 
         )
 
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
         
-        # --- 3. DATE SELECTION ---
-    col_date, _ = st.columns([1, 2])
-    with col_date:
-        pulse_range = st.date_input(
-            "Select Analysis Window:", 
-            value=(today, today + datetime.timedelta(days=7)), 
-            key="pulse_exec_vfinal_synced"
-        )
-
-    if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
-        start_p, end_p = pulse_range
-        
-        # --- 4. THE FAIL-SAFE TIMELINE GENERATOR (v43) ---
-        # 1. Create a clean list of dates from your selection
+        # --- 3. THE FAIL-SAFE TIMELINE ---
         date_list = pd.date_range(start=start_p, end=end_p)
-        
-        # 2. Build the dataframe from scratch
         df_p = pd.DataFrame({'entry_date': date_list})
         df_p['entry_date'] = pd.to_datetime(df_p['entry_date'])
         df_p['dow'] = df_p['entry_date'].dt.day_name()
         
-        # 3. Create a 'lookup' version of your ledger (df_raw)
-        # This converts the ledger into a searchable dictionary keyed by date string
-        ledger_lookup = df_raw.set_index(pd.to_datetime(df_raw['entry_date']).dt.strftime('%Y-%m-%d')).to_dict('index')
+        # Dictionary-based lookup (Bypasses the Jan 01 Merge Bug)
+        ledger_lookup = df_raw.set_index(df_raw['entry_date'].dt.strftime('%Y-%m-%d')).to_dict('index')
         
-        # 4. Map the data directly to the new timeline
-        # This ensures that if April 29 exists in the ledger, it pulls; otherwise it defaults to 0
-        def map_ledger(row, target_col):
-            date_str = row['entry_date'].strftime('%Y-%m-%d')
-            if date_str in ledger_lookup:
-                return ledger_lookup[date_str].get(target_col, 0)
-            return 0 if target_col != 'active_promo' else ""
+        def map_data(row, col_name):
+            d_str = row['entry_date'].strftime('%Y-%m-%d')
+            if d_str in ledger_lookup:
+                val = ledger_lookup[d_str].get(col_name, 0)
+                return val if val is not None else 0
+            return "" if col_name == 'active_promo' else 0.0
 
-        # Apply the mapping for all required columns
-        planner_cols = ['entry_date', 'dow', 'active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
-        for col in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm', 'actual_traffic']:
-            df_p[col] = df_p.apply(lambda row: map_ledger(row, col), axis=1)
+        # Map current values from database
+        map_cols = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm', 'actual_traffic']
+        for c in map_cols:
+            df_p[c] = df_p.apply(lambda r: map_data(r, c), axis=1)
 
         df_p['baseline'] = df_p['dow'].map(master_baselines).fillna(0)
 
-        # --- 5. STRATEGIC DAILY PLANNER ---
+        # --- 4. STRATEGIC DAILY PLANNER ---
         with st.expander("📅 Strategic Daily Planner & Simulator", expanded=True):
             st.write("Plan your lift. Inputs here directly scale the Vital Signs below.")
             
-            # Format display copy
+            planner_cols = ['entry_date', 'dow', 'active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
             df_plan_display = df_p[planner_cols].copy()
             df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
             
@@ -515,12 +499,12 @@ if page == "Executive Dashboard":
                     "entry_date": st.column_config.Column("Date", disabled=True),
                     "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
                 },
-                hide_index=True, use_container_width=True, key="p1_planner_v43_final"
+                hide_index=True, use_container_width=True, key="p1_planner_v44_editor"
             )
             
-            # Sync back to main engine (df_p)
-            for col in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
-                df_p[col] = edited_df[col].values
+            # Write back to main dataframe
+            for field in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
+                df_p[field] = edited_df[field].values
 
         # --- 5. ENGINE EXECUTION ---
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
@@ -568,7 +552,7 @@ if page == "Executive Dashboard":
         fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # --- 8. RISK & SOCIAL PULSE ---
+        # --- 8. RISK & SOCIAL ---
         st.divider()
         o_col, s_col = st.columns(2)
         with o_col:
