@@ -501,7 +501,13 @@ if page == "Executive Dashboard":
         with st.expander("📅 Strategic Daily Planner & Simulator", expanded=True):
             st.write("Plan your lift. Inputs here directly scale the Vital Signs below.")
             
+            # 1. Grab the columns
             df_plan = df_p[planner_cols].copy()
+            
+            # 2. THE CRITICAL FIX: Force the column to datetime type
+            df_plan['entry_date'] = pd.to_datetime(df_plan['entry_date'])
+            
+            # 3. Now create the display version safely
             df_plan_display = df_plan.copy()
             df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
             
@@ -515,7 +521,7 @@ if page == "Executive Dashboard":
                     "rain_mm": st.column_config.NumberColumn("Rain (mm)"),
                     "snow_cm": st.column_config.NumberColumn("Snow (cm)"),
                 },
-                hide_index=True, use_container_width=True, key="p1_planner_v40"
+                hide_index=True, use_container_width=True, key="p1_planner_v40_fixed"
             )
             
             # Sync back to main engine
