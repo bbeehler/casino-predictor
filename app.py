@@ -519,30 +519,39 @@ if page == "Executive Dashboard":
         total_vol = df_final['expected'].sum()
         mkt_impact_pct = (total_lift_vol / total_vol * 100) if total_vol > 0 else 0
 
-        # --- 5. EXECUTIVE KPI GRID ---
+        # --- 5. EXECUTIVE KPI GRID (FINANCIAL UPGRADE) ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
         
+        # Pull global benchmarks for calculation
+        # We use your SharePoint standards: $1,900 LTV and $1,279.33 Spend
+        LTV_VAL = 1900.00
+        AVG_SPEND = 1279.33
+
         if is_future:
-            k1.metric("Projected Demand", f"{total_vol:,.0f} Guests")
-            k2.metric("Target Signups", f"{(total_vol * 0.05):,.0f}")
-            k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
-            k4.metric("AI Confidence", m['predictability'])
+            # Calculate Projected Financials for the 7-day window
+            projected_coin_in = total_vol * AVG_SPEND
+            projected_ltv = (total_vol * 0.05) * LTV_VAL
+            # Enhanced Revenue = Coin-in + LTV + Brand Lift (Inertia)
+            proj_enhanced_rev = projected_coin_in + projected_ltv + (daily_brand_inertia * len(df_final))
+
+            k1.metric("Projected Demand", f"{total_vol:,.0f} Guests", help="Total predicted foot traffic.")
+            k2.metric("Target Signups", f"{(total_vol * 0.05):,.0f}", help="Based on 5% conversion target.")
+            k3.metric("Projected Enhanced Revenue", f"${proj_enhanced_rev:,.0f}", help="Sum of Coin-in, Signups, and Brand Equity.")
+            k4.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
+
         elif is_past:
             total_act = df_final['actual_traffic'].sum()
-            k1.metric("Actual Guest Flow", f"{total_act:,.0f}")
-            k2.metric("New Unity Members", f"{df_final['new_members'].sum():,.0f}")
-            k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
-            k4.metric("Audited Accuracy", m['predictability'])
-        else:
-            past_t = df_final[df_final['entry_date'].dt.date < today]['actual_traffic'].sum()
-            future_e = df_final[df_final['entry_date'].dt.date >= today]['expected'].sum()
-            k1.metric("Total Window Guests", f"{(past_t + future_e):,.0f}")
-            k2.metric("Window New Members", f"{df_final['new_members'].sum():,.0f}")
-            k3.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
-            k4.metric("Current Accuracy", m['predictability'])
+            actual_signups = df_final['new_members'].sum()
+            
+            # Use actual coin-in if available in the ledger, else fallback to avg
+            act_coin_in = df_final['actual_coin_in'].sum() if 'actual_coin_in' in df_final.columns else (total_act * AVG_SPEND)
+            act_enhanced_rev = act_coin_in + (actual_signups * LTV_VAL)
 
-        st.divider()
+            k1.metric("Actual Guest Flow", f"{total_act:,.0f}")
+            k2.metric("New Unity Members", f"{actual_signups:,.0f}")
+            k3.metric("Audited Revenue Impact", f"${act_enhanced_rev:,.0f}")
+            k4.metric("Audited Accuracy", m['predictability'])
 
         # --- 6. PERFORMANCE VIZ ---
         st.write("### 🎰 The Unified Pulse")
