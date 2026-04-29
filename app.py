@@ -595,61 +595,143 @@ if page == "Executive Dashboard":
         st.stop()
 
 # =================================================================
-# 8. PAGE 2: DAILY LEDGER AUDIT (HARDENED v7.3 - Scoped Fix)
+# 8. PAGE 2: DAILY LEDGER AUDIT (HARDENED v7.4 - NameError & Scope Fix)
 # =================================================================
-# ... (Keep Section 1 & 2 the same as your current code)
+elif page == "Daily Ledger Audit":
+    # --- 1. THE DATA ENGINE (CRITICAL: Define df_ledger FIRST to prevent NameError) ---
+    if not ledger_data:
+        df_ledger = pd.DataFrame(columns=[
+            'entry_date', 'actual_traffic', 'new_members', 'actual_coin_in', 
+            'active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 
+            'rain_mm', 'snow_cm'
+        ])
+    else:
+        df_ledger = pd.DataFrame(ledger_data)
+        df_ledger['entry_date'] = pd.to_datetime(df_ledger['entry_date']).dt.date
+        
+        # Ensure all numeric columns are handled properly
+        marketing_cols = ['actual_traffic', 'new_members', 'actual_coin_in', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
+        for col in marketing_cols:
+            if col in df_ledger.columns:
+                df_ledger[col] = pd.to_numeric(df_ledger[col], errors='coerce').fillna(0)
+        
+        df_ledger['active_promo'] = df_ledger['active_promo'].astype(str).replace(['nan', 'None', '0', '0.0'], '')
+        df_ledger = df_ledger.sort_values('entry_date', ascending=False)
 
-    # --- 3. THE SCOREBOARD (IMMEDIATE FEEDBACK) ---
-    # THE FIX: Only calculate metrics if an entry exists for the selected e_date
+    st.markdown("""
+        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
+            <h2 style="color: #0047AB; margin: 0;">🎰 Daily Property Ledger</h2>
+            <p style="color: #444; margin: 0;">Ground Truth Data: Financials, Foot Traffic, and Marketing Spend.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # --- 2. RAPID ENTRY FORM ---
+    with st.expander("➕ Log New Daily Actuals", expanded=True):
+        with st.form("rapid_entry_form", clear_on_submit=True):
+            f1, f2, f3 = st.columns(3)
+            with f1:
+                e_date = st.date_input("Date", value=datetime.date.today())
+                e_traffic = st.number_input("Actual Traffic", min_value=0, step=1)
+                e_members = st.number_input("New Members", min_value=0, step=1)
+            with f2:
+                e_promo = st.text_input("Active Promo Name", placeholder="e.g. Rock of Ages")
+                e_event = st.number_input("Event Attendance", min_value=0, step=1)
+                e_coin = st.number_input("Actual Coin-In ($)", min_value=0.0, step=1000.0)
+            with f3:
+                e_clicks = st.number_input("Ad Clicks", min_value=0, step=1)
+                e_imps = st.number_input("Social Impressions", min_value=0, step=1)
+                e_rain = st.number_input("Rain (mm)", min_value=0.0, step=0.1)
+            
+            submit_new = st.form_submit_button("🚀 Submit to Database", use_container_width=True)
+            
+            if submit_new:
+                new_row = {
+                    "entry_date": str(e_date),
+                    "actual_traffic": int(e_traffic),
+                    "new_members": int(e_members),
+                    "actual_coin_in": float(e_coin),
+                    "active_promo": str(e_promo).strip() if e_promo else None,
+                    "attendance": int(e_event),
+                    "ad_clicks": int(e_clicks),
+                    "ad_impressions": int(e_imps),
+                    "rain_mm": float(e_rain),
+                    "snow_cm": 0.0 # Defaulting snow to 0 for rapid entry
+                }
+                try:
+                    supabase.table("ledger").upsert(new_row).execute()
+                    st.success(f"✅ Successfully logged: {e_date}")
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Database Error: {e}")
+
+    # --- 3. THE HISTORICAL EDITABLE LEDGER ---
     st.divider()
-    
-    # Filter ledger for the date currently in the date_input (e_date)
+    l1, l2 = st.columns([2, 1])
+    with l1:
+        st.write("### 📂 Bulk Audit & Corrections")
+    with l2:
+        view_limit = st.slider("Historical View:", 7, 100, 30)
+
+    with st.form("bulk_ledger_sync"):
+        edited_ledger = st.data_editor(
+            df_ledger.head(view_limit),
+            column_config={
+                "entry_date": st.column_config.DateColumn("Date", required=True),
+                "actual_traffic": st.column_config.NumberColumn("Actual Traffic", format="%d"),
+                "new_members": st.column_config.NumberColumn("New Members", format="%d"),
+                "actual_coin_in": st.column_config.NumberColumn("Coin-In", format="$%d"),
+                "active_promo": st.column_config.TextColumn("Promo Name"),
+                "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
+            },
+            hide_index=True,
+            use_container_width=True,
+            num_rows="dynamic",
+            key="property_ledger_v7_4"
+        )
+        
+        if st.form_submit_button("💾 Sync Table Updates", use_container_width=True):
+            try:
+                df_sync = edited_ledger.copy()
+                df_sync['entry_date'] = df_sync['entry_date'].astype(str)
+                sync_payload = df_sync.fillna(0).to_dict(orient='records')
+                supabase.table("ledger").upsert(sync_payload).execute()
+                st.success("✅ Bulk updates synced successfully.")
+                st.cache_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Bulk Sync Error: {e}")
+
+    # --- 4. THE SCOREBOARD (SCOPED FEEDBACK) ---
+    st.divider()
     day_audit = df_ledger[df_ledger['entry_date'] == e_date]
     
     if not day_audit.empty:
-        # Pull specific daily actuals
         day_traffic = day_audit['actual_traffic'].iloc[0]
         day_signups = day_audit['new_members'].iloc[0]
-        
-        # Pull global ROI metrics (Assumes these variables exist from your ROI form or session state)
-        # For immediate feedback, we use the values currently in the Page 7 session state
-        ad_spend = float(existing.get('ad_spend', 1.0)) # Fallback to 1 to avoid div by zero
-        
-        # Recalculate daily potential using Brian's $1,279.33 and $1,900 benchmarks
-        # Note: On Page 2, we look at DAILY potential, so we divide the monthly goals accordingly
+        # Using Brian's standard benchmarks
         daily_potential = (day_traffic * 1279.33) + (day_signups * 1900.00)
         
-        st.write(f"### 🎯 Daily Performance Scoreboard: {e_date.strftime('%B %d, %Y')}")
-        
+        st.write(f"### 🎯 Performance Scoreboard: {e_date.strftime('%B %d, %Y')}")
         m1, m2, m3 = st.columns(3)
         m1.metric("Daily Floor Traffic", f"{day_traffic:,}")
         m2.metric("New Member Signups", f"{day_signups:,}")
-        m3.metric("Daily Property Potential", f"${daily_potential:,.2f}", help="Based on $1,279.33 avg spend and $1,900 LTV.")
+        m3.metric("Daily Potential", f"${daily_potential:,.2f}", help="Based on $1,279.33 avg spend and $1,900 LTV.")
 
-        # --- 4. SCENARIO ATTRIBUTION MATRIX (DAILY) ---
-        st.write("### 📍 Daily Attribution Scenarios")
-        st.caption("How much of today's floor volume was driven by the current marketing spend?")
-        
+        # --- 5. SCENARIO ATTRIBUTION MATRIX (DAILY) ---
+        st.write("#### 📍 Daily Attribution Scenarios")
         scenarios = {
             "Attribution Level": ["Conservative (10%)", "Moderate (20%)", "Aggressive (30%)"],
-            "Attributed Floor Impact": [
-                f"${daily_potential * 0.1:,.2f}", 
-                f"${daily_potential * 0.2:,.2f}", 
-                f"${daily_potential * 0.3:,.2f}"
-            ],
-            "Trip Equivalent": [
-                f"{int(day_traffic * 0.1)} visits",
-                f"{int(day_traffic * 0.2)} visits",
-                f"{int(day_traffic * 0.3)} visits"
-            ]
+            "Attributed Floor Impact": [f"${daily_potential * 0.1:,.2f}", f"${daily_potential * 0.2:,.2f}", f"${daily_potential * 0.3:,.2f}"],
+            "Trip Equivalent": [f"{int(day_traffic * 0.1)} visits", f"{int(day_traffic * 0.2)} visits", f"{int(day_traffic * 0.3)} visits"]
         }
         st.table(pd.DataFrame(scenarios))
     else:
-        st.info("💡 Select a date with existing data to see the Performance Scoreboard.")
+        st.info("💡 Select a date with existing data to see the daily Performance Scoreboard.")
 
-# --- 5. DATABASE STATS ---
-if not df_ledger.empty:
-    st.write(f"**Database Audit:** {len(df_ledger)} total records in vault.")
+    # --- 6. DATABASE STATS ---
+    if not df_ledger.empty:
+        st.write(f"**Database Audit:** {len(df_ledger)} total records in vault.")
 
 # =================================================================
 # 3. PAGE 3: ATTRIBUTION ANALYTICS (PRO-MARKETING SUITE)
