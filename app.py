@@ -482,26 +482,29 @@ if page == "Executive Dashboard":
         start_p, end_p = pulse_range
         is_future = start_p >= today
         
-        # --- 4. TIMELINE GENERATION & FORCE-SCAFFOLDING (HARD-SYNC v31) ---
-        # Convert start/end to datetime objects to prevent "Jan 1" default
-        dt_start = pd.to_datetime(start_p)
-        dt_end = pd.to_datetime(end_p)
-        
-        # Explicitly build the range based on YOUR selection
-        date_list = pd.date_range(start=dt_start, end=dt_end)
+        # --- 4. THE TYPE-HAMMER SYNC (v32 - ZERO DATA LOSS FIX) ---
+        # 1. Create the timeline
+        date_list = pd.date_range(start=start_p, end=end_p)
         df_p = pd.DataFrame({'entry_date': date_list})
         
-        # Immediately force the column to datetime so it matches the ledger
-        df_p['entry_date'] = pd.to_datetime(df_p['entry_date'])
+        # 2. Convert BOTH to strings for a guaranteed match
+        df_p['merge_key'] = df_p['entry_date'].dt.strftime('%Y-%m-%d')
+        
+        # Ensure ledger exists and has the same string key
+        df_raw_sync = df_raw.copy()
+        df_raw_sync['merge_key'] = pd.to_datetime(df_raw_sync['entry_date']).dt.strftime('%Y-%m-%d')
+        
+        # 3. MERGE on the string key
+        df_p = pd.merge(df_p, df_raw_sync.drop(columns=['entry_date']), on='merge_key', how='left')
+        
+        # 4. Clean up: Restore entry_date as a proper datetime and drop the key
+        df_p['entry_date'] = pd.to_datetime(df_p['merge_key'])
         df_p['dow'] = df_p['entry_date'].dt.day_name()
         df_p['baseline'] = df_p['dow'].map(master_baselines)
-        
-        # Merge - Ensure 'on' column types match exactly
-        df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
-        df_p = pd.merge(df_p, df_raw, on='entry_date', how='left')
+        df_p = df_p.drop(columns=['merge_key'])
 
-        # Scaffold to prevent zeros in the engine
-        planner_cols = ['entry_date', 'dow', 'active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
+        # 5. SCAFFOLDING (Ensuring no zeros reach the engine)
+        planner_cols = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
         for col in planner_cols:
             if col not in df_p.columns:
                 df_p[col] = "" if col == 'active_promo' else 0.0
