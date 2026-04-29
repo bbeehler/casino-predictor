@@ -146,13 +146,9 @@ def apply_corporate_styling():
 apply_corporate_styling()
 
 # =================================================================
-# 3. FORENSIC ENGINE: FULL-SPECTRUM ATTRIBUTION (v6.1 - Hardened)
+# 3. FORENSIC ENGINE: FULL-SPECTRUM ATTRIBUTION (v6.2 - High Performance)
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
-    """
-    ENGINE: Calculates expected traffic based on Organic Baseline + 
-    Trackable Digital + Mass Media Inertia + PR Gravity.
-    """
     if not df_input:
         return {"predictability": "0.0%", "df": pd.DataFrame(), "ooh_total_daily": 0}
 
@@ -160,12 +156,12 @@ def get_forensic_metrics(df_input, coeffs):
     df['entry_date'] = pd.to_datetime(df['entry_date'])
     today = pd.Timestamp(datetime.date.today())
     
-    # --- 1. COEFFICIENT EXTRACTION (Performance Tuned) ---
+    # --- 1. COEFFICIENT EXTRACTION ---
     c_clicks = float(coeffs.get('Clicks', 0.05))
     c_social = float(coeffs.get('Social_Imp', 0.0002))
     decay = float(coeffs.get('Ad_Decay', 85.0)) / 100 
     
-    # FIX: Ensure Gravity is a multiplier, not a fraction of a fraction
+    # PERFORMANCE FIX: If you enter 85 in the UI, this becomes 0.85 multiplier
     gravity = float(coeffs.get('Event_Gravity', 25.0)) / 100
     promo_lift_weight = float(coeffs.get('Promo', 550))
     
@@ -173,7 +169,6 @@ def get_forensic_metrics(df_input, coeffs):
     c_ooh = float(coeffs.get('OOH_Weight', 100))           
     c_pr_mult = float(coeffs.get('PR_Weight', 1.2))        
 
-    # Baseline OOH calculation
     ooh_daily = (float(coeffs.get('Static_Weight', 15)) * int(coeffs.get('Static_Count', 10))) + \
                 (float(coeffs.get('Digital_OOH_Weight', 25)) * int(coeffs.get('Digital_OOH_Count', 5)))
     
@@ -181,7 +176,7 @@ def get_forensic_metrics(df_input, coeffs):
 
     # --- 2. OPERATIONAL FAILSAFE ---
     df['is_closed'] = df.apply(
-        lambda x: 1 if (x['entry_date'] < today and x.get('actual_traffic', 0) == 0 and x.get('new_members', 0) == 0) else 0, 
+        lambda x: 1 if (x['entry_date'] < today and x.get('actual_traffic', 0) == 0) else 0, 
         axis=1
     )
 
@@ -194,17 +189,20 @@ def get_forensic_metrics(df_input, coeffs):
     
     df['residual_lift'] = awareness_pool
     
-    # CRITICAL FIX: Ensure 'attendance' is forced to numeric before applying gravity
+    # Ensure attendance is numeric and multiply by your 85% gravity
     df['gravity_lift'] = pd.to_numeric(df['attendance'], errors='coerce').fillna(0) * gravity
 
-    # --- 4. HEARTBEAT CALCULATION (OTTAWA BASELINES) ---
-    # We prioritize actual history if it exists
-    df['guest_baseline'] = df.get('actual_traffic', 0) - df['residual_lift'] - total_brand_inertia - df['gravity_lift']
+    # --- 4. THE "HEARTBEAT" (HISTORICAL AVERAGE) ---
+    # We calculate the organic baseline by stripping away known lifts from ACTUALS
+    df['organic_subtraction'] = df.get('actual_traffic', 0) - df['residual_lift'] - total_brand_inertia - df['gravity_lift']
+    
     open_past = df[(df['is_closed'] == 0) & (df['entry_date'] < today)]
     
     if not open_past.empty:
-        heartbeats = open_past.groupby(open_past['entry_date'].dt.day_name())['guest_baseline'].mean().to_dict()
+        # This gets your REAL historical average from the ledger per day of week
+        heartbeats = open_past.groupby(open_past['entry_date'].dt.day_name())['organic_subtraction'].mean().to_dict()
     else:
+        # Ottawa Hard Rock Standard Baselines
         heartbeats = {
             'Monday': 3398, 'Tuesday': 3800, 'Wednesday': 5574,
             'Thursday': 3931, 'Friday': 7651, 'Saturday': 9800, 'Sunday': 5800
@@ -215,16 +213,20 @@ def get_forensic_metrics(df_input, coeffs):
         if row['is_closed'] == 1: return 0
         
         day_name = row['entry_date'].strftime('%A')
+        # Step A: Start with the Historical Average (Naked Base)
         base = heartbeats.get(day_name, 4200) 
         
-        # PR Multiplier logic
+        # Step B: Apply PR Multiplier to the Base
         p_val = str(row.get('active_promo', '0'))
-        current_base = base * c_pr_mult if "PR" in p_val.upper() else base
+        if "PR" in p_val.upper() or "EARNED" in p_val.upper():
+            current_base = base * c_pr_mult
+        else:
+            current_base = base
         
-        # Standard Promo Lift
+        # Step C: Add Promos, Brand Inertia, Awareness, and your 85% Event Gravity
         promo_impact = promo_lift_weight if p_val not in ['0', '0.0', 'nan', 'None', ''] else 0
 
-        # SUMMATION: Base + Awareness + Brand + Events + Promo
+        # FINAL FORMULA
         return max(0, current_base + row['residual_lift'] + total_brand_inertia + row['gravity_lift'] + promo_impact)
 
     df['expected'] = df.apply(predict_guests, axis=1)
