@@ -442,11 +442,27 @@ if page == "Executive Dashboard":
         st.warning("Forensic Vault is empty. Please populate the Ledger.")
         st.stop()
 
-    # --- 1. THE DEEP HISTORY ENGINE ---
-    df_raw = pd.DataFrame(ledger_data)
-    df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
-    df_raw['dow'] = df_raw['entry_date'].dt.day_name()
-    master_baselines = df_raw.groupby('dow')['actual_traffic'].mean().to_dict()
+    # 1. Force entry_date to datetime (The fix for your AttributeError)
+                df_plan['entry_date'] = pd.to_datetime(df_plan['entry_date'])
+                
+                # 2. Create the display version
+                df_plan_display = df_plan.copy()
+                
+                # NOW .dt.strftime will work because we forced the type above
+                df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
+                
+                edited_df = st.data_editor(
+                    df_plan_display, 
+                    column_config={
+                        "dow": None, 
+                        "entry_date": st.column_config.Column("Date", disabled=True),
+                        "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
+                        "active_promo": st.column_config.TextColumn("Promo/PR Hit"),
+                    },
+                    hide_index=True, 
+                    use_container_width=True, 
+                    key="p1_planner_v32_final"
+                )
 
     # --- 2. ENVIRONMENT CANADA BRIDGE ---
     def get_live_ottawa_forecast():
