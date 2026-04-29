@@ -146,7 +146,7 @@ def apply_corporate_styling():
 apply_corporate_styling()
 
 # =================================================================
-# 3. FORENSIC ENGINE: FULL-SPECTRUM ATTRIBUTION (v6.0)
+# 3. FORENSIC ENGINE: FULL-SPECTRUM ATTRIBUTION (v6.1 - Hardened)
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
     """
@@ -160,24 +160,23 @@ def get_forensic_metrics(df_input, coeffs):
     df['entry_date'] = pd.to_datetime(df['entry_date'])
     today = pd.Timestamp(datetime.date.today())
     
-    # --- 1. COEFFICIENT EXTRACTION (Expanded) ---
+    # --- 1. COEFFICIENT EXTRACTION (Performance Tuned) ---
     c_clicks = float(coeffs.get('Clicks', 0.05))
     c_social = float(coeffs.get('Social_Imp', 0.0002))
     decay = float(coeffs.get('Ad_Decay', 85.0)) / 100 
+    
+    # FIX: Ensure Gravity is a multiplier, not a fraction of a fraction
     gravity = float(coeffs.get('Event_Gravity', 25.0)) / 100
     promo_lift_weight = float(coeffs.get('Promo', 550))
     
-    # NEW: Mass Media & Brand Inertia weights
-    c_broadcast = float(coeffs.get('Broadcast_Weight', 150)) # TV/Radio
-    c_ooh = float(coeffs.get('OOH_Weight', 100))           # Signage
-    c_print = float(coeffs.get('Print_Lift', 75))          # Magazines/Newspapers
-    c_pr_mult = float(coeffs.get('PR_Weight', 1.2))        # Earned Media Multiplier
+    c_broadcast = float(coeffs.get('Broadcast_Weight', 150)) 
+    c_ooh = float(coeffs.get('OOH_Weight', 100))           
+    c_pr_mult = float(coeffs.get('PR_Weight', 1.2))        
 
-    # Baseline OOH calculation (Static + Digital Faces)
+    # Baseline OOH calculation
     ooh_daily = (float(coeffs.get('Static_Weight', 15)) * int(coeffs.get('Static_Count', 10))) + \
-                 (float(coeffs.get('Digital_OOH_Weight', 25)) * int(coeffs.get('Digital_OOH_Count', 5)))
+                (float(coeffs.get('Digital_OOH_Weight', 25)) * int(coeffs.get('Digital_OOH_Count', 5)))
     
-    # The Total "Inertia" layer (Fixed daily lift from non-digital media)
     total_brand_inertia = ooh_daily + c_broadcast + c_ooh
 
     # --- 2. OPERATIONAL FAILSAFE ---
@@ -187,53 +186,45 @@ def get_forensic_metrics(df_input, coeffs):
     )
 
     # --- 3. MARKETING & EVENT LIFTS ---
-    # We include 'Print' in the awareness pool because it has a decay/tail effect
     awareness_pool, current_pool = [], 0.0
     for _, row in df.iterrows():
-        # Daily input now accounts for trackable digital + estimated print hits
         daily_in = (row.get('ad_clicks', 0) * c_clicks) + (row.get('ad_impressions', 0) * c_social)
         current_pool = daily_in + (current_pool * decay)
         awareness_pool.append(current_pool)
     
     df['residual_lift'] = awareness_pool
-    df['gravity_lift'] = df.get('attendance', 0) * gravity
+    
+    # CRITICAL FIX: Ensure 'attendance' is forced to numeric before applying gravity
+    df['gravity_lift'] = pd.to_numeric(df['attendance'], errors='coerce').fillna(0) * gravity
 
-    # --- 4. HEARTBEAT CALCULATION (PAST ONLY) ---
-    # We subtract ALL known lifts to find the "naked" organic traffic
+    # --- 4. HEARTBEAT CALCULATION (OTTAWA BASELINES) ---
+    # We prioritize actual history if it exists
     df['guest_baseline'] = df.get('actual_traffic', 0) - df['residual_lift'] - total_brand_inertia - df['gravity_lift']
     open_past = df[(df['is_closed'] == 0) & (df['entry_date'] < today)]
     
     if not open_past.empty:
         heartbeats = open_past.groupby(open_past['entry_date'].dt.day_name())['guest_baseline'].mean().to_dict()
     else:
-        # UPDATED: Hard Rock Hotel & Casino Ottawa Specific Organic Baselines
-        # These are the "Naked" numbers (No marketing, no events)
         heartbeats = {
-            'Monday': 3398,
-            'Tuesday': 3800,
-            'Wednesday': 5574,
-            'Thursday': 3931,
-            'Friday': 7651,
-            'Saturday': 9800,
-            'Sunday': 5800
+            'Monday': 3398, 'Tuesday': 3800, 'Wednesday': 5574,
+            'Thursday': 3931, 'Friday': 7651, 'Saturday': 9800, 'Sunday': 5800
         }
     
     # --- 5. PREDICTION LOGIC ---
     def predict_guests(row):
-        if row['is_closed'] == 1: 
-            return 0
+        if row['is_closed'] == 1: return 0
         
         day_name = row['entry_date'].strftime('%A')
         base = heartbeats.get(day_name, 4200) 
         
-        # Apply the PR Multiplier if "PR" or "Earned" is in the promo name
+        # PR Multiplier logic
         p_val = str(row.get('active_promo', '0'))
         current_base = base * c_pr_mult if "PR" in p_val.upper() else base
         
         # Standard Promo Lift
         promo_impact = promo_lift_weight if p_val not in ['0', '0.0', 'nan', 'None', ''] else 0
 
-        # Result = (Naked Base * PR Multiplier) + Awareness + Brand Inertia + Events + Promo
+        # SUMMATION: Base + Awareness + Brand + Events + Promo
         return max(0, current_base + row['residual_lift'] + total_brand_inertia + row['gravity_lift'] + promo_impact)
 
     df['expected'] = df.apply(predict_guests, axis=1)
@@ -251,57 +242,6 @@ def get_forensic_metrics(df_input, coeffs):
         "df": df,
         "total_inertia": total_brand_inertia
     }
-
-# =================================================================
-# 3.1 BL-ROAS CALCULATION ENGINE
-# =================================================================
-def calculate_and_save_roas(data_dict):
-    """
-    Implements the 5-Step BL-ROAS logic and saves to Supabase.
-    """
-    # Math logic based on Brian's Copilot instructions
-    traffic_score = (data_dict['utm_sessions'] + data_dict['organic_sessions']) * 8.00
-    eng_score = (
-        (data_dict['social_likes'] * 0.50) + 
-        (data_dict['social_comments'] * 1.00) + 
-        (data_dict['social_shares'] * 1.25) + 
-        (data_dict['post_views'] * 0.25) + 
-        (data_dict['site_time_sessions'] * 1.50) + 
-        (data_dict['booking_clicks'] * 2.50)
-    )
-    sentiment_score = data_dict['pos_reviews'] * 30.00
-    geo_lift_score = data_dict['geo_lift_traffic'] * 8.00
-    
-    brand_value = traffic_score + eng_score + sentiment_score + geo_lift_score
-    bl_roas = brand_value / data_dict['ad_spend'] if data_dict['ad_spend'] > 0 else 0
-    
-    # Enhanced Revenue logic using Brian's benchmarks
-    enhanced_revenue = (
-        brand_value + 
-        (data_dict['ledger_traffic'] * data_dict['avg_spend']) + 
-        (data_dict['ledger_signups'] * data_dict['ltv_member'])
-    )
-
-    payload = {
-        "report_month": data_dict['report_month'],
-        "utm_sessions": int(data_dict['utm_sessions']),
-        "organic_sessions": int(data_dict['organic_sessions']),
-        "ad_spend": float(data_dict['ad_spend']),
-        "social_likes": int(data_dict['social_likes']),
-        "social_comments": int(data_dict['social_comments']),
-        "social_shares": int(data_dict['social_shares']),
-        "post_views": int(data_dict['post_views']),
-        "site_time_sessions": int(data_dict['site_time_sessions']),
-        "booking_clicks": int(data_dict['booking_clicks']),
-        "pos_reviews": int(data_dict['pos_reviews']),
-        "geo_lift_traffic": int(data_dict['geo_lift_traffic']),
-        "calculated_bl_roas": round(float(bl_roas), 2),
-        "brand_value": round(float(brand_value), 2),
-        "enhanced_revenue": round(float(enhanced_revenue), 2)
-    }
-
-    # THE CRITICAL FIX: Add 'on_conflict="report_month"'
-    return supabase.table("monthly_roi").upsert(payload, on_conflict="report_month").execute()
 
 # =================================================================
 # 4. DATA INFRASTRUCTURE (SUPABASE & WEATHER)
