@@ -1221,6 +1221,8 @@ elif page == "FloorCast AI Analyst":
             
             st.session_state.messages.append({"role": "assistant", "content": assistant_msg})
             st.rerun()
+        except Exception as e:
+            st.error(f"AI Error: {e}")
 
 # =================================================================
 # 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v23 - Zero-Proof Edition)
