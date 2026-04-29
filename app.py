@@ -425,7 +425,7 @@ if st.sidebar.button("🚪 Logout / Reset Session", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (v40 - Streamlined & Stable)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (v42 - Hardened Direct-Sync)
 # =================================================================
 if page == "Executive Dashboard":
     st.markdown("""
@@ -460,67 +460,26 @@ if page == "Executive Dashboard":
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
         
-        # --- 3. THE UNIVERSAL SYNC (v40) ---
-        planner_cols = [
-            'entry_date', 'dow', 'active_promo', 'attendance', 
-            'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm'
-        ]
-        
-        # 1. Generate Timeline
-        date_list = pd.date_range(start=start_p, end=end_p)
-        df_p = pd.DataFrame({'entry_date': date_list})
-        
-        # 2. Integer-Lock Merge
-        df_p['int_key'] = df_p['entry_date'].dt.strftime('%Y%m%d').astype(int)
-        df_raw_sync = df_raw.copy()
-        df_raw_sync['int_key'] = pd.to_datetime(df_raw_sync['entry_date']).dt.strftime('%Y%m%d').astype(int)
-        
-        df_p = pd.merge(
-            df_p, 
-            df_raw_sync.drop(columns=['entry_date', 'dow'], errors='ignore'), 
-            on='int_key', 
-            how='left'
-        )
-        
-        # 3. Restore Types
-        df_p['entry_date'] = pd.to_datetime(df_p['int_key'].astype(str), format='%Y%m%d')
-        df_p['dow'] = df_p['entry_date'].dt.day_name()
-        df_p['baseline'] = df_p['dow'].map(master_baselines)
-
-        # 4. Scaffolding
-        for col in planner_cols:
-            if col not in df_p.columns:
-                df_p[col] = "" if col == 'active_promo' else 0.0
-            else:
-                if col == 'active_promo':
-                    df_p[col] = df_p[col].fillna("")
-                else:
-                    df_p[col] = pd.to_numeric(df_p[col], errors='coerce').fillna(0)
-
-        if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
-        start_p, end_p = pulse_range
-        
-        # --- 4. THE DIRECT-SYNC TIMELINE (v41) ---
-        # 1. Define the columns we need
+        # --- 3. THE DIRECT-SYNC TIMELINE (v42) ---
         planner_cols = ['entry_date', 'dow', 'active_promo', 'attendance', 
                         'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
         
-        # 2. Build the timeline DIRECTLY from your selection
+        # 1. Build the timeline DIRECTLY from selection
         date_list = pd.date_range(start=start_p, end=end_p)
         df_p = pd.DataFrame({'entry_date': date_list})
-        
-        # 3. Standardize types for the merge
         df_p['entry_date'] = pd.to_datetime(df_p['entry_date'])
-        df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
         
-        # 4. Merge with the Ledger
-        df_p = pd.merge(df_p, df_raw.drop(columns=['dow'], errors='ignore'), on='entry_date', how='left')
+        # 2. Merge with Ledger (Type-Safe)
+        df_raw_sync = df_raw.copy()
+        df_raw_sync['entry_date'] = pd.to_datetime(df_raw_sync['entry_date'])
         
-        # 5. Restore Day of Week and Baselines
+        df_p = pd.merge(df_p, df_raw_sync.drop(columns=['dow'], errors='ignore'), on='entry_date', how='left')
+        
+        # 3. Restore Day of Week and Baselines
         df_p['dow'] = df_p['entry_date'].dt.day_name()
         df_p['baseline'] = df_p['dow'].map(master_baselines)
 
-        # 6. Fill missing values so the engine has numbers to work with
+        # 4. Fill missing values (Scaffolding)
         for col in planner_cols:
             if col not in df_p.columns:
                 df_p[col] = "" if col == 'active_promo' else 0.0
@@ -530,12 +489,15 @@ if page == "Executive Dashboard":
                 else:
                     df_p[col] = pd.to_numeric(df_p[col], errors='coerce').fillna(0)
 
-        # --- 5. STRATEGIC DAILY PLANNER ---
+        # --- 4. STRATEGIC DAILY PLANNER ---
         with st.expander("📅 Strategic Daily Planner & Simulator", expanded=True):
             st.write("Plan your lift. Inputs here directly scale the Vital Signs below.")
             
-            # Format display
-            df_plan_display = df_p[planner_cols].copy()
+            # Use a clean copy for the data editor
+            df_plan_edit = df_p[planner_cols].copy()
+            df_plan_edit['entry_date'] = pd.to_datetime(df_plan_edit['entry_date'])
+            
+            df_plan_display = df_plan_edit.copy()
             df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
             
             edited_df = st.data_editor(
@@ -544,13 +506,33 @@ if page == "Executive Dashboard":
                     "dow": None, 
                     "entry_date": st.column_config.Column("Date", disabled=True),
                     "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
+                    "active_promo": st.column_config.TextColumn("Promo/PR Hit"),
                 },
-                hide_index=True, use_container_width=True, key="p1_planner_v41_stable"
+                hide_index=True, use_container_width=True, key="p1_planner_v42_final"
             )
             
-            # CRITICAL: Sync edited data back to the main engine (df_p)
-            for col in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
+            # Sync edited data back to the main engine (df_p)
+            editable_fields = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
+            for col in editable_fields:
                 df_p[col] = edited_df[col].values
+
+        # --- 5. ENGINE EXECUTION ---
+        m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
+        df_final = m['df'].sort_values('entry_date')
+
+        daily_brand_inertia = (
+            float(current_weights.get('Broadcast_Weight', 150)) + 
+            float(current_weights.get('OOH_Weight', 100)) + 
+            float(current_weights.get('Print_Lift', 75)) +
+            (float(current_weights.get('Static_Weight', 15)) * int(current_weights.get('Static_Count', 10))) +
+            (float(current_weights.get('Digital_OOH_Weight', 25)) * int(current_weights.get('Digital_OOH_Count', 5)))
+        )
+        
+        total_vol = df_final['expected'].sum()
+        total_lift_vol = (df_final['residual_lift'].sum() + 
+                          df_final['gravity_lift'].sum() + 
+                          (daily_brand_inertia * len(df_final)))
+        mkt_impact_pct = (total_lift_vol / total_vol * 100) if total_vol > 0 else 0
 
         # --- 6. EXECUTIVE KPI GRID ---
         st.write("### 🏛️ Property Vital Signs")
