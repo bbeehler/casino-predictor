@@ -425,7 +425,7 @@ if st.sidebar.button("🚪 Logout / Reset Session", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL v28 - Stable Scaffolding)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL v29 - Full Logic Sync)
 # =================================================================
 if page == "Executive Dashboard":
     st.markdown("""
@@ -468,17 +468,16 @@ if page == "Executive Dashboard":
         except:
             return None
 
-    # --- 3. DATE SELECTION (MUST COME BEFORE THE LOGIC) ---
+    # --- 3. DATE SELECTION ---
     col_date, _ = st.columns([1, 2])
     with col_date:
-        # Define the variable here first!
         pulse_range = st.date_input(
             "Select Analysis Window:", 
             value=(today, today + datetime.timedelta(days=7)), 
             key="pulse_exec_vfinal_synced"
         )
 
-    # NOW you can check if it's a tuple
+    # CHECK: Ensure pulse_range is a valid selection before running logic
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
         is_future = start_p >= today
@@ -489,22 +488,53 @@ if page == "Executive Dashboard":
         df_p['dow'] = df_p['entry_date'].dt.day_name()
         df_p['baseline'] = df_p['dow'].map(master_baselines)
         
-        # Merge and Scaffold (Keep the rest of the hardened logic we built)
         df_p = pd.merge(df_p, df_raw, on='entry_date', how='left')
-        
-        scaffold_defaults = {
+
+        # ENSURE ALL COLUMNS EXIST
+        required_cols = {
             'active_promo': '', 'attendance': 0, 'ad_clicks': 0, 
             'ad_impressions': 0, 'rain_mm': 0.0, 'snow_cm': 0.0,
             'actual_traffic': 0, 'actual_coin_in': 0.0, 'new_members': 0
         }
-        
-        for col, val in scaffold_defaults.items():
+        for col, default_val in required_cols.items():
             if col not in df_p.columns:
-                df_p[col] = val
+                df_p[col] = default_val
             else:
                 df_p[col] = df_p[col].fillna(val)
 
-        # --- 5. ENGINE EXECUTION ---
+        # --- 5. STRATEGIC DAILY PLANNER & WEATHER ---
+        if is_future:
+            live_weather = get_live_ottawa_forecast()
+            with st.expander("📅 Daily Strategy Planner", expanded=True):
+                st.write("Plan your lift. Weather below is synced from Environment Canada.")
+                df_plan = df_p[['entry_date', 'dow', 'active_promo', 'attendance', 
+                                'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']].copy()
+                
+                df_plan_display = df_plan.copy()
+                df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
+                
+                edited_df = st.data_editor(
+                    df_plan_display, 
+                    column_config={"dow": None, "entry_date": st.column_config.Column("Date", disabled=True)},
+                    hide_index=True, use_container_width=True, key="p1_planner_v29_stable"
+                )
+                
+                for col in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
+                    df_p[col] = edited_df[col].values
+            
+            if live_weather:
+                st.sidebar.success("📡 Environment Canada Feed Active")
+                for i, row in df_p.iterrows():
+                    day_name = row.get('dow')
+                    if day_name in live_weather:
+                        if df_p.at[i, 'rain_mm'] == 0:
+                            df_p.at[i, 'rain_mm'] = live_weather[day_name]['rain']
+                        if df_p.at[i, 'snow_cm'] == 0:
+                            df_p.at[i, 'snow_cm'] = live_weather[day_name]['snow']
+        else:
+            st.info("💡 Reviewing historical actuals. Planner is disabled for past dates.")
+
+        # --- 6. ENGINE EXECUTION ---
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
 
@@ -520,7 +550,7 @@ if page == "Executive Dashboard":
         total_lift_vol = df_final['residual_lift'].sum() + df_final['gravity_lift'].sum() + (daily_brand_inertia * len(df_final))
         mkt_impact_pct = (total_lift_vol / total_vol * 100) if total_vol > 0 else 0
 
-        # --- 6. EXECUTIVE KPI GRID ---
+        # --- 7. EXECUTIVE KPI GRID ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
         LTV_VAL, AVG_SPEND = 1900.00, 1279.33
@@ -540,7 +570,7 @@ if page == "Executive Dashboard":
             k3.metric("Audited Revenue Impact", f"${act_rev:,.0f}")
             k4.metric("Audited Accuracy", m['predictability'])
 
-        # --- 7. VISUALIZATION ---
+        # --- 8. VISUALIZATION ---
         st.write("### 🎰 The Unified Pulse")
         fig_pulse = go.Figure()
         df_act_chart = df_final[df_final['entry_date'].dt.date < today]
@@ -548,54 +578,30 @@ if page == "Executive Dashboard":
         fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # --- 8. RISK MANAGEMENT ---
+        # --- 9. RISK & SOCIAL PULSE (CONSOLIDATED) ---
         st.divider()
-        if not (end_p < today):
-            st.write("#### 🛡️ Operational Risk & Opportunity")
-            o1, o2, o3 = st.columns(3)
+        o_col, s_col = st.columns(2)
+        
+        with o_col:
+            st.write("#### 🛡️ Operational Risk")
             s_imp = df_final['snow_cm'].sum() * float(current_weights.get('Snow_cm', -45))
             r_imp = df_final['rain_mm'].sum() * float(current_weights.get('Rain_mm', -12))
-            o1.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
-            o2.metric("Conversion Opportunity", f"{max(0, int(total_vol * 0.95)):,.0f}")
-            peak_vol = df_final['expected'].max()
-            o3.metric("Staffing Intensity", "🔴 Critical Peak" if peak_vol > 6200 else "🟢 Stable")
+            st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}", help="Projected loss from snow/rain.")
+        
+        with s_col:
+            st.write("#### 📱 Social Engagement")
+            total_clicks = df_final['ad_clicks'].sum()
+            total_imps = df_final['ad_impressions'].sum()
+            ctr = (total_clicks / total_imps * 100) if total_imps > 0 else 0.0
+            st.metric("Campaign Clicks", f"{total_clicks:,.0f}", delta=f"{ctr:.2f}% CTR")
+
+        s1, s2, s3 = st.columns(3)
+        s1.metric("Total Impressions", f"{total_imps:,.0f}")
+        s2.metric("Engagement Velocity", "High" if ctr > 1.5 else "Stable")
+        s3.metric("Digital Visibility Score", f"{(total_imps * 0.8 / 1000):,.1f}k Reach")
+
     else:
         st.info("Select a date range to view the Dashboard.")
-
-# --- 9. SOCIAL MEDIA PERFORMANCE PULSE ---
-        st.divider()
-        st.write("### 📱 Social Media Engagement Pulse")
-        st.caption(f"Aggregated digital footprint for {start_p.strftime('%b %d')} - {end_p.strftime('%b %d, %Y')}")
-        
-        # Aggregate the planned or actual social metrics from your scaffolded dataframe
-        total_clicks = df_final['ad_clicks'].sum()
-        total_imps = df_final['ad_impressions'].sum()
-        
-        # Calculate CTR (Click-Through Rate) safely
-        ctr = (total_clicks / total_imps * 100) if total_imps > 0 else 0.0
-        
-        s1, s2, s3, s4 = st.columns(4)
-        
-        s1.metric(
-            label="Total Campaign Clicks", 
-            value=f"{total_clicks:,.0f}", 
-            help="Total clicks from Google Ads, Facebook, and Instagram campaigns."
-        )
-        s2.metric(
-            label="Digital Impressions", 
-            value=f"{total_imps:,.0f}", 
-            help="Total number of times your content was displayed on social feeds."
-        )
-        s3.metric(
-            label="Avg. CTR", 
-            value=f"{ctr:.2f}%", 
-            help="Click-Through Rate: Effectiveness of your creative at driving traffic."
-        )
-        s4.metric(
-            label="Engagement Velocity", 
-            value="High" if ctr > 1.5 else "Stable", 
-            help="Based on current casino industry benchmarks for digital engagement."
-        )
 
 # =================================================================
 # 8. PAGE 2: DAILY LEDGER AUDIT (HARDENED v7.4 - NameError & Scope Fix)
