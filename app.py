@@ -1179,8 +1179,8 @@ elif page == "FloorCast AI Analyst":
 
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             
-            # Using 'gemini-1.5-flash' for high-speed analysis
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            # Using 'gemini-2.5-flash' for high-speed analysis
+            model = genai.GenerativeModel('gemini-2.5-flash')
             
             # THE FIX: Safety Settings to prevent "Finish Reason 1" blocks
             safety_settings = {
