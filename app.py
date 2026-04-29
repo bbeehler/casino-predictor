@@ -492,7 +492,7 @@ if page == "Executive Dashboard":
 
         # ENSURE ALL COLUMNS EXIST
         required_cols = {
-            'active_promo': '', 'attendance': 0, 'ad_clicks': 0, 
+            'active_promo': '', 'ad_clicks': 0, 
             'ad_impressions': 0, 'rain_mm': 0.0, 'snow_cm': 0.0,
             'actual_traffic': 0, 'actual_coin_in': 0.0, 'new_members': 0
         }
@@ -507,8 +507,7 @@ if page == "Executive Dashboard":
             live_weather = get_live_ottawa_forecast()
             with st.expander("📅 Daily Strategy Planner", expanded=True):
                 st.write("Plan your lift. Weather below is synced from Environment Canada.")
-                df_plan = df_p[['entry_date', 'dow', 'active_promo', 'attendance', 
-                                'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']].copy()
+                df_plan = df_p[['entry_date', 'dow', 'active_promo', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']].copy()
                 
                 df_plan_display = df_plan.copy()
                 df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
@@ -519,7 +518,7 @@ if page == "Executive Dashboard":
                     hide_index=True, use_container_width=True, key="p1_planner_v29_stable"
                 )
                 
-                for col in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
+                for col in ['active_promo', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
                     df_p[col] = edited_df[col].values
             
             if live_weather:
