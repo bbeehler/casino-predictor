@@ -162,7 +162,7 @@ def get_forensic_metrics(df_input, coeffs):
     decay = float(coeffs.get('Ad_Decay', 0)) / 100 
     
     # UI setting 85.0 -> 0.85 multiplier. 1000 attendance = 850 guests.
-    gravity = float(coeffs.get('Event_Gravity', 0)) / 100
+    gravity = float(coeffs.get('Event_Gravity', 0))
     promo_lift_weight = float(coeffs.get('Promo', 0))
     c_broadcast = float(coeffs.get('Broadcast_Weight', 0)) 
     c_ooh = float(coeffs.get('OOH_Weight', 0))           
