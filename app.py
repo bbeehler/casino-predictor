@@ -482,29 +482,29 @@ if page == "Executive Dashboard":
         start_p, end_p = pulse_range
         is_future = start_p >= today
         
-        # --- 4. THE TYPE-HAMMER SYNC (v32 - ZERO DATA LOSS FIX) ---
-        # 1. Create the timeline
+        # --- 4. THE UNIVERSAL SCAFFOLD (v33 - Final KeyError Fix) ---
+        # 1. Generate the timeline
         date_list = pd.date_range(start=start_p, end=end_p)
         df_p = pd.DataFrame({'entry_date': date_list})
         
-        # 2. Convert BOTH to strings for a guaranteed match
+        # 2. Prepare the merge keys (Strings are safer for matching)
         df_p['merge_key'] = df_p['entry_date'].dt.strftime('%Y-%m-%d')
-        
-        # Ensure ledger exists and has the same string key
         df_raw_sync = df_raw.copy()
         df_raw_sync['merge_key'] = pd.to_datetime(df_raw_sync['entry_date']).dt.strftime('%Y-%m-%d')
         
-        # 3. MERGE on the string key
+        # 3. Merge and immediately restore column names
+        # We drop the old entry_date from the ledger to prevent 'entry_date_x' naming conflicts
         df_p = pd.merge(df_p, df_raw_sync.drop(columns=['entry_date']), on='merge_key', how='left')
         
-        # 4. Clean up: Restore entry_date as a proper datetime and drop the key
+        # 4. Critical: Ensure 'entry_date' is the primary datetime column
         df_p['entry_date'] = pd.to_datetime(df_p['merge_key'])
         df_p['dow'] = df_p['entry_date'].dt.day_name()
         df_p['baseline'] = df_p['dow'].map(master_baselines)
-        df_p = df_p.drop(columns=['merge_key'])
 
-        # 5. SCAFFOLDING (Ensuring no zeros reach the engine)
-        planner_cols = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
+        # 5. Force-create every column the planner and engine require
+        planner_cols = ['entry_date', 'dow', 'active_promo', 'attendance', 
+                        'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
+        
         for col in planner_cols:
             if col not in df_p.columns:
                 df_p[col] = "" if col == 'active_promo' else 0.0
@@ -514,15 +514,17 @@ if page == "Executive Dashboard":
                 else:
                     df_p[col] = pd.to_numeric(df_p[col], errors='coerce').fillna(0)
 
-        # --- 5. STRATEGIC DAILY PLANNER ---
+        # --- 5. STRATEGIC DAILY PLANNER (HARDENED) ---
         if is_future:
             live_weather = get_live_ottawa_forecast()
             with st.expander("📅 Daily Strategy Planner", expanded=True):
                 st.write("Plan your lift. Weather below is synced from Environment Canada.")
                 
+                # Now 'entry_date' is guaranteed to exist because of step 4 above
                 df_plan = df_p[planner_cols].copy()
-                df_plan['entry_date'] = pd.to_datetime(df_plan['entry_date']) # Fix AttributeError
                 
+                # Double-check the type before formatting for display
+                df_plan['entry_date'] = pd.to_datetime(df_plan['entry_date'])
                 df_plan_display = df_plan.copy()
                 df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
                 
@@ -534,13 +536,14 @@ if page == "Executive Dashboard":
                         "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
                         "active_promo": st.column_config.TextColumn("Promo/PR Hit"),
                     },
-                    hide_index=True, use_container_width=True, key="p1_planner_v32_final"
+                    hide_index=True, use_container_width=True, key="p1_planner_v33_final"
                 )
                 
+                # Sync back to df_p for the engine
                 editable_fields = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
                 for col in editable_fields:
                     df_p[col] = edited_df[col].values
-
+                    
         # --- 6. ENGINE EXECUTION ---
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
