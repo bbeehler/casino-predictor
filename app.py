@@ -503,21 +503,53 @@ if page == "Executive Dashboard":
             how='left'
         )
         
-        # 5. RESTORE PROPER TYPES FOR THE ENGINE
-        df_p['entry_date'] = pd.to_datetime(df_p['int_key'].astype(str), format='%Y%m%d')
-        df_p['dow'] = df_p['entry_date'].dt.day_name()
-        df_p['baseline'] = df_p['dow'].map(master_baselines)
+        # --- 5. UNIVERSAL STRATEGY PLANNER (FIXED) ---
+        # 1. Fetch live weather (it returns None if outside the 7-day window)
+        live_weather = get_live_ottawa_forecast()
+        
+        with st.expander("📅 Strategic Daily Planner & Simulator", expanded=True):
+            st.write("Edit cells below to simulate marketing lift or record planned events.")
+            
+            # Prepare the data for the editor
+            df_plan = df_p[planner_cols].copy()
+            df_plan['entry_date'] = pd.to_datetime(df_plan['entry_date'])
+            
+            df_plan_display = df_plan.copy()
+            df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
+            
+            # The Data Editor
+            edited_df = st.data_editor(
+                df_plan_display, 
+                column_config={
+                    "dow": None, 
+                    "entry_date": st.column_config.Column("Date", disabled=True),
+                    "attendance": st.column_config.NumberColumn("Event Attendance", format="%d", help="Planned concert/event crowd size"),
+                    "active_promo": st.column_config.TextColumn("Promo/PR Hit"),
+                    "ad_clicks": st.column_config.NumberColumn("Target Clicks"),
+                    "ad_impressions": st.column_config.NumberColumn("Target Impressions"),
+                },
+                hide_index=True, 
+                use_container_width=True, 
+                key="p1_universal_planner_v36"
+            )
+            
+            # Sync back to the main engine dataframe
+            editable_fields = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
+            for col in editable_fields:
+                df_p[col] = edited_df[col].values
 
-        # 6. FORCE-SCAFFOLD (Prevent any remaining NaNs)
-        planner_cols = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
-        for col in planner_cols:
-            if col not in df_p.columns:
-                df_p[col] = "" if col == 'active_promo' else 0.0
-            else:
-                if col == 'active_promo':
-                    df_p[col] = df_p[col].fillna("")
-                else:
-                    df_p[col] = pd.to_numeric(df_p[col], errors='coerce').fillna(0)
+        # --- 5b. AUTOMATIC WEATHER SYNC ---
+        if live_weather:
+            # We only apply live weather to dates that are today or in the future
+            for i, row in df_p.iterrows():
+                if row['entry_date'].date() >= today:
+                    day_name = row.get('dow')
+                    if day_name in live_weather:
+                        # Only auto-fill if the user hasn't typed a manual value yet
+                        if df_p.at[i, 'rain_mm'] == 0:
+                            df_p.at[i, 'rain_mm'] = live_weather[day_name]['rain']
+                        if df_p.at[i, 'snow_cm'] == 0:
+                            df_p.at[i, 'snow_cm'] = live_weather[day_name]['snow']
 
         # --- 6. ENGINE EXECUTION ---
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
