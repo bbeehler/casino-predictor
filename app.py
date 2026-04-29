@@ -160,7 +160,7 @@ def get_forensic_metrics(df_input, coeffs):
     c_clicks = float(coeffs.get('Clicks', 0))
     c_social = float(coeffs.get('Social_Imp', 0))
     decay = float(coeffs.get('Ad_Decay', 0)) / 100 
-    gravity = float(coeffs.get('Event_Gravity', 0)) / 100
+    gravity = float(coeffs.get('Event_Gravity', 0)) * 100
     promo_lift_weight = float(coeffs.get('Promo', 0))
     c_pr_mult = float(coeffs.get('PR_Weight', 1.0)) 
 
