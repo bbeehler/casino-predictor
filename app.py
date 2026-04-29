@@ -426,29 +426,31 @@ if st.sidebar.button("🚪 Logout / Reset Session", use_container_width=True):
             st.rerun()
 
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL VERSION - LIVE SYNCED)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL v25 - Deep Baseline Fix)
 # =================================================================
 if page == "Executive Dashboard":
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">📈 Executive Performance Pulse</h2>
-            <p style="color: #444; margin: 0;">Predictive Guest Volume & Strategic Planning Command Center.</p>
+            <p style="color: #444; margin: 0;">Deep History Projection: Predictive Guest Volume & Strategic Planning.</p>
         </div>
     """, unsafe_allow_html=True)
 
     today = datetime.date.today()
-    
-    # --- 1. THE LIVE BRIDGE (CRITICAL FIX) ---
-    # We pull this at the very top of the page logic to ensure every widget below sees the current sliders
     current_weights = st.session_state.get('coeffs', {})
 
     if not ledger_data:
         st.warning("Forensic Vault is empty. Please populate the Ledger.")
         st.stop()
 
+    # --- 1. THE DEEP HISTORY ENGINE ---
     df_raw = pd.DataFrame(ledger_data)
     df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
     
+    # Calculate the Master Baseline for every Day of Week across ENTIRE history
+    df_raw['dow'] = df_raw['entry_date'].dt.day_name()
+    master_baselines = df_raw.groupby('dow')['actual_traffic'].mean().to_dict()
+
     # 2. DATE SELECTION
     col_date, _ = st.columns([1, 2])
     with col_date:
@@ -466,12 +468,18 @@ if page == "Executive Dashboard":
         # TIMELINE GENERATION
         date_list = pd.date_range(start=start_p, end=end_p)
         df_timeline = pd.DataFrame({'entry_date': date_list})
+        df_timeline['dow'] = df_timeline['entry_date'].dt.day_name()
+        
+        # Map Deep History Baselines to the selected timeline
+        df_timeline['baseline'] = df_timeline['dow'].map(master_baselines)
+        
+        # Merge with existing ledger data (to catch past actuals)
         df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
 
         # 3. STRATEGIC DAILY PLANNER
         if is_future:
             with st.expander("📅 Daily Strategy Planner", expanded=True):
-                st.write("Plan your digital spend and PR events to see the projected lift.")
+                st.write("Plan your digital spend and PR events to see the projected lift over the historical baseline.")
                 df_plan = df_p[['entry_date', 'active_promo', 'attendance', 
                                 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']].copy()
                 
@@ -484,7 +492,7 @@ if page == "Executive Dashboard":
                     df_plan,
                     column_config={
                         "entry_date": st.column_config.Column("Date", disabled=True),
-                        "active_promo": st.column_config.TextColumn("Active Promo/PR Hit", help="Type 'PR' in name for PR Multiplier"),
+                        "active_promo": st.column_config.TextColumn("Active Promo/PR Hit"),
                         "ad_clicks": st.column_config.NumberColumn("Google/FB Clicks"),
                         "ad_impressions": st.column_config.NumberColumn("Social Impressions"),
                         "attendance": st.column_config.NumberColumn("Event Attendance"),
@@ -498,12 +506,12 @@ if page == "Executive Dashboard":
                 df_p['rain_mm'] = edited_df['rain_mm'].values
                 df_p['snow_cm'] = edited_df['snow_cm'].values
 
-        # --- 4. THE ENGINE EXECUTION (LIVE SYNC) ---
-        # We pass the 'current_weights' dictionary directly into the engine
+        # --- 4. ENGINE EXECUTION ---
+        # The engine now uses the Deep History baseline to calculate 'expected'
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
 
-        # CALCULATE MARKETING IMPACT (Live calculation based on session state)
+        # CALCULATE MARKETING IMPACT
         daily_brand_inertia = (
             float(current_weights.get('Broadcast_Weight', 150)) + 
             float(current_weights.get('OOH_Weight', 100)) + 
@@ -523,28 +531,23 @@ if page == "Executive Dashboard":
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
         
-        # Pull global benchmarks for calculation
-        # We use your SharePoint standards: $1,900 LTV and $1,279.33 Spend
         LTV_VAL = 1900.00
         AVG_SPEND = 1279.33
 
         if is_future:
-            # Calculate Projected Financials for the 7-day window
+            # Financial Projections based on Deep History + Coefficients
             projected_coin_in = total_vol * AVG_SPEND
             projected_ltv = (total_vol * 0.05) * LTV_VAL
-            # Enhanced Revenue = Coin-in + LTV + Brand Lift (Inertia)
             proj_enhanced_rev = projected_coin_in + projected_ltv + (daily_brand_inertia * len(df_final))
 
-            k1.metric("Projected Demand", f"{total_vol:,.0f} Guests", help="Total predicted foot traffic.")
-            k2.metric("Target Signups", f"{(total_vol * 0.05):,.0f}", help="Based on 5% conversion target.")
-            k3.metric("Projected Enhanced Revenue", f"${proj_enhanced_rev:,.0f}", help="Sum of Coin-in, Signups, and Brand Equity.")
+            k1.metric("Projected Demand", f"{total_vol:,.0f} Guests", help="Based on Deep Historical Baseline + Sliders.")
+            k2.metric("Target Signups", f"{(total_vol * 0.05):,.0f}", help="Assumes 5% conversion rate.")
+            k3.metric("Proj. Enhanced Revenue", f"${proj_enhanced_rev:,.0f}", help="Coin-In + Signups + Brand Equity.")
             k4.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
 
         elif is_past:
             total_act = df_final['actual_traffic'].sum()
             actual_signups = df_final['new_members'].sum()
-            
-            # Use actual coin-in if available in the ledger, else fallback to avg
             act_coin_in = df_final['actual_coin_in'].sum() if 'actual_coin_in' in df_final.columns else (total_act * AVG_SPEND)
             act_enhanced_rev = act_coin_in + (actual_signups * LTV_VAL)
 
@@ -565,20 +568,12 @@ if page == "Executive Dashboard":
         fig_pulse.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=400, margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # --- 7. OPERATIONAL RISK vs. HISTORICAL AUDIT ---
+        # --- 7. OPERATIONAL RISK ---
         st.divider()
-        if is_past:
-            st.write("#### 🔍 Historical Performance Audit")
-            o1, o2, o3 = st.columns(3)
-            variance = df_final['actual_traffic'].sum() - df_final['expected'].sum()
-            o1.metric("Volume Variance", f"{variance:+,.0f}")
-            o2.metric("Avg Daily Traffic", f"{df_final['actual_traffic'].mean():,.0f}")
-            o3.metric("Data Integrity", "Verified" if m['predictability'] != "0.0%" else "Incomplete")
-        else:
+        if not is_past:
             st.write("#### 🛡️ Operational Risk & Opportunity")
             o1, o2, o3 = st.columns(3)
             with o1:
-                # Force dynamic weather friction from sliders
                 s_imp = df_final['snow_cm'].sum() * float(current_weights.get('Snow_cm', -45))
                 r_imp = df_final['rain_mm'].sum() * float(current_weights.get('Rain_mm', -12))
                 st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
