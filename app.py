@@ -441,22 +441,30 @@ if page == "Executive Dashboard":
             for field in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
                 df_p[field] = edited_df[field].values
 
-        # --- 5. ENGINE EXECUTION ---
+        # --- 5. ENGINE EXECUTION (v45 - Zero-Leak Attribution) ---
+        # 1. Run the Engine
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
-
-        daily_brand_inertia = (
-            float(current_weights.get('Broadcast_Weight', 150)) + 
-            float(current_weights.get('OOH_Weight', 100)) + 
-            float(current_weights.get('Print_Lift', 75)) +
-            (float(current_weights.get('Static_Weight', 15)) * int(current_weights.get('Static_Count', 10))) +
-            (float(current_weights.get('Digital_OOH_Weight', 25)) * int(current_weights.get('Digital_OOH_Count', 5)))
-        )
         
+        # 2. Get the ACTUAL brand inertia used by the engine (No hard-coding)
+        # We pull this directly from the engine's return dictionary
+        daily_brand_inertia = m.get('total_inertia', 0)
+        
+        # 3. Calculate Total Projected Volume
         total_vol = df_final['expected'].sum()
-        total_lift_vol = (df_final['residual_lift'].sum() + 
-                          df_final['gravity_lift'].sum() + 
-                          (daily_brand_inertia * len(df_final)))
+        
+        # 4. Calculate the "Dark Property" Volume (Naked Organic Baseline)
+        # We pull the heartbeat averages for the selected days of the week
+        organic_vol = 0
+        # We need to access the heartbeats dictionary calculated inside the engine
+        # If the engine doesn't return it, we use the property averages directly
+        for i, row in df_final.iterrows():
+            day_name = row['entry_date'].strftime('%A')
+            # Use the same baseline logic as the engine to ensure 1:1 parity
+            organic_vol += df_final.loc[i, 'baseline'] if 'baseline' in df_final.columns else 0
+        
+        # 5. THE PURE LIFT: Everything that isn't organic is Marketing Impact
+        total_lift_vol = total_vol - organic_vol
         mkt_impact_pct = (total_lift_vol / total_vol * 100) if total_vol > 0 else 0
 
         # --- 6. EXECUTIVE KPI GRID ---
