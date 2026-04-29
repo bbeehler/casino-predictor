@@ -468,73 +468,76 @@ if page == "Executive Dashboard":
         except:
             return None
 
-    # --- 3. DATE SELECTION ---
-    col_date, _ = st.columns([1, 2])
-    with col_date:
-        pulse_range = st.date_input(
-            "Select Analysis Window:", 
-            value=(today, today + datetime.timedelta(days=7)), 
-            key="pulse_exec_vfinal_synced"
-        )
-
+    # --- 3. TIMELINE GENERATION & SCAFFOLDING (HARDENED) ---
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
         is_future = start_p >= today
         
-        # TIMELINE GENERATION & SCAFFOLDING
         date_list = pd.date_range(start=start_p, end=end_p)
         df_p = pd.DataFrame({'entry_date': date_list})
+        
+        # 1. Force the 'dow' column immediately
         df_p['dow'] = df_p['entry_date'].dt.day_name()
+        
+        # 2. Map Deep History Baselines
         df_p['baseline'] = df_p['dow'].map(master_baselines)
         
+        # 3. Merge with ledger
         df_p = pd.merge(df_p, df_raw, on='entry_date', how='left')
 
-        # ENSURE ALL COLUMNS EXIST (The KeyError Fix)
-        required_cols = {
-            'active_promo': '', 'attendance': 0, 'ad_clicks': 0, 
-            'ad_impressions': 0, 'rain_mm': 0.0, 'snow_cm': 0.0
+        # 4. THE SAFETY NET: Force-create every single column the Planner needs
+        # This ensures the subsetting [[...]] never fails.
+        scaffold_defaults = {
+            'active_promo': '',
+            'attendance': 0,
+            'ad_clicks': 0,
+            'ad_impressions': 0,
+            'rain_mm': 0.0,
+            'snow_cm': 0.0,
+            'actual_traffic': 0,
+            'actual_coin_in': 0.0,
+            'new_members': 0
         }
-        for col, default_val in required_cols.items():
+        
+        for col, val in scaffold_defaults.items():
             if col not in df_p.columns:
-                df_p[col] = default_val
-        df_p = df_p.fillna(value=required_cols)
+                df_p[col] = val
+            else:
+                # Fill NaNs for existing columns to prevent data_editor crashes
+                df_p[col] = df_p[col].fillna(val)
 
-        # --- 4. STRATEGIC DAILY PLANNER & WEATHER ---
+        # --- 4. STRATEGIC DAILY PLANNER (NOW SAFE) ---
         if is_future:
             live_weather = get_live_ottawa_forecast()
             
             with st.expander("📅 Daily Strategy Planner", expanded=True):
                 st.write("Plan your lift. Weather below is synced from Environment Canada.")
-                df_plan = df_p[['entry_date', 'dow', 'active_promo', 'attendance', 
-                                'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']].copy()
                 
+                # We define the columns we WANT to see
+                planner_cols = ['entry_date', 'dow', 'active_promo', 'attendance', 
+                                'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
+                
+                # Subset safely
+                df_plan = df_p[planner_cols].copy()
+                
+                # Format for display
                 df_plan_display = df_plan.copy()
                 df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
                 
                 edited_df = st.data_editor(
                     df_plan_display, 
                     column_config={
-                        "dow": None, # Keep hidden
+                        "dow": None, # Hide but keep
                         "entry_date": st.column_config.Column("Date", disabled=True),
                     },
-                    hide_index=True, use_container_width=True, key="p1_planner_v28"
+                    hide_index=True, 
+                    use_container_width=True, 
+                    key="p1_planner_v29_final"
                 )
                 
-                # Sync back edited values
-                for col in required_cols.keys():
+                # Sync back ONLY the editable columns
+                for col in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
                     df_p[col] = edited_df[col].values
-            
-            if live_weather:
-                st.sidebar.success("📡 Environment Canada Feed Active")
-                for i, row in df_p.iterrows():
-                    day_name = row.get('dow')
-                    if day_name in live_weather:
-                        if df_p.at[i, 'rain_mm'] == 0:
-                            df_p.at[i, 'rain_mm'] = live_weather[day_name]['rain']
-                        if df_p.at[i, 'snow_cm'] == 0:
-                            df_p.at[i, 'snow_cm'] = live_weather[day_name]['snow']
-        else:
-            st.info("💡 Reviewing historical actuals. Planner is disabled for past dates.")
 
         # --- 5. ENGINE EXECUTION ---
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
