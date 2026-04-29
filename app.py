@@ -424,9 +424,8 @@ if st.sidebar.button("🚪 Logout / Reset Session", use_container_width=True):
         if st.sidebar.button("🗑️ Reset Analyst Thread", use_container_width=True, key="sidebar_reset"):
             st.session_state.messages = []
             st.rerun()
-
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL v26 - EC API & Deep Baseline)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL v28 - Stable Scaffolding)
 # =================================================================
 if page == "Executive Dashboard":
     st.markdown("""
@@ -460,7 +459,7 @@ if page == "Executive Dashboard":
             
             forecast_data = {}
             for day in ec.daily_forecasts:
-                period = day['period'] # e.g., "Monday"
+                period = day['period'] 
                 forecast_data[period] = {
                     "rain": float(day.get('rain_amount', 0) or 0),
                     "snow": float(day.get('snow_amount', 0) or 0)
@@ -469,79 +468,78 @@ if page == "Executive Dashboard":
         except:
             return None
 
-    # --- 3. TIMELINE GENERATION & SCAFFOLDING ---
+    # --- 3. DATE SELECTION ---
+    col_date, _ = st.columns([1, 2])
+    with col_date:
+        pulse_range = st.date_input(
+            "Select Analysis Window:", 
+            value=(today, today + datetime.timedelta(days=7)), 
+            key="pulse_exec_vfinal_synced"
+        )
+
+    if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
+        start_p, end_p = pulse_range
+        is_future = start_p >= today
+        
+        # TIMELINE GENERATION & SCAFFOLDING
         date_list = pd.date_range(start=start_p, end=end_p)
         df_p = pd.DataFrame({'entry_date': date_list})
         df_p['dow'] = df_p['entry_date'].dt.day_name()
         df_p['baseline'] = df_p['dow'].map(master_baselines)
         
-        # Merge with existing ledger data
         df_p = pd.merge(df_p, df_raw, on='entry_date', how='left')
 
-        # THE CRITICAL FIX: Ensure ALL columns exist before subsetting
-        # This prevents the KeyError if the database is missing a column
+        # ENSURE ALL COLUMNS EXIST (The KeyError Fix)
         required_cols = {
-            'active_promo': '',
-            'attendance': 0,
-            'ad_clicks': 0,
-            'ad_impressions': 0,
-            'rain_mm': 0.0,
-            'snow_cm': 0.0
+            'active_promo': '', 'attendance': 0, 'ad_clicks': 0, 
+            'ad_impressions': 0, 'rain_mm': 0.0, 'snow_cm': 0.0
         }
         for col, default_val in required_cols.items():
             if col not in df_p.columns:
                 df_p[col] = default_val
-        
-        # Fill any NaNs created by the merge for these specific columns
         df_p = df_p.fillna(value=required_cols)
 
-        # 4. STRATEGIC DAILY PLANNER (SAFE SUBSETTING)
+        # --- 4. STRATEGIC DAILY PLANNER & WEATHER ---
         if is_future:
             live_weather = get_live_ottawa_forecast()
             
             with st.expander("📅 Daily Strategy Planner", expanded=True):
                 st.write("Plan your lift. Weather below is synced from Environment Canada.")
-                
-                # Now this subsetting is guaranteed to work
                 df_plan = df_p[['entry_date', 'dow', 'active_promo', 'attendance', 
                                 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']].copy()
                 
-                # Format for display
                 df_plan_display = df_plan.copy()
                 df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
                 
                 edited_df = st.data_editor(
                     df_plan_display, 
                     column_config={
-                        "dow": None, # Keep hidden but present
+                        "dow": None, # Keep hidden
                         "entry_date": st.column_config.Column("Date", disabled=True),
-                        "active_promo": st.column_config.TextColumn("Active Promo/PR Hit"),
                     },
-                    hide_index=True, 
-                    use_container_width=True, 
-                    key="p1_planner_v27_stable"
+                    hide_index=True, use_container_width=True, key="p1_planner_v28"
                 )
                 
-                # Map edited values back to the main dataframe
+                # Sync back edited values
                 for col in required_cols.keys():
                     df_p[col] = edited_df[col].values
             
-            # 5. LIVE WEATHER INTEGRATION
             if live_weather:
                 st.sidebar.success("📡 Environment Canada Feed Active")
                 for i, row in df_p.iterrows():
                     day_name = row.get('dow')
-                    if day_name and day_name in live_weather:
-                        # Only apply if no manual weather is set for that day
+                    if day_name in live_weather:
                         if df_p.at[i, 'rain_mm'] == 0:
                             df_p.at[i, 'rain_mm'] = live_weather[day_name]['rain']
                         if df_p.at[i, 'snow_cm'] == 0:
                             df_p.at[i, 'snow_cm'] = live_weather[day_name]['snow']
+        else:
+            st.info("💡 Reviewing historical actuals. Planner is disabled for past dates.")
+
         # --- 5. ENGINE EXECUTION ---
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
 
-        # Marketing Inertia Calculation
         daily_brand_inertia = (
             float(current_weights.get('Broadcast_Weight', 150)) + 
             float(current_weights.get('OOH_Weight', 100)) + 
@@ -567,13 +565,14 @@ if page == "Executive Dashboard":
             k4.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
         else:
             total_act = df_final['actual_traffic'].sum()
-            act_rev = df_final['actual_coin_in'].sum() + (df_final['new_members'].sum() * LTV_VAL)
+            act_coin = df_final['actual_coin_in'].sum() if 'actual_coin_in' in df_final.columns else (total_act * AVG_SPEND)
+            act_rev = act_coin + (df_final['new_members'].sum() * LTV_VAL)
             k1.metric("Actual Guest Flow", f"{total_act:,.0f}")
             k2.metric("New Unity Members", f"{df_final['new_members'].sum():,.0f}")
             k3.metric("Audited Revenue Impact", f"${act_rev:,.0f}")
             k4.metric("Audited Accuracy", m['predictability'])
 
-        # --- 7. THE UNIFIED PULSE ---
+        # --- 7. VISUALIZATION ---
         st.write("### 🎰 The Unified Pulse")
         fig_pulse = go.Figure()
         df_act_chart = df_final[df_final['entry_date'].dt.date < today]
@@ -592,7 +591,6 @@ if page == "Executive Dashboard":
             o2.metric("Conversion Opportunity", f"{max(0, int(total_vol * 0.95)):,.0f}")
             peak_vol = df_final['expected'].max()
             o3.metric("Staffing Intensity", "🔴 Critical Peak" if peak_vol > 6200 else "🟢 Stable")
-
     else:
         st.info("Select a date range to view the Dashboard.")
 
