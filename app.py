@@ -425,13 +425,13 @@ if st.sidebar.button("🚪 Logout / Reset Session", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (v37 - Universal Scoped Fix)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (v40 - Streamlined & Stable)
 # =================================================================
 if page == "Executive Dashboard":
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">📈 Executive Performance Pulse</h2>
-            <p style="color: #444; margin: 0;">Deep History Projection & Live Environment Canada Feed.</p>
+            <p style="color: #444; margin: 0;">Strategic Demand Projection & Marketing Impact.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -448,25 +448,7 @@ if page == "Executive Dashboard":
     df_raw['dow'] = df_raw['entry_date'].dt.day_name()
     master_baselines = df_raw.groupby('dow')['actual_traffic'].mean().to_dict()
 
-    # --- 2. ENVIRONMENT CANADA BRIDGE ---
-    def get_live_ottawa_forecast():
-        try:
-            from env_canada import ECWeather
-            import asyncio
-            ec = ECWeather(station_id="ON/s0000430")
-            asyncio.run(ec.update())
-            forecast_data = {}
-            for day in ec.daily_forecasts:
-                period = day['period'] 
-                forecast_data[period] = {
-                    "rain": float(day.get('rain_amount', 0) or 0),
-                    "snow": float(day.get('snow_amount', 0) or 0)
-                }
-            return forecast_data
-        except:
-            return None
-
-    # --- 3. DATE SELECTION ---
+    # --- 2. DATE SELECTION ---
     col_date, _ = st.columns([1, 2])
     with col_date:
         pulse_range = st.date_input(
@@ -478,18 +460,17 @@ if page == "Executive Dashboard":
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
         
-        # --- 4. THE UNIVERSAL SYNC (v39 - NameError & Scope Fix) ---
-        # DEFINING THIS FIRST ensures no NameError in the loops below
+        # --- 3. THE UNIVERSAL SYNC (v40) ---
         planner_cols = [
             'entry_date', 'dow', 'active_promo', 'attendance', 
             'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm'
         ]
         
-        # 1. Timeline Scaffolding
+        # 1. Generate Timeline
         date_list = pd.date_range(start=start_p, end=end_p)
         df_p = pd.DataFrame({'entry_date': date_list})
         
-        # 2. Integer-Lock Merge (Bypassing Jan 1st glitch)
+        # 2. Integer-Lock Merge
         df_p['int_key'] = df_p['entry_date'].dt.strftime('%Y%m%d').astype(int)
         df_raw_sync = df_raw.copy()
         df_raw_sync['int_key'] = pd.to_datetime(df_raw_sync['entry_date']).dt.strftime('%Y%m%d').astype(int)
@@ -501,12 +482,12 @@ if page == "Executive Dashboard":
             how='left'
         )
         
-        # 3. Force Proper Types (Fixes AttributeError and Jan 11 glitch)
+        # 3. Restore Types
         df_p['entry_date'] = pd.to_datetime(df_p['int_key'].astype(str), format='%Y%m%d')
         df_p['dow'] = df_p['entry_date'].dt.day_name()
         df_p['baseline'] = df_p['dow'].map(master_baselines)
 
-        # 4. Force-Scaffold all columns (This is where the NameError was)
+        # 4. Scaffolding
         for col in planner_cols:
             if col not in df_p.columns:
                 df_p[col] = "" if col == 'active_promo' else 0.0
@@ -516,11 +497,9 @@ if page == "Executive Dashboard":
                 else:
                     df_p[col] = pd.to_numeric(df_p[col], errors='coerce').fillna(0)
 
-        # --- 5. UNIVERSAL STRATEGIC PLANNER ---
-        live_weather = get_live_ottawa_forecast()
-        
+        # --- 4. STRATEGIC DAILY PLANNER ---
         with st.expander("📅 Strategic Daily Planner & Simulator", expanded=True):
-            st.write("Plan your lift. Data entered here updates the Vital Signs below.")
+            st.write("Plan your lift. Inputs here directly scale the Vital Signs below.")
             
             df_plan = df_p[planner_cols].copy()
             df_plan_display = df_plan.copy()
@@ -533,8 +512,10 @@ if page == "Executive Dashboard":
                     "entry_date": st.column_config.Column("Date", disabled=True),
                     "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
                     "active_promo": st.column_config.TextColumn("Promo/PR Hit"),
+                    "rain_mm": st.column_config.NumberColumn("Rain (mm)"),
+                    "snow_cm": st.column_config.NumberColumn("Snow (cm)"),
                 },
-                hide_index=True, use_container_width=True, key="p1_planner_v39_final"
+                hide_index=True, use_container_width=True, key="p1_planner_v40"
             )
             
             # Sync back to main engine
@@ -542,20 +523,25 @@ if page == "Executive Dashboard":
             for col in editable_fields:
                 df_p[col] = edited_df[col].values
 
-        # --- 6. ENGINE & WEATHER EXECUTION ---
-        ts_today = pd.Timestamp(today)
+        # --- 5. ENGINE EXECUTION ---
+        m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
+        df_final = m['df'].sort_values('entry_date')
 
-        if live_weather:
-            for i, row in df_p.iterrows():
-                if row['entry_date'] >= ts_today:
-                    day_name = row.get('dow')
-                    if day_name in live_weather:
-                        if df_p.at[i, 'rain_mm'] == 0:
-                            df_p.at[i, 'rain_mm'] = live_weather[day_name]['rain']
-                        if df_p.at[i, 'snow_cm'] == 0:
-                            df_p.at[i, 'snow_cm'] = live_weather[day_name]['snow']
+        daily_brand_inertia = (
+            float(current_weights.get('Broadcast_Weight', 150)) + 
+            float(current_weights.get('OOH_Weight', 100)) + 
+            float(current_weights.get('Print_Lift', 75)) +
+            (float(current_weights.get('Static_Weight', 15)) * int(current_weights.get('Static_Count', 10))) +
+            (float(current_weights.get('Digital_OOH_Weight', 25)) * int(current_weights.get('Digital_OOH_Count', 5)))
+        )
+        
+        total_vol = df_final['expected'].sum()
+        total_lift_vol = (df_final['residual_lift'].sum() + 
+                          df_final['gravity_lift'].sum() + 
+                          (daily_brand_inertia * len(df_final)))
+        mkt_impact_pct = (total_lift_vol / total_vol * 100) if total_vol > 0 else 0
 
-        # --- 7. EXECUTIVE KPI GRID ---
+        # --- 6. EXECUTIVE KPI GRID ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
         LTV_VAL, AVG_SPEND = 1900.00, 1279.33
@@ -575,7 +561,7 @@ if page == "Executive Dashboard":
             k3.metric("Audited Revenue Impact", f"${act_rev:,.0f}")
             k4.metric("Audited Accuracy", m['predictability'])
 
-        # --- 8. VISUALIZATION ---
+        # --- 7. VISUALIZATION ---
         st.write("### 🎰 The Unified Pulse")
         fig_pulse = go.Figure()
         df_act_chart = df_final[df_final['entry_date'].dt.date < today]
@@ -583,7 +569,7 @@ if page == "Executive Dashboard":
         fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # --- 9. RISK & SOCIAL PULSE ---
+        # --- 8. RISK & SOCIAL PULSE ---
         st.divider()
         o_col, s_col = st.columns(2)
         with o_col:
