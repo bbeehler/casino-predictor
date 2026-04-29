@@ -482,7 +482,7 @@ if page == "Executive Dashboard":
         start_p, end_p = pulse_range
         is_future = start_p >= today
         
-        # --- 4. TIMELINE GENERATION & SCAFFOLDING ---
+        # --- 4. TIMELINE GENERATION & SCAFFOLDING (STABLE v30) ---
         date_list = pd.date_range(start=start_p, end=end_p)
         df_p = pd.DataFrame({'entry_date': date_list})
         df_p['dow'] = df_p['entry_date'].dt.day_name()
@@ -490,17 +490,25 @@ if page == "Executive Dashboard":
         
         df_p = pd.merge(df_p, df_raw, on='entry_date', how='left')
 
-        # ENSURE ALL COLUMNS EXIST
+        # ENSURE ALL COLUMNS EXIST (Including verified 'attendance')
         required_cols = {
-            'active_promo': '', 'ad_clicks': 0, 
-            'ad_impressions': 0, 'rain_mm': 0.0, 'snow_cm': 0.0,
-            'actual_traffic': 0, 'actual_coin_in': 0.0, 'new_members': 0
+            'active_promo': '', 
+            'attendance': 0, 
+            'ad_clicks': 0, 
+            'ad_impressions': 0, 
+            'rain_mm': 0.0, 
+            'snow_cm': 0.0,
+            'actual_traffic': 0, 
+            'actual_coin_in': 0.0, 
+            'new_members': 0
         }
+        
         for col, default_val in required_cols.items():
             if col not in df_p.columns:
                 df_p[col] = default_val
             else:
-                df_p[col] = df_p[col].fillna(val)
+                # FIXED: Using 'default_val' to match the loop variable
+                df_p[col] = df_p[col].fillna(default_val)
 
         # --- 5. STRATEGIC DAILY PLANNER & WEATHER ---
         if is_future:
