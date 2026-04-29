@@ -425,7 +425,7 @@ if st.sidebar.button("🚪 Logout / Reset Session", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL v30 - Indentation & Logic Sync)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (v34 - Hard-Synced & Hardened)
 # =================================================================
 if page == "Executive Dashboard":
     st.markdown("""
@@ -482,26 +482,22 @@ if page == "Executive Dashboard":
         start_p, end_p = pulse_range
         is_future = start_p >= today
         
-        # --- 4. THE UNIVERSAL SCAFFOLD (v33 - Final KeyError Fix) ---
-        # 1. Generate the timeline
+        # --- 4. THE UNIVERSAL SCAFFOLD (v34 - Fix for Jan 1st Error) ---
         date_list = pd.date_range(start=start_p, end=end_p)
         df_p = pd.DataFrame({'entry_date': date_list})
         
-        # 2. Prepare the merge keys (Strings are safer for matching)
+        # String keys for a 100% accurate merge regardless of date/datetime types
         df_p['merge_key'] = df_p['entry_date'].dt.strftime('%Y-%m-%d')
         df_raw_sync = df_raw.copy()
         df_raw_sync['merge_key'] = pd.to_datetime(df_raw_sync['entry_date']).dt.strftime('%Y-%m-%d')
         
-        # 3. Merge and immediately restore column names
-        # We drop the old entry_date from the ledger to prevent 'entry_date_x' naming conflicts
+        # Merge on string keys and restore primary column
         df_p = pd.merge(df_p, df_raw_sync.drop(columns=['entry_date']), on='merge_key', how='left')
-        
-        # 4. Critical: Ensure 'entry_date' is the primary datetime column
         df_p['entry_date'] = pd.to_datetime(df_p['merge_key'])
         df_p['dow'] = df_p['entry_date'].dt.day_name()
         df_p['baseline'] = df_p['dow'].map(master_baselines)
 
-        # 5. Force-create every column the planner and engine require
+        # Force-create every column the planner and engine require
         planner_cols = ['entry_date', 'dow', 'active_promo', 'attendance', 
                         'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
         
@@ -514,17 +510,15 @@ if page == "Executive Dashboard":
                 else:
                     df_p[col] = pd.to_numeric(df_p[col], errors='coerce').fillna(0)
 
-        # --- 5. STRATEGIC DAILY PLANNER (HARDENED) ---
+        # --- 5. STRATEGIC DAILY PLANNER ---
         if is_future:
             live_weather = get_live_ottawa_forecast()
             with st.expander("📅 Daily Strategy Planner", expanded=True):
                 st.write("Plan your lift. Weather below is synced from Environment Canada.")
                 
-                # Now 'entry_date' is guaranteed to exist because of step 4 above
                 df_plan = df_p[planner_cols].copy()
-                
-                # Double-check the type before formatting for display
                 df_plan['entry_date'] = pd.to_datetime(df_plan['entry_date'])
+                
                 df_plan_display = df_plan.copy()
                 df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
                 
@@ -536,14 +530,24 @@ if page == "Executive Dashboard":
                         "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
                         "active_promo": st.column_config.TextColumn("Promo/PR Hit"),
                     },
-                    hide_index=True, use_container_width=True, key="p1_planner_v33_final"
+                    hide_index=True, use_container_width=True, key="p1_planner_v34_final"
                 )
                 
-                # Sync back to df_p for the engine
                 editable_fields = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
                 for col in editable_fields:
                     df_p[col] = edited_df[col].values
-                    
+            
+            # Sync EC Weather into the dataframe if available
+            if live_weather:
+                st.sidebar.success("📡 Environment Canada Feed Active")
+                for i, row in df_p.iterrows():
+                    day_name = row.get('dow')
+                    if day_name in live_weather:
+                        if df_p.at[i, 'rain_mm'] == 0:
+                            df_p.at[i, 'rain_mm'] = live_weather[day_name]['rain']
+                        if df_p.at[i, 'snow_cm'] == 0:
+                            df_p.at[i, 'snow_cm'] = live_weather[day_name]['snow']
+
         # --- 6. ENGINE EXECUTION ---
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
@@ -557,7 +561,9 @@ if page == "Executive Dashboard":
         )
         
         total_vol = df_final['expected'].sum()
-        total_lift_vol = df_final['residual_lift'].sum() + df_final['gravity_lift'].sum() + (daily_brand_inertia * len(df_final))
+        total_lift_vol = (df_final['residual_lift'].sum() + 
+                          df_final['gravity_lift'].sum() + 
+                          (daily_brand_inertia * len(df_final)))
         mkt_impact_pct = (total_lift_vol / total_vol * 100) if total_vol > 0 else 0
 
         # --- 7. EXECUTIVE KPI GRID ---
@@ -588,7 +594,7 @@ if page == "Executive Dashboard":
         fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # --- 9. RISK & SOCIAL PULSE (CONSOLIDATED) ---
+        # --- 9. RISK & SOCIAL PULSE ---
         st.divider()
         o_col, s_col = st.columns(2)
         
@@ -596,7 +602,7 @@ if page == "Executive Dashboard":
             st.write("#### 🛡️ Operational Risk")
             s_imp = df_final['snow_cm'].sum() * float(current_weights.get('Snow_cm', -45))
             r_imp = df_final['rain_mm'].sum() * float(current_weights.get('Rain_mm', -12))
-            st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
+            st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}", help="Based on forecast friction weights.")
         
         with s_col:
             st.write("#### 📱 Social Engagement")
