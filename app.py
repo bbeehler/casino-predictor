@@ -510,36 +510,37 @@ if page == "Executive Dashboard":
                 # FIXED: Using 'default_val' to match the loop variable
                 df_p[col] = df_p[col].fillna(default_val)
 
-        # --- 5. STRATEGIC DAILY PLANNER & WEATHER ---
+        # --- 5. STRATEGIC DAILY PLANNER (SYNCED v31) ---
         if is_future:
             live_weather = get_live_ottawa_forecast()
             with st.expander("📅 Daily Strategy Planner", expanded=True):
                 st.write("Plan your lift. Weather below is synced from Environment Canada.")
-                df_plan = df_p[['entry_date', 'dow', 'active_promo', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']].copy()
+                
+                # THE FIX: Added 'attendance' back into this list 
+                # It must match the columns scaffolded in Section 4 exactly
+                planner_cols = [
+                    'entry_date', 'dow', 'active_promo', 'attendance', 
+                    'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm'
+                ]
+                
+                df_plan = df_p[planner_cols].copy()
                 
                 df_plan_display = df_plan.copy()
                 df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
                 
                 edited_df = st.data_editor(
                     df_plan_display, 
-                    column_config={"dow": None, "entry_date": st.column_config.Column("Date", disabled=True)},
-                    hide_index=True, use_container_width=True, key="p1_planner_v29_stable"
+                    column_config={
+                        "dow": None, 
+                        "entry_date": st.column_config.Column("Date", disabled=True),
+                        "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
+                    },
+                    hide_index=True, use_container_width=True, key="p1_planner_v31_stable"
                 )
                 
-                for col in ['active_promo', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
+                # Ensure the sync loop also handles 'attendance'
+                for col in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
                     df_p[col] = edited_df[col].values
-            
-            if live_weather:
-                st.sidebar.success("📡 Environment Canada Feed Active")
-                for i, row in df_p.iterrows():
-                    day_name = row.get('dow')
-                    if day_name in live_weather:
-                        if df_p.at[i, 'rain_mm'] == 0:
-                            df_p.at[i, 'rain_mm'] = live_weather[day_name]['rain']
-                        if df_p.at[i, 'snow_cm'] == 0:
-                            df_p.at[i, 'snow_cm'] = live_weather[day_name]['snow']
-        else:
-            st.info("💡 Reviewing historical actuals. Planner is disabled for past dates.")
 
         # --- 6. ENGINE EXECUTION ---
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
