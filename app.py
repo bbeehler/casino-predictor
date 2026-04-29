@@ -426,13 +426,13 @@ if st.sidebar.button("🚪 Logout / Reset Session", use_container_width=True):
             st.rerun()
 
 # =================================================================
-# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL v25 - Deep Baseline Fix)
+# 7. PAGE 1: EXECUTIVE DASHBOARD (FINAL v26 - EC API & Deep Baseline)
 # =================================================================
 if page == "Executive Dashboard":
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">📈 Executive Performance Pulse</h2>
-            <p style="color: #444; margin: 0;">Deep History Projection: Predictive Guest Volume & Strategic Planning.</p>
+            <p style="color: #444; margin: 0;">Deep History Projection & Live Environment Canada Feed.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -446,12 +446,30 @@ if page == "Executive Dashboard":
     # --- 1. THE DEEP HISTORY ENGINE ---
     df_raw = pd.DataFrame(ledger_data)
     df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
-    
-    # Calculate the Master Baseline for every Day of Week across ENTIRE history
     df_raw['dow'] = df_raw['entry_date'].dt.day_name()
     master_baselines = df_raw.groupby('dow')['actual_traffic'].mean().to_dict()
 
-    # 2. DATE SELECTION
+    # --- 2. ENVIRONMENT CANADA BRIDGE ---
+    def get_live_ottawa_forecast():
+        """Fetches 7-day forecast from Environment Canada (Ottawa CDA Station)"""
+        try:
+            from env_canada import ECWeather
+            import asyncio
+            ec = ECWeather(station_id="ON/s0000430")
+            asyncio.run(ec.update())
+            
+            forecast_data = {}
+            for day in ec.daily_forecasts:
+                period = day['period'] # e.g., "Monday"
+                forecast_data[period] = {
+                    "rain": float(day.get('rain_amount', 0) or 0),
+                    "snow": float(day.get('snow_amount', 0) or 0)
+                }
+            return forecast_data
+        except:
+            return None
+
+    # 3. DATE SELECTION
     col_date, _ = st.columns([1, 2])
     with col_date:
         pulse_range = st.date_input(
@@ -463,55 +481,46 @@ if page == "Executive Dashboard":
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
         is_future = start_p >= today
-        is_past = end_p < today
         
-        # TIMELINE GENERATION
         date_list = pd.date_range(start=start_p, end=end_p)
-        df_timeline = pd.DataFrame({'entry_date': date_list})
-        df_timeline['dow'] = df_timeline['entry_date'].dt.day_name()
+        df_p = pd.DataFrame({'entry_date': date_list})
+        df_p['dow'] = df_p['entry_date'].dt.day_name()
+        df_p['baseline'] = df_p['dow'].map(master_baselines)
         
-        # Map Deep History Baselines to the selected timeline
-        df_timeline['baseline'] = df_timeline['dow'].map(master_baselines)
-        
-        # Merge with existing ledger data (to catch past actuals)
-        df_p = pd.merge(df_timeline, df_raw, on='entry_date', how='left').fillna(0)
+        # Merge with existing data
+        df_p = pd.merge(df_p, df_raw, on='entry_date', how='left').fillna(0)
 
-        # 3. STRATEGIC DAILY PLANNER
+        # 4. LIVE WEATHER INTEGRATION
         if is_future:
+            live_weather = get_live_ottawa_forecast()
+            if live_weather:
+                st.sidebar.success("📡 Environment Canada Feed Active")
+                for i, row in df_p.iterrows():
+                    day_name = row['dow']
+                    if day_name in live_weather:
+                        # Only overwrite if manual data isn't already there
+                        if df_p.at[i, 'rain_mm'] == 0:
+                            df_p.at[i, 'rain_mm'] = live_weather[day_name]['rain']
+                        if df_p.at[i, 'snow_cm'] == 0:
+                            df_p.at[i, 'snow_cm'] = live_weather[day_name]['snow']
+
             with st.expander("📅 Daily Strategy Planner", expanded=True):
-                st.write("Plan your digital spend and PR events to see the projected lift over the historical baseline.")
+                st.write("Plan your lift. Weather below is synced from Environment Canada.")
                 df_plan = df_p[['entry_date', 'active_promo', 'attendance', 
                                 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']].copy()
                 
-                df_plan['active_promo'] = df_plan['active_promo'].astype(str).replace(['0', '0.0', 'nan', 'None'], '')
-                float_cols = ['attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
-                df_plan[float_cols] = df_plan[float_cols].astype(float)
                 df_plan['entry_date'] = df_plan['entry_date'].dt.strftime('%a, %b %d')
+                edited_df = st.data_editor(df_plan, hide_index=True, use_container_width=True, key="p1_planner_v26")
                 
-                edited_df = st.data_editor(
-                    df_plan,
-                    column_config={
-                        "entry_date": st.column_config.Column("Date", disabled=True),
-                        "active_promo": st.column_config.TextColumn("Active Promo/PR Hit"),
-                        "ad_clicks": st.column_config.NumberColumn("Google/FB Clicks"),
-                        "ad_impressions": st.column_config.NumberColumn("Social Impressions"),
-                        "attendance": st.column_config.NumberColumn("Event Attendance"),
-                    },
-                    hide_index=True, use_container_width=True, key="p1_planner_vfinal"
-                )
-                df_p['active_promo'] = edited_df['active_promo'].values
-                df_p['attendance'] = edited_df['attendance'].values
-                df_p['ad_clicks'] = edited_df['ad_clicks'].values
-                df_p['ad_impressions'] = edited_df['ad_impressions'].values
-                df_p['rain_mm'] = edited_df['rain_mm'].values
-                df_p['snow_cm'] = edited_df['snow_cm'].values
+                # Sync back to df_p
+                for col in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
+                    df_p[col] = edited_df[col].values
 
-        # --- 4. ENGINE EXECUTION ---
-        # The engine now uses the Deep History baseline to calculate 'expected'
+        # --- 5. ENGINE EXECUTION ---
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
 
-        # CALCULATE MARKETING IMPACT
+        # Marketing Inertia Calculation
         daily_brand_inertia = (
             float(current_weights.get('Broadcast_Weight', 150)) + 
             float(current_weights.get('OOH_Weight', 100)) + 
@@ -520,74 +529,51 @@ if page == "Executive Dashboard":
             (float(current_weights.get('Digital_OOH_Weight', 25)) * int(current_weights.get('Digital_OOH_Count', 5)))
         )
         
-        total_lift_vol = (df_final['residual_lift'].sum() + 
-                          df_final['gravity_lift'].sum() + 
-                          (daily_brand_inertia * len(df_final)))
-        
         total_vol = df_final['expected'].sum()
+        total_lift_vol = df_final['residual_lift'].sum() + df_final['gravity_lift'].sum() + (daily_brand_inertia * len(df_final))
         mkt_impact_pct = (total_lift_vol / total_vol * 100) if total_vol > 0 else 0
 
-        # --- 5. EXECUTIVE KPI GRID (FINANCIAL UPGRADE) ---
+        # --- 6. EXECUTIVE KPI GRID ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
-        
-        LTV_VAL = 1900.00
-        AVG_SPEND = 1279.33
+        LTV_VAL, AVG_SPEND = 1900.00, 1279.33
 
         if is_future:
-            # Financial Projections based on Deep History + Coefficients
-            projected_coin_in = total_vol * AVG_SPEND
-            projected_ltv = (total_vol * 0.05) * LTV_VAL
-            proj_enhanced_rev = projected_coin_in + projected_ltv + (daily_brand_inertia * len(df_final))
-
-            k1.metric("Projected Demand", f"{total_vol:,.0f} Guests", help="Based on Deep Historical Baseline + Sliders.")
-            k2.metric("Target Signups", f"{(total_vol * 0.05):,.0f}", help="Assumes 5% conversion rate.")
-            k3.metric("Proj. Enhanced Revenue", f"${proj_enhanced_rev:,.0f}", help="Coin-In + Signups + Brand Equity.")
+            proj_rev = (total_vol * AVG_SPEND) + ((total_vol * 0.05) * LTV_VAL) + (daily_brand_inertia * len(df_final))
+            k1.metric("Projected Demand", f"{total_vol:,.0f} Guests")
+            k2.metric("Target Signups", f"{(total_vol * 0.05):,.0f}")
+            k3.metric("Proj. Enhanced Revenue", f"${proj_rev:,.0f}")
             k4.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
-
-        elif is_past:
+        else:
             total_act = df_final['actual_traffic'].sum()
-            actual_signups = df_final['new_members'].sum()
-            act_coin_in = df_final['actual_coin_in'].sum() if 'actual_coin_in' in df_final.columns else (total_act * AVG_SPEND)
-            act_enhanced_rev = act_coin_in + (actual_signups * LTV_VAL)
-
+            act_rev = df_final['actual_coin_in'].sum() + (df_final['new_members'].sum() * LTV_VAL)
             k1.metric("Actual Guest Flow", f"{total_act:,.0f}")
-            k2.metric("New Unity Members", f"{actual_signups:,.0f}")
-            k3.metric("Audited Revenue Impact", f"${act_enhanced_rev:,.0f}")
+            k2.metric("New Unity Members", f"{df_final['new_members'].sum():,.0f}")
+            k3.metric("Audited Revenue Impact", f"${act_rev:,.0f}")
             k4.metric("Audited Accuracy", m['predictability'])
 
-        # --- 6. PERFORMANCE VIZ ---
+        # --- 7. THE UNIFIED PULSE ---
         st.write("### 🎰 The Unified Pulse")
         fig_pulse = go.Figure()
         df_act_chart = df_final[df_final['entry_date'].dt.date < today]
         fig_pulse.add_trace(go.Scatter(x=df_act_chart['entry_date'], y=df_act_chart['actual_traffic'], name="Actual Guests", line=dict(color='#0047AB', width=4)))
         fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
-        
-        today_ts = pd.Timestamp(today)
-        fig_pulse.add_shape(type="line", x0=today_ts, x1=today_ts, y0=0, y1=1, yref="paper", line=dict(color="#666", width=2, dash="dash"))
-        fig_pulse.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=400, margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified")
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # --- 7. OPERATIONAL RISK ---
+        # --- 8. RISK MANAGEMENT ---
         st.divider()
-        if not is_past:
+        if not (end_p < today):
             st.write("#### 🛡️ Operational Risk & Opportunity")
             o1, o2, o3 = st.columns(3)
-            with o1:
-                s_imp = df_final['snow_cm'].sum() * float(current_weights.get('Snow_cm', -45))
-                r_imp = df_final['rain_mm'].sum() * float(current_weights.get('Rain_mm', -12))
-                st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
-            with o2:
-                potential = int(df_final['expected'].sum() - df_final['new_members'].sum())
-                st.metric("Conversion Opportunity", f"{max(0, potential):,.0f}")
-            with o3:
-                peak_day_volume = df_final['expected'].max()
-                intensity_label = "🔴 Critical Peak" if peak_day_volume > 6200 else ("🟡 High" if peak_day_volume > 5200 else "🟢 Stable")
-                st.metric("Staffing Intensity", intensity_label)
+            s_imp = df_final['snow_cm'].sum() * float(current_weights.get('Snow_cm', -45))
+            r_imp = df_final['rain_mm'].sum() * float(current_weights.get('Rain_mm', -12))
+            o1.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
+            o2.metric("Conversion Opportunity", f"{max(0, int(total_vol * 0.95)):,.0f}")
+            peak_vol = df_final['expected'].max()
+            o3.metric("Staffing Intensity", "🔴 Critical Peak" if peak_vol > 6200 else "🟢 Stable")
 
     else:
-        st.info("Please select a complete Start and End date range to view the Dashboard.")
-        st.stop()
+        st.info("Select a date range to view the Dashboard.")
 
 # =================================================================
 # 8. PAGE 2: DAILY LEDGER AUDIT (HARDENED v7.4 - NameError & Scope Fix)
