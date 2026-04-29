@@ -533,17 +533,20 @@ if page == "Executive Dashboard":
             with st.expander("📅 Daily Strategy Planner", expanded=True):
                 st.write("Plan your lift. Weather below is synced from Environment Canada.")
                 
-                # This line is now bulletproof because of the loop above
+                # Bulletproof subsetting
                 df_plan = df_p[planner_cols].copy()
                 
-                # Display Formatting
+                # FORCE DATE TYPE (The fix for the previous AttributeError)
+                df_plan['entry_date'] = pd.to_datetime(df_plan['entry_date'])
+                
+                # Create display version
                 df_plan_display = df_plan.copy()
                 df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
                 
                 edited_df = st.data_editor(
                     df_plan_display, 
                     column_config={
-                        "dow": None, # Hide day of week
+                        "dow": None, 
                         "entry_date": st.column_config.Column("Date", disabled=True),
                         "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
                         "active_promo": st.column_config.TextColumn("Promo/PR Hit"),
@@ -553,8 +556,7 @@ if page == "Executive Dashboard":
                     key="p1_planner_v32_final"
                 )
                 
-                # Map edited values back to the main df_p for the engine
-                # We skip entry_date and dow because they aren't editable
+                # Map edited values back
                 editable_fields = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
                 for col in editable_fields:
                     df_p[col] = edited_df[col].values
