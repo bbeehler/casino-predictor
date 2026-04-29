@@ -146,7 +146,7 @@ def apply_corporate_styling():
 apply_corporate_styling()
 
 # =================================================================
-# 3. FORENSIC ENGINE: DEMAND RESTORATION (v6.10)
+# 3. FORENSIC ENGINE: OTTAWA REALITY (v6.12)
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
     if not df_input:
@@ -156,73 +156,71 @@ def get_forensic_metrics(df_input, coeffs):
     df['entry_date'] = pd.to_datetime(df['entry_date'])
     today = pd.Timestamp(datetime.date.today())
     
-    # --- 1. DYNAMIC COEFFICIENTS (Source: Database) ---
+    # --- 1. DYNAMIC COEFFICIENTS ---
     c_clicks = float(coeffs.get('Clicks', 0))
     c_social = float(coeffs.get('Social_Imp', 0))
     decay = float(coeffs.get('Ad_Decay', 0)) / 100 
-    gravity = float(coeffs.get('Event_Gravity', 0)) / 100 # Your 85% or 35% setting
+    
+    # Gravity: 85.0 in UI -> 0.85 Multiplier
+    gravity = float(coeffs.get('Event_Gravity', 0)) / 100
     promo_lift_weight = float(coeffs.get('Promo', 0))
-    c_broadcast = float(coeffs.get('Broadcast_Weight', 0)) 
-    c_ooh = float(coeffs.get('OOH_Weight', 0))           
     c_pr_mult = float(coeffs.get('PR_Weight', 1.0)) 
 
-    # Branding/Inertia (Daily Mass Media Lift)
+    # Brand Inertia Layer
     ooh_daily = (float(coeffs.get('Static_Weight', 0)) * int(coeffs.get('Static_Count', 0))) + \
                 (float(coeffs.get('Digital_OOH_Weight', 0)) * int(coeffs.get('Digital_OOH_Count', 0)))
-    total_brand_inertia = ooh_daily + c_broadcast + c_ooh
+    total_brand_inertia = ooh_daily + float(coeffs.get('Broadcast_Weight', 0)) + float(coeffs.get('OOH_Weight', 0))
 
-    # --- 2. CALCULATE Lifts for the whole Timeline ---
-    # This ensures consistency between historical stripping and future projection
-    df['clean_attendance'] = pd.to_numeric(df['attendance'], errors='coerce').fillna(0)
+    # --- 2. DATA CLEANING (THE FIX FOR 1,900 ATTENDANCE) ---
+    # We force 'attendance' to be a number before doing any math
+    df['clean_attendance'] = pd.to_numeric(df['attendance'], errors='coerce').fillna(0).astype(float)
     df['gravity_lift'] = df['clean_attendance'] * gravity
     
-    awareness_pool, current_pool = [], 0.0
-    for _, row in df.iterrows():
-        daily_in = (row.get('ad_clicks', 0) * c_clicks) + (row.get('ad_impressions', 0) * c_social)
-        current_pool = daily_in + (current_pool * decay)
-        awareness_pool.append(current_pool)
-    df['residual_lift'] = awareness_pool
-
-    # --- 3. THE HEARTBEAT (THE FIX FOR PROJECTED DEMAND) ---
-    # We define Organic Baseline by subtracting ONLY Brand Inertia from history.
-    # We do NOT subtract Gravity or Digital Lifts here because they are often
-    # under-reported in history, which was 'starving' your organic base.
-    df['is_closed'] = df.apply(lambda x: 1 if (x['entry_date'] < today and x.get('actual_traffic', 0) == 0) else 0, axis=1)
-    df['organic_baseline_raw'] = df.get('actual_traffic', 0) - total_brand_inertia
-    
-    open_past = df[(df['is_closed'] == 0) & (df['entry_date'] < today)]
-    
-    if not open_past.empty:
-        heartbeats = open_past.groupby(open_past['entry_date'].dt.day_name())['organic_baseline_raw'].mean().to_dict()
-    else:
-        # These are the "Floor" numbers for Ottawa
-        heartbeats = {'Monday': 3454, 'Tuesday': 3250, 'Wednesday': 4682, 'Thursday': 4683, 'Friday': 7249, 'Saturday': 7208, 'Sunday': 4629}
+    # --- 3. THE ACTUAL OTTAWA FLOOR ---
+    # Hard-coded to your provided property averages
+    heartbeats = {
+        'Monday': 3171,
+        'Tuesday': 3989,
+        'Wednesday': 3892,
+        'Thursday': 4500,
+        'Friday': 7370,
+        'Saturday': 5888,
+        'Sunday': 4929
+    }
 
     # --- 4. PREDICTION LOGIC ---
     def predict_guests(row):
         if row['is_closed'] == 1: return 0
-        
         day_name = row['entry_date'].strftime('%A')
-        # Referencing the organic average we just calculated
-        base = heartbeats.get(day_name, 0) 
         
-        # Apply PR Multiplier to the Organic Base
+        # Pull from the actual Ottawa floor
+        base = float(heartbeats.get(day_name, 4000))
+        
+        # Apply PR Multiplier to the floor
         p_val = str(row.get('active_promo', '0'))
         current_base = base * c_pr_mult if "PR" in p_val.upper() else base
         
-        # Promo Lift
-        promo_impact = promo_lift_weight if p_val not in ['0', '0.0', 'nan', 'None', ''] else 0
+        # Calculate Digital Lifts (Simplified for this pass)
+        digital_lift = float(row.get('residual_lift', 0)) if 'residual_lift' in row else 0
+        
+        # Add Promo and Event Gravity
+        promo_impact = float(promo_lift_weight) if p_val not in ['0', '0.0', 'nan', 'None', ''] else 0
+        event_lift = float(row['gravity_lift'])
 
-        # FINAL SUMMATION (Base + Awareness + Brand + Events + Promo)
-        return max(0, current_base + row['residual_lift'] + total_brand_inertia + row['gravity_lift'] + promo_impact)
+        return max(0, current_base + digital_lift + total_brand_inertia + event_lift + promo_impact)
+
+    # Calculate Residual Lift for the timeline
+    awareness_pool, current_pool = [], 0.0
+    for _, row in df.iterrows():
+        daily_in = (float(row.get('ad_clicks', 0)) * c_clicks) + (float(row.get('ad_impressions', 0)) * c_social)
+        current_pool = daily_in + (current_pool * decay)
+        awareness_pool.append(current_pool)
+    df['residual_lift'] = awareness_pool
 
     df['expected'] = df.apply(predict_guests, axis=1)
-    
-    # Store the heartbeat baseline in the DF for the Dashboard KPI math
-    df['baseline'] = df['entry_date'].dt.day_name().map(heartbeats)
+    df['baseline'] = df['entry_date'].dt.day_name().map(heartbeats).astype(float)
 
     return {
-        "predictability": "94.2%", # Can be calculated if needed
         "df": df,
         "total_inertia": total_brand_inertia,
         "heartbeats": heartbeats
