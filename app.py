@@ -497,18 +497,45 @@ if page == "Executive Dashboard":
                 else:
                     df_p[col] = pd.to_numeric(df_p[col], errors='coerce').fillna(0)
 
-        # --- 4. STRATEGIC DAILY PLANNER ---
+        if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
+        start_p, end_p = pulse_range
+        
+        # --- 4. THE DIRECT-SYNC TIMELINE (v41) ---
+        # 1. Define the columns we need
+        planner_cols = ['entry_date', 'dow', 'active_promo', 'attendance', 
+                        'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
+        
+        # 2. Build the timeline DIRECTLY from your selection
+        date_list = pd.date_range(start=start_p, end=end_p)
+        df_p = pd.DataFrame({'entry_date': date_list})
+        
+        # 3. Standardize types for the merge
+        df_p['entry_date'] = pd.to_datetime(df_p['entry_date'])
+        df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
+        
+        # 4. Merge with the Ledger
+        df_p = pd.merge(df_p, df_raw.drop(columns=['dow'], errors='ignore'), on='entry_date', how='left')
+        
+        # 5. Restore Day of Week and Baselines
+        df_p['dow'] = df_p['entry_date'].dt.day_name()
+        df_p['baseline'] = df_p['dow'].map(master_baselines)
+
+        # 6. Fill missing values so the engine has numbers to work with
+        for col in planner_cols:
+            if col not in df_p.columns:
+                df_p[col] = "" if col == 'active_promo' else 0.0
+            else:
+                if col == 'active_promo':
+                    df_p[col] = df_p[col].fillna("")
+                else:
+                    df_p[col] = pd.to_numeric(df_p[col], errors='coerce').fillna(0)
+
+        # --- 5. STRATEGIC DAILY PLANNER ---
         with st.expander("📅 Strategic Daily Planner & Simulator", expanded=True):
             st.write("Plan your lift. Inputs here directly scale the Vital Signs below.")
             
-            # 1. Grab the columns
-            df_plan = df_p[planner_cols].copy()
-            
-            # 2. THE CRITICAL FIX: Force the column to datetime type
-            df_plan['entry_date'] = pd.to_datetime(df_plan['entry_date'])
-            
-            # 3. Now create the display version safely
-            df_plan_display = df_plan.copy()
+            # Format display
+            df_plan_display = df_p[planner_cols].copy()
             df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
             
             edited_df = st.data_editor(
@@ -517,35 +544,13 @@ if page == "Executive Dashboard":
                     "dow": None, 
                     "entry_date": st.column_config.Column("Date", disabled=True),
                     "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
-                    "active_promo": st.column_config.TextColumn("Promo/PR Hit"),
-                    "rain_mm": st.column_config.NumberColumn("Rain (mm)"),
-                    "snow_cm": st.column_config.NumberColumn("Snow (cm)"),
                 },
-                hide_index=True, use_container_width=True, key="p1_planner_v40_fixed"
+                hide_index=True, use_container_width=True, key="p1_planner_v41_stable"
             )
             
-            # Sync back to main engine
-            editable_fields = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
-            for col in editable_fields:
+            # CRITICAL: Sync edited data back to the main engine (df_p)
+            for col in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
                 df_p[col] = edited_df[col].values
-
-        # --- 5. ENGINE EXECUTION ---
-        m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
-        df_final = m['df'].sort_values('entry_date')
-
-        daily_brand_inertia = (
-            float(current_weights.get('Broadcast_Weight', 150)) + 
-            float(current_weights.get('OOH_Weight', 100)) + 
-            float(current_weights.get('Print_Lift', 75)) +
-            (float(current_weights.get('Static_Weight', 15)) * int(current_weights.get('Static_Count', 10))) +
-            (float(current_weights.get('Digital_OOH_Weight', 25)) * int(current_weights.get('Digital_OOH_Count', 5)))
-        )
-        
-        total_vol = df_final['expected'].sum()
-        total_lift_vol = (df_final['residual_lift'].sum() + 
-                          df_final['gravity_lift'].sum() + 
-                          (daily_brand_inertia * len(df_final)))
-        mkt_impact_pct = (total_lift_vol / total_vol * 100) if total_vol > 0 else 0
 
         # --- 6. EXECUTIVE KPI GRID ---
         st.write("### 🏛️ Property Vital Signs")
