@@ -146,7 +146,7 @@ def apply_corporate_styling():
 apply_corporate_styling()
 
 # =================================================================
-# 3. FORENSIC ENGINE: PURE DATA ATTRIBUTION (v6.6 - Stable)
+# 3. FORENSIC ENGINE: PURE DATA ATTRIBUTION (v6.7 - KPI Sync)
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
     if not df_input:
@@ -156,72 +156,65 @@ def get_forensic_metrics(df_input, coeffs):
     df['entry_date'] = pd.to_datetime(df['entry_date'])
     today = pd.Timestamp(datetime.date.today())
     
-    # --- 1. DYNAMIC COEFFICIENT EXTRACTION (100% referential) ---
+    # --- 1. DYNAMIC COEFFICIENT EXTRACTION ---
     c_clicks = float(coeffs.get('Clicks', 0))
     c_social = float(coeffs.get('Social_Imp', 0))
     decay = float(coeffs.get('Ad_Decay', 0)) / 100 
-    
-    # Event Gravity: Capturing your 30-40% property experience
     gravity = float(coeffs.get('Event_Gravity', 0)) / 100
     promo_lift_weight = float(coeffs.get('Promo', 0))
-    
     c_broadcast = float(coeffs.get('Broadcast_Weight', 0)) 
     c_ooh = float(coeffs.get('OOH_Weight', 0))           
     c_pr_mult = float(coeffs.get('PR_Weight', 1.0)) 
 
-    # Mass Media / Brand Inertia (Calculated from UI counts/weights)
     ooh_daily = (float(coeffs.get('Static_Weight', 0)) * int(coeffs.get('Static_Count', 0))) + \
                 (float(coeffs.get('Digital_OOH_Weight', 0)) * int(coeffs.get('Digital_OOH_Count', 0)))
     
     total_brand_inertia = ooh_daily + c_broadcast + c_ooh
 
-    # --- 2. LEDGER HEARTBEAT (Finding Organic Baseline) ---
+    # --- 2. LEDGER HEARTBEAT ---
     df['is_closed'] = df.apply(lambda x: 1 if (x['entry_date'] < today and x.get('actual_traffic', 0) == 0) else 0, axis=1)
     
-    # Safely convert attendance to numeric for the whole column at once
+    # Calculate lifts for the whole dataframe
     df['clean_attendance'] = pd.to_numeric(df['attendance'], errors='coerce').fillna(0)
-    df['tmp_gravity_lift'] = df['clean_attendance'] * gravity
+    df['gravity_lift'] = df['clean_attendance'] * gravity
     
-    # Strip actuals to find the naked organic average per day
-    df['organic_remainder'] = df.get('actual_traffic', 0) - total_brand_inertia - df['tmp_gravity_lift']
+    # --- 3. AWARENESS POOL (RESIDUAL LIFT) ---
+    # This loop calculates the decaying 'memory' of your digital ads
+    awareness_pool, current_pool = [], 0.0
+    for _, row in df.iterrows():
+        daily_in = (row.get('ad_clicks', 0) * c_clicks) + (row.get('ad_impressions', 0) * c_social)
+        current_pool = daily_in + (current_pool * decay)
+        awareness_pool.append(current_pool)
     
+    # THE CRITICAL EXPORT: This fixes the KeyError
+    df['residual_lift'] = awareness_pool
+
+    # --- 4. HEARTBEAT CALCULATION ---
+    df['organic_remainder'] = df.get('actual_traffic', 0) - total_brand_inertia - df['gravity_lift'] - df['residual_lift']
     open_past = df[(df['is_closed'] == 0) & (df['entry_date'] < today)]
     
     if not open_past.empty:
         heartbeats = open_past.groupby(open_past['entry_date'].dt.day_name())['organic_remainder'].mean().to_dict()
     else:
-        # Emergency fallbacks only if Ledger Page 2 is empty
         heartbeats = {'Monday': 3400, 'Tuesday': 3800, 'Wednesday': 5500, 'Thursday': 4000, 'Friday': 7600, 'Saturday': 9800, 'Sunday': 5800}
 
-    # --- 3. PREDICTION LOGIC ---
+    # --- 5. PREDICTION LOGIC ---
     def predict_guests(row):
         if row['is_closed'] == 1: return 0
-        
         day_name = row['entry_date'].strftime('%A')
-        # Referencing the organic average we just calculated from your Ledger
         base = heartbeats.get(day_name, 0) 
         
-        # Apply PR Multiplier to the Organic Base
         p_val = str(row.get('active_promo', '0'))
         current_base = base * c_pr_mult if "PR" in p_val.upper() else base
         
-        # Calculate Event Gravity (Directly using the 30-40% rule)
-        # We use the clean column we created in step 2
-        attendance_val = pd.to_numeric(row.get('attendance', 0), errors='coerce')
-        event_lift = (attendance_val if pd.notnull(attendance_val) else 0) * gravity
-        
-        # Promo Lift
         promo_impact = promo_lift_weight if p_val not in ['0', '0.0', 'nan', 'None', ''] else 0
 
-        return max(0, current_base + total_brand_inertia + event_lift + promo_impact)
+        # Sum: Base + Awareness + Brand + Events + Promo
+        return max(0, current_base + row['residual_lift'] + total_brand_inertia + row['gravity_lift'] + promo_impact)
 
-    # Apply the logic
     df['expected'] = df.apply(predict_guests, axis=1)
     
-    # Update gravity_lift column for dashboard visuals
-    df['gravity_lift'] = df['clean_attendance'] * gravity
-    
-    # --- 4. ACCURACY AUDIT ---
+    # --- 6. ACCURACY AUDIT ---
     df_audit = df[(df['entry_date'] < today) & (df['is_closed'] == 0) & (df.get('actual_traffic', 0) > 0)].copy()
     if not df_audit.empty:
         mape = (np.abs(df_audit['actual_traffic'] - df_audit['expected']) / df_audit['actual_traffic']).mean()
