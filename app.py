@@ -1175,8 +1175,20 @@ elif page == "FloorCast AI Analyst":
         
         try:
             import google.generativeai as genai
+            from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model = genai.GenerativeModel('gemini-2.5-flash') # Or your specific version
+            
+            # Using 'gemini-1.5-flash' for high-speed analysis
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            # THE FIX: Safety Settings to prevent "Finish Reason 1" blocks
+            safety_settings = {
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            }
             
             with st.status("🕵️ Correlating Brand Value with Floor Cash...", expanded=True) as status:
                 full_prompt = f"""
@@ -1195,13 +1207,20 @@ elif page == "FloorCast AI Analyst":
                 
                 EXECUTIVE QUERY: {prompt}
                 """
-                response = model.generate_content(full_prompt)
+                
+                # Apply the safety settings here
+                response = model.generate_content(full_prompt, safety_settings=safety_settings)
+                
+                # Check if the response was blocked before accessing .text
+                if response.candidates[0].finish_reason == 3: # Safety block
+                    assistant_msg = "⚠️ The analysis was blocked by safety filters due to a data pattern. Try rephrasing your question."
+                else:
+                    assistant_msg = response.text
+
                 status.update(label="✅ Strategic Insight Ready", state="complete")
             
-            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            st.session_state.messages.append({"role": "assistant", "content": assistant_msg})
             st.rerun()
-        except Exception as e:
-            st.error(f"AI Error: {e}")
 
 # =================================================================
 # 13. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v23 - Zero-Proof Edition)
