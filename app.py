@@ -280,26 +280,69 @@ def archive_sentiment_entry(raw_text, asset_name, manual_score=0.0):
         st.error(f"Cloud Database Error: {e}")
         return "Error", "⚠️", "Unknown"
 # =================================================================
-# 4.6 GAUGE RENDERING ENGINE (v2.0 - Plotly Version)
+# 4.6 EXECUTIVE BRAND SENTIMENT PULSE (Multi-Tag & Historical)
 # =================================================================
-def draw_sentiment_gauge(score):
-    """Generates a forensic gauge chart using Plotly."""
-    fig = go.Figure(go.Indicator(
-        mode = "gauge+number",
-        value = score,
-        number = {'font': {'size': 24}, 'valueformat': "+.2f"},
-        gauge = {
-            'axis': {'range': [-1, 1]},
-            'bar': {'color': "#1A1A1B", 'thickness': 0.15},
-            'steps': [
-                {'range': [-1, -0.3], 'color': "#ff4b4b"},
-                {'range': [-0.3, 0.3], 'color': "#fbc02d"},
-                {'range': [0.3, 1], 'color': "#00c853"}
-            ],
-        }
-    ))
-    fig.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor='rgba(0,0,0,0)')
-    return fig
+        st.divider()
+        st.write("### 🏛️ Executive Brand Sentiment Pulse")
+        
+        # 1. Historical Selection Logic
+        col_header, col_filter = st.columns([2, 1])
+        with col_filter:
+            today = datetime.date.today()
+            # Generate a list of the last 12 months for historical auditing
+            gauge_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
+            gauge_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in gauge_months[1:]]
+            selected_gauge_label = st.selectbox("Audit Period:", gauge_labels, key="gauge_period_select")
+
+        # 2. Define our Asset Tags
+        tags = ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"]
+        cols = st.columns(len(tags))
+
+        for i, tag in enumerate(tags):
+            with cols[i]:
+                score_val = 0.0
+                try:
+                    # Construct the Query
+                    query = supabase.table("sentiment_history").select("sentiment_score").eq("asset", tag)
+                    
+                    if selected_gauge_label == "Current (Live)":
+                        # Pull latest 10 for real-time pulse
+                        sent_res = query.order("timestamp", desc=True).limit(10).execute()
+                    else:
+                        # Filter by selected month
+                        sel_date = gauge_months[gauge_labels.index(selected_gauge_label)]
+                        start_date = sel_date.strftime("%Y-%m-%d")
+                        end_date = (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")
+                        sent_res = query.filter("timestamp", "gte", start_date).filter("timestamp", "lt", end_date).execute()
+                    
+                    if sent_res.data:
+                        score_val = np.mean([d['sentiment_score'] for d in sent_res.data])
+                except:
+                    pass
+
+                # 3. Render the Gauge for each Tag
+                fig_gauge = go.Figure(go.Indicator(
+                    mode = "gauge+number",
+                    value = score_val,
+                    title = {'text': f"<b>{tag}</b>", 'font': {'size': 14}},
+                    number = {'font': {'size': 20}, 'valueformat': ".2f"},
+                    gauge = {
+                        'axis': {'range': [-1, 1], 'tickwidth': 1},
+                        'bar': {'color': "#0047AB"},
+                        'steps': [
+                            {'range': [-1, -0.3], 'color': "#FF4B4B"},
+                            {'range': [-0.3, 0.3], 'color': "#F0F2F6"},
+                            {'range': 0.3, 1], 'color': "#28A745"}
+                        ],
+                        'threshold': {
+                            'line': {'color': "black", 'width': 4},
+                            'thickness': 0.75,
+                            'value': score_val
+                        }
+                    }
+                ))
+                fig_gauge.update_layout(height=220, margin=dict(l=10, r=10, t=40, b=10), paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_gauge, use_container_width=True)
 
 # =================================================================
 # 5. DATA INFRASTRUCTURE (SUPABASE & WEATHER)[cite: 1]
