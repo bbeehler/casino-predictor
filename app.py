@@ -16,16 +16,16 @@ import uuid
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 # =================================================================
-# 1. DATABASE CONNECTION (MUST BE FIRST)
+# 1. DATABASE CONNECTION (CLEANED)
 # =================================================================
-# Ensure these match your Streamlit Secrets exactly[cite: 1]
 try:
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    supabase: Client = create_client(url, key)
+    # Ensure these are regular spaces, not non-breaking spaces
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    supabase: Client = create_client(url, key)
 except Exception as e:
-    st.error(f"Critical System Error: Connection secrets missing. {e}")
-    st.stop()
+    st.error(f"Critical System Error: Connection secrets missing. {e}")
+    st.stop()
 
 # =================================================================
 # 2. PERMANENT INITIALIZATION & STATE LOCK (v7.5 - ID-1 TARGET)[cite: 1]
