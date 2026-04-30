@@ -473,38 +473,67 @@ if page == "Executive Dashboard":
             k3.metric("Audited Revenue", f"${act_coin:,.0f}")
             k4.metric("Audited Accuracy", m['predictability'])
 
-        # --- 7. BRAND SENTIMENT PULSE (Multi-Tag & Historical) ---
+        # --- 7. BRAND SENTIMENT PULSE (Consolidated + Multi-Tag) ---
         st.divider()
         st.write("### 🏛️ Executive Brand Sentiment Pulse")
         
-        # 7a. Historical Filter
+        # 7a. Historical Filter & Global Calculation
         col_h1, col_h2 = st.columns([2, 1])
+        
         with col_h2:
             g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
             g_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in g_months[1:]]
             sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select")
 
-        # 7b. Multi-Gauge Grid
+        # 7b. Calculate Overall Consolidated Score
+        overall_score = 0.0
+        try:
+            # Query all tags for the selected period to get the "Property Temperature"
+            global_query = supabase.table("sentiment_history").select("sentiment_score")
+            
+            if sel_period == "Current (Live)":
+                g_res = global_query.order("timestamp", desc=True).limit(40).execute()
+            else:
+                sel_date = g_months[g_labels.index(sel_period)]
+                s_d, e_d = sel_date.strftime("%Y-%m-%d"), (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")
+                g_res = global_query.filter("timestamp", "gte", s_d).filter("timestamp", "lt", e_d).execute()
+            
+            if g_res.data:
+                overall_score = np.mean([d['sentiment_score'] for d in g_res.data])
+        except:
+            pass
+
+        # Display the Overall Score as a Hero Metric
+        st.metric(
+            label=f"Consolidated Property Pulse ({sel_period})", 
+            value=f"{overall_score:+.2f}",
+            delta="Positive Impact" if overall_score > 0.3 else "High Friction" if overall_score < -0.3 else "Neutral",
+            delta_color="normal" if abs(overall_score) > 0.3 else "off"
+        )
+
+        # 7c. Multi-Gauge Grid for Specific Assets
         tags = ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"]
         cols = st.columns(len(tags))
 
         for i, tag in enumerate(tags):
             with cols[i]:
-                score_val = 0.0
+                tag_score = 0.0
                 try:
-                    query = supabase.table("sentiment_history").select("sentiment_score").eq("asset", tag)
+                    tag_query = supabase.table("sentiment_history").select("sentiment_score").eq("asset", tag)
                     if sel_period == "Current (Live)":
-                        res = query.order("timestamp", desc=True).limit(10).execute()
+                        t_res = tag_query.order("timestamp", desc=True).limit(10).execute()
                     else:
                         sel_date = g_months[g_labels.index(sel_period)]
                         s_d, e_d = sel_date.strftime("%Y-%m-%d"), (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")
-                        res = query.filter("timestamp", "gte", s_d).filter("timestamp", "lt", e_d).execute()
+                        t_res = tag_query.filter("timestamp", "gte", s_d).filter("timestamp", "lt", e_d).execute()
                     
-                    if res.data: score_val = np.mean([d['sentiment_score'] for d in res.data])
-                except: pass
+                    if t_res.data:
+                        tag_score = np.mean([d['sentiment_score'] for d in t_res.data])
+                except:
+                    pass
 
                 fig = go.Figure(go.Indicator(
-                    mode = "gauge+number", value = score_val,
+                    mode = "gauge+number", value = tag_score,
                     title = {'text': f"<b>{tag}</b>", 'font': {'size': 14}},
                     number = {'font': {'size': 18}, 'valueformat': ".2f"},
                     gauge = {
@@ -515,7 +544,7 @@ if page == "Executive Dashboard":
                             {'range': [-0.3, 0.3], 'color': "#F0F2F6"},
                             {'range': [0.3, 1], 'color': "#28A745"}
                         ],
-                        'threshold': {'line': {'color': "black", 'width': 3}, 'value': score_val}
+                        'threshold': {'line': {'color': "black", 'width': 3}, 'value': tag_score}
                     }
                 ))
                 fig.update_layout(height=200, margin=dict(l=10, r=10, t=40, b=10), paper_bgcolor='rgba(0,0,0,0)')
