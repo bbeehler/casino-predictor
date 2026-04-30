@@ -466,9 +466,10 @@ if st.sidebar.button("🚪 Logout / Reset Session", use_container_width=True):
             st.rerun()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v44 - THE FINAL STABLE VERSION)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v45 - Multi-Gauge Historical)
 # =================================================================
 if page == "Executive Dashboard":
+    # 1. HEADER (This always stays at the top)
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">📈 Executive Performance Pulse</h2>
@@ -483,33 +484,28 @@ if page == "Executive Dashboard":
         st.warning("Forensic Vault is empty. Please populate the Ledger.")
         st.stop()
 
-    # --- 1. PREPARE RAW DATA ---
+    # --- 2. PREPARE RAW DATA ---
     df_raw = pd.DataFrame(ledger_data)
     df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
     df_raw['dow'] = df_raw['entry_date'].dt.day_name()
-    
-    # Build baselines from historical actuals[cite: 1]
     master_baselines = df_raw.groupby('dow')['actual_traffic'].mean().to_dict()
 
-    # --- 2. DATE SELECTION ---
+    # --- 3. DATE SELECTION ---
     col_date, _ = st.columns([1, 2])
     with col_date:
         pulse_range = st.date_input(
             "Select Analysis Window:", 
             value=(today, today + datetime.timedelta(days=7)), 
-            key="pulse_exec_v44_unique" 
+            key="pulse_exec_unique" 
         )
 
     if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
         start_p, end_p = pulse_range
-        
-        # --- 3. THE FAIL-SAFE TIMELINE ---
         date_list = pd.date_range(start=start_p, end=end_p)
         df_p = pd.DataFrame({'entry_date': date_list})
         df_p['entry_date'] = pd.to_datetime(df_p['entry_date'])
         df_p['dow'] = df_p['entry_date'].dt.day_name()
         
-        # Dictionary-based lookup (Bypasses the Jan 01 Merge Bug)[cite: 1]
         ledger_lookup = df_raw.set_index(df_raw['entry_date'].dt.strftime('%Y-%m-%d')).to_dict('index')
         
         def map_data(row, col_name):
@@ -519,7 +515,6 @@ if page == "Executive Dashboard":
                 return val if val is not None else 0
             return "" if col_name == 'active_promo' else 0.0
 
-        # Map current values from database[cite: 1]
         map_cols = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm', 'actual_traffic']
         for c in map_cols:
             df_p[c] = df_p.apply(lambda r: map_data(r, c), axis=1)
@@ -529,7 +524,6 @@ if page == "Executive Dashboard":
         # --- 4. STRATEGIC DAILY PLANNER ---
         with st.expander("📅 Strategic Daily Planner & Simulator", expanded=True):
             st.write("Plan your lift. Inputs here directly scale the Vital Signs below.")
-            
             planner_cols = ['entry_date', 'dow', 'active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
             df_plan_display = df_p[planner_cols].copy()
             df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
@@ -541,27 +535,18 @@ if page == "Executive Dashboard":
                     "entry_date": st.column_config.Column("Date", disabled=True),
                     "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
                 },
-                hide_index=True, use_container_width=True, key="p1_planner_v44_editor"
+                hide_index=True, use_container_width=True, key="p1_planner_v45_editor"
             )
             
-            # Write back to main dataframe[cite: 1]
             for field in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
                 df_p[field] = edited_df[field].values
 
         # --- 5. ENGINE EXECUTION ---
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
-        
-        daily_brand_inertia = m.get('total_inertia', 0)
         total_vol = df_final['expected'].sum()
-        
-        # Calculate organic volume[cite: 1]
-        organic_vol = 0
-        for i, row in df_final.iterrows():
-            organic_vol += df_final.loc[i, 'baseline'] if 'baseline' in df_final.columns else 0
-        
-        total_lift_vol = total_vol - organic_vol
-        mkt_impact_pct = (total_lift_vol / total_vol * 100) if total_vol > 0 else 0
+        organic_vol = sum(df_final['baseline']) if 'baseline' in df_final.columns else 0
+        mkt_impact_pct = ((total_vol - organic_vol) / total_vol * 100) if total_vol > 0 else 0
 
         # --- 6. EXECUTIVE KPI GRID ---
         st.write("### 🏛️ Property Vital Signs")
@@ -569,7 +554,7 @@ if page == "Executive Dashboard":
         LTV_VAL, AVG_SPEND = 1900.00, 1279.33
 
         if start_p >= today:
-            proj_rev = (total_vol * AVG_SPEND) + ((total_vol * 0.05) * LTV_VAL) + (daily_brand_inertia * len(df_final))
+            proj_rev = (total_vol * AVG_SPEND) + ((total_vol * 0.05) * LTV_VAL)
             k1.metric("Projected Demand", f"{total_vol:,.0f} Guests")
             k2.metric("Target Signups", f"{(total_vol * 0.05):,.0f}")
             k3.metric("Proj. Enhanced Revenue", f"${proj_rev:,.0f}")
@@ -577,66 +562,66 @@ if page == "Executive Dashboard":
         else:
             total_act = df_final['actual_traffic'].sum()
             act_coin = df_final['actual_coin_in'].sum() if 'actual_coin_in' in df_final.columns else (total_act * AVG_SPEND)
-            act_rev = act_coin + (df_final['new_members'].sum() * LTV_VAL)
             k1.metric("Actual Guest Flow", f"{total_act:,.0f}")
             k2.metric("New Unity Members", f"{df_final['new_members'].sum():,.0f}")
-            k3.metric("Audited Revenue Impact", f"${act_rev:,.0f}")
+            k3.metric("Audited Revenue", f"${act_coin:,.0f}")
             k4.metric("Audited Accuracy", m['predictability'])
 
-        # --- 7. VISUALIZATION ---
+        # --- 7. BRAND SENTIMENT PULSE (Multi-Tag & Historical) ---
+        st.divider()
+        st.write("### 🏛️ Executive Brand Sentiment Pulse")
+        
+        # 7a. Historical Filter
+        col_h1, col_h2 = st.columns([2, 1])
+        with col_h2:
+            g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
+            g_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in g_months[1:]]
+            sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select")
+
+        # 7b. Multi-Gauge Grid
+        tags = ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"]
+        cols = st.columns(len(tags))
+
+        for i, tag in enumerate(tags):
+            with cols[i]:
+                score_val = 0.0
+                try:
+                    query = supabase.table("sentiment_history").select("sentiment_score").eq("asset", tag)
+                    if sel_period == "Current (Live)":
+                        res = query.order("timestamp", desc=True).limit(10).execute()
+                    else:
+                        sel_date = g_months[g_labels.index(sel_period)]
+                        s_d, e_d = sel_date.strftime("%Y-%m-%d"), (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")
+                        res = query.filter("timestamp", "gte", s_d).filter("timestamp", "lt", e_d).execute()
+                    
+                    if res.data: score_val = np.mean([d['sentiment_score'] for d in res.data])
+                except: pass
+
+                fig = go.Figure(go.Indicator(
+                    mode = "gauge+number", value = score_val,
+                    title = {'text': f"<b>{tag}</b>", 'font': {'size': 14}},
+                    number = {'font': {'size': 18}, 'valueformat': ".2f"},
+                    gauge = {
+                        'axis': {'range': [-1, 1]},
+                        'bar': {'color': "#0047AB"},
+                        'steps': [
+                            {'range': [-1, -0.3], 'color': "#FF4B4B"},
+                            {'range': [-0.3, 0.3], 'color': "#F0F2F6"},
+                            {'range': [0.3, 1], 'color': "#28A745"}
+                        ],
+                        'threshold': {'line': {'color': "black", 'width': 3}, 'value': score_val}
+                    }
+                ))
+                fig.update_layout(height=200, margin=dict(l=10, r=10, t=40, b=10), paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+
+        # --- 8. THE UNIFIED PULSE CHART ---
         st.write("### 🎰 The Unified Pulse")
         fig_pulse = go.Figure()
         df_act_chart = df_final[df_final['entry_date'].dt.date < today]
         fig_pulse.add_trace(go.Scatter(x=df_act_chart['entry_date'], y=df_act_chart['actual_traffic'], name="Actual Guests", line=dict(color='#0047AB', width=4)))
         fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
         st.plotly_chart(fig_pulse, use_container_width=True)
-
-        # --- 8. RISK & SOCIAL ---
-        st.divider()
-        o_col, s_col = st.columns(2)
-        with o_col:
-            st.write("#### 🛡️ Operational Risk")
-            s_imp = df_final['snow_cm'].sum() * float(current_weights.get('Snow_cm', -45))
-            r_imp = df_final['rain_mm'].sum() * float(current_weights.get('Rain_mm', -12))
-            st.metric("Weather Friction", f"-{abs(s_imp + r_imp):,.0f}")
-        
-        with s_col:
-            st.write("#### 📱 Social Engagement")
-            total_clicks = df_final['ad_clicks'].sum()
-            total_imps = df_final['ad_impressions'].sum()
-            ctr = (total_clicks / total_imps * 100) if total_imps > 0 else 0.0
-            st.metric("Campaign Clicks", f"{total_clicks:,.0f}", delta=f"{ctr:.2f}% CTR")
-
-        s1, s2, s3 = st.columns(3)
-        s1.metric("Total Impressions", f"{total_imps:,.0f}")
-        s2.metric("Engagement Velocity", "High" if ctr > 1.5 else "Stable")
-        s3.metric("Digital Visibility Score", f"{(total_imps * 0.8 / 1000):,.1f}k Reach")
-
-        # --- 9. BRAND SENTIMENT PULSE (Integrated Sentiment Feature) ---
-        st.divider()
-        st.write("### 🏛️ Executive Brand Sentiment Pulse")
-        
-        score_val = 0.0
-        try:
-            sent_res = supabase.table("sentiment_history").select("sentiment_score").eq("asset", "Overall Property").order("timestamp", desc=True).limit(7).execute()
-            if sent_res.data:
-                score_val = np.mean([d['sentiment_score'] for d in sent_res.data])
-        except:
-            pass
-
-        s_col1, s_col2 = st.columns([1, 1])
-        with s_col1:
-            gauge_fig = draw_sentiment_gauge(score_val)
-            st.plotly_chart(gauge_fig, use_container_width=True)
-            st.caption(f"**Forensic Property Temperature:** {score_val:+.2f}")
-
-        with s_col2:
-            if score_val > 0.3:
-                st.success("**Strategic State: Marketing Velocity**\n\nPositive sentiment is acting as a multiplier. Your current 'Event Gravity' and 'Promo Lift' will perform at peak efficiency.[cite: 1]")
-            elif score_val < -0.3:
-                st.error("**Strategic State: Marketing Tax**\n\nNegative sentiment is creating friction. You are paying a 'tax' on your ad spend to overcome guest hesitation.[cite: 1]")
-            else:
-                st.warning("**Strategic State: Neutral Friction**\n\nThe needle is in the neutral zone. Brand health is stable, but not currently providing a competitive lift to floor traffic.[cite: 1]")
 
 # =================================================================
 # 10. PAGE 2: DAILY LEDGER AUDIT (HARDENED v7.4 - NameError & Scope Fix)
