@@ -1073,7 +1073,7 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: AI STRATEGIC ANALYST (Unified Logic)
+# 14. PAGE 6: AI STRATEGIC ANALYST (Unified Logic - Uncapped)
 # =================================================================
 elif page == "FloorCast AI Analyst":
     st.markdown("""
@@ -1082,7 +1082,7 @@ elif page == "FloorCast AI Analyst":
             <p style="color: #444; margin: 0;">Executive Intelligence: Correlating Ledger Traffic with Sentiment & ROI Audits.</p>
         </div>
     """, unsafe_allow_html=True)
-
+    
     if not ledger_data:
         st.warning("Forensic Vault is empty.")
         st.stop()
@@ -1090,36 +1090,34 @@ elif page == "FloorCast AI Analyst":
     # --- 14.1 ENTRY MODULES ---
     col_input1, col_input2 = st.columns(2)
 
-    # LEFT COLUMN: Manual Sentiment Entry (Slider Removed)
+    # LEFT COLUMN: Manual Sentiment Entry
     with col_input1:
         with st.expander("📝 Manual Sentiment Entry", expanded=True):
-            st.write("Log a specific specific review or high-value comment.")
+            st.write("Log a specific review or high-value comment.")
             with st.form("manual_sentiment_form", clear_on_submit=True):
-                # Tag Selection remains critical for the Dashboard
+                # Tag Selection: Added 'Social Inbox'
                 manual_tag = st.selectbox("Assign to Asset (Tag):", 
-                                       ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"],
+                                       ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"],
                                        key="manual_tag_select")
                 
                 f_text = st.text_area("Review Text", placeholder="Type or paste a single review...")
                 
-                # We no longer pass f_score here; archive_sentiment_entry will default to 0.0
-                # which triggers the Gemini AI scoring pipeline
                 if st.form_submit_button("🛡️ Archive & AI Score"):
                     if f_text:
-                        # Passing 0.0 tells the function to use Gemini
                         cat, icon, intens = archive_sentiment_entry(f_text, manual_tag, 0.0)
                         st.success(f"**Archived to {manual_tag}!** {cat} {icon}")
                         st.cache_data.clear()
 
-    # RIGHT COLUMN: Intelligent Word Doc Upload with Progress Bar
+    # RIGHT COLUMN: Intelligent Word Doc Upload
     with col_input2:
         from docx import Document
         with st.expander("📄 Intelligent Word Doc Upload", expanded=True):
             st.write("Extracts individual reviews and auto-scores sentiment.")
             uploaded_doc = st.file_uploader("Select .docx file", type="docx", key="word_sent_upload")
             
+            # Tag Selection: Added 'Social Inbox'
             bulk_tag = st.selectbox("Assign ALL to Asset (Tag):", 
-                                   ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"],
+                                   ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"],
                                    key="bulk_tag_select")
             
             if uploaded_doc and st.button("🚀 Parse & AI Score Bulk"):
@@ -1127,7 +1125,6 @@ elif page == "FloorCast AI Analyst":
                 current_user = "Unknown User"
                 entries = []
                 
-                # Parse the document structure
                 for para in doc.paragraphs:
                     text = para.text.strip()
                     if not text: continue
@@ -1139,42 +1136,56 @@ elif page == "FloorCast AI Analyst":
                 
                 if entries:
                     total_reviews = len(entries)
-                    # Initialize the Progress Bar and Status Label
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     
                     for i, entry in enumerate(entries):
-                        # Update progress UI
                         percent_complete = (i + 1) / total_reviews
                         progress_bar.progress(percent_complete)
                         status_text.text(f"Processing review {i+1} of {total_reviews} ({entry['user']})...")
                         
                         full_audit_text = f"User: {entry['user']} | Review: {entry['text']}"
-                        
-                        # Trigger the automated sentiment pipeline (Option A)
-                        # Leaving score at 0.0 signals the archive function to use Gemini
                         archive_sentiment_entry(full_audit_text, bulk_tag, 0.0)
                     
-                    # Finalize UI
                     status_text.success(f"✅ Successfully archived and AI-scored {total_reviews} reviews!")
                     st.cache_data.clear()
                 else:
                     st.warning("No reviews detected. Check document formatting.")
 
-    # --- 14.2 AI STRATEGIC DOSSIER ---
+    # --- 14.2 AI STRATEGIC DOSSIER (UNCAPPED) ---
     m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
     df_ai = m_audit['df']
     
     try:
-        sent_res = supabase.table("sentiment_history").select("*").order("timestamp", desc=True).limit(15).execute()
-        sentiment_context = pd.DataFrame(sent_res.data).to_csv(index=False) if sent_res.data else "No history."
-    except:
-        sentiment_context = "Error fetching cloud data."
+        # Pull the full record (Removed .limit(15)) to ensure AI sees all 188+ reviews
+        sent_res = supabase.table("sentiment_history").select("asset, raw_text, sentiment_score, timestamp").order("timestamp", desc=True).execute()
+        
+        if sent_res.data:
+            sentiment_df = pd.DataFrame(sent_res.data)
+            sentiment_count = len(sentiment_df)
+            # Convert to compact CSV for efficient AI token usage
+            sentiment_context = sentiment_df.to_csv(index=False)
+        else:
+            sentiment_context = "No history."
+            sentiment_count = 0
+    except Exception as e:
+        sentiment_context = f"Error fetching cloud data: {e}"
+        sentiment_count = 0
 
     c = st.session_state.coeffs
-    dossier = f"PROPERTY: Hard Rock Ottawa\nSENTIMENT:\n{sentiment_context}\n\nLEDGER:\n{df_ai.tail(30).to_csv(index=False)}"
+    # Providing the AI with an explicit count prevents it from guessing quantities
+    dossier = f"""
+    PROPERTY: Hard Rock Ottawa
+    TOTAL REVIEWS IN DATASET: {sentiment_count}
+    
+    SENTIMENT DATA:
+    {sentiment_context}
+    
+    LEDGER TRAFFIC (Latest 30 Days):
+    {df_ai.tail(30).to_csv(index=False)}
+    """
 
-    # --- 14.3 THE CHAT INTERFACE (ONLY ONE INPUT LINE) ---
+    # --- 14.3 THE CHAT INTERFACE ---
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -1182,7 +1193,6 @@ elif page == "FloorCast AI Analyst":
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-    # This is the singular chat input for the page
     prompt = st.chat_input("Ask about sentiment trends vs. actual floor patterns...")
     
     if prompt:
@@ -1191,6 +1201,7 @@ elif page == "FloorCast AI Analyst":
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             model = genai.GenerativeModel('gemini-2.5-flash')
             with st.status("🕵️ Correlating Property Data...", expanded=True) as status:
+                # Passing the uncapped dossier to the model
                 res = model.generate_content(f"Analyst Dossier:\n{dossier}\n\nQuery: {prompt}")
                 st.session_state.messages.append({"role": "assistant", "content": res.text})
                 status.update(label="✅ Analysis Complete", state="complete")
