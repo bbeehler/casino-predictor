@@ -1059,61 +1059,62 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: AI STRATEGIC ANALYST (EXECUTIVE UPGRADE v15)
+# 14. PAGE 6: AI STRATEGIC ANALYST (Intelligent Word Parsing)
 # =================================================================
 elif page == "FloorCast AI Analyst":
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">🕵️ FloorCast Strategic AI Analyst</h2>
-            <p style="color: #444; margin: 0;">Executive Intelligence: Correlating Ledger Traffic with Sentiment & ROI Audits.</p>
+            <p style="color: #444; margin: 0;">Intelligent Parsing: Individualizing Google Reviews for Cloud Archival.</p>
         </div>
     """, unsafe_allow_html=True)
-    
+
     if not ledger_data:
-        st.warning("Forensic Vault is empty. Analyst cannot audit performance without a ledger.")
+        st.warning("Forensic Vault is empty.")
         st.stop()
 
-    # --- 14.1 SENTIMENT & BULK ENTRY MODULES ---
-    col_input1, col_input2 = st.columns(2)
-    
-    with col_input1:
-        with st.expander("📝 Manual Sentiment Entry", expanded=False):
-            st.write("Analyze incoming messages and archive them to the forensic ledger.")
-            with st.form("sentiment_input_form", clear_on_submit=True):
-                f_asset = st.selectbox("Target Asset", 
-                                       ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"])
-                f_text = st.text_area("Message / Comment Text", placeholder="Paste message here...")
-                f_score = st.slider("Sentiment Polarity Score", -1.0, 1.0, 0.0, 
-                                    help="Assign a value from -1.0 (Negative) to +1.0 (Positive)")
-                
-                submit_sentiment = st.form_submit_button("🛡️ Archive to Ledger")
-                
-                if submit_sentiment and f_text:
-                    category, icon, intensity = archive_sentiment_entry(f_text, f_asset, f_score)
-                    if category != "Error":
-                        st.success(f"**Archive Success!** {category} {icon}")
-                        st.cache_data.clear()
+    # --- 14.1 INTELLIGENT WORD DOC UPLOAD ---
+    from docx import Document
 
-    with col_input2:
-        with st.expander("📋 Bulk Paste Reviews from Word", expanded=False):
-            st.write("Paste reviews from your document below. Separate each review with a double line break.")
-            bulk_text = st.text_area("Paste Content Here:", height=150)
-            target_asset = st.selectbox("Assign to Asset:", 
-                                       ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"],
-                                       key="bulk_paste_asset")
+    with st.expander("📄 Upload Google Reviews Word Doc", expanded=True):
+        st.write("Extracts individual reviews based on Usernames and archives them to Supabase.")
+        uploaded_doc = st.file_uploader("Select .docx file", type="docx", key="word_sent_upload")
+        
+        target_asset = st.selectbox("Assign to Asset:", 
+                                   ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"])
+        
+        if uploaded_doc and st.button("📥 Parse & Archive to Cloud"):
+            doc = Document(uploaded_doc)
             
-            if st.button("🚀 Process & Archive Bulk Reviews"):
-                if bulk_text:
-                    # Splitting by double newlines for bulk processing
-                    reviews = [r.strip() for r in bulk_text.split('\n\n') if len(r.strip()) > 5]
-                    success_count = 0
-                    for review in reviews:
-                        archive_sentiment_entry(review, target_asset, 0.0)
-                        success_count += 1
+            current_user = "Unknown User"
+            entries = []
+            
+            # This loop identifies the User Name (short lines) vs. the Review Text
+            for para in doc.paragraphs:
+                text = para.text.strip()
+                if not text: continue
+                
+                # HEURISTIC: If a line is short and doesn't have punctuation, it's a Username
+                if len(text) < 45 and not text.endswith(('.', '!', '?')):
+                    current_user = text
+                else:
+                    # Archive as an individual entry linked to that user
+                    entries.append({"user": current_user, "text": text})
+            
+            if entries:
+                with st.status("Individualizing and Archiving...", expanded=True) as status:
+                    for entry in entries:
+                        # Combine User + Text so the AI Analyst retains attribution
+                        full_audit_text = f"User: {entry['user']} | Review: {entry['text']}"
+                        
+                        # Archive directly to the cloud ledger via existing function
+                        archive_sentiment_entry(full_audit_text, target_asset, 0.0)
                     
-                    st.success(f"✅ Processed {success_count} reviews from your paste!")
-                    st.cache_data.clear()
-
+                    status.update(label=f"✅ Successfully archived {len(entries)} individual reviews!", state="complete")
+                st.cache_data.clear()
+            else:
+                st.warning("No reviews detected. Ensure the document lists Names followed by Review text.")
+                
     # --- 14.2 AI STRATEGIC DOSSIER ---
     m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
     df_ai = m_audit['df']
