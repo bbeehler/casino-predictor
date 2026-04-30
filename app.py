@@ -457,7 +457,15 @@ if page == "Executive Dashboard":
         organic_vol = sum(df_final['baseline']) if 'baseline' in df_final.columns else 0
         mkt_impact_pct = ((total_vol - organic_vol) / total_vol * 100) if total_vol > 0 else 0
 
-        # --- 6. EXECUTIVE KPI GRID (v46 - Schema Hardened) ---
+        # --- 6. THE UNIFIED PULSE CHART ---
+        st.write("### 🎰 The Unified Pulse")
+        fig_pulse = go.Figure()
+        df_act_chart = df_final[df_final['entry_date'].dt.date < today]
+        fig_pulse.add_trace(go.Scatter(x=df_act_chart['entry_date'], y=df_act_chart['actual_traffic'], name="Actual Guests", line=dict(color='#0047AB', width=4)))
+        fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
+        st.plotly_chart(fig_pulse, use_container_width=True)
+
+        # --- 7. EXECUTIVE KPI GRID (v46 - Schema Hardened) ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
         LTV_VAL, AVG_SPEND = 1900.00, 1279.33
@@ -494,11 +502,11 @@ if page == "Executive Dashboard":
             k3.metric("Audited Revenue Impact", f"${act_rev:,.0f}")
             k4.metric("Audited Accuracy", m.get('predictability', 'N/A'))
 
-        # --- 7. BRAND SENTIMENT PULSE (Consolidated + Multi-Tag) ---
+        # --- 8. BRAND SENTIMENT PULSE (Consolidated + Multi-Tag) ---
         st.divider()
         st.write("### 🏛️ Executive Brand Sentiment Pulse")
         
-        # 7a. Historical Filter & Global Calculation
+        # 8a. Historical Filter & Global Calculation
         col_h1, col_h2 = st.columns([2, 1])
         
         with col_h2:
@@ -507,7 +515,7 @@ if page == "Executive Dashboard":
             g_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in g_months[1:]]
             sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select")
 
-        # 7b. Calculate Overall Consolidated Score
+        # 8b. Calculate Overall Consolidated Score
         overall_score = 0.0
         try:
             global_query = supabase.table("sentiment_history").select("sentiment_score")
@@ -535,7 +543,7 @@ if page == "Executive Dashboard":
             delta_color="normal" if abs(overall_score) > 0.3 else "off"
         )
 
-        # 7c. Multi-Gauge Grid for Specific Assets
+        # 8c. Multi-Gauge Grid for Specific Assets
         tags = ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"]
         cols = st.columns(len(tags))
 
@@ -576,14 +584,6 @@ if page == "Executive Dashboard":
                 ))
                 fig.update_layout(height=180, margin=dict(l=5, r=5, t=35, b=5), paper_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig, use_container_width=True)
-
-        # --- 8. THE UNIFIED PULSE CHART ---
-        st.write("### 🎰 The Unified Pulse")
-        fig_pulse = go.Figure()
-        df_act_chart = df_final[df_final['entry_date'].dt.date < today]
-        fig_pulse.add_trace(go.Scatter(x=df_act_chart['entry_date'], y=df_act_chart['actual_traffic'], name="Actual Guests", line=dict(color='#0047AB', width=4)))
-        fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
-        st.plotly_chart(fig_pulse, use_container_width=True)
 
 # =================================================================
 # 10. PAGE 2: DAILY LEDGER AUDIT (HARDENED v7.4 - NameError & Scope Fix)
