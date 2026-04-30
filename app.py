@@ -586,10 +586,10 @@ if page == "Executive Dashboard":
                 st.plotly_chart(fig, use_container_width=True)
 
 # =================================================================
-# 10. PAGE 2: DAILY LEDGER AUDIT (REAL-TIME PERFORMANCE v8.0)
+# 10. PAGE 2: DAILY LEDGER AUDIT (DYNAMIC PERFORMANCE v8.5)
 # =================================================================
 elif page == "Daily Ledger Audit":
-    # --- 1. THE DATA ENGINE (CRITICAL: Define df_ledger FIRST) ---
+    # --- 1. THE DATA ENGINE ---
     if not ledger_data:
         df_ledger = pd.DataFrame(columns=[
             'entry_date', 'actual_traffic', 'new_members', 'actual_coin_in', 
@@ -609,52 +609,47 @@ elif page == "Daily Ledger Audit":
         df_ledger['active_promo'] = df_ledger['active_promo'].astype(str).replace(['nan', 'None', '0', '0.0'], '')
         df_ledger = df_ledger.sort_values('entry_date', ascending=False)
 
-    # --- 2. LIVE PERFORMANCE SCOREBOARD (NEW: Real-Time Focus) ---
-    today_dt = datetime.date.today()
-    st.write(f"### ⏱️ Live Performance Scoreboard: {today_dt.strftime('%B %d, %Y')}")
+    # --- 2. HISTORICAL VIEW SLIDER (Now at the top to drive the Scoreboard) ---
+    st.write("### 📂 Performance Audit Range")
+    view_limit = st.slider("Select Audit Depth (Days):", 7, 100, 30, key="audit_slider_top")
     
-    # Fetch Live Weather context from session state
-    weather = st.session_state.get('weather_data', {})
-    curr_temp = weather.get('current', {}).get('temperature', 0)
+    # Slice the dataframe based on the user's selection
+    df_audit_period = df_ledger.head(view_limit)
     
-    # Run Engine for Today specifically
-    df_today_context = pd.DataFrame([{
-        'entry_date': today_dt,
-        'ad_clicks': st.session_state.get('daily_clicks', 0),
-        'ad_impressions': st.session_state.get('daily_social', 0),
-        'attendance': 0,
-        'active_promo': '0'
-    }])
+    # --- 3. DYNAMIC PERFORMANCE SCOREBOARD (Based on Slider) ---
+    st.write(f"### 🎯 Performance Scoreboard: Last {view_limit} Days")
     
-    m_live = get_forensic_metrics(df_today_context.to_dict(orient='records'), st.session_state.coeffs)
-    live_expected = m_live['df']['expected'].iloc[0]
-    live_baseline = m_live['df']['baseline'].iloc[0]
-    
-    # Fetch actuals logged for today if they exist
-    today_actual = 0
-    day_audit = df_ledger[df_ledger['entry_date'] == today_dt]
-    if not day_audit.empty:
-        today_actual = day_audit['actual_traffic'].iloc[0]
-
-    s1, s2, s3 = st.columns(3)
-    with s1:
-        st.metric("Live AI Target", f"{live_expected:,.0f} Guests", 
-                  delta=f"{live_expected - live_baseline:,.0f} vs Baseline")
-    with s2:
-        st.metric("Ottawa Temp", f"{curr_temp}°C", delta="Live Weather Condition")
-    with s3:
-        st.metric("Actual Floor (Live)", f"{today_actual:,.0f}", 
-                  delta=f"{today_actual - live_expected:,.0f} vs AI Target",
-                  delta_color="normal" if today_actual >= live_expected else "inverse")
+    if not df_audit_period.empty:
+        # Calculate totals for the selected historical window
+        total_period_traffic = df_audit_period['actual_traffic'].sum()
+        total_period_signups = df_audit_period['new_members'].sum()
+        
+        # Benchmarks: $1,279.33 avg spend and $1,900 LTV
+        total_potential = (total_period_traffic * 1279.33) + (total_period_signups * 1900.00)
+        
+        # Calculate averages per day for the Delta comparison
+        avg_traffic = total_period_traffic / len(df_audit_period)
+        
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Period Traffic", f"{total_period_traffic:,.0f}", 
+                  delta=f"{avg_traffic:,.0f} avg/day")
+        
+        m2.metric("Total New Members", f"{total_period_signups:,.0f}", 
+                  delta=f"{total_period_signups / len(df_audit_period):,.1f} avg/day")
+                  
+        m3.metric("Audited Potential", f"${total_potential:,.2f}", 
+                  help="Aggregated Revenue Potential for the selected period.")
+    else:
+        st.info("No data available for the selected range.")
 
     st.divider()
 
-    # --- 3. RAPID ENTRY FORM ---
+    # --- 4. RAPID ENTRY FORM ---
     with st.expander("➕ Log New Daily Actuals", expanded=False):
         with st.form("rapid_entry_form", clear_on_submit=True):
             f1, f2, f3 = st.columns(3)
             with f1:
-                e_date = st.date_input("Date", value=today_dt)
+                e_date = st.date_input("Date", value=datetime.date.today())
                 e_traffic = st.number_input("Actual Traffic", min_value=0, step=1)
                 e_members = st.number_input("New Members", min_value=0, step=1)
             with f2:
@@ -688,13 +683,11 @@ elif page == "Daily Ledger Audit":
                 except Exception as e:
                     st.error(f"Database Error: {e}")
 
-    # --- 4. THE HISTORICAL EDITABLE LEDGER ---
+    # --- 5. THE HISTORICAL EDITABLE LEDGER ---
     st.write("### 📂 Bulk Audit & Corrections")
-    view_limit = st.slider("Historical View:", 7, 100, 30)
-
     with st.form("bulk_ledger_sync"):
         edited_ledger = st.data_editor(
-            df_ledger.head(view_limit),
+            df_audit_period, # Driven by the same slider
             column_config={
                 "entry_date": st.column_config.DateColumn("Date", required=True),
                 "actual_traffic": st.column_config.NumberColumn("Actual Traffic", format="%d"),
@@ -706,7 +699,7 @@ elif page == "Daily Ledger Audit":
             hide_index=True,
             use_container_width=True,
             num_rows="dynamic",
-            key="property_ledger_v8_0"
+            key="property_ledger_v8_5"
         )
         
         if st.form_submit_button("💾 Sync Table Updates", use_container_width=True):
@@ -720,22 +713,6 @@ elif page == "Daily Ledger Audit":
                 st.rerun()
             except Exception as e:
                 st.error(f"Bulk Sync Error: {e}")
-
-    # --- 5. DAILY ATTRIBUTION MATRIX (LIVE CONTEXT) ---
-    if not day_audit.empty:
-        day_traffic = day_audit['actual_traffic'].iloc[0]
-        day_signups = day_audit['new_members'].iloc[0]
-        daily_potential = (day_traffic * 1279.33) + (day_signups * 1900.00)
-        
-        st.write(f"#### 📍 Attribution Scenarios: {today_dt.strftime('%B %d')}")
-        scenarios = {
-            "Attribution Level": ["Conservative (10%)", "Moderate (20%)", "Aggressive (30%)"],
-            "Attributed Floor Impact": [f"${daily_potential * 0.1:,.2f}", f"${daily_potential * 0.2:,.2f}", f"${daily_potential * 0.3:,.2f}"],
-            "Trip Equivalent": [f"{int(day_traffic * 0.1)} visits", f"{int(day_traffic * 0.2)} visits", f"{int(day_traffic * 0.3)} visits"]
-        }
-        st.table(pd.DataFrame(scenarios))
-    else:
-        st.info("💡 Today's actuals have not been logged yet. Submit the form above to see live attribution.")
 
 # =================================================================
 # 11. PAGE 3: ATTRIBUTION ANALYTICS (PRO-MARKETING SUITE)
