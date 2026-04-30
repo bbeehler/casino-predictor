@@ -536,7 +536,7 @@ if page == "Executive Dashboard":
         )
 
         # 7c. Multi-Gauge Grid for Specific Assets
-        tags = ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"]
+        tags = ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"]
         cols = st.columns(len(tags))
 
         for i, tag in enumerate(tags):
@@ -574,7 +574,7 @@ if page == "Executive Dashboard":
                         'threshold': {'line': {'color': "black", 'width': 3}, 'value': tag_score}
                     }
                 ))
-                fig.update_layout(height=200, margin=dict(l=10, r=10, t=40, b=10), paper_bgcolor='rgba(0,0,0,0)')
+                fig.update_layout(height=180, margin=dict(l=5, r=5, t=35, b=5), paper_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig, use_container_width=True)
 
         # --- 8. THE UNIFIED PULSE CHART ---
