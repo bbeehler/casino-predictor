@@ -1059,13 +1059,13 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: AI STRATEGIC ANALYST (Intelligent Word Parsing)
+# 14. PAGE 6: AI STRATEGIC ANALYST (Manual + Intelligent Word Parsing)
 # =================================================================
 elif page == "FloorCast AI Analyst":
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">🕵️ FloorCast Strategic AI Analyst</h2>
-            <p style="color: #444; margin: 0;">Intelligent Parsing: Individualizing Google Reviews for Cloud Archival.</p>
+            <p style="color: #444; margin: 0;">Executive Intelligence: Correlating Ledger Traffic with Sentiment & ROI Audits.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -1073,49 +1073,65 @@ elif page == "FloorCast AI Analyst":
         st.warning("Forensic Vault is empty.")
         st.stop()
 
-    # --- 14.1 INTELLIGENT WORD DOC UPLOAD ---
-    from docx import Document
+    # --- 14.1 ENTRY MODULES (Two-Column Layout) ---
+    col_input1, col_input2 = st.columns(2)
 
-    with st.expander("📄 Upload Google Reviews Word Doc", expanded=True):
-        st.write("Extracts individual reviews based on Usernames and archives them to Supabase.")
-        uploaded_doc = st.file_uploader("Select .docx file", type="docx", key="word_sent_upload")
-        
-        target_asset = st.selectbox("Assign to Asset:", 
-                                   ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"])
-        
-        if uploaded_doc and st.button("📥 Parse & Archive to Cloud"):
-            doc = Document(uploaded_doc)
-            
-            current_user = "Unknown User"
-            entries = []
-            
-            # This loop identifies the User Name (short lines) vs. the Review Text
-            for para in doc.paragraphs:
-                text = para.text.strip()
-                if not text: continue
+    # LEFT COLUMN: Manual Sentiment Entry
+    with col_input1:
+        with st.expander("📝 Manual Sentiment Entry", expanded=True):
+            st.write("Log a specific specific review or high-value comment.")
+            with st.form("manual_sentiment_form", clear_on_submit=True):
+                manual_tag = st.selectbox("Assign to Asset (Tag):", 
+                                       ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"],
+                                       key="manual_tag_select")
                 
-                # HEURISTIC: If a line is short and doesn't have punctuation, it's a Username
-                if len(text) < 45 and not text.endswith(('.', '!', '?')):
-                    current_user = text
-                else:
-                    # Archive as an individual entry linked to that user
-                    entries.append({"user": current_user, "text": text})
+                f_text = st.text_area("Review Text", placeholder="Type or paste a single review...")
+                f_score = st.slider("Sentiment Score", -1.0, 1.0, 0.0, 
+                                    help="Assign -1.0 for negative, +1.0 for positive.")
+                
+                if st.form_submit_button("🛡️ Archive Single Entry"):
+                    if f_text:
+                        cat, icon, intens = archive_sentiment_entry(f_text, manual_tag, f_score)
+                        st.success(f"**Archived to {manual_tag}!** {cat} {icon}")
+                        st.cache_data.clear()
+
+    # RIGHT COLUMN: Intelligent Word Doc Upload
+    with col_input2:
+        from docx import Document
+        with st.expander("📄 Intelligent Word Doc Upload", expanded=True):
+            st.write("Extracts individual reviews based on Usernames.")
+            uploaded_doc = st.file_uploader("Select .docx file", type="docx", key="word_sent_upload")
             
-            if entries:
-                with st.status("Individualizing and Archiving...", expanded=True) as status:
-                    for entry in entries:
-                        # Combine User + Text so the AI Analyst retains attribution
-                        full_audit_text = f"User: {entry['user']} | Review: {entry['text']}"
-                        
-                        # Archive directly to the cloud ledger via existing function
-                        archive_sentiment_entry(full_audit_text, target_asset, 0.0)
+            bulk_tag = st.selectbox("Assign ALL to Asset (Tag):", 
+                                   ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"],
+                                   key="bulk_tag_select")
+            
+            if uploaded_doc and st.button("📥 Parse & Archive Bulk"):
+                doc = Document(uploaded_doc)
+                current_user = "Unknown User"
+                entries = []
+                
+                for para in doc.paragraphs:
+                    text = para.text.strip()
+                    if not text: continue
                     
-                    status.update(label=f"✅ Successfully archived {len(entries)} individual reviews!", state="complete")
-                st.cache_data.clear()
-            else:
-                st.warning("No reviews detected. Ensure the document lists Names followed by Review text.")
+                    # Heuristic for Username (short lines without punctuation)
+                    if len(text) < 45 and not text.endswith(('.', '!', '?')):
+                        current_user = text
+                    else:
+                        entries.append({"user": current_user, "text": text})
                 
-    # --- 14.2 AI STRATEGIC DOSSIER ---
+                if entries:
+                    with st.status("Individualizing and Archiving...", expanded=True) as status:
+                        for entry in entries:
+                            full_audit_text = f"User: {entry['user']} | Review: {entry['text']}"
+                            archive_sentiment_entry(full_audit_text, bulk_tag, 0.0)
+                        status.update(label=f"✅ Successfully archived {len(entries)} reviews to {bulk_tag}!", state="complete")
+                    st.cache_data.clear()
+                else:
+                    st.warning("No reviews detected. Check document formatting.")
+
+    # --- 14.2 AI STRATEGIC DOSSIER & CHAT INTERFACE ---
     m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
     df_ai = m_audit['df']
     
@@ -1126,7 +1142,7 @@ elif page == "FloorCast AI Analyst":
     except:
         sentiment_context = "Error fetching cloud sentiment data."
 
-    # Fetch Monthly ROI data
+    # Fetch Monthly ROI data[cite: 1]
     roi_data_res = supabase.table("monthly_roi").select("*").order("report_month", desc=True).execute()
     roi_context = pd.DataFrame(roi_data_res.data).to_csv(index=False) if roi_data_res.data else "No ROI data available."
 
@@ -1147,6 +1163,34 @@ elif page == "FloorCast AI Analyst":
     --- DAILY LEDGER DATASET ---
     {df_ai.tail(30).to_csv(index=False)}
     """
+
+    # Chat Interface Logic[cite: 1]
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    for m in reversed(st.session_state.messages):
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
+
+    prompt = st.chat_input("Ask about sentiment trends vs. actual floor patterns...")
+    
+    if prompt:
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        try:
+            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            
+            with st.status("🕵️ Correlating Property Data...", expanded=True) as status:
+                full_prompt = f"Senior Strategy Analyst Dossier:\n{dossier}\n\nExecutive Inquiry: {prompt}"
+                response = model.generate_content(full_prompt)
+                assistant_msg = response.text
+                status.update(label="✅ Analysis Complete", state="complete")
+            
+            st.session_state.messages.append({"role": "assistant", "content": assistant_msg})
+            st.rerun()
+        except Exception as e:
+            st.error(f"AI Error: {e}")
 
     # --- 14.3 CHAT INTERFACE ---
     if "messages" not in st.session_state:
