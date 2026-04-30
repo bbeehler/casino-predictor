@@ -174,8 +174,8 @@ def get_forensic_metrics(df_input, coeffs):
 
     # --- 3. THE ACTUAL OTTAWA FLOOR ---
     heartbeats = {
-        'Monday': 3171, 'Tuesday': 3989, 'Wednesday': 3892,
-        'Thursday': 4500, 'Friday': 7370, 'Saturday': 5888, 'Sunday': 4929
+        'Monday': 3398, 'Tuesday': 3525, 'Wednesday': 6312,
+        'Thursday': 4924, 'Friday': 7523, 'Saturday': 9863, 'Sunday': 5894
     }
 
     # --- 4. PREDICTION LOGIC ---
