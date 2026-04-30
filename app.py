@@ -1,4 +1,4 @@
-this is the code before page 1 fix it: import streamlit as st
+import streamlit as st
 import pandas as pd
 import datetime
 import json
