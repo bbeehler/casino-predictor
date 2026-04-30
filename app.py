@@ -40,7 +40,7 @@ if 'coeffs' not in st.session_state:
         else:
             st.session_state.coeffs = {
                 'id': 1,
-                'Promo_Lift': 500.0,
+                'Promo': 500.0,
                 'Broadcast_Weight': 150.0,
                 'OOH_Weight': 100.0,
                 'OOH_Count': 1,
@@ -61,7 +61,7 @@ if 'coeffs' not in st.session_state:
             
     except Exception as e:
         st.error(f"Initialization Error: {e}")
-        st.session_state.coeffs = {'id': 1, 'Promo_Lift': 500.0, 'OOH_Weight': 100.0, 'OOH_Count': 1}
+        st.session_state.coeffs = {'id': 1, 'Promo': 500.0, 'OOH_Weight': 100.0, 'OOH_Count': 1}
 
 # =================================================================
 # 3. GLOBAL PAGE CONFIG & EXECUTIVE THEME
@@ -153,7 +153,7 @@ def get_forensic_metrics(df_input, coeffs):
     gravity = float(coeffs.get('Event_Gravity', 0.25))
     
     # Check for both naming conventions to be safe
-    promo_lift_weight = float(coeffs.get('Promo_Lift', coeffs.get('Promo', 500.0)))
+    promo_lift_weight = float(coeffs.get('Promo', coeffs.get('Promo', 500.0)))
     c_pr_mult = float(coeffs.get('PR_Weight', 1.2)) 
 
     # Brand Inertia Layer
@@ -1025,7 +1025,7 @@ elif page == "AI Calibration":
         with f2:
             n_grav = st.slider("Event Gravity %", 0, 100, int(float(st.session_state.coeffs.get('Event_Gravity', 0.25)) * 100)) / 100
         with f3:
-            n_promo = st.number_input("Standard Promo Lift", value=int(st.session_state.coeffs.get('Promo_Lift', 550)))
+            n_promo = st.number_input("Standard Promo Lift", value=int(st.session_state.coeffs.get('Promo', 550)))
 
         # SECTION 4: FRICTION[cite: 1]
         st.divider()
@@ -1049,7 +1049,7 @@ elif page == "AI Calibration":
                 "Print_Lift": float(n_print),
                 "PR_Weight": float(n_earned),
                 "Event_Gravity": float(n_grav),
-                "Promo_Lift": float(n_promo),
+                "Promo": float(n_promo),
                 "Rain_mm": float(n_rain),
                 "Snow_cm": float(n_snow),
                 "Static_Weight": float(n_ooh),
