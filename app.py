@@ -136,7 +136,7 @@ def apply_corporate_styling():
 apply_corporate_styling()
 
 # =================================================================
-# 4. FORENSIC ENGINE: OTTAWA REALITY (v6.13 - REBOOT STABLE)
+# 4. FORENSIC ENGINE: OTTAWA REALITY (v6.14 - HEARTBEAT SYNC)
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
     if not df_input:
@@ -147,24 +147,26 @@ def get_forensic_metrics(df_input, coeffs):
     today = pd.Timestamp(datetime.date.today())
     
     # --- 1. DYNAMIC COEFFICIENTS ---
-    c_clicks = float(coeffs.get('Clicks', 0))
-    c_social = float(coeffs.get('Social_Imp', 0))
-    decay = float(coeffs.get('Ad_Decay', 0)) / 100 
-    gravity = float(coeffs.get('Event_Gravity', 0))
-    promo_lift_weight = float(coeffs.get('Promo', 0))
-    c_pr_mult = float(coeffs.get('PR_Weight', 1.0)) 
+    c_clicks = float(coeffs.get('Clicks', 0.05))
+    c_social = float(coeffs.get('Social_Imp', 0.0002))
+    decay = float(coeffs.get('Ad_Decay', 85)) / 100 
+    gravity = float(coeffs.get('Event_Gravity', 0.25))
+    
+    # Check for both naming conventions to be safe
+    promo_lift_weight = float(coeffs.get('Promo_Lift', coeffs.get('Promo', 500.0)))
+    c_pr_mult = float(coeffs.get('PR_Weight', 1.2)) 
 
     # Brand Inertia Layer
-    ooh_daily = (float(coeffs.get('Static_Weight', 0)) * int(coeffs.get('Static_Count', 0))) + \
-                (float(coeffs.get('Digital_OOH_Weight', 0)) * int(coeffs.get('Digital_OOH_Count', 0)))
-    total_brand_inertia = ooh_daily + float(coeffs.get('Broadcast_Weight', 0)) + float(coeffs.get('OOH_Weight', 0))
+    ooh_daily = (float(coeffs.get('Static_Weight', 100.0)) * int(coeffs.get('Static_Count', 1))) + \
+                (float(coeffs.get('Digital_OOH_Weight', 25.0)) * int(coeffs.get('Digital_OOH_Count', 5)))
+    total_brand_inertia = ooh_daily + float(coeffs.get('Broadcast_Weight', 150.0)) + float(coeffs.get('OOH_Weight', 100.0))
 
     # --- 2. DATA PREPARATION ---
     df['is_closed'] = df.apply(lambda x: 1 if (x['entry_date'] < today and x.get('actual_traffic', 0) == 0) else 0, axis=1)
     df['clean_attendance'] = pd.to_numeric(df['attendance'], errors='coerce').fillna(0).astype(float)
     df['gravity_lift'] = df['clean_attendance'] * gravity
     
-    # Calculate Residual Lift
+    # Calculate Residual Lift (Ad Spend Decay Modeling)
     awareness_pool, current_pool = [], 0.0
     for _, row in df.iterrows():
         daily_in = (float(row.get('ad_clicks', 0)) * c_clicks) + (float(row.get('ad_impressions', 0)) * c_social)
@@ -172,7 +174,7 @@ def get_forensic_metrics(df_input, coeffs):
         awareness_pool.append(current_pool)
     df['residual_lift'] = awareness_pool
 
-    # --- 3. THE ACTUAL OTTAWA FLOOR ---
+    # --- 3. THE ACTUAL OTTAWA FLOOR (UPDATED 2026) ---
     heartbeats = {
         'Monday': 3398, 'Tuesday': 3525, 'Wednesday': 6312,
         'Thursday': 4924, 'Friday': 7523, 'Saturday': 9863, 'Sunday': 5894
@@ -184,13 +186,14 @@ def get_forensic_metrics(df_input, coeffs):
             return 0
             
         day_name = row['entry_date'].strftime('%A')
+        # Ensure we fallback to 4000 if a day is missing
         base = float(heartbeats.get(day_name, 4000))
         
-        # PR Multiplier
+        # PR Multiplier logic
         p_val = str(row.get('active_promo', '0'))
         current_base = base * c_pr_mult if "PR" in p_val.upper() else base
         
-        # Add Lifts
+        # Calculate Lifts
         promo_impact = float(promo_lift_weight) if p_val not in ['0', '0.0', 'nan', 'None', ''] else 0
         event_lift = float(row.get('gravity_lift', 0))
         digital_lift = float(row.get('residual_lift', 0))
