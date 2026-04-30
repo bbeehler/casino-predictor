@@ -454,24 +454,42 @@ if page == "Executive Dashboard":
         organic_vol = sum(df_final['baseline']) if 'baseline' in df_final.columns else 0
         mkt_impact_pct = ((total_vol - organic_vol) / total_vol * 100) if total_vol > 0 else 0
 
-        # --- 6. EXECUTIVE KPI GRID ---
+        # --- 6. EXECUTIVE KPI GRID (v46 - Schema Hardened) ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
         LTV_VAL, AVG_SPEND = 1900.00, 1279.33
 
+        # Ensure the column exists in our local dataframe to prevent KeyErrors
+        if 'new_members' not in df_final.columns:
+            df_final['new_members'] = 0
+        else:
+            # Force numeric conversion in case Supabase sends it as text
+            df_final['new_members'] = pd.to_numeric(df_final['new_members'], errors='coerce').fillna(0)
+
         if start_p >= today:
+            # PROJECTION MODE
             proj_rev = (total_vol * AVG_SPEND) + ((total_vol * 0.05) * LTV_VAL)
             k1.metric("Projected Demand", f"{total_vol:,.0f} Guests")
             k2.metric("Target Signups", f"{(total_vol * 0.05):,.0f}")
             k3.metric("Proj. Enhanced Revenue", f"${proj_rev:,.0f}")
             k4.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
         else:
+            # AUDIT MODE (Historical)
             total_act = df_final['actual_traffic'].sum()
-            act_coin = df_final['actual_coin_in'].sum() if 'actual_coin_in' in df_final.columns else (total_act * AVG_SPEND)
+            actual_signups = df_final['new_members'].sum()
+            
+            # Use actual coin-in if available, otherwise estimate from guest flow
+            if 'actual_coin_in' in df_final.columns:
+                base_rev = pd.to_numeric(df_final['actual_coin_in'], errors='coerce').fillna(0).sum()
+            else:
+                base_rev = (total_act * AVG_SPEND)
+                
+            act_rev = base_rev + (actual_signups * LTV_VAL)
+
             k1.metric("Actual Guest Flow", f"{total_act:,.0f}")
-            k2.metric("New Unity Members", f"{df_final['new_members'].sum():,.0f}")
-            k3.metric("Audited Revenue", f"${act_coin:,.0f}")
-            k4.metric("Audited Accuracy", m['predictability'])
+            k2.metric("New Unity Members", f"{actual_signups:,.0f}")
+            k3.metric("Audited Revenue Impact", f"${act_rev:,.0f}")
+            k4.metric("Audited Accuracy", m.get('predictability', 'N/A'))
 
         # --- 7. BRAND SENTIMENT PULSE (Consolidated + Multi-Tag) ---
         st.divider()
