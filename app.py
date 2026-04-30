@@ -1059,7 +1059,7 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: AI STRATEGIC ANALYST (Manual + Intelligent Word Parsing)
+# 14. PAGE 6: AI STRATEGIC ANALYST (Unified Logic)
 # =================================================================
 elif page == "FloorCast AI Analyst":
     st.markdown("""
@@ -1073,98 +1073,61 @@ elif page == "FloorCast AI Analyst":
         st.warning("Forensic Vault is empty.")
         st.stop()
 
-    # --- 14.1 ENTRY MODULES (Two-Column Layout) ---
+    # --- 14.1 ENTRY MODULES ---
     col_input1, col_input2 = st.columns(2)
 
-    # LEFT COLUMN: Manual Sentiment Entry
     with col_input1:
         with st.expander("📝 Manual Sentiment Entry", expanded=True):
-            st.write("Log a specific specific review or high-value comment.")
             with st.form("manual_sentiment_form", clear_on_submit=True):
                 manual_tag = st.selectbox("Assign to Asset (Tag):", 
                                        ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"],
                                        key="manual_tag_select")
-                
                 f_text = st.text_area("Review Text", placeholder="Type or paste a single review...")
-                f_score = st.slider("Sentiment Score", -1.0, 1.0, 0.0, 
-                                    help="Assign -1.0 for negative, +1.0 for positive.")
-                
+                f_score = st.slider("Sentiment Score", -1.0, 1.0, 0.0)
                 if st.form_submit_button("🛡️ Archive Single Entry"):
                     if f_text:
                         cat, icon, intens = archive_sentiment_entry(f_text, manual_tag, f_score)
-                        st.success(f"**Archived to {manual_tag}!** {cat} {icon}")
+                        st.success(f"Archived to {manual_tag}!")
                         st.cache_data.clear()
 
-    # RIGHT COLUMN: Intelligent Word Doc Upload
     with col_input2:
         from docx import Document
         with st.expander("📄 Intelligent Word Doc Upload", expanded=True):
-            st.write("Extracts individual reviews based on Usernames.")
             uploaded_doc = st.file_uploader("Select .docx file", type="docx", key="word_sent_upload")
-            
             bulk_tag = st.selectbox("Assign ALL to Asset (Tag):", 
                                    ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"],
                                    key="bulk_tag_select")
-            
             if uploaded_doc and st.button("📥 Parse & Archive Bulk"):
                 doc = Document(uploaded_doc)
-                current_user = "Unknown User"
-                entries = []
-                
+                current_user, entries = "Unknown User", []
                 for para in doc.paragraphs:
                     text = para.text.strip()
                     if not text: continue
-                    
-                    # Heuristic for Username (short lines without punctuation)
                     if len(text) < 45 and not text.endswith(('.', '!', '?')):
                         current_user = text
                     else:
                         entries.append({"user": current_user, "text": text})
-                
                 if entries:
-                    with st.status("Individualizing and Archiving...", expanded=True) as status:
+                    with st.status("Archiving...", expanded=True) as status:
                         for entry in entries:
-                            full_audit_text = f"User: {entry['user']} | Review: {entry['text']}"
-                            archive_sentiment_entry(full_audit_text, bulk_tag, 0.0)
-                        status.update(label=f"✅ Successfully archived {len(entries)} reviews to {bulk_tag}!", state="complete")
+                            archive_sentiment_entry(f"User: {entry['user']} | Review: {entry['text']}", bulk_tag, 0.0)
+                        status.update(label=f"✅ Archived {len(entries)} reviews to {bulk_tag}!", state="complete")
                     st.cache_data.clear()
-                else:
-                    st.warning("No reviews detected. Check document formatting.")
 
-    # --- 14.2 AI STRATEGIC DOSSIER & CHAT INTERFACE ---
+    # --- 14.2 AI STRATEGIC DOSSIER ---
     m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
     df_ai = m_audit['df']
     
-    # Fetch Cloud Sentiment context
     try:
         sent_res = supabase.table("sentiment_history").select("*").order("timestamp", desc=True).limit(15).execute()
-        sentiment_context = pd.DataFrame(sent_res.data).to_csv(index=False) if sent_res.data else "No sentiment history."
+        sentiment_context = pd.DataFrame(sent_res.data).to_csv(index=False) if sent_res.data else "No history."
     except:
-        sentiment_context = "Error fetching cloud sentiment data."
-
-    # Fetch Monthly ROI data[cite: 1]
-    roi_data_res = supabase.table("monthly_roi").select("*").order("report_month", desc=True).execute()
-    roi_context = pd.DataFrame(roi_data_res.data).to_csv(index=False) if roi_data_res.data else "No ROI data available."
+        sentiment_context = "Error fetching cloud data."
 
     c = st.session_state.coeffs
-    dossier = f"""
-    PROPERTY: Hard Rock Hotel & Casino Ottawa
-    AI PREDICTABILITY SCORE: {m_audit.get('predictability')}
+    dossier = f"PROPERTY: Hard Rock Ottawa\nSENTIMENT:\n{sentiment_context}\n\nLEDGER:\n{df_ai.tail(30).to_csv(index=False)}"
 
-    --- CURRENT CALIBRATION WEIGHTS ---
-    - Promo: {c.get('Promo_Lift')} | Billboard: {c.get('OOH_Weight')} | PR: {c.get('PR_Weight')}
-
-    --- HISTORICAL BRAND SENTIMENT DATA (Live Cloud) ---
-    {sentiment_context}
-
-    --- MONTHLY ROI & BRAND HEALTH AUDIT ---
-    {roi_context}
-
-    --- DAILY LEDGER DATASET ---
-    {df_ai.tail(30).to_csv(index=False)}
-    """
-
-    # Chat Interface Logic[cite: 1]
+    # --- 14.3 THE CHAT INTERFACE (ONLY ONE INPUT LINE) ---
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -1172,57 +1135,18 @@ elif page == "FloorCast AI Analyst":
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
+    # This is the singular chat input for the page
     prompt = st.chat_input("Ask about sentiment trends vs. actual floor patterns...")
     
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
-        
         try:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             model = genai.GenerativeModel('gemini-2.5-flash')
-            
             with st.status("🕵️ Correlating Property Data...", expanded=True) as status:
-                full_prompt = f"Senior Strategy Analyst Dossier:\n{dossier}\n\nExecutive Inquiry: {prompt}"
-                response = model.generate_content(full_prompt)
-                assistant_msg = response.text
+                res = model.generate_content(f"Analyst Dossier:\n{dossier}\n\nQuery: {prompt}")
+                st.session_state.messages.append({"role": "assistant", "content": res.text})
                 status.update(label="✅ Analysis Complete", state="complete")
-            
-            st.session_state.messages.append({"role": "assistant", "content": assistant_msg})
-            st.rerun()
-        except Exception as e:
-            st.error(f"AI Error: {e}")
-
-    # --- 14.3 CHAT INTERFACE ---
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    for m in reversed(st.session_state.messages):
-        with st.chat_message(m["role"]):
-            st.markdown(m["content"])
-
-    prompt = st.chat_input("Ask about sentiment trends vs. actual Saturday traffic patterns...")
-    
-    if prompt:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        try:
-            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model = genai.GenerativeModel('gemini-2.5-flash')
-            
-            safety_settings = {
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            }
-            
-            with st.status("🕵️ Correlating Brand Value with Floor Cash...", expanded=True) as status:
-                full_prompt = f"Senior Strategic Analyst Context:\n{dossier}\n\nExecutive Query: {prompt}"
-                response = model.generate_content(full_prompt, safety_settings=safety_settings)
-                assistant_msg = response.text if response.candidates[0].finish_reason != 3 else "⚠️ Safety block."
-                status.update(label="✅ Strategic Insight Ready", state="complete")
-            
-            st.session_state.messages.append({"role": "assistant", "content": assistant_msg})
             st.rerun()
         except Exception as e:
             st.error(f"AI Error: {e}")
