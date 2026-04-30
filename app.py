@@ -609,42 +609,7 @@ elif page == "Daily Ledger Audit":
         df_ledger['active_promo'] = df_ledger['active_promo'].astype(str).replace(['nan', 'None', '0', '0.0'], '')
         df_ledger = df_ledger.sort_values('entry_date', ascending=False)
 
-    # --- 2. HISTORICAL VIEW SLIDER (Now at the top to drive the Scoreboard) ---
-    st.write("### 📂 Performance Audit Range")
-    view_limit = st.slider("Select Audit Depth (Days):", 7, 100, 30, key="audit_slider_top")
-    
-    # Slice the dataframe based on the user's selection
-    df_audit_period = df_ledger.head(view_limit)
-    
-    # --- 3. DYNAMIC PERFORMANCE SCOREBOARD (Based on Slider) ---
-    st.write(f"### 🎯 Performance Scoreboard: Last {view_limit} Days")
-    
-    if not df_audit_period.empty:
-        # Calculate totals for the selected historical window
-        total_period_traffic = df_audit_period['actual_traffic'].sum()
-        total_period_signups = df_audit_period['new_members'].sum()
-        
-        # Benchmarks: $1,279.33 avg spend and $1,900 LTV
-        total_potential = (total_period_traffic * 1279.33) + (total_period_signups * 1900.00)
-        
-        # Calculate averages per day for the Delta comparison
-        avg_traffic = total_period_traffic / len(df_audit_period)
-        
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total Period Traffic", f"{total_period_traffic:,.0f}", 
-                  delta=f"{avg_traffic:,.0f} avg/day")
-        
-        m2.metric("Total New Members", f"{total_period_signups:,.0f}", 
-                  delta=f"{total_period_signups / len(df_audit_period):,.1f} avg/day")
-                  
-        m3.metric("Audited Potential", f"${total_potential:,.2f}", 
-                  help="Aggregated Revenue Potential for the selected period.")
-    else:
-        st.info("No data available for the selected range.")
-
-    st.divider()
-
-    # --- 4. RAPID ENTRY FORM ---
+    # --- 1. RAPID ENTRY FORM ---
     with st.expander("➕ Log New Daily Actuals", expanded=False):
         with st.form("rapid_entry_form", clear_on_submit=True):
             f1, f2, f3 = st.columns(3)
@@ -682,6 +647,41 @@ elif page == "Daily Ledger Audit":
                     st.rerun()
                 except Exception as e:
                     st.error(f"Database Error: {e}")
+
+    # --- 2. HISTORICAL VIEW SLIDER (Now at the top to drive the Scoreboard) ---
+    st.write("### 📂 Performance Audit Range")
+    view_limit = st.slider("Select Audit Depth (Days):", 7, 100, 30, key="audit_slider_top")
+    
+    # Slice the dataframe based on the user's selection
+    df_audit_period = df_ledger.head(view_limit)
+    
+    # --- 3. DYNAMIC PERFORMANCE SCOREBOARD (Based on Slider) ---
+    st.write(f"### 🎯 Performance Scoreboard: Last {view_limit} Days")
+    
+    if not df_audit_period.empty:
+        # Calculate totals for the selected historical window
+        total_period_traffic = df_audit_period['actual_traffic'].sum()
+        total_period_signups = df_audit_period['new_members'].sum()
+        
+        # Benchmarks: $1,279.33 avg spend and $1,900 LTV
+        total_potential = (total_period_traffic * 1279.33) + (total_period_signups * 1900.00)
+        
+        # Calculate averages per day for the Delta comparison
+        avg_traffic = total_period_traffic / len(df_audit_period)
+        
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Period Traffic", f"{total_period_traffic:,.0f}", 
+                  delta=f"{avg_traffic:,.0f} avg/day")
+        
+        m2.metric("Total New Members", f"{total_period_signups:,.0f}", 
+                  delta=f"{total_period_signups / len(df_audit_period):,.1f} avg/day")
+                  
+        m3.metric("Audited Potential", f"${total_potential:,.2f}", 
+                  help="Aggregated Revenue Potential for the selected period.")
+    else:
+        st.info("No data available for the selected range.")
+
+    st.divider()
 
     # --- 5. THE HISTORICAL EDITABLE LEDGER ---
     st.write("### 📂 Bulk Audit & Corrections")
