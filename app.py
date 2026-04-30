@@ -225,10 +225,35 @@ def get_forensic_metrics(df_input, coeffs):
     }
 
 # =================================================================
-# 4.5 CLOUD SENTIMENT ENGINE (v2.0 - Supabase Integrated)
+# 4.5 CLOUD SENTIMENT ENGINE (v3.0 - AI-Automated Scoring)
 # =================================================================
-def archive_sentiment_entry(raw_text, asset_name, nlp_score):
-    """Calculates category and intensity and archives directly to Supabase."""
+def archive_sentiment_entry(raw_text, asset_name, manual_score=0.0):
+    """
+    Evaluates sentiment via Gemini if no manual score is provided, 
+    then archives to Supabase.
+    """
+    nlp_score = manual_score
+
+    # AUTOMATED SCORING: If score is 0.0 (default for bulk), ask Gemini to evaluate
+    if nlp_score == 0.0:
+        try:
+            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            
+            # Direct prompt for a forensic float value
+            response = model.generate_content(
+                f"Analyze the sentiment of this casino/hotel review. "
+                f"Return ONLY a single number between -1.0 (very negative) and 1.0 (very positive): {raw_text}"
+            )
+            
+            # Clean and convert the response
+            clean_val = response.text.strip().replace(" ", "")
+            nlp_score = float(clean_val)
+        except Exception as e:
+            st.error(f"AI Scoring Error: {e}")
+            nlp_score = 0.0  # Failsafe to neutral
+
+    # Calculate Category and Icon for the Ledger
     if nlp_score > 0.3:
         category, icon = "Positive", "🟢"
     elif nlp_score < -0.3:
@@ -246,15 +271,14 @@ def archive_sentiment_entry(raw_text, asset_name, nlp_score):
         "sentiment_score": round(float(nlp_score), 2),
         "sentiment_category": category,
         "intensity_level": intensity
-        # Timestamp is handled automatically by Supabase
     }
+
     try:
         supabase.table("sentiment_history").insert(new_entry).execute()
         return category, icon, intensity
     except Exception as e:
         st.error(f"Cloud Database Error: {e}")
         return "Error", "⚠️", "Unknown"
-
 # =================================================================
 # 4.6 GAUGE RENDERING ENGINE (v2.0 - Plotly Version)
 # =================================================================
@@ -1090,29 +1114,55 @@ elif page == "FloorCast AI Analyst":
                         st.success(f"Archived to {manual_tag}!")
                         st.cache_data.clear()
 
+    # RIGHT COLUMN: Intelligent Word Doc Upload with Progress Bar
     with col_input2:
         from docx import Document
         with st.expander("📄 Intelligent Word Doc Upload", expanded=True):
+            st.write("Extracts individual reviews and auto-scores sentiment.")
             uploaded_doc = st.file_uploader("Select .docx file", type="docx", key="word_sent_upload")
+            
             bulk_tag = st.selectbox("Assign ALL to Asset (Tag):", 
                                    ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"],
                                    key="bulk_tag_select")
-            if uploaded_doc and st.button("📥 Parse & Archive Bulk"):
+            
+            if uploaded_doc and st.button("🚀 Parse & AI Score Bulk"):
                 doc = Document(uploaded_doc)
-                current_user, entries = "Unknown User", []
+                current_user = "Unknown User"
+                entries = []
+                
+                # Parse the document structure
                 for para in doc.paragraphs:
                     text = para.text.strip()
                     if not text: continue
+                    
                     if len(text) < 45 and not text.endswith(('.', '!', '?')):
                         current_user = text
                     else:
                         entries.append({"user": current_user, "text": text})
+                
                 if entries:
-                    with st.status("Archiving...", expanded=True) as status:
-                        for entry in entries:
-                            archive_sentiment_entry(f"User: {entry['user']} | Review: {entry['text']}", bulk_tag, 0.0)
-                        status.update(label=f"✅ Archived {len(entries)} reviews to {bulk_tag}!", state="complete")
+                    total_reviews = len(entries)
+                    # Initialize the Progress Bar and Status Label
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    for i, entry in enumerate(entries):
+                        # Update progress UI
+                        percent_complete = (i + 1) / total_reviews
+                        progress_bar.progress(percent_complete)
+                        status_text.text(f"Processing review {i+1} of {total_reviews} ({entry['user']})...")
+                        
+                        full_audit_text = f"User: {entry['user']} | Review: {entry['text']}"
+                        
+                        # Trigger the automated sentiment pipeline (Option A)
+                        # Leaving score at 0.0 signals the archive function to use Gemini
+                        archive_sentiment_entry(full_audit_text, bulk_tag, 0.0)
+                    
+                    # Finalize UI
+                    status_text.success(f"✅ Successfully archived and AI-scored {total_reviews} reviews!")
                     st.cache_data.clear()
+                else:
+                    st.warning("No reviews detected. Check document formatting.")
 
     # --- 14.2 AI STRATEGIC DOSSIER ---
     m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
