@@ -589,7 +589,15 @@ if page == "Executive Dashboard":
 # 10. PAGE 2: DAILY LEDGER AUDIT (DYNAMIC PERFORMANCE v8.5)
 # =================================================================
 elif page == "Daily Ledger Audit":
-    # --- 1. THE DATA ENGINE ---
+    # 1. HEADER
+    st.markdown("""
+        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
+            <h2 style="color: #0047AB; margin: 0;">📈 Daily Ledge Audit</h2>
+            <p style="color: #444; margin: 0;">Enter daily results or see past performance.</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # --- 2. THE DATA ENGINE ---
     if not ledger_data:
         df_ledger = pd.DataFrame(columns=[
             'entry_date', 'actual_traffic', 'new_members', 'actual_coin_in', 
@@ -609,7 +617,7 @@ elif page == "Daily Ledger Audit":
         df_ledger['active_promo'] = df_ledger['active_promo'].astype(str).replace(['nan', 'None', '0', '0.0'], '')
         df_ledger = df_ledger.sort_values('entry_date', ascending=False)
 
-    # --- 1. RAPID ENTRY FORM ---
+    # --- 3. RAPID ENTRY FORM ---
     with st.expander("➕ Log New Daily Actuals", expanded=False):
         with st.form("rapid_entry_form", clear_on_submit=True):
             f1, f2, f3 = st.columns(3)
@@ -648,14 +656,14 @@ elif page == "Daily Ledger Audit":
                 except Exception as e:
                     st.error(f"Database Error: {e}")
 
-    # --- 2. HISTORICAL VIEW SLIDER (Now at the top to drive the Scoreboard) ---
+    # --- 4. HISTORICAL VIEW SLIDER (Now at the top to drive the Scoreboard) ---
     st.write("### 📂 Performance Audit Range")
     view_limit = st.slider("Select Audit Depth (Days):", 7, 100, 30, key="audit_slider_top")
     
     # Slice the dataframe based on the user's selection
     df_audit_period = df_ledger.head(view_limit)
     
-    # --- 3. DYNAMIC PERFORMANCE SCOREBOARD (Based on Slider) ---
+    # --- 5. DYNAMIC PERFORMANCE SCOREBOARD (Based on Slider) ---
     st.write(f"### 🎯 Performance Scoreboard: Last {view_limit} Days")
     
     if not df_audit_period.empty:
@@ -683,7 +691,7 @@ elif page == "Daily Ledger Audit":
 
     st.divider()
 
-    # --- 5. THE HISTORICAL EDITABLE LEDGER ---
+    # --- 6. THE HISTORICAL EDITABLE LEDGER ---
     st.write("### 📂 Bulk Audit & Corrections")
     with st.form("bulk_ledger_sync"):
         edited_ledger = st.data_editor(
