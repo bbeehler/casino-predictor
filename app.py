@@ -1100,18 +1100,25 @@ elif page == "FloorCast AI Analyst":
     # --- 14.1 ENTRY MODULES ---
     col_input1, col_input2 = st.columns(2)
 
+    # LEFT COLUMN: Manual Sentiment Entry (Slider Removed)
     with col_input1:
         with st.expander("📝 Manual Sentiment Entry", expanded=True):
+            st.write("Log a specific specific review or high-value comment.")
             with st.form("manual_sentiment_form", clear_on_submit=True):
+                # Tag Selection remains critical for the Dashboard
                 manual_tag = st.selectbox("Assign to Asset (Tag):", 
                                        ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"],
                                        key="manual_tag_select")
+                
                 f_text = st.text_area("Review Text", placeholder="Type or paste a single review...")
-                f_score = st.slider("Sentiment Score", -1.0, 1.0, 0.0)
-                if st.form_submit_button("🛡️ Archive Single Entry"):
+                
+                # We no longer pass f_score here; archive_sentiment_entry will default to 0.0
+                # which triggers the Gemini AI scoring pipeline
+                if st.form_submit_button("🛡️ Archive & AI Score"):
                     if f_text:
-                        cat, icon, intens = archive_sentiment_entry(f_text, manual_tag, f_score)
-                        st.success(f"Archived to {manual_tag}!")
+                        # Passing 0.0 tells the function to use Gemini
+                        cat, icon, intens = archive_sentiment_entry(f_text, manual_tag, 0.0)
+                        st.success(f"**Archived to {manual_tag}!** {cat} {icon}")
                         st.cache_data.clear()
 
     # RIGHT COLUMN: Intelligent Word Doc Upload with Progress Bar
