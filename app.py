@@ -481,6 +481,7 @@ if page == "Executive Dashboard":
         col_h1, col_h2 = st.columns([2, 1])
         
         with col_h2:
+            # Generate months for the selector
             g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
             g_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in g_months[1:]]
             sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select")
@@ -488,22 +489,24 @@ if page == "Executive Dashboard":
         # 7b. Calculate Overall Consolidated Score
         overall_score = 0.0
         try:
-            # Query all tags for the selected period to get the "Property Temperature"
             global_query = supabase.table("sentiment_history").select("sentiment_score")
             
             if sel_period == "Current (Live)":
+                # Pull latest 40 to get a broad property-wide pulse
                 g_res = global_query.order("timestamp", desc=True).limit(40).execute()
             else:
+                # Historical month filtering
                 sel_date = g_months[g_labels.index(sel_period)]
-                s_d, e_d = sel_date.strftime("%Y-%m-%d"), (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")
+                s_d = sel_date.strftime("%Y-%m-%d")
+                e_d = (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")
                 g_res = global_query.filter("timestamp", "gte", s_d).filter("timestamp", "lt", e_d).execute()
             
             if g_res.data:
                 overall_score = np.mean([d['sentiment_score'] for d in g_res.data])
-        except:
-            pass
+        except Exception as e:
+            st.error(f"Sentiment Query Error: {e}")
 
-        # Display the Overall Score as a Hero Metric
+        # Display the Overall Consolidated Score as a Hero Metric
         st.metric(
             label=f"Consolidated Property Pulse ({sel_period})", 
             value=f"{overall_score:+.2f}",
@@ -520,11 +523,13 @@ if page == "Executive Dashboard":
                 tag_score = 0.0
                 try:
                     tag_query = supabase.table("sentiment_history").select("sentiment_score").eq("asset", tag)
+                    
                     if sel_period == "Current (Live)":
                         t_res = tag_query.order("timestamp", desc=True).limit(10).execute()
                     else:
                         sel_date = g_months[g_labels.index(sel_period)]
-                        s_d, e_d = sel_date.strftime("%Y-%m-%d"), (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")
+                        s_d = sel_date.strftime("%Y-%m-%d")
+                        e_d = (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")
                         t_res = tag_query.filter("timestamp", "gte", s_d).filter("timestamp", "lt", e_d).execute()
                     
                     if t_res.data:
@@ -533,7 +538,8 @@ if page == "Executive Dashboard":
                     pass
 
                 fig = go.Figure(go.Indicator(
-                    mode = "gauge+number", value = tag_score,
+                    mode = "gauge+number", 
+                    value = tag_score,
                     title = {'text': f"<b>{tag}</b>", 'font': {'size': 14}},
                     number = {'font': {'size': 18}, 'valueformat': ".2f"},
                     gauge = {
