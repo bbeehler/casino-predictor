@@ -1,7 +1,4 @@
-# =================================================================
-# 1. DATABASE CONNECTION & CONFIG (v7.6)
-# =================================================================
-import streamlit as st
+this is the code before page 1 fix it: import streamlit as st
 import pandas as pd
 import datetime
 import json
@@ -11,148 +8,462 @@ import plotly.graph_objects as go
 import plotly.express as px
 from env_canada import ECWeather
 import google.generativeai as genai
-from supabase import create_client, Client
+from supabase import create_client, Client # Added Client for type hinting
 from io import BytesIO
 from dateutil.relativedelta import relativedelta
 import os
 import uuid
-
-# --- GLOBAL CONFIG ---
-st.set_page_config(
-    page_title="FloorCast Pro | Hard Rock Ottawa", 
-    layout="wide", 
-    page_icon="🎰",
-    initial_sidebar_state="expanded"
-)
-
-# --- DATABASE ---
-try:
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    supabase: Client = create_client(url, key)
-except Exception as e:
-    st.error(f"Critical System Error: Connection secrets missing. {e}")
-    st.stop()
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 # =================================================================
-# 2. STATE INITIALIZATION (v7.5)
+# 1. DATABASE CONNECTION (MUST BE FIRST)
+# =================================================================
+# Ensure these match your Streamlit Secrets exactly[cite: 1]
+try:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    supabase: Client = create_client(url, key)
+except Exception as e:
+    st.error(f"Critical System Error: Connection secrets missing. {e}")
+    st.stop()
+
+# =================================================================
+# 2. PERMANENT INITIALIZATION & STATE LOCK (v7.5 - ID-1 TARGET)[cite: 1]
 # =================================================================
 if 'coeffs' not in st.session_state:
-    try:
-        response = supabase.table("coefficients").select("*").eq("id", 1).execute()
-        if response.data and len(response.data) > 0:
-            st.session_state.coeffs = response.data[0]
-            st.session_state.coeffs['OOH_Count'] = st.session_state.coeffs.get('OOH_Count', 1) or 1
-            st.session_state.coeffs['Static_Count'] = st.session_state.coeffs.get('Static_Count', 1) or 1
-        else:
-            st.session_state.coeffs = {
-                'id': 1, 'Promo_Lift': 500.0, 'Broadcast_Weight': 150.0,
-                'OOH_Weight': 100.0, 'OOH_Count': 1, 'Print_Lift': 75.0,
-                'PR_Weight': 1.2, 'Clicks': 0.05, 'Social_Imp': 0.0002,
-                'Ad_Decay': 85, 'Rain_mm': -12.0, 'Snow_cm': -45.0,
-                'Event_Gravity': 0.25, 'Static_Weight': 100.0, 'Static_Count': 1,
-                'Digital_OOH_Weight': 25.0, 'Digital_OOH_Count': 5
-            }
-            supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
-    except Exception as e:
-        st.error(f"Initialization Error: {e}")
-        st.session_state.coeffs = {'id': 1, 'Promo_Lift': 500.0, 'OOH_Weight': 100.0, 'OOH_Count': 1}
+    try:
+        # 🟢 TARGETED PULL: We look specifically for the record we save on Page 5[cite: 1]
+        response = supabase.table("coefficients").select("*").eq("id", 1).execute()
+        
+        if response.data and len(response.data) > 0:
+            # Found our saved weights[cite: 1]
+            st.session_state.coeffs = response.data[0]
+            
+            # Ensure OOH/Static counts are never null to prevent math errors[cite: 1]
+            st.session_state.coeffs['OOH_Count'] = st.session_state.coeffs.get('OOH_Count', 1) or 1
+            st.session_state.coeffs['Static_Count'] = st.session_state.coeffs.get('Static_Count', 1) or 1
+        else:
+            # 🟡 INITIAL SEED: ID 1 doesn't exist yet, so we create the master record[cite: 1]
+            st.session_state.coeffs = {
+                'id': 1, # <--- THE ANCHOR
+                'Promo_Lift': 500.0,
+                'Broadcast_Weight': 150.0,
+                'OOH_Weight': 100.0,
+                'OOH_Count': 1,
+                'Print_Lift': 75.0,
+                'PR_Weight': 1.2,
+                'Clicks': 0.05,
+                'Social_Imp': 0.0002,
+                'Ad_Decay': 85,
+                'Rain_mm': -12.0,
+                'Snow_cm': -45.0,
+                'Event_Gravity': 0.25,
+                'Static_Weight': 100.0,
+                'Static_Count': 1,
+                'Digital_OOH_Weight': 25.0,
+                'Digital_OOH_Count': 5
+            }
+            # Create the master record in Supabase[cite: 1]
+            supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
+            
+    except Exception as e:
+        st.error(f"Initialization Error: {e}")
+        # Failsafe defaults so the app remains functional[cite: 1]
+        st.session_state.coeffs = {
+            'id': 1, 
+            'Promo_Lift': 500.0, 
+            'OOH_Weight': 100.0, 
+            'OOH_Count': 1
+        }
 
 # =================================================================
-# 3. STYLING & WEATHER
+# 3. GLOBAL PAGE CONFIG & EXECUTIVE THEME
 # =================================================================
+st.set_page_config(
+    page_title="FloorCast Pro | Hard Rock Ottawa", 
+    layout="wide", 
+    page_icon="🎰",
+    initial_sidebar_state="expanded"
+)
+
 def apply_corporate_styling():
-    st.markdown("""
-        <style>
-        .stApp { background-color: #F0F2F6 !important; }
-        h1, h2, h3, h4, h5, h6, p, span, label, div, [data-testid="stMarkdownContainer"] p {
-            color: #1A1A1B !important;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-        }
-        div[data-testid="metric-container"] {
-            background-color: #E1E8F0 !important;
-            border: 1px solid #B0C4DE !important;
-            border-left: 6px solid #0047AB !important;
-            padding: 20px !important;
-            border-radius: 12px !important;
-        }
-        .stButton>button { background-color: #0047AB !important; color: white !important; }
-        </style>
-    """, unsafe_allow_html=True)
+    st.markdown("""
+        <style>
+        /* Global Foundations */
+        .stApp { background-color: #F0F2F6 !important; }
+        
+        /* Typography Force-Black - Fixing visibility issues[cite: 1] */
+        h1, h2, h3, h4, h5, h6, p, span, label, div, [data-testid="stMarkdownContainer"] p {
+            color: #1A1A1B !important;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        /* Sidebar: Clean Drawer Style (The Sidecar)[cite: 1] */
+        section[data-testid="stSidebar"] {
+            background-color: #FFFFFF !important;
+            border-right: 2px solid #DEE2E6 !important;
+            padding-top: 2rem;
+        }
+        
+        /* Metric Card: Executive Blue[cite: 1] */
+        div[data-testid="metric-container"] {
+            background-color: #E1E8F0 !important;
+            border: 1px solid #B0C4DE !important;
+            border-left: 6px solid #0047AB !important;
+            padding: 20px !important;
+            border-radius: 12px !important;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        [data-testid="stMetricLabel"] p {
+            color: #0047AB !important;
+            font-weight: 700 !important;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.85rem !important;
+        }
+
+        /* Inputs & Buttons[cite: 1] */
+        .stButton>button {
+            background-color: #0047AB !important;
+            color: white !important;
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+            border: none !important;
+            transition: all 0.3s ease;
+        }
+        input, textarea, select {
+            background-color: #FFFFFF !important;
+            border-radius: 8px !important;
+            border: 1px solid #CED4DA !important;
+        }
+        
+        /* Analyst Status Bar[cite: 1] */
+        [data-testid="stStatus"] {
+            background-color: #E7F3FF !important;
+            border: 1px solid #0047AB !important;
+            border-radius: 10px !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
 apply_corporate_styling()
 
-async def fetch_weather():
-    try:
-        ec = ECWeather(coordinates=(45.33, -75.71))
-        await ec.update()
-        return {"current": ec.conditions, "forecast": ec.daily_forecasts, "alerts": ec.alerts}
-    except:
-        return {"error": "Station Unavailable"}
-
-if 'weather_data' not in st.session_state:
-    st.session_state.weather_data = asyncio.run(fetch_weather())
-
 # =================================================================
-# 4. FUNCTIONS & LOGIC
+# 4. FORENSIC ENGINE: OTTAWA REALITY (v6.13 - REBOOT STABLE)[cite: 1]
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
-    # ... (Your existing get_forensic_metrics logic here) ...
-    pass
+    if not df_input:
+        return {"predictability": "0.0%", "df": pd.DataFrame(), "total_inertia": 0}
 
+    df = pd.DataFrame(df_input).copy()
+    df['entry_date'] = pd.to_datetime(df['entry_date'])
+    today = pd.Timestamp(datetime.date.today())
+    
+    # --- 1. DYNAMIC COEFFICIENTS ---
+    c_clicks = float(coeffs.get('Clicks', 0))
+    c_social = float(coeffs.get('Social_Imp', 0))
+    decay = float(coeffs.get('Ad_Decay', 0)) / 100 
+    gravity = float(coeffs.get('Event_Gravity', 0))
+    promo_lift_weight = float(coeffs.get('Promo', 0))
+    c_pr_mult = float(coeffs.get('PR_Weight', 1.0)) 
+
+    # Brand Inertia Layer[cite: 1]
+    ooh_daily = (float(coeffs.get('Static_Weight', 0)) * int(coeffs.get('Static_Count', 0))) + \
+                (float(coeffs.get('Digital_OOH_Weight', 0)) * int(coeffs.get('Digital_OOH_Count', 0)))
+    total_brand_inertia = ooh_daily + float(coeffs.get('Broadcast_Weight', 0)) + float(coeffs.get('OOH_Weight', 0))
+
+    # --- 2. DATA PREPARATION (DEFINING COLUMNS FIRST) ---
+    # Fix: Define 'is_closed' BEFORE the prediction function runs[cite: 1]
+    df['is_closed'] = df.apply(lambda x: 1 if (x['entry_date'] < today and x.get('actual_traffic', 0) == 0) else 0, axis=1)
+    
+    # Fix: Force attendance to float so 1,900 adds ~1,615 guests at 85%[cite: 1]
+    df['clean_attendance'] = pd.to_numeric(df['attendance'], errors='coerce').fillna(0).astype(float)
+    df['gravity_lift'] = df['clean_attendance'] * gravity
+    
+    # Calculate Residual Lift[cite: 1]
+    awareness_pool, current_pool = [], 0.0
+    for _, row in df.iterrows():
+        daily_in = (float(row.get('ad_clicks', 0)) * c_clicks) + (float(row.get('ad_impressions', 0)) * c_social)
+        current_pool = daily_in + (current_pool * decay)
+        awareness_pool.append(current_pool)
+    df['residual_lift'] = awareness_pool
+
+    # --- 3. THE ACTUAL OTTAWA FLOOR[cite: 1] ---
+    heartbeats = {
+        'Monday': 3171, 'Tuesday': 3989, 'Wednesday': 3892,
+        'Thursday': 4500, 'Friday': 7370, 'Saturday': 5888, 'Sunday': 4929
+    }
+
+    # --- 4. PREDICTION LOGIC ---
+    def predict_guests(row):
+        # Now 'is_closed' is guaranteed to exist in the row[cite: 1]
+        if row.get('is_closed', 0) == 1: 
+            return 0
+            
+        day_name = row['entry_date'].strftime('%A')
+        base = float(heartbeats.get(day_name, 4000))
+        
+        # PR Multiplier[cite: 1]
+        p_val = str(row.get('active_promo', '0'))
+        current_base = base * c_pr_mult if "PR" in p_val.upper() else base
+        
+        # Add Lifts[cite: 1]
+        promo_impact = float(promo_lift_weight) if p_val not in ['0', '0.0', 'nan', 'None', ''] else 0
+        event_lift = float(row.get('gravity_lift', 0))
+        digital_lift = float(row.get('residual_lift', 0))
+
+        return max(0, current_base + digital_lift + total_brand_inertia + event_lift + promo_impact)
+
+    # --- 5. EXECUTION[cite: 1] ---
+    df['expected'] = df.apply(predict_guests, axis=1)
+    df['baseline'] = df['entry_date'].dt.day_name().map(heartbeats).astype(float)
+
+    return {
+        "df": df,
+        "total_inertia": total_brand_inertia,
+        "heartbeats": heartbeats
+    }
+
+# =================================================================
+# 4.5 CLOUD SENTIMENT ENGINE (v3.0 - AI-Automated Scoring)
+# =================================================================
 def archive_sentiment_entry(raw_text, asset_name, manual_score=0.0):
-    # ... (Your existing automated sentiment logic here) ...
-    pass
+    """
+    Evaluates sentiment via Gemini if no manual score is provided, 
+    then archives to Supabase.
+    """
+    nlp_score = manual_score
+
+    # AUTOMATED SCORING: If score is 0.0 (default for bulk), ask Gemini to evaluate
+    if nlp_score == 0.0:
+        try:
+            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            
+            # Direct prompt for a forensic float value
+            response = model.generate_content(
+                f"Analyze the sentiment of this casino/hotel review. "
+                f"Return ONLY a single number between -1.0 (very negative) and 1.0 (very positive): {raw_text}"
+            )
+            
+            # Clean and convert the response
+            clean_val = response.text.strip().replace(" ", "")
+            nlp_score = float(clean_val)
+        except Exception as e:
+            st.error(f"AI Scoring Error: {e}")
+            nlp_score = 0.0  # Failsafe to neutral
+
+    # Calculate Category and Icon for the Ledger
+    if nlp_score > 0.3:
+        category, icon = "Positive", "🟢"
+    elif nlp_score < -0.3:
+        category, icon = "Negative", "🔴"
+    else:
+        category, icon = "Neutral", "🟡"
+
+    abs_score = abs(nlp_score)
+    intensity = "High" if abs_score > 0.7 else "Moderate" if abs_score > 0.3 else "Low"
+
+    new_entry = {
+        "message_id": f"MSG-{uuid.uuid4().hex[:6].upper()}",
+        "raw_text": raw_text,
+        "asset": asset_name,
+        "sentiment_score": round(float(nlp_score), 2),
+        "sentiment_category": category,
+        "intensity_level": intensity
+    }
+
+    try:
+        supabase.table("sentiment_history").insert(new_entry).execute()
+        return category, icon, intensity
+    except Exception as e:
+        st.error(f"Cloud Database Error: {e}")
+        return "Error", "⚠️", "Unknown"
+# =================================================================
+# 4.6 EXECUTIVE BRAND SENTIMENT PULSE (Multi-Tag & Historical)
+# =================================================================
+st.divider()
+st.write("### 🏛️ Executive Brand Sentiment Pulse")
+
+# 1. Historical Selection Logic
+col_header, col_filter = st.columns([2, 1])
+with col_filter:
+    today = datetime.date.today()
+    # Generate a list of the last 12 months for historical auditing
+    gauge_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
+    gauge_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in gauge_months[1:]]
+    selected_gauge_label = st.selectbox("Audit Period:", gauge_labels, key="gauge_period_select")
+
+# 2. Define our Asset Tags
+tags = ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak"]
+cols = st.columns(len(tags))
+
+for i, tag in enumerate(tags):
+    with cols[i]:
+        score_val = 0.0
+        try:
+            # Construct the Query
+            query = supabase.table("sentiment_history").select("sentiment_score").eq("asset", tag)
+            
+            if selected_gauge_label == "Current (Live)":
+                # Pull latest 10 for real-time pulse
+                sent_res = query.order("timestamp", desc=True).limit(10).execute()
+            else:
+                # Filter by selected month
+                sel_date = gauge_months[gauge_labels.index(selected_gauge_label)]
+                start_date = sel_date.strftime("%Y-%m-%d")
+                end_date = (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")
+                sent_res = query.filter("timestamp", "gte", start_date).filter("timestamp", "lt", end_date).execute()
+            
+            if sent_res.data:
+                score_val = np.mean([d['sentiment_score'] for d in sent_res.data])
+        except:
+            pass
+
+        # 3. Render the Gauge for each Tag
+        fig_gauge = go.Figure(go.Indicator(
+            mode = "gauge+number",
+            value = score_val,
+            title = {'text': f"<b>{tag}</b>", 'font': {'size': 14}},
+            number = {'font': {'size': 20}, 'valueformat': ".2f"},
+            gauge = {
+                'axis': {'range': [-1, 1], 'tickwidth': 1},
+                'bar': {'color': "#0047AB"},
+                'steps': [
+                    {'range': [-1, -0.3], 'color': "#FF4B4B"},
+                    {'range': [-0.3, 0.3], 'color': "#F0F2F6"},
+                    {'range': [0.3, 1], 'color': "#28A745"}
+                ],
+                'threshold': {
+                    'line': {'color': "black", 'width': 4},
+                    'thickness': 0.75,
+                    'value': score_val
+                }
+            }
+        ))
+        fig_gauge.update_layout(height=220, margin=dict(l=10, r=10, t=40, b=10), paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_gauge, use_container_width=True)
 
 # =================================================================
-# 5. AUTH & NAVIGATION
-# =================================================================
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-
-if not st.session_state.authenticated:
-    st.markdown("<h1 style='color:#0047AB; text-align:center;'>Executive Access Required</h1>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        with st.form("login_form"):
-            e_mail = st.text_input("Email")
-            p_word = st.text_input("Password", type="password")
-            if st.form_submit_button("Unlock Engine", use_container_width=True):
-                try:
-                    res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
-                    if res.user:
-                        st.session_state.authenticated = True
-                        st.session_state.user_email = res.user.email
-                        st.rerun()
-                except:
-                    st.error("Access Denied.")
-    st.stop()
-
-# --- SIDEBAR ---
-with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/en/thumb/0/04/Hard_Rock_Cafe_logo.svg/1200px-Hard_Rock_Cafe_logo.svg.png", width=120)
-    page = st.radio("Intelligence Decks:", [
-        "Executive Dashboard", "Daily Ledger Audit", "Attribution Analytics", 
-        "Master Audit Report", "AI Calibration", "FloorCast AI Analyst", "BL-ROAS Calculator"
-    ])
-    if st.button("🚪 Logout"):
-        st.session_state.clear()
-        st.rerun()
-
-# =================================================================
-# 6. DATA HYDRATION
+# 5. DATA INFRASTRUCTURE (SUPABASE & WEATHER)[cite: 1]
 # =================================================================
 try:
-    l_res = supabase.table("ledger").select("*").execute()
-    ledger_data = l_res.data if l_res.data else []
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    supabase = create_client(url, key)
 except:
-    ledger_data = []
+    st.error("🚨 Critical Error: Supabase connection failed. Check your secrets.toml.")
 
-# --- PAGE ROUTING STARTS HERE ---
-if page == "Executive Dashboard":
-    # PASTE YOUR PAGE 1 CODE HERE
-    # (Including the Historical Multi-Gauge Sentiment block)
-    pass
+async def fetch_weather():
+    try:
+        ec = ECWeather(coordinates=(45.33, -75.71))
+        await ec.update()
+        return {"current": ec.conditions, "forecast": ec.daily_forecasts, "alerts": ec.alerts}
+    except:
+        return {"error": "Station Unavailable"}
+
+if 'weather_data' not in st.session_state:
+    st.session_state.weather_data = asyncio.run(fetch_weather())
+
+# =================================================================
+# 6. HYDRATION & RECOVERY[cite: 1]
+# =================================================================
+try:
+    c_res = supabase.table("coefficients").select("*").eq("id", 1).execute()
+    if c_res.data:
+        st.session_state.coeffs = c_res.data[0]
+    
+    l_res = supabase.table("ledger").select("*").execute()
+    ledger_data = l_res.data if l_res.data else []
+except:
+    ledger_data = []
+
+# =================================================================
+# 7. SIDEBAR NAVIGATION & AUTH (GATEKEEPER OVERHAUL)[cite: 1]
+# =================================================================
+# CSS Injection for Button Text Color
+st.markdown("""
+    <style>
+    /* Targeted fix for button text within Section 6[cite: 1] */
+    div.stButton > button > div > p,
+    div.stButton > button span,
+    div.stButton > button p {
+        color: #FFFFFF !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.sidebar.markdown("<h1 style='color:#0047AB; font-size: 28px; margin-bottom: 0;'>🎰 FloorCast</h1><p style='color:#888;'>Hard Rock Ottawa v4.0</p>", unsafe_allow_html=True)
+st.sidebar.divider()
+
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+
+# --- THE GATEKEEPER ---
+if not st.session_state.authenticated:
+    # Centered Login UI[cite: 1]
+    st.markdown("<h1 style='color:#0047AB; text-align:center;'>Executive Access Required</h1>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        with st.form("login_form"):
+            e_mail = st.text_input("Email")
+            p_word = st.text_input("Password", type="password")
+            submit = st.form_submit_button("Unlock Engine", use_container_width=True)
+            
+            if submit:
+                try:
+                    res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
+                    if res.user:
+                        # Update session state and force a re-run to clear the login screen[cite: 1]
+                        st.session_state.authenticated = True
+                        st.session_state.user_email = res.user.email
+                        st.rerun() 
+                    else:
+                        st.error("Authentication failed. Please check credentials.")
+                except Exception as e:
+                    st.error("Access Denied: Invalid credentials or connection error.")
+    st.stop() # Prevents dashboard from rendering until authenticated
+
+# =================================================================
+# 8. EXECUTIVE NAVIGATION[cite: 1]
+# =================================================================
+with st.sidebar:
+    st.image("https://upload.wikimedia.org/wikipedia/en/thumb/0/04/Hard_Rock_Cafe_logo.svg/1200px-Hard_Rock_Cafe_logo.svg.png", width=150)
+    st.title("Admin Command")
+    st.divider()
+    
+    # Vertical navigation list[cite: 1]
+    page = st.radio(
+        "Intelligence Decks:",
+        [
+            "Executive Dashboard", 
+            "Daily Ledger Audit", 
+            "Attribution Analytics", 
+            "Master Audit Report", 
+            "AI Calibration",
+            "FloorCast AI Analyst",
+            "BL-ROAS Calculator"
+        ],
+        index=0,
+        key="nav_list_v12"
+    )
+    
+    st.divider()
+
+    # Logout Button[cite: 1]
+if st.sidebar.button("🚪 Logout / Reset Session", use_container_width=True):
+    # 1. Clear the local session state
+    st.session_state.clear()
+    
+    # 2. Force a rerun to the starting state[cite: 1]
+    st.rerun()
+
+    # Ensure these two lines are indented exactly like this[cite: 1]
+    if page == "🤖 FloorCast AI Analyst" and st.session_state.get('messages'):
+        if st.sidebar.button("🗑️ Reset Analyst Thread", use_container_width=True, key="sidebar_reset"):
+            st.session_state.messages = []
+            st.rerun()
 
 # =================================================================
 # 9. PAGE 1: EXECUTIVE DASHBOARD (v45 - Multi-Gauge Historical)
