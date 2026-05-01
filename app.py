@@ -1106,23 +1106,31 @@ elif page == "FloorCast AI Analyst":
                         st.success(f"**Archived to {manual_tag}!** {cat} {icon}")
                         st.cache_data.clear()
 
-    # RIGHT COLUMN: Intelligent Word Doc Upload
+    # RIGHT COLUMN: Intelligent Word Doc Upload (Table-Aware)
     with col_input2:
         from docx import Document
         with st.expander("📄 Intelligent Word Doc Upload", expanded=True):
-            st.write("Extracts individual reviews and auto-scores sentiment.")
+            st.write("Extracts reviews from text AND pasted tables.")
             uploaded_doc = st.file_uploader("Select .docx file", type="docx", key="word_sent_upload")
             
-            # Tag Selection: Added 'Social Inbox'
             bulk_tag = st.selectbox("Assign ALL to Asset (Tag):", 
                                    ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"],
                                    key="bulk_tag_select")
             
             if uploaded_doc and st.button("🚀 Parse & AI Score Bulk"):
                 doc = Document(uploaded_doc)
-                current_user = "Unknown User"
                 entries = []
                 
+                # 1. PARSE TABLES (For pasted Excel data)
+                for table in doc.tables:
+                    for row in table.rows:
+                        # Joining all text in a row to ensure we catch the review
+                        row_text = " ".join([cell.text.strip() for cell in row.cells if cell.text.strip()])
+                        if len(row_text) > 10:
+                            entries.append({"user": "Table Entry", "text": row_text})
+
+                # 2. PARSE PARAGRAPHS (For standard text)
+                current_user = "Unknown User"
                 for para in doc.paragraphs:
                     text = para.text.strip()
                     if not text: continue
@@ -1140,15 +1148,15 @@ elif page == "FloorCast AI Analyst":
                     for i, entry in enumerate(entries):
                         percent_complete = (i + 1) / total_reviews
                         progress_bar.progress(percent_complete)
-                        status_text.text(f"Processing review {i+1} of {total_reviews} ({entry['user']})...")
+                        status_text.text(f"Processing review {i+1} of {total_reviews}...")
                         
-                        full_audit_text = f"User: {entry['user']} | Review: {entry['text']}"
+                        full_audit_text = f"Source: {entry['user']} | Review: {entry['text']}"
                         archive_sentiment_entry(full_audit_text, bulk_tag, 0.0)
                     
                     status_text.success(f"✅ Successfully archived and AI-scored {total_reviews} reviews!")
                     st.cache_data.clear()
                 else:
-                    st.warning("No reviews detected. Check document formatting.")
+                    st.warning("No reviews detected. If using a table, ensure cells contain text.")
 
     # --- 14.2 AI STRATEGIC DOSSIER (UNCAPPED) ---
     m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
