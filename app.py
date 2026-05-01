@@ -822,7 +822,7 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for Strategic Interpretation.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v13)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (RESTORATION COMPLETE)
 # =================================================================
 elif page == "Master Audit Report":
     st.markdown("""
@@ -910,14 +910,12 @@ elif page == "Master Audit Report":
         k9.metric("Weather Friction", f"-{friction_total:,.0f}")
         k10.metric("AI Confidence", m.get('predictability', '92.5%'))
 
-        # --- NEW SECTION: 5. SOCIAL MEDIA IMPACT CARDS ---
+        # 5. SOCIAL PERFORMANCE & AWARENESS
         st.write("### 📱 Social Performance & Awareness")
         ks1, ks2, ks3, ks4, ks5 = st.columns(5)
         
         t_imps = df_final['ad_impressions'].sum()
         t_clicks = df_final['ad_clicks'].sum()
-        
-        # Engagement = Total active interactions tracked in the ledger
         t_engagements = t_imps + t_clicks
         ctr = (t_clicks / t_imps * 100) if t_imps > 0 else 0
         reach_efficiency = (t_traffic / t_imps * 1000) if t_imps > 0 else 0
@@ -930,9 +928,63 @@ elif page == "Master Audit Report":
 
         st.divider()
 
-        # --- 6. FORENSIC ATTRIBUTION FLOW ---
+        # --- 6. FORENSIC ATTRIBUTION FLOW (STACKED AREA) ---
         st.write("### 🌊 Multi-Channel Attribution Flow")
-        # ... [Keep your existing Chart and Ledger logic below this] ...
+        st.caption("Visualizing the cumulative layers of guest demand.")
+        
+        df_stack = df_final.copy()
+        df_stack['Brand_Inertia_Layer'] = m.get('total_inertia', 0)
+        
+        fig_stack = go.Figure()
+        layers = [
+            ('Organic Heartbeat', 'baseline', 'rgba(200, 210, 225, 0.5)', '#8E9AAF'),
+            ('Brand (OOH/Broadcast)', 'Brand_Inertia_Layer', 'rgba(93, 112, 127, 0.5)', '#5D707F'),
+            ('Digital ROI Lift', 'residual_lift', 'rgba(0, 71, 171, 0.5)', '#0047AB'),
+            ('Hard Rock LIVE Gravity', 'gravity_lift', 'rgba(255, 204, 0, 0.6)', '#FFCC00')
+        ]
+
+        for name, col, fill_color, line_color in layers:
+            if col in df_stack.columns:
+                fig_stack.add_trace(go.Scatter(
+                    x=df_stack['entry_date'], 
+                    y=df_stack[col],
+                    name=name,
+                    mode='lines',
+                    line=dict(width=0.5, color=line_color, shape='spline'),
+                    stackgroup='one',
+                    fillcolor=fill_color,
+                    hovertemplate='%{y:,.0f} Guests'
+                ))
+
+        fig_stack.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            height=500,
+            margin=dict(l=10, r=10, t=10, b=10),
+            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
+            hovermode="x unified",
+            yaxis=dict(title="Total Guest Volume", showgrid=True, gridcolor='#F0F2F6', tickformat=',d'),
+            xaxis=dict(showgrid=False)
+        )
+        st.plotly_chart(fig_stack, use_container_width=True)
+
+        # --- 7. DETAILED FORENSIC LEDGER ---
+        st.write("### 📋 Detailed Forensic Ledger")
+        df_final['expected'] = df_final['expected'].round(0)
+        df_final['Variance'] = df_final['actual_traffic'] - df_final['expected']
+        display_cols = ['entry_date', 'actual_traffic', 'expected', 'Variance', 'residual_lift', 'gravity_lift', 'new_members']
+        st.dataframe(
+            df_final[display_cols].sort_values('entry_date', ascending=False),
+            use_container_width=True, hide_index=True
+        )
+
+        with col_export:
+            csv_data = df_final.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Export Audit to CSV", data=csv_data,
+                file_name=f"HR_Audit_{s_date}_{e_date}.csv",
+                mime='text/csv', use_container_width=True
+            )
 
 # =================================================================
 # 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS
