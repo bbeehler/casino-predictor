@@ -481,7 +481,7 @@ if page == "Executive Dashboard":
             # PROJECTION MODE
             proj_rev = (total_vol * AVG_SPEND) + ((total_vol * 0.05) * LTV_VAL)
             k1.metric("Projected Demand", f"{total_vol:,.0f} Guests")
-            k2.metric("Target Signups", f"{(total_vol * 0.05):,.0f}")
+            k2.metric("Target Signups", f"{(total_vol * 0.0170):,.0f}")
             k3.metric("Proj. Enhanced Revenue", f"${proj_rev:,.0f}")
             k4.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
         else:
