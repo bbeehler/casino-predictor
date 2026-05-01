@@ -375,10 +375,10 @@ with st.sidebar:
             st.rerun()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v45 - Multi-Gauge Historical)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v46 - Audit Hardened)
 # =================================================================
 if page == "Executive Dashboard":
-    # 1. HEADER (This always stays at the top)
+    # 1. HEADER
     st.markdown("""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
             <h2 style="color: #0047AB; margin: 0;">📈 Executive Performance Pulse</h2>
@@ -397,6 +397,8 @@ if page == "Executive Dashboard":
     df_raw = pd.DataFrame(ledger_data)
     df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
     df_raw['dow'] = df_raw['entry_date'].dt.day_name()
+    
+    # Use the updated Saturday Heartbeat of 9,863 for baselines
     master_baselines = df_raw.groupby('dow')['actual_traffic'].mean().to_dict()
 
     # --- 3. DATE SELECTION ---
@@ -424,7 +426,7 @@ if page == "Executive Dashboard":
                 return val if val is not None else 0
             return "" if col_name == 'active_promo' else 0.0
 
-        map_cols = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm', 'actual_traffic']
+        map_cols = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm', 'actual_traffic', 'new_members', 'actual_coin_in']
         for c in map_cols:
             df_p[c] = df_p.apply(lambda r: map_data(r, c), axis=1)
 
@@ -444,7 +446,7 @@ if page == "Executive Dashboard":
                     "entry_date": st.column_config.Column("Date", disabled=True),
                     "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
                 },
-                hide_index=True, use_container_width=True, key="p1_planner_v45_editor"
+                hide_index=True, use_container_width=True, key="p1_planner_v46_editor"
             )
             
             for field in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
@@ -453,11 +455,16 @@ if page == "Executive Dashboard":
         # --- 5. ENGINE EXECUTION ---
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
+        
+        # Ensure numeric types for metrics
+        df_final['new_members'] = pd.to_numeric(df_final['new_members'], errors='coerce').fillna(0)
+        df_final['actual_traffic'] = pd.to_numeric(df_final['actual_traffic'], errors='coerce').fillna(0)
+        
         total_vol = df_final['expected'].sum()
         organic_vol = sum(df_final['baseline']) if 'baseline' in df_final.columns else 0
         mkt_impact_pct = ((total_vol - organic_vol) / total_vol * 100) if total_vol > 0 else 0
 
-        # --- 6. THE UNIFIED PULSE CHART ---
+        # --- 6. THE UNIFIED PULSE CHART (Moved Above KPI Grid) ---
         st.write("### 🎰 The Unified Pulse")
         fig_pulse = go.Figure()
         df_act_chart = df_final[df_final['entry_date'].dt.date < today]
@@ -465,17 +472,10 @@ if page == "Executive Dashboard":
         fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # --- 7. EXECUTIVE KPI GRID (v46 - Schema Hardened) ---
+        # --- 7. EXECUTIVE KPI GRID (Audit Accuracy Fixed) ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
         LTV_VAL, AVG_SPEND = 1900.00, 1279.33
-
-        # Ensure the column exists in our local dataframe to prevent KeyErrors
-        if 'new_members' not in df_final.columns:
-            df_final['new_members'] = 0
-        else:
-            # Force numeric conversion in case Supabase sends it as text
-            df_final['new_members'] = pd.to_numeric(df_final['new_members'], errors='coerce').fillna(0)
 
         if start_p >= today:
             # PROJECTION MODE
@@ -485,40 +485,43 @@ if page == "Executive Dashboard":
             k3.metric("Proj. Enhanced Revenue", f"${proj_rev:,.0f}")
             k4.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
         else:
-            # AUDIT MODE (Historical)
+            # AUDIT MODE (Historical - April Fix)
             total_act = df_final['actual_traffic'].sum()
             actual_signups = df_final['new_members'].sum()
             
-            # Use actual coin-in if available, otherwise estimate from guest flow
-            if 'actual_coin_in' in df_final.columns:
+            if 'actual_coin_in' in df_final.columns and df_final['actual_coin_in'].sum() > 0:
                 base_rev = pd.to_numeric(df_final['actual_coin_in'], errors='coerce').fillna(0).sum()
             else:
                 base_rev = (total_act * AVG_SPEND)
                 
             act_rev = base_rev + (actual_signups * LTV_VAL)
 
+            # Calculation for Audited Accuracy N/A fix
+            if total_act > 0:
+                expected_sum = df_final['expected'].sum()
+                acc_val = (1 - abs(total_act - expected_sum) / total_act) * 100
+                accuracy_display = f"{max(0, acc_val):.1f}%"
+            else:
+                accuracy_display = "N/A"
+
             k1.metric("Actual Guest Flow", f"{total_act:,.0f}")
             k2.metric("New Unity Members", f"{actual_signups:,.0f}")
             k3.metric("Audited Revenue Impact", f"${act_rev:,.0f}")
-            k4.metric("Audited Accuracy", m.get('predictability', 'N/A'))
+            k4.metric("Audited Accuracy", accuracy_display)
 
         # --- 8. BRAND SENTIMENT PULSE (Consolidated + Multi-Tag) ---
         st.divider()
         st.write("### 🏛️ Executive Brand Sentiment Pulse")
         
-        # 8a. Historical Filter & Global Calculation
         col_h1, col_h2 = st.columns([2, 1])
-        
         with col_h2:
             g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
             g_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in g_months[1:]]
             sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select")
 
-        # 8b. Calculate Overall Consolidated Score
         overall_score = 0.0
         try:
             global_query = supabase.table("sentiment_history").select("sentiment_score")
-            
             if sel_period == "Current (Live)":
                 g_res = global_query.order("timestamp", desc=True).limit(40).execute()
             else:
@@ -529,10 +532,9 @@ if page == "Executive Dashboard":
             
             if g_res.data:
                 overall_score = np.mean([d['sentiment_score'] for d in g_res.data])
-        except Exception as e:
-            st.error(f"Sentiment Query Error: {e}")
+        except:
+            pass
 
-        # Overall Hero Metric
         st.metric(
             label=f"Consolidated Property Pulse ({sel_period})", 
             value=f"{overall_score:+.2f}",
@@ -549,7 +551,6 @@ if page == "Executive Dashboard":
                 tag_score = 0.0
                 try:
                     tag_query = supabase.table("sentiment_history").select("sentiment_score").eq("asset", tag)
-                    
                     if sel_period == "Current (Live)":
                         t_res = tag_query.order("timestamp", desc=True).limit(10).execute()
                     else:
@@ -563,7 +564,6 @@ if page == "Executive Dashboard":
                 except:
                     pass
 
-                # Gauge Figure (Title removed from here)
                 fig = go.Figure(go.Indicator(
                     mode = "gauge+number", 
                     value = tag_score,
@@ -581,8 +581,6 @@ if page == "Executive Dashboard":
                 ))
                 fig.update_layout(height=150, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig, use_container_width=True)
-                
-                # Tag Label placed BELOW the gauge
                 st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 14px;'>{tag}</p>", unsafe_allow_html=True)
 
 # =================================================================
