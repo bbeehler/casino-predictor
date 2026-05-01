@@ -475,7 +475,7 @@ if page == "Executive Dashboard":
         # --- 7. EXECUTIVE KPI GRID (Audit Accuracy Fixed) ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4 = st.columns(4)
-        LTV_VAL, AVG_SPEND = 1900.00, 1279.33
+        LTV_VAL, AVG_SPEND = 1900.00, 1100.31
 
         if start_p >= today:
             # PROJECTION MODE
@@ -670,7 +670,7 @@ elif page == "Daily Ledger Audit":
         total_period_signups = df_audit_period['new_members'].sum()
         
         # Benchmarks: $1,279.33 avg spend and $1,900 LTV
-        total_potential = (total_period_traffic * 1279.33) + (total_period_signups * 1900.00)
+        total_potential = (total_period_traffic * 1100.31) + (total_period_signups * 1900.00)
         
         # Calculate averages per day for the Delta comparison
         avg_traffic = total_period_traffic / len(df_audit_period)
@@ -1245,7 +1245,7 @@ elif page == "BL-ROAS Calculator":
 
     # --- 0. GLOBAL PAGE BENCHMARKS ---
     LTV_BENCHMARK = 1900.00 
-    DEFAULT_AVG_SPEND = 1279.33
+    DEFAULT_AVG_SPEND = 1100.31
 
     # --- 1. MONTH SELECTION ---
     today = datetime.date.today()
