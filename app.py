@@ -510,7 +510,6 @@ if page == "Executive Dashboard":
         col_h1, col_h2 = st.columns([2, 1])
         
         with col_h2:
-            # Generate months for the selector
             g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
             g_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in g_months[1:]]
             sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select")
@@ -521,10 +520,8 @@ if page == "Executive Dashboard":
             global_query = supabase.table("sentiment_history").select("sentiment_score")
             
             if sel_period == "Current (Live)":
-                # Pull latest 40 to get a broad property-wide pulse
                 g_res = global_query.order("timestamp", desc=True).limit(40).execute()
             else:
-                # Historical month filtering
                 sel_date = g_months[g_labels.index(sel_period)]
                 s_d = sel_date.strftime("%Y-%m-%d")
                 e_d = (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")
@@ -535,7 +532,7 @@ if page == "Executive Dashboard":
         except Exception as e:
             st.error(f"Sentiment Query Error: {e}")
 
-        # Display the Overall Consolidated Score as a Hero Metric
+        # Overall Hero Metric
         st.metric(
             label=f"Consolidated Property Pulse ({sel_period})", 
             value=f"{overall_score:+.2f}",
@@ -543,9 +540,10 @@ if page == "Executive Dashboard":
             delta_color="normal" if abs(overall_score) > 0.3 else "off"
         )
 
-        # 8c. Multi-Gauge Grid for Specific Assets
-                tags = ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"]
-                cols = st.columns(len(tags))
+        # 8c. Multi-Gauge Grid (Tags Below Gauges)
+        tags = ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"]
+        cols = st.columns(len(tags))
+
         for i, tag in enumerate(tags):
             with cols[i]:
                 tag_score = 0.0
@@ -565,13 +563,13 @@ if page == "Executive Dashboard":
                 except:
                     pass
 
+                # Gauge Figure (Title removed from here)
                 fig = go.Figure(go.Indicator(
                     mode = "gauge+number", 
                     value = tag_score,
-                    title = {'text': f"<b>{tag}</b>", 'font': {'size': 14}},
-                    number = {'font': {'size': 18}, 'valueformat': ".2f"},
+                    number = {'font': {'size': 20}, 'valueformat': ".2f"},
                     gauge = {
-                        'axis': {'range': [-1, 1]},
+                        'axis': {'range': [-1, 1], 'tickwidth': 1},
                         'bar': {'color': "#0047AB"},
                         'steps': [
                             {'range': [-1, -0.3], 'color': "#FF4B4B"},
@@ -581,8 +579,11 @@ if page == "Executive Dashboard":
                         'threshold': {'line': {'color': "black", 'width': 3}, 'value': tag_score}
                     }
                 ))
-                fig.update_layout(height=180, margin=dict(l=5, r=5, t=35, b=5), paper_bgcolor='rgba(0,0,0,0)')
+                fig.update_layout(height=150, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig, use_container_width=True)
+                
+                # Tag Label placed BELOW the gauge
+                st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 14px;'>{tag}</p>", unsafe_allow_html=True)
 
 # =================================================================
 # 10. PAGE 2: DAILY LEDGER AUDIT (DYNAMIC PERFORMANCE v8.5)
