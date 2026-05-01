@@ -1309,23 +1309,37 @@ elif page == "BL-ROAS Calculator":
 
         submit = st.form_submit_button("🚀 Save & Calculate ROI")
 
-    # --- 4. CALCULATION LOGIC ---
+    # --- 4. CALCULATION LOGIC (Streamlined - No Unused Columns) ---
     if submit:
-        # Business logic for Brand Value calculation[cite: 1]
+        # Business logic for Brand Value calculation
         brand_value = (utm_s * 1.5) + (org_s * 0.5) + (likes * 0.1) + (shares * 0.5) + (geo_lift * 2.0)
         bl_roas = brand_value / ad_spend if ad_spend > 0 else 0
+        
+        # We still use ledger_signups for the local calculation, but we don't save it to the DB
         enhanced_rev = brand_value + ledger_coin_in + (ledger_signups * LTV_BENCHMARK)
 
+        # Removed 'ledger_signups' from this dictionary to stop the Sync Failure
         roi_payload = {
             "report_month": str(selected_month),
-            "utm_sessions": utm_s, "organic_sessions": org_s, "ad_spend": ad_spend,
-            "social_likes": likes, "social_comments": comments, "social_shares": shares, "post_views": views,
-            "site_time_sessions": time_site, "booking_clicks": cta_clicks, "pos_reviews": reviews, "geo_lift_traffic": geo_lift,
-            "ledger_traffic": ledger_traffic, "ledger_signups": ledger_signups,
-            "brand_value": brand_value, "calculated_bl_roas": bl_roas, "enhanced_revenue": enhanced_rev
+            "utm_sessions": utm_s, 
+            "organic_sessions": org_s, 
+            "ad_spend": ad_spend,
+            "social_likes": likes, 
+            "social_comments": comments, 
+            "social_shares": shares, 
+            "post_views": views,
+            "site_time_sessions": time_site, 
+            "booking_clicks": cta_clicks, 
+            "pos_reviews": reviews, 
+            "geo_lift_traffic": geo_lift,
+            "ledger_traffic": ledger_traffic, 
+            "brand_value": brand_value, 
+            "calculated_bl_roas": bl_roas, 
+            "enhanced_revenue": enhanced_rev
         }
         
         try:
+            # This will now succeed because all keys match existing Supabase columns
             supabase.table("monthly_roi").upsert(roi_payload).execute()
             st.success(f"✅ ROI for {selected_label} saved successfully!")
             st.rerun() 
