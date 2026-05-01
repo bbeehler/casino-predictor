@@ -544,8 +544,6 @@ if page == "Executive Dashboard":
         )
 
         # 8c. Multi-Gauge Grid for Specific Assets
-        tags = ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"]
-        cols = st.columns(len(tags))
 
         for i, tag in enumerate(tags):
             with cols[i]:
@@ -584,6 +582,8 @@ if page == "Executive Dashboard":
                 ))
                 fig.update_layout(height=180, margin=dict(l=5, r=5, t=35, b=5), paper_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig, use_container_width=True)
+                tags = ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"]
+                cols = st.columns(len(tags))
 
 # =================================================================
 # 10. PAGE 2: DAILY LEDGER AUDIT (DYNAMIC PERFORMANCE v8.5)
