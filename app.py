@@ -1170,18 +1170,17 @@ elif page == "FloorCast AI Analyst":
                 else:
                     st.warning("No reviews detected. If using a table, ensure cells contain text.")
 
-    # --- 14.2 AI STRATEGIC DOSSIER (UNCAPPED) ---
+    # --- 14.2 AI STRATEGIC DOSSIER (TRUE UNCAPPED LEDGER) ---
     m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
     df_ai = m_audit['df']
     
     try:
-        # Pull the full record (Removed .limit(15)) to ensure AI sees all 188+ reviews
+        # Pull the full record (Uncapped sentiment history)
         sent_res = supabase.table("sentiment_history").select("asset, raw_text, sentiment_score, timestamp").order("timestamp", desc=True).execute()
         
         if sent_res.data:
             sentiment_df = pd.DataFrame(sent_res.data)
             sentiment_count = len(sentiment_df)
-            # Convert to compact CSV for efficient AI token usage
             sentiment_context = sentiment_df.to_csv(index=False)
         else:
             sentiment_context = "No history."
@@ -1191,16 +1190,22 @@ elif page == "FloorCast AI Analyst":
         sentiment_count = 0
 
     c = st.session_state.coeffs
-    # Providing the AI with an explicit count prevents it from guessing quantities
+    
+    # CALCULATE FULL DEPTH: No more .tail(30)
+    full_ledger_csv = df_ai.to_csv(index=False)
+    ledger_depth = len(df_ai)
+
+    # Updated Dossier to explicitly tell the AI it has the FULL record
     dossier = f"""
     PROPERTY: Hard Rock Ottawa
     TOTAL REVIEWS IN DATASET: {sentiment_count}
+    TOTAL LEDGER DAYS ANALYZED: {ledger_depth}
     
     SENTIMENT DATA:
     {sentiment_context}
     
-    LEDGER TRAFFIC (Latest 30 Days):
-    {df_ai.tail(30).to_csv(index=False)}
+    FULL PROPERTY LEDGER (Comprehensive History):
+    {full_ledger_csv}
     """
 
     # --- 14.3 THE CHAT INTERFACE ---
