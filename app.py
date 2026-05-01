@@ -822,7 +822,7 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for Strategic Interpretation.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (RESTORATION COMPLETE)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v14.1)
 # =================================================================
 elif page == "Master Audit Report":
     st.markdown("""
@@ -870,6 +870,7 @@ elif page == "Master Audit Report":
         df_final = m['df'] 
         c = st.session_state.coeffs
         num_days = len(df_final)
+        LTV_VAL = 1900.00
 
         # 3. FINANCIAL & LOYALTY INTEGRITY
         st.write("### 💰 Financial & Loyalty Integrity")
@@ -910,7 +911,31 @@ elif page == "Master Audit Report":
         k9.metric("Weather Friction", f"-{friction_total:,.0f}")
         k10.metric("AI Confidence", m.get('predictability', '92.5%'))
 
-        # 5. SOCIAL PERFORMANCE & AWARENESS
+        # --- NEW SECTION: 5. BL-ROAS & EQUITY EFFICIENCY ---
+        st.write("### 💎 BL-ROAS & Equity Efficiency")
+        kb1, kb2, kb3, kb4, kb5 = st.columns(5)
+        
+        try:
+            roi_res = supabase.table("monthly_roi").select("brand_value, calculated_bl_roas, ad_spend").execute()
+            if roi_res.data:
+                roi_df = pd.DataFrame(roi_res.data)
+                avg_bl_roas = roi_df['calculated_bl_roas'].mean()
+                total_brand_val = roi_df['brand_value'].sum()
+                total_ad_spend = roi_df['ad_spend'].sum()
+            else:
+                avg_bl_roas, total_brand_val, total_ad_spend = 0.0, 0.0, 0.0
+        except:
+            avg_bl_roas, total_brand_val, total_ad_spend = 0.0, 0.0, 0.0
+
+        rev_multiplier = (actual_ggr + total_brand_val) / total_ad_spend if total_ad_spend > 0 else 0
+
+        kb1.metric("Avg. BL-ROAS", f"{avg_bl_roas:.2f}x")
+        kb2.metric("Total Brand Value", f"${total_brand_val:,.0f}")
+        kb3.metric("Revenue Multiplier", f"{rev_multiplier:.1f}x")
+        kb4.metric("Equity Efficiency", f"{(t_mkt / t_traffic * 100):.1f}%")
+        kb5.metric("LTV Equity Growth", f"${(t_mems * LTV_VAL):,.0f}")
+
+        # 6. SOCIAL PERFORMANCE & AWARENESS
         st.write("### 📱 Social Performance & Awareness")
         ks1, ks2, ks3, ks4, ks5 = st.columns(5)
         
@@ -928,7 +953,7 @@ elif page == "Master Audit Report":
 
         st.divider()
 
-        # --- 6. FORENSIC ATTRIBUTION FLOW (STACKED AREA) ---
+        # --- 7. FORENSIC ATTRIBUTION FLOW (STACKED AREA) ---
         st.write("### 🌊 Multi-Channel Attribution Flow")
         st.caption("Visualizing the cumulative layers of guest demand.")
         
@@ -968,7 +993,7 @@ elif page == "Master Audit Report":
         )
         st.plotly_chart(fig_stack, use_container_width=True)
 
-        # --- 7. DETAILED FORENSIC LEDGER ---
+        # --- 8. DETAILED FORENSIC LEDGER ---
         st.write("### 📋 Detailed Forensic Ledger")
         df_final['expected'] = df_final['expected'].round(0)
         df_final['Variance'] = df_final['actual_traffic'] - df_final['expected']
