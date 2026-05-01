@@ -1331,8 +1331,7 @@ elif page == "BL-ROAS Calculator":
             "site_time_sessions": time_site, 
             "booking_clicks": cta_clicks, 
             "pos_reviews": reviews, 
-            "geo_lift_traffic": geo_lift,
-            "ledger_traffic": ledger_traffic, 
+            "geo_lift_traffic": geo_lift, 
             "brand_value": brand_value, 
             "calculated_bl_roas": bl_roas, 
             "enhanced_revenue": enhanced_rev
