@@ -822,7 +822,7 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for Strategic Interpretation.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v14.1)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v14.2)
 # =================================================================
 elif page == "Master Audit Report":
     st.markdown("""
@@ -884,11 +884,11 @@ elif page == "Master Audit Report":
         t_mems = df_final['new_members'].sum()
         conv_rate = (t_mems / t_traffic * 100) if t_traffic > 0 else 0
 
-        k1.metric("Total Traffic", f"{t_traffic:,}")
-        k2.metric("Est. Total Revenue", f"${t_rev:,.0f}")
-        k3.metric("Actual GGR (Hold)", f"${actual_ggr:,.0f}")
-        k4.metric("New Unity Members", f"{t_mems:,}")
-        k5.metric("Member Conv. %", f"{conv_rate:.2f}%")
+        k1.metric("Total Traffic", f"{t_traffic:,}", help="Total verified guest entries for the period.")
+        k2.metric("Est. Total Revenue", f"${t_rev:,.0f}", help="Total estimated property spend based on average coin-in.")
+        k3.metric("Actual GGR (Hold)", f"${actual_ggr:,.0f}", help="Gross Gaming Revenue based on estimated hold percentage.")
+        k4.metric("New Unity Members", f"{t_mems:,}", help="Total new loyalty program signups verified in the ledger.")
+        k5.metric("Member Conv. %", f"{conv_rate:.2f}%", help="Percentage of total traffic converted into new Unity members.")
 
         # 4. MARKETING EQUITY & FRICTION
         st.write("### 🧬 Marketing Equity & Friction")
@@ -905,13 +905,13 @@ elif page == "Master Audit Report":
         t_rain_loss = (df_final['rain_mm'].sum() * float(c.get('Rain_mm', -12)))
         friction_total = abs(t_snow_loss + t_rain_loss)
 
-        k6.metric("Marketing Guests", f"{t_mkt:,.0f}")
-        k7.metric("Marketing Share", f"{mkt_share:.1f}%")
-        k8.metric("Digital ROI Lift", f"{t_digital:,.0f}")
-        k9.metric("Weather Friction", f"-{friction_total:,.0f}")
-        k10.metric("AI Confidence", m.get('predictability', '92.5%'))
+        k6.metric("Marketing Guests", f"{t_mkt:,.0f}", help="Total guests attributed to Brand, Digital, and Gravity layers.")
+        k7.metric("Marketing Share", f"{mkt_share:.1f}%", help="Percentage of total traffic driven by marketing efforts.")
+        k8.metric("Digital ROI Lift", f"{t_digital:,.0f}", help="Incremental guest flow driven by active social and ad campaigns.")
+        k9.metric("Weather Friction", f"-{friction_total:,.0f}", help="Estimated guest loss due to rain and snow events.")
+        k10.metric("AI Confidence", m.get('predictability', '92.5%'), help="The statistical variance accuracy of the AI projection model.")
 
-        # --- NEW SECTION: 5. BL-ROAS & EQUITY EFFICIENCY ---
+        # 5. BL-ROAS & EQUITY EFFICIENCY
         st.write("### 💎 BL-ROAS & Equity Efficiency")
         kb1, kb2, kb3, kb4, kb5 = st.columns(5)
         
@@ -929,11 +929,11 @@ elif page == "Master Audit Report":
 
         rev_multiplier = (actual_ggr + total_brand_val) / total_ad_spend if total_ad_spend > 0 else 0
 
-        kb1.metric("Avg. BL-ROAS", f"{avg_bl_roas:.2f}x")
-        kb2.metric("Total Brand Value", f"${total_brand_val:,.0f}")
-        kb3.metric("Revenue Multiplier", f"{rev_multiplier:.1f}x")
-        kb4.metric("Equity Efficiency", f"{(t_mkt / t_traffic * 100):.1f}%")
-        kb5.metric("LTV Equity Growth", f"${(t_mems * LTV_VAL):,.0f}")
+        kb1.metric("Avg. BL-ROAS", f"{avg_bl_roas:.2f}x", help="Brand Lift Return on Ad Spend: Brand Value generated per dollar spent.")
+        kb2.metric("Total Brand Value", f"${total_brand_val:,.0f}", help="Aggregated value of UTM sessions, social engagement, and geo-lift.")
+        kb3.metric("Revenue Multiplier", f"{rev_multiplier:.1f}x", help="Ratio of combined GGR and Brand Value to Total Ad Spend.")
+        kb4.metric("Equity Efficiency", f"{(t_mkt / t_traffic * 100):.1f}%", help="Efficiency of non-organic marketing layers in driving floor traffic.")
+        kb5.metric("LTV Equity Growth", f"${(t_mems * LTV_VAL):,.0f}", help="Long-term value added to the property through new loyalty members.")
 
         # 6. SOCIAL PERFORMANCE & AWARENESS
         st.write("### 📱 Social Performance & Awareness")
@@ -945,11 +945,11 @@ elif page == "Master Audit Report":
         ctr = (t_clicks / t_imps * 100) if t_imps > 0 else 0
         reach_efficiency = (t_traffic / t_imps * 1000) if t_imps > 0 else 0
 
-        ks1.metric("Ad Impressions", f"{t_imps:,.0f}")
-        ks2.metric("Ad Clicks", f"{t_clicks:,.0f}")
-        ks3.metric("Total Engagement", f"{t_engagements:,.0f}")
-        ks4.metric("Click-Thru Rate", f"{ctr:.2f}%")
-        ks5.metric("Traffic per 1k Imps", f"{reach_efficiency:.1f}")
+        ks1.metric("Ad Impressions", f"{t_imps:,.0f}", help="Total number of times marketing content was displayed.")
+        ks2.metric("Ad Clicks", f"{t_clicks:,.0f}", help="Total number of user clicks on digital ad content.")
+        ks3.metric("Total Engagement", f"{t_engagements:,.0f}", help="Combined total of impressions and clicks.")
+        ks4.metric("Click-Thru Rate", f"{ctr:.2f}%", help="The percentage of impressions that resulted in a click.")
+        ks5.metric("Traffic per 1k Imps", f"{reach_efficiency:.1f}", help="How many guests entered the floor per 1,000 ad impressions served.")
 
         st.divider()
 
