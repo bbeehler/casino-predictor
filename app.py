@@ -880,7 +880,7 @@ elif page == "Master Audit Report":
         # Benchmarks
         LTV_VAL = 1900.00
         avg_coin = float(c.get('Avg_Coin_In', 112.50))
-        hold_pct = float(c.get('Hold_Pct', 10.0)) / 100
+        hold_pct = float(c.get('Hold_Pct', 10.2)) / 100
 
         # Core Metrics
         t_traffic = df_final['actual_traffic'].sum()
@@ -1094,22 +1094,49 @@ elif page == "Master Audit Report":
             st.download_button("📥 Export Audit to CSV", data=df_final.to_csv(index=False).encode('utf-8'), file_name=f"HR_Audit_{s_date}_{e_date}.csv", use_container_width=True)
             
 # =================================================================
-# 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS
+# 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS (v16)
 # =================================================================
 elif page == "AI Calibration":
     st.markdown("""
         <div style="background-color:#F8F9FA;padding:20px;border-radius:12px;border-left:6px solid #FFCC00;margin-bottom:20px;">
             <h2 style="color:#343a40;margin:0;">⚙️ Engine Weight Calibration</h2>
-            <p style="color:#666;margin:0;">Calibrate the "Why" behind the traffic: From Clicks to TV, Radio, and Signage.</p>
+            <p style="color:#666;margin:0;">Calibrate the "Why" behind the traffic and the "Value" behind the guest.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # Current Model Health Check[cite: 1]
+    # --- LIVE LEDGER FINANCIAL CALCULATION ---
+    df_ledger = pd.DataFrame(ledger_data)
+    if not df_ledger.empty and 'actual_coin_in' in df_ledger.columns:
+        total_rev = pd.to_numeric(df_ledger['actual_coin_in']).sum()
+        total_traf = pd.to_numeric(df_ledger['actual_traffic']).sum()
+        # Calculate the actual ledger average
+        live_avg_coin_in = (total_rev / total_traf) if total_traf > 0 else 112.50
+    else:
+        live_avg_coin_in = 112.50
+
+    # Current Model Health Check
     m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
     st.metric("Current Model Predictability", m_audit.get('predictability', '92.5%'))
 
     with st.form("master_calibration_form"):
-        # SECTION 1: DIGITAL & SOCIAL (The Trackable)[cite: 1]
+        # SECTION 1: FINANCIAL DNA (NEW: COIN-IN CALIBRATION)
+        st.subheader("💰 Financial DNA & Benchmarks")
+        st.write(f"**Current Ledger Performance:** Average Coin-In is `${live_avg_coin_in:.2f}` per guest.")
+        
+        b1, b2 = st.columns(2)
+        with b1:
+            # The user can now choose to use the live data or a custom benchmark
+            n_avg_coin = st.number_input(
+                "Target Avg Coin-In ($)", 
+                value=float(st.session_state.coeffs.get('Avg_Coin_In', live_avg_coin_in)),
+                help="Set this to the live average above to use actual performance, or a higher value for projections."
+            )
+        with b2:
+            n_hold = st.slider("Property Hold %", 5.0, 15.0, float(st.session_state.coeffs.get('Hold_Pct', 10.0)))
+
+        st.divider()
+
+        # SECTION 2: DIGITAL & SOCIAL
         st.subheader("🌐 Digital & Social Drivers")
         d1, d2, d3 = st.columns(3)
         with d1:
@@ -1121,9 +1148,8 @@ elif page == "AI Calibration":
 
         st.divider()
 
-        # SECTION 2: MASS MEDIA & OOH (The Inertia)[cite: 1]
+        # SECTION 3: MASS MEDIA & OOH (The Inertia)
         st.subheader("📡 Mass Media & Brand Inertia")
-        st.caption("Estimated daily guest lift from non-trackable broad-spectrum media.")
         c1, c2, c3 = st.columns(3)
         with c1:
             n_broad = st.number_input("Broadcast (TV/Radio) Daily Lift", value=int(st.session_state.coeffs.get('Broadcast_Weight', 150)))
@@ -1132,19 +1158,7 @@ elif page == "AI Calibration":
         with c3:
             n_print = st.number_input("Print (Mag/News) Daily Lift", value=int(st.session_state.coeffs.get('Print_Lift', 75)))
 
-        st.divider()
-
-        # SECTION 3: GRAVITY & FINANCIAL DNA[cite: 1]
-        st.subheader("💰 Financial DNA & Event Gravity")
-        f1, f2, f3 = st.columns(3)
-        with f1:
-            n_earned = st.slider("Earned Media Multiplier", 1.0, 2.0, float(st.session_state.coeffs.get('PR_Weight', 1.2)), help="Bonus lift applied during PR spikes")
-        with f2:
-            n_grav = st.slider("Event Gravity %", 0, 100, int(float(st.session_state.coeffs.get('Event_Gravity', 0.25)) * 100)) / 100
-        with f3:
-            n_promo = st.number_input("Standard Promo Lift", value=int(st.session_state.coeffs.get('Promo', 550)))
-
-        # SECTION 4: FRICTION[cite: 1]
+        # SECTION 4: FRICTION
         st.divider()
         st.subheader("🌦️ Environmental Friction")
         w1, w2 = st.columns(2)
@@ -1154,40 +1168,29 @@ elif page == "AI Calibration":
             n_snow = st.slider("Snow Impact (per cm)", -500, 0, int(st.session_state.coeffs.get('Snow_cm', -45)))
 
         if st.form_submit_button("🚀 Recalibrate Property Engine", use_container_width=True):
-            # Explicitly lock this to Record ID 1[cite: 1]
             updated_coeffs = {
                 "id": 1,
+                "Avg_Coin_In": float(n_avg_coin),
+                "Hold_Pct": float(n_hold),
                 "Clicks": float(n_clicks),
                 "Social_Imp": float(n_social),
                 "Ad_Decay": int(n_decay),
                 "Broadcast_Weight": float(n_broad),
                 "OOH_Weight": float(n_ooh),
-                "OOH_Count": 1 if n_ooh > 0 else 0,
                 "Print_Lift": float(n_print),
-                "PR_Weight": float(n_earned),
-                "Event_Gravity": float(n_grav),
-                "Promo": float(n_promo),
                 "Rain_mm": float(n_rain),
-                "Snow_cm": float(n_snow),
-                "Static_Weight": float(n_ooh),
-                "Static_Count": 1 if n_ooh > 0 else 0
+                "Snow_cm": float(n_snow)
             }
             
-            # Update session state[cite: 1]
             st.session_state.coeffs.update(updated_coeffs)
             
             try:
-                # Push to Supabase - specifically targeting ID 1[cite: 1]
                 supabase.table("coefficients").upsert(updated_coeffs).execute()
-                
-                st.success(f"✅ Weights Hard-Saved to Database.")
+                st.success(f"✅ Weights and Coin-In Benchmark Saved.")
                 st.cache_data.clear()
                 st.rerun()
             except Exception as e:
                 st.error(f"Sync Error: {e}")
-
-    with st.expander("🔍 View Active Sensitivity Manifest"):
-        st.json(st.session_state.coeffs)
 
 # =================================================================
 # 14. PAGE 6: AI STRATEGIC ANALYST (v16 - Direct Chronology)
