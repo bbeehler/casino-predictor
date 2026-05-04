@@ -827,7 +827,7 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for Strategic Interpretation.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (v15.2 - MoM & MULTI-MONTH)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v15.3)
 # =================================================================
 elif page == "Master Audit Report":
     st.markdown("""
@@ -870,49 +870,34 @@ elif page == "Master Audit Report":
             st.error(f"No records found between {s_date} and {e_date}.")
             st.stop()
 
-        # --- 1. ENGINE & PRE-CALCULATIONS (VITAL STEP) ---
+        # --- 1. ENGINE & GLOBAL VARIABLE INITIALIZATION ---
+        # This section ensures NO NameErrors occur in the cards below
         m = get_forensic_metrics(df_audit_filtered.to_dict(orient='records'), st.session_state.coeffs)
         df_final = m['df'] 
         c = st.session_state.coeffs
         num_days = len(df_final)
-        LTV_VAL, avg_coin = 1900.00, float(c.get('Avg_Coin_In', 112.50))
+        
+        # Benchmarks
+        LTV_VAL = 1900.00
+        avg_coin = float(c.get('Avg_Coin_In', 112.50))
+        hold_pct = float(c.get('Hold_Pct', 10.0)) / 100
 
-        # --- INITIALIZE ALL VARIABLES FOR THE PAGE ---
+        # Core Metrics
         t_traffic = df_final['actual_traffic'].sum()
         t_actual_rev = df_final['actual_coin_in'].sum()
+        actual_ggr = t_actual_rev * hold_pct
+        
         t_digital = df_final['residual_lift'].sum()
         t_gravity = df_final['gravity_lift'].sum()
-        
-        # Calculate Marketing Guests (t_mkt) here so kb4 can see it
-        t_inertia_val = m.get('total_inertia', 0)
-        t_inertia_total = t_inertia_val * num_days
+        t_inertia_total = m.get('total_inertia', 0) * num_days
         t_mkt = t_digital + t_inertia_total + t_gravity
+        
+        t_mems = df_final['new_members'].sum()
         
         friction_total = abs((df_final['snow_cm'].sum() * float(c.get('Snow_cm', -45))) + (df_final['rain_mm'].sum() * float(c.get('Rain_mm', -12))))
         digital_dollar = t_digital * avg_coin
 
-        # --- 2. EXECUTIVE SUMMARY TABLE (NOW RE-ALIGNED) ---
-        st.write("### 📊 Executive Summary & MoM Performance")
-        # [Keep your Summary Table code here...]
-
-        # --- 3. FINANCIAL & LOYALTY INTEGRITY ---
-        # [Keep your Financial cards here...]
-
-        # --- 4. MARKETING EQUITY & FRICTION ---
-        st.write("### 🧬 Marketing Equity & Friction")
-        k6, k7, k8, k9, k10 = st.columns(5)
-        mkt_share = (t_mkt / t_traffic * 100) if t_traffic > 0 else 0
-
-        k6.metric("Marketing Guests", f"{t_mkt:,.0f}", help="Total guests attributed to Brand, Digital, and Gravity layers.")
-        k7.metric("Marketing Share", f"{mkt_share:.1f}%", help="Percentage of total traffic driven by marketing efforts.")
-        k8.metric("Digital ROI Lift", f"{t_digital:,.0f}", help="Incremental guest flow driven by active campaigns.")
-        k9.metric("Weather Friction", f"-{friction_total:,.0f}", help="Estimated guest loss due to weather.")
-        k10.metric("AI Confidence", m.get('predictability', '92.5%'), help="Model accuracy rating.")
-
-        # 5. BL-ROAS & EQUITY EFFICIENCY
-        st.write("### 💎 BL-ROAS & Equity Efficiency")
-        kb1, kb2, kb3, kb4, kb5 = st.columns(5)
-        
+        # Fetch External ROI Data for BL-ROAS Cards
         try:
             roi_res = supabase.table("monthly_roi").select("brand_value, calculated_bl_roas, ad_spend").execute()
             if roi_res.data:
@@ -927,37 +912,91 @@ elif page == "Master Audit Report":
 
         rev_multiplier = (actual_ggr + total_brand_val) / total_ad_spend if total_ad_spend > 0 else 0
 
-        kb1.metric("Avg. BL-ROAS", f"{avg_bl_roas:.2f}x", help="Brand Lift Return on Ad Spend: Brand Value generated per dollar spent.")
-        kb2.metric("Total Brand Value", f"${total_brand_val:,.0f}", help="Aggregated value of UTM sessions, social engagement, and geo-lift.")
-        kb3.metric("Revenue Multiplier", f"{rev_multiplier:.1f}x", help="Ratio of combined GGR and Brand Value to Total Ad Spend.")
-        kb4.metric("Equity Efficiency", f"{(t_mkt / t_traffic * 100):.1f}%", help="Efficiency of non-organic marketing layers in driving floor traffic.")
-        kb5.metric("LTV Equity Growth", f"${(t_mems * LTV_VAL):,.0f}", help="Long-term value added to the property through new loyalty members.")
+        # --- 2. EXECUTIVE SUMMARY TABLE & MoM ---
+        st.write("### 📊 Executive Summary & MoM Performance")
+        is_multi_month = (e_date - s_date).days > 28
+        mom_display = []
+        
+        if is_multi_month:
+            prev_s = s_date - datetime.timedelta(days=num_days)
+            prev_e = s_date - datetime.timedelta(days=1)
+            prev_mask = (df_audit_raw['entry_date'].dt.date >= prev_s) & (df_audit_raw['entry_date'].dt.date <= prev_e)
+            df_prev_raw = df_audit_raw.loc[prev_mask].copy()
+            
+            if not df_prev_raw.empty:
+                m_prev = get_forensic_metrics(df_prev_raw.to_dict(orient='records'), c)
+                df_prev = m_prev['df']
+                p_traffic, p_rev, p_digital = df_prev['actual_traffic'].sum(), df_prev['actual_coin_in'].sum(), df_prev['residual_lift'].sum()
+                
+                def get_change(curr, prev):
+                    if prev == 0: return "N/A"
+                    return f"{(((curr - prev) / prev) * 100):+.1f}%"
 
-        # 6. SOCIAL PERFORMANCE & AWARENESS
+                mom_display = [get_change(t_traffic, p_traffic), get_change(t_digital, p_digital), "---", get_change(t_actual_rev, p_rev), get_change(digital_dollar, (p_digital * avg_coin)), "---"]
+
+        summary_rows = [
+            ["Total Traffic", f"{t_traffic:,.0f} Guests"],
+            ["Digital ROI Lift", f"{t_digital:,.0f} Guests"],
+            ["Weather Penalty", f"-{friction_total:,.0f} Guests"],
+            ["Actual Revenue (Coin-In)", f"${t_actual_rev:,.0f}"],
+            ["Digital $ Contribution", f"${digital_dollar:,.0f}"],
+            ["Weather $ Penalty", f"-${(friction_total * avg_coin):,.0f}"]
+        ]
+        df_summary = pd.DataFrame(summary_rows, columns=["Metric Category", "Current Value"])
+        if is_multi_month and mom_display: df_summary["MoM Growth"] = mom_display
+        st.table(df_summary)
+
+        # --- 3. FINANCIAL & LOYALTY INTEGRITY ---
+        st.write("### 💰 Financial & Loyalty Integrity")
+        k1, k2, k3, k4, k5 = st.columns(5)
+        conv_rate = (t_mems / t_traffic * 100) if t_traffic > 0 else 0
+
+        k1.metric("Total Traffic", f"{t_traffic:,}", help="Total verified guest entries.")
+        k2.metric("Actual Revenue", f"${t_actual_rev:,.0f}", help="Total coin-in recorded in the property ledger.")
+        k3.metric("Actual GGR (Hold)", f"${actual_ggr:,.0f}", help="Gross Gaming Revenue based on actual coin-in.")
+        k4.metric("New Unity Members", f"{t_mems:,}", help="Total new loyalty signups.")
+        k5.metric("Member Conv. %", f"{conv_rate:.2f}%", help="Conversion of traffic to Unity members.")
+
+        # --- 4. MARKETING EQUITY & FRICTION ---
+        st.write("### 🧬 Marketing Equity & Friction")
+        k6, k7, k8, k9, k10 = st.columns(5)
+        mkt_share = (t_mkt / t_traffic * 100) if t_traffic > 0 else 0
+
+        k6.metric("Marketing Guests", f"{t_mkt:,.0f}", help="Guests driven by Brand, Digital, and Gravity layers.")
+        k7.metric("Marketing Share", f"{mkt_share:.1f}%", help="Percentage of traffic driven by marketing.")
+        k8.metric("Digital ROI Lift", f"{t_digital:,.0f}", help="Incremental guest flow from active campaigns.")
+        k9.metric("Weather Friction", f"-{friction_total:,.0f}", help="Estimated guest loss due to weather.")
+        k10.metric("AI Confidence", m.get('predictability', '92.5%'), help="Model accuracy rating.")
+
+        # --- 5. BL-ROAS & EQUITY EFFICIENCY ---
+        st.write("### 💎 BL-ROAS & Equity Efficiency")
+        kb1, kb2, kb3, kb4, kb5 = st.columns(5)
+        
+        kb1.metric("Avg. BL-ROAS", f"{avg_bl_roas:.2f}x", help="Brand Value generated per dollar spent.")
+        kb2.metric("Total Brand Value", f"${total_brand_val:,.0f}", help="Aggregated value of UTMs, Social, and Geo-Lift.")
+        kb3.metric("Revenue Multiplier", f"{rev_multiplier:.1f}x", help="Ratio of GGR + Brand Value to Ad Spend.")
+        kb4.metric("Equity Efficiency", f"{(t_mkt / t_traffic * 100):.1f}%", help="Efficiency of marketing layers.")
+        kb5.metric("LTV Equity Growth", f"${(t_mems * LTV_VAL):,.0f}", help="Long-term value of new members.")
+
+        # --- 6. SOCIAL PERFORMANCE & AWARENESS ---
         st.write("### 📱 Social Performance & Awareness")
         ks1, ks2, ks3, ks4, ks5 = st.columns(5)
-        
-        t_imps = df_final['ad_impressions'].sum()
-        t_clicks = df_final['ad_clicks'].sum()
-        t_engagements = t_imps + t_clicks
+        t_imps, t_clicks = df_final['ad_impressions'].sum(), df_final['ad_clicks'].sum()
         ctr = (t_clicks / t_imps * 100) if t_imps > 0 else 0
         reach_efficiency = (t_traffic / t_imps * 1000) if t_imps > 0 else 0
 
-        ks1.metric("Ad Impressions", f"{t_imps:,.0f}", help="Total number of times marketing content was displayed.")
-        ks2.metric("Ad Clicks", f"{t_clicks:,.0f}", help="Total number of user clicks on digital ad content.")
-        ks3.metric("Total Engagement", f"{t_engagements:,.0f}", help="Combined total of impressions and clicks.")
-        ks4.metric("Click-Thru Rate", f"{ctr:.2f}%", help="The percentage of impressions that resulted in a click.")
-        ks5.metric("Traffic per 1k Imps", f"{reach_efficiency:.1f}", help="How many guests entered the floor per 1,000 ad impressions served.")
+        ks1.metric("Ad Impressions", f"{t_imps:,.0f}", help="Total times content was displayed.")
+        ks2.metric("Ad Clicks", f"{t_clicks:,.0f}", help="Total clicks on digital content.")
+        ks3.metric("Total Engagement", f"{(t_imps + t_clicks):,.0f}", help="Combined impressions and clicks.")
+        ks4.metric("Click-Thru Rate", f"{ctr:.2f}%", help="Percentage of impressions resulting in clicks.")
+        ks5.metric("Traffic per 1k Imps", f"{reach_efficiency:.1f}", help="Guests per 1,000 ad impressions.")
 
         st.divider()
 
-        # --- 7. FORENSIC ATTRIBUTION FLOW (STACKED AREA) ---
+        # --- 7. FORENSIC ATTRIBUTION FLOW ---
         st.write("### 🌊 Multi-Channel Attribution Flow")
-        st.caption("Visualizing the cumulative layers of guest demand.")
-        
         df_stack = df_final.copy()
         df_stack['Brand_Inertia_Layer'] = m.get('total_inertia', 0)
-        
         fig_stack = go.Figure()
         layers = [
             ('Organic Heartbeat', 'baseline', 'rgba(200, 210, 225, 0.5)', '#8E9AAF'),
@@ -965,50 +1004,21 @@ elif page == "Master Audit Report":
             ('Digital ROI Lift', 'residual_lift', 'rgba(0, 71, 171, 0.5)', '#0047AB'),
             ('Hard Rock LIVE Gravity', 'gravity_lift', 'rgba(255, 204, 0, 0.6)', '#FFCC00')
         ]
-
         for name, col, fill_color, line_color in layers:
             if col in df_stack.columns:
-                fig_stack.add_trace(go.Scatter(
-                    x=df_stack['entry_date'], 
-                    y=df_stack[col],
-                    name=name,
-                    mode='lines',
-                    line=dict(width=0.5, color=line_color, shape='spline'),
-                    stackgroup='one',
-                    fillcolor=fill_color,
-                    hovertemplate='%{y:,.0f} Guests'
-                ))
-
-        fig_stack.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            height=500,
-            margin=dict(l=10, r=10, t=10, b=10),
-            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
-            hovermode="x unified",
-            yaxis=dict(title="Total Guest Volume", showgrid=True, gridcolor='#F0F2F6', tickformat=',d'),
-            xaxis=dict(showgrid=False)
-        )
+                fig_stack.add_trace(go.Scatter(x=df_stack['entry_date'], y=df_stack[col], name=name, mode='lines', 
+                                              stackgroup='one', fillcolor=fill_color, line=dict(width=0.5, color=line_color)))
+        fig_stack.update_layout(height=500, margin=dict(l=10, r=10, t=10, b=10), hovermode="x unified", template="plotly_white")
         st.plotly_chart(fig_stack, use_container_width=True)
 
         # --- 8. DETAILED FORENSIC LEDGER ---
         st.write("### 📋 Detailed Forensic Ledger")
-        df_final['expected'] = df_final['expected'].round(0)
-        df_final['Variance'] = df_final['actual_traffic'] - df_final['expected']
-        display_cols = ['entry_date', 'actual_traffic', 'expected', 'Variance', 'residual_lift', 'gravity_lift', 'new_members']
-        st.dataframe(
-            df_final[display_cols].sort_values('entry_date', ascending=False),
-            use_container_width=True, hide_index=True
-        )
+        df_final['Variance'] = df_final['actual_traffic'] - df_final['expected'].round(0)
+        st.dataframe(df_final[['entry_date', 'actual_traffic', 'expected', 'Variance', 'residual_lift', 'gravity_lift', 'new_members']].sort_values('entry_date', ascending=False), use_container_width=True, hide_index=True)
 
         with col_export:
-            csv_data = df_final.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Export Audit to CSV", data=csv_data,
-                file_name=f"HR_Audit_{s_date}_{e_date}.csv",
-                mime='text/csv', use_container_width=True
-            )
-
+            st.download_button("📥 Export Audit to CSV", data=df_final.to_csv(index=False).encode('utf-8'), file_name=f"HR_Audit_{s_date}_{e_date}.csv", use_container_width=True)
+            
 # =================================================================
 # 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS
 # =================================================================
