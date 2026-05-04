@@ -375,7 +375,7 @@ with st.sidebar:
             st.rerun()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v46 - Audit Hardened)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v47 - Revenue Variance Fix)
 # =================================================================
 if page == "Executive Dashboard":
     # 1. HEADER
@@ -397,8 +397,6 @@ if page == "Executive Dashboard":
     df_raw = pd.DataFrame(ledger_data)
     df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
     df_raw['dow'] = df_raw['entry_date'].dt.day_name()
-    
-    # Use the updated Saturday Heartbeat of 9,863 for baselines
     master_baselines = df_raw.groupby('dow')['actual_traffic'].mean().to_dict()
 
     # --- 3. DATE SELECTION ---
@@ -456,15 +454,15 @@ if page == "Executive Dashboard":
         m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
         df_final = m['df'].sort_values('entry_date')
         
-        # Ensure numeric types for metrics
         df_final['new_members'] = pd.to_numeric(df_final['new_members'], errors='coerce').fillna(0)
         df_final['actual_traffic'] = pd.to_numeric(df_final['actual_traffic'], errors='coerce').fillna(0)
+        df_final['actual_coin_in'] = pd.to_numeric(df_final['actual_coin_in'], errors='coerce').fillna(0)
         
         total_vol = df_final['expected'].sum()
         organic_vol = sum(df_final['baseline']) if 'baseline' in df_final.columns else 0
         mkt_impact_pct = ((total_vol - organic_vol) / total_vol * 100) if total_vol > 0 else 0
 
-        # --- 6. THE UNIFIED PULSE CHART (Moved Above KPI Grid) ---
+        # --- 6. THE UNIFIED PULSE CHART ---
         st.write("### 🎰 The Unified Pulse")
         fig_pulse = go.Figure()
         df_act_chart = df_final[df_final['entry_date'].dt.date < today]
@@ -472,9 +470,10 @@ if page == "Executive Dashboard":
         fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # --- 7. EXECUTIVE KPI GRID (Audit Accuracy Fixed) ---
+        # --- 7. EXECUTIVE KPI GRID (v47 - Revenue Variance Fixed) ---
         st.write("### 🏛️ Property Vital Signs")
-        k1, k2, k3, k4 = st.columns(4)
+        # Expanded to 5 columns to fit the Revenue Variance card
+        k1, k2, k3, k4, k5 = st.columns(5)
         LTV_VAL, AVG_SPEND = 1900.00, 1100.31
 
         if start_p >= today:
@@ -484,19 +483,24 @@ if page == "Executive Dashboard":
             k2.metric("Target Signups", f"{(total_vol * 0.0170):,.0f}")
             k3.metric("Proj. Enhanced Revenue", f"${proj_rev:,.0f}")
             k4.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
+            k5.metric("Ledger Revenue", "$0.00")
         else:
-            # AUDIT MODE (Historical - April Fix)
+            # AUDIT MODE
             total_act = df_final['actual_traffic'].sum()
             actual_signups = df_final['new_members'].sum()
+            ledger_rev = df_final['actual_coin_in'].sum()
             
-            if 'actual_coin_in' in df_final.columns and df_final['actual_coin_in'].sum() > 0:
-                base_rev = pd.to_numeric(df_final['actual_coin_in'], errors='coerce').fillna(0).sum()
-            else:
-                base_rev = (total_act * AVG_SPEND)
-                
-            act_rev = base_rev + (actual_signups * LTV_VAL)
+            # Audited Revenue Impact (Estimated based on spend benchmarks + LTV)
+            base_est_rev = (total_act * AVG_SPEND)
+            act_impact_rev = base_est_rev + (actual_signups * LTV_VAL)
 
-            # Calculation for Audited Accuracy N/A fix
+            # Calculation for variance between Recorded Ledger Revenue and Impact Estimate
+            if act_impact_rev > 0:
+                rev_diff_pct = ((ledger_rev - act_impact_rev) / act_impact_rev) * 100
+            else:
+                rev_diff_pct = 0
+
+            # Calculation for Audited Accuracy
             if total_act > 0:
                 expected_sum = df_final['expected'].sum()
                 acc_val = (1 - abs(total_act - expected_sum) / total_act) * 100
@@ -506,8 +510,9 @@ if page == "Executive Dashboard":
 
             k1.metric("Actual Guest Flow", f"{total_act:,.0f}")
             k2.metric("New Unity Members", f"{actual_signups:,.0f}")
-            k3.metric("Audited Revenue Impact", f"${act_rev:,.0f}")
-            k4.metric("Audited Accuracy", accuracy_display)
+            k3.metric("Audited Revenue Impact", f"${act_impact_rev:,.0f}")
+            k4.metric("Ledger Revenue", f"${ledger_rev:,.0f}", delta=f"{rev_diff_pct:.1f}% Diff")
+            k5.metric("Audited Accuracy", accuracy_display)
 
         # --- 8. BRAND SENTIMENT PULSE (Consolidated + Multi-Tag) ---
         st.divider()
