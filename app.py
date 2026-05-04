@@ -912,7 +912,7 @@ elif page == "Master Audit Report":
 
         rev_multiplier = (actual_ggr + total_brand_val) / total_ad_spend if total_ad_spend > 0 else 0
 
-        # --- 2. EXECUTIVE SUMMARY & MoM PERFORMANCE (WITH YTD CAPTION) ---
+        # --- 2. EXECUTIVE SUMMARY & MoM PERFORMANCE (WITH FULL YTD CAPTION) ---
         st.write("### 📊 Executive Summary & Monthly Performance")
         
         # Group data by Month-Year to show individual month results
@@ -922,9 +922,14 @@ elif page == "Master Audit Report":
         # Calculate YTD Totals for the current year (2026)
         current_year = 2026
         df_ytd = df_audit_raw[df_audit_raw['entry_date'].dt.year == current_year]
+        
         ytd_traffic = df_ytd['actual_traffic'].sum()
         ytd_rev = df_ytd['actual_coin_in'].sum()
         ytd_mems = df_ytd['new_members'].sum()
+        
+        # Calculate YTD Digital Lift and % Contribution
+        ytd_digital_lift = df_ytd['residual_lift'].sum()
+        ytd_digital_pct = (ytd_digital_lift / ytd_traffic * 100) if ytd_traffic > 0 else 0
         
         summary_list = []
         
@@ -968,13 +973,11 @@ elif page == "Master Audit Report":
         df_summary_table = pd.DataFrame(summary_list)
         st.table(df_summary_table)
         
-        # --- NEW DYNAMIC YTD CAPTION ---
-        ytd_statement = f"**2026 Year-to-Date Totals:** {ytd_traffic:,.0f} Guests | ${ytd_rev:,.0f} Revenue | {ytd_mems:,.0f} New Unity Members."
+        # --- DYNAMIC YTD CAPTION (Includes Digital Lift & %) ---
+        ytd_perf = f"**2026 Year-to-Date Totals:** {ytd_traffic:,.0f} Guests | ${ytd_rev:,.0f} Revenue | {ytd_mems:,.0f} New Members."
+        ytd_mkt = f"**YTD Digital Impact:** {ytd_digital_lift:,.0f} Guests ({ytd_digital_pct:.1f}% of total property volume)."
         
-        if len(months) > 1:
-            st.caption(f"MoM calculations based on selected audit window. {ytd_statement}")
-        else:
-            st.caption(f"💡 Select multiple months for MoM comparisons. {ytd_statement}")
+        st.caption(f"{ytd_perf}  \n{ytd_mkt}")
 
         # --- 3. FINANCIAL & LOYALTY INTEGRITY ---
         st.write("### 💰 Financial & Loyalty Integrity")
