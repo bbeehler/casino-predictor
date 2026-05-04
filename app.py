@@ -1190,7 +1190,7 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: AI STRATEGIC ANALYST (Quad-Database Unified Logic)
+# 14. PAGE 6: AI STRATEGIC ANALYST (v16 - Direct Chronology)
 # =================================================================
 elif page == "FloorCast AI Analyst":
     st.markdown("""
@@ -1204,97 +1204,88 @@ elif page == "FloorCast AI Analyst":
         st.warning("Forensic Vault is empty.")
         st.stop()
 
-    # --- 14.1 ENTRY MODULES (Keep existing Manual/Word Doc entry logic) ---
+    # --- 14.1 ENTRY MODULES ---
     col_input1, col_input2 = st.columns(2)
     with col_input1:
         with st.expander("📝 Manual Sentiment Entry", expanded=False):
-            # ... [Keep your existing form code here] ...
+            # [Keep your existing manual entry form code here]
             pass
     with col_input2:
         with st.expander("📄 Intelligent Word Doc Upload", expanded=False):
-            # ... [Keep your existing doc upload code here] ...
+            # [Keep your existing word doc upload code here]
             pass
 
     # --- 14.2 MULTI-DATABASE AGGREGATION ---
-    with st.status("🔗 Synchronizing All Property Databases...", expanded=True) as status:
-        # 1. LEDGER DATA (Traffic & Internal Metrics)
+    with st.status("🔗 Synchronizing All Property Databases...", expanded=False) as status:
+        # 1. LEDGER DATA (Process with attribution engine)
         m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
-        df_ai = m_audit['df']
-        ledger_csv = df_ai.to_csv(index=False)
+        ledger_csv = m_audit['df'].to_csv(index=False)
 
-        # 2. SENTIMENT DATA (Reviews & Scores)
+        # 2. SENTIMENT DATA
         try:
             sent_res = supabase.table("sentiment_history").select("*").order("timestamp", desc=True).execute()
-            sent_csv = pd.DataFrame(sent_res.data).to_csv(index=False) if sent_res.data else "No sentiment data."
-        except: sent_csv = "Sentiment database unavailable."
+            sent_csv = pd.DataFrame(sent_res.data).to_csv(index=False) if sent_res.data else "No sentiment."
+        except: sent_csv = "Error fetching sentiment."
 
-        # 3. ROI DATA (Marketing Spend & BL-ROAS)
+        # 3. ROI DATA
         try:
-            roi_res = supabase.table("monthly_roi").select("*").order("report_month", desc=True).execute()
-            roi_csv = pd.DataFrame(roi_res.data).to_csv(index=False) if roi_res.data else "No ROI data."
-        except: roi_csv = "ROI database unavailable."
+            roi_res = supabase.table("monthly_roi").select("*").execute()
+            roi_csv = pd.DataFrame(roi_res.data).to_csv(index=False) if roi_res.data else "No ROI records."
+        except: roi_csv = "Error fetching ROI."
 
-        # 4. PROMOTIONS/EVENTS DATA
+        # 4. EVENTS/PROMO DATA
         try:
-            # Assuming your promotions/events are in a table named 'promotions'
+            # Note: Ensure your table name matches (e.g., 'promotions' or 'events')
             promo_res = supabase.table("promotions").select("*").execute()
-            promo_csv = pd.DataFrame(promo_res.data).to_csv(index=False) if promo_res.data else "No promo data."
-        except: promo_csv = "Promotions database unavailable."
+            promo_csv = pd.DataFrame(promo_res.data).to_csv(index=False) if promo_res.data else "No promos."
+        except: promo_csv = "Error fetching promotions."
 
-        status.update(label="✅ Data Synchronization Complete", state="complete")
+        status.update(label="✅ Databases Synced", state="complete")
 
-    # --- 14.3 THE MASTER DOSSIER ---
-    # We pack all four datasets into the prompt context
-    dossier = f"""
-    EXECUTIVE DOSSIER: Hard Rock Ottawa Performance
-    
-    [DATABASE 1: FLOOR LEDGER]
-    {ledger_csv}
-    
-    [DATABASE 2: GUEST SENTIMENT]
-    {sent_csv}
-    
-    [DATABASE 3: MARKETING ROI & AD SPEND]
-    {roi_csv}
-    
-    [DATABASE 4: PROMOTIONS & EVENTS]
-    {promo_csv}
-    """
-
-    # --- 14.4 THE CHAT INTERFACE ---
+    # --- 14.3 THE CHAT INTERFACE (CHRONOLOGICAL ORDER) ---
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    for m in reversed(st.session_state.messages):
+    # REMOVED reversed() so that the latest message appears at the bottom
+    for m in st.session_state.messages:
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-    prompt = st.chat_input("Ask a cross-database question (e.g., 'How did the ad spend in April affect Council Oak sentiment?')")
+    # Chat Input field stays at the bottom
+    prompt = st.chat_input("Ask a cross-database question...")
     
     if prompt:
+        # Display user message immediately
         st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
         try:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            # Using 1.5 Flash for speed with large context
             model = genai.GenerativeModel('gemini-2.5-flash') 
             
-            with st.spinner("🕵️ AI Analyst is correlating data points..."):
-                full_prompt = f"""
-                You are the Lead Strategic Analyst for Hard Rock Hotel & Casino Ottawa. 
-                You have access to four databases: Floor Ledger, Guest Sentiment, ROI Audits, and Promotions.
-                
-                Your Task: Answer the user's query by correlating data across these databases. 
-                Example: Link a drop in ROI to a specific weather event in the ledger or a negative sentiment trend in a specific outlet.
-                
-                Dossier Content:
-                {dossier}
-                
-                User Query: {prompt}
-                """
-                res = model.generate_content(full_prompt)
-                st.session_state.messages.append({"role": "assistant", "content": res.text})
+            with st.chat_message("assistant"):
+                with st.spinner("🕵️ Correlating Property Data..."):
+                    dossier = f"LEDGER:\n{ledger_csv}\n\nSENTIMENT:\n{sent_csv}\n\nROI:\n{roi_csv}\n\nPROMOS:\n{promo_csv}"
+                    
+                    full_query = f"""
+                    Context: You are the Lead Analyst for Hard Rock Ottawa. 
+                    Use the provided CSV data (Ledger, Sentiment, ROI, Promos) to answer.
+                    
+                    Dossier:
+                    {dossier}
+                    
+                    Query: {prompt}
+                    """
+                    
+                    res = model.generate_content(full_query)
+                    response_text = res.text
+                    st.markdown(response_text)
             
-            st.rerun()
+            st.session_state.messages.append({"role": "assistant", "content": response_text})
+            # No st.rerun() needed here if using the standard chat flow, 
+            # but keep it if you want to force a state refresh.
+            
         except Exception as e:
             st.error(f"AI Error: {e}")
 
