@@ -827,7 +827,7 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for Strategic Interpretation.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v15)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (v15.2 - MoM & MULTI-MONTH)
 # =================================================================
 elif page == "Master Audit Report":
     st.markdown("""
@@ -870,71 +870,82 @@ elif page == "Master Audit Report":
             st.error(f"No records found between {s_date} and {e_date}.")
             st.stop()
 
-        # RUN ENGINE
+        # --- 1. ENGINE & PRE-CALCULATIONS ---
         m = get_forensic_metrics(df_audit_filtered.to_dict(orient='records'), st.session_state.coeffs)
         df_final = m['df'] 
         c = st.session_state.coeffs
         num_days = len(df_final)
-        LTV_VAL = 1900.00
+        LTV_VAL, avg_coin = 1900.00, float(c.get('Avg_Coin_In', 112.50))
 
-        # 3. FINANCIAL & LOYALTY INTEGRITY (REVENUE ADDED)
+        # Current Period Totals
+        t_traffic = df_final['actual_traffic'].sum()
+        t_actual_rev = df_final['actual_coin_in'].sum()
+        t_digital = df_final['residual_lift'].sum()
+        friction_total = abs((df_final['snow_cm'].sum() * float(c.get('Snow_cm', -45))) + (df_final['rain_mm'].sum() * float(c.get('Rain_mm', -12))))
+        digital_dollar = t_digital * avg_coin
+
+        # --- 2. MoM LOGIC (If range spans > 30 days or cross months) ---
+        is_multi_month = (e_date - s_date).days > 28
+        mom_display = []
+        
+        if is_multi_month:
+            # Calculate Previous Period (Same length of time, immediately preceding)
+            prev_s = s_date - datetime.timedelta(days=num_days)
+            prev_e = s_date - datetime.timedelta(days=1)
+            prev_mask = (df_audit_raw['entry_date'].dt.date >= prev_s) & (df_audit_raw['entry_date'].dt.date <= prev_e)
+            df_prev_raw = df_audit_raw.loc[prev_mask].copy()
+            
+            if not df_prev_raw.empty:
+                m_prev = get_forensic_metrics(df_prev_raw.to_dict(orient='records'), c)
+                df_prev = m_prev['df']
+                
+                # Previous Totals
+                p_traffic = df_prev['actual_traffic'].sum()
+                p_rev = df_prev['actual_coin_in'].sum()
+                p_digital = df_prev['residual_lift'].sum()
+
+                def get_change(curr, prev):
+                    if prev == 0: return "N/A"
+                    diff = ((curr - prev) / prev) * 100
+                    return f"{diff:+.1f}%"
+
+                mom_display = [get_change(t_traffic, p_traffic), get_change(t_digital, p_digital), "---", get_change(t_actual_rev, p_rev), get_change(digital_dollar, (p_digital * avg_coin)), "---"]
+
+        # --- 3. EXECUTIVE SUMMARY TABLE (TOP POSITION) ---
+        st.write("### 📊 Executive Summary & MoM Performance")
+        
+        summary_rows = [
+            ["Total Traffic", f"{t_traffic:,.0f} Guests"],
+            ["Digital ROI Lift", f"{t_digital:,.0f} Guests"],
+            ["Weather Penalty", f"-{friction_total:,.0f} Guests"],
+            ["Actual Revenue (Coin-In)", f"${t_actual_rev:,.0f}"],
+            ["Digital $ Contribution", f"${digital_dollar:,.0f}"],
+            ["Weather $ Penalty", f"-${(friction_total * avg_coin):,.0f}"]
+        ]
+        
+        df_summary = pd.DataFrame(summary_rows, columns=["Metric Category", "Current Value"])
+        
+        if is_multi_month and mom_display:
+            df_summary["MoM Growth"] = mom_display
+            st.table(df_summary)
+            st.caption(f"MoM Comparison: {s_date.strftime('%b %d')} - {e_date.strftime('%b %d')} vs Previous {num_days} Days.")
+        else:
+            st.table(df_summary)
+
+        # --- 4. FINANCIAL & LOYALTY INTEGRITY ---
         st.write("### 💰 Financial & Loyalty Integrity")
         k1, k2, k3, k4, k5 = st.columns(5)
         
-        t_traffic = df_final['actual_traffic'].sum()
-        t_actual_rev = df_final['actual_coin_in'].sum() # ACTUAL REVENUE FROM LEDGER
-        avg_coin = float(c.get('Avg_Coin_In', 112.50))
         hold_pct = float(c.get('Hold_Pct', 10.0)) / 100
-        t_rev_est = t_traffic * avg_coin
         actual_ggr = t_actual_rev * hold_pct
         t_mems = df_final['new_members'].sum()
         conv_rate = (t_mems / t_traffic * 100) if t_traffic > 0 else 0
 
         k1.metric("Total Traffic", f"{t_traffic:,}", help="Total verified guest entries.")
         k2.metric("Actual Revenue", f"${t_actual_rev:,.0f}", help="Total coin-in recorded in the property ledger.")
-        k3.metric("Actual GGR (Hold)", f"${actual_ggr:,.0f}", help="Gross Gaming Revenue based on actual coin-in and hold %.")
+        k3.metric("Actual GGR (Hold)", f"${actual_ggr:,.0f}", help="Gross Gaming Revenue based on actual coin-in.")
         k4.metric("New Unity Members", f"{t_mems:,}", help="Total new loyalty signups.")
-        k5.metric("Member Conv. %", f"{conv_rate:.2f}%", help="Traffic to Unity member conversion rate.")
-
-        # 4. MARKETING EQUITY & FRICTION
-        st.write("### 🧬 Marketing Equity & Friction")
-        k6, k7, k8, k9, k10 = st.columns(5)
-        
-        t_digital = df_final['residual_lift'].sum()
-        t_inertia_val = m.get('total_inertia', 0)
-        t_inertia_total = t_inertia_val * num_days
-        t_gravity = df_final['gravity_lift'].sum()
-        t_mkt = t_digital + t_inertia_total + t_gravity
-        mkt_share = (t_mkt / t_traffic * 100) if t_traffic > 0 else 0
-        
-        # Calculations for Table Summary
-        t_snow_loss = (df_final['snow_cm'].sum() * float(c.get('Snow_cm', -45)))
-        t_rain_loss = (df_final['rain_mm'].sum() * float(c.get('Rain_mm', -12)))
-        friction_total = abs(t_snow_loss + t_rain_loss)
-        
-        # Digital $ Contribution (Lift * Avg Spend)
-        digital_dollar_impact = t_digital * avg_coin
-
-        k6.metric("Marketing Guests", f"{t_mkt:,.0f}")
-        k7.metric("Marketing Share", f"{mkt_share:.1f}%")
-        k8.metric("Digital ROI Lift", f"{t_digital:,.0f}")
-        k9.metric("Weather Friction", f"-{friction_total:,.0f}")
-        k10.metric("AI Confidence", m.get('predictability', '92.5%'))
-
-        # --- NEW SECTION: 4b. EXECUTIVE SUMMARY TABLE (COPY/PASTE READY) ---
-        st.write("### 📊 Executive Summary Table")
-        summary_data = {
-            "Metric Category": ["Total Traffic", "Digital ROI Lift", "Weather Penalty", "Actual Revenue (Coin-In)", "Digital $ Contribution", "Weather $ Penalty"],
-            "Value": [
-                f"{t_traffic:,.0f} Guests",
-                f"{t_digital:,.0f} Guests",
-                f"-{friction_total:,.0f} Guests",
-                f"${t_actual_rev:,.0f}",
-                f"${digital_dollar_impact:,.0f}",
-                f"-${(friction_total * avg_coin):,.0f}"
-            ]
-        }
-        st.table(pd.DataFrame(summary_data))
+        k5.metric("Member Conv. %", f"{conv_rate:.2f}%")
 
         # 5. BL-ROAS & EQUITY EFFICIENCY
         st.write("### 💎 BL-ROAS & Equity Efficiency")
