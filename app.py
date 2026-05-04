@@ -937,15 +937,47 @@ elif page == "Master Audit Report":
         k9.metric("Weather Friction", f"-{friction_total:,.0f}", help="Estimated guest loss due to weather.")
         k10.metric("AI Confidence", m.get('predictability', '92.5%'), help="Model accuracy rating.")
 
-        # --- 5. BL-ROAS & EQUITY EFFICIENCY ---
+        # --- 5. BL-ROAS & EQUITY EFFICIENCY (v16.2 - Integrated Strength Badges) ---
         st.write("### 💎 BL-ROAS & Equity Efficiency")
+        
+        # Define Strength Logic inside the section
+        def get_status_ui(val, type="multiplier"):
+            if type == "multiplier":
+                if val >= 5.0: return "💎 ELITE", "#008000"
+                if val >= 3.0: return "✅ STRONG", "#2E8B57"
+                return "⚠️ MONITOR", "#B8860B"
+            else:
+                if val >= 20.0: return "🚀 OPTIMIZED", "#008000"
+                if val >= 15.0: return "📈 STABLE", "#2E8B57"
+                return "🔍 UNDER-LEVERAGED", "#B8860B"
+
+        m_status, m_color = get_status_ui(rev_multiplier, "multiplier")
+        e_pct = (t_mkt / t_traffic * 100) if t_traffic > 0 else 0
+        e_status, e_color = get_status_ui(e_pct, "efficiency")
+
+        # Metric Cards
         kb1, kb2, kb3, kb4, kb5 = st.columns(5)
         
         kb1.metric("Avg. BL-ROAS", f"{avg_bl_roas:.2f}x", help="Brand Value generated per dollar spent.")
-        kb2.metric("Total Brand Value", f"${total_brand_val:,.0f}", help="Aggregated value of UTMs, Social, and Geo-Lift.")
-        kb3.metric("Revenue Multiplier", f"{rev_multiplier:.1f}x", help="Ratio of GGR + Brand Value to Ad Spend.")
-        kb4.metric("Equity Efficiency", f"{(t_mkt / t_traffic * 100):.1f}%", help="Efficiency of marketing layers.")
-        kb5.metric("LTV Equity Growth", f"${(t_mems * LTV_VAL):,.0f}", help="Long-term value of new members.")
+        kb2.metric("Total Brand Value", f"${total_brand_val:,.0f}", help="Aggregated equity from digital and brand layers.")
+        kb3.metric("Revenue Multiplier", f"{rev_multiplier:.1f}x", help="GGR + Brand Value divided by Ad Spend.")
+        kb4.metric("Equity Efficiency", f"{e_pct:.1f}%", help="Marketing's share of total property traffic.")
+        kb5.metric("LTV Equity Growth", f"${(t_mems * LTV_VAL):,.0f}", help="Long-term value of new loyalty members.")
+
+        # Status Badge Row (Directly below metrics)
+        sb1, sb2, sb3, sb4, sb5 = st.columns(5)
+        with sb3: # Under Multiplier
+            st.markdown(f"""
+                <div style="text-align:center; padding:5px; border-radius:5px; background-color:{m_color}; color:white; font-size:0.7rem; font-weight:bold; margin-top:-10px;">
+                    {m_status}
+                </div>
+                """, unsafe_allow_html=True)
+        with sb4: # Under Efficiency
+            st.markdown(f"""
+                <div style="text-align:center; padding:5px; border-radius:5px; background-color:{e_color}; color:white; font-size:0.7rem; font-weight:bold; margin-top:-10px;">
+                    {e_status}
+                </div>
+                """, unsafe_allow_html=True)
 
         # --- 6. SOCIAL PERFORMANCE & AWARENESS ---
         st.write("### 📱 Social Performance & Awareness")
