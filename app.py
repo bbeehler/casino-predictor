@@ -912,7 +912,7 @@ elif page == "Master Audit Report":
 
         rev_multiplier = (actual_ggr + total_brand_val) / total_ad_spend if total_ad_spend > 0 else 0
 
-        # --- 2. EXECUTIVE SUMMARY & MoM PERFORMANCE (v15.8 - WITH TOTAL ROW) ---
+        # --- 2. EXECUTIVE SUMMARY & MoM PERFORMANCE (v15.9 - TOTALS & MoM AVG) ---
         st.write("### 📊 Executive Summary & Monthly Performance")
         
         # Group data by Month-Year for the table
@@ -935,8 +935,8 @@ elif page == "Master Audit Report":
             ytd_traffic, ytd_rev, ytd_mems, ytd_digital_lift, ytd_digital_pct = 0, 0, 0, 0, 0
         
         summary_list = []
+        raw_mom_values = {"traffic": [], "revenue": [], "digital": []}
         
-        # Loop through months to build table rows
         for i, month in enumerate(months):
             df_m = df_final[df_final['month_year'] == month]
             
@@ -946,52 +946,61 @@ elif page == "Master Audit Report":
             m_friction = abs((df_m['snow_cm'].sum() * float(c.get('Snow_cm', -45))) + (df_m['rain_mm'].sum() * float(c.get('Rain_mm', -12))))
             m_digital_dollar = m_digital * avg_coin
             
-            mom_traffic, mom_rev, mom_digital = "---", "---", "---"
+            mom_traffic_pct, mom_rev_pct, mom_digital_pct = None, None, None
+            mom_traffic_str, mom_rev_str, mom_digital_str = "---", "---", "---"
             
             if i > 0:
                 prev_month = months[i-1]
                 df_prev = df_final[df_final['month_year'] == prev_month]
                 p_traffic, p_rev, p_digital = df_prev['actual_traffic'].sum(), df_prev['actual_coin_in'].sum(), df_prev['residual_lift'].sum()
                 
-                def get_change(curr, prev):
-                    if prev == 0: return "+0.0%"
-                    return f"{(((curr - prev) / prev) * 100):+.1f}%"
-                
-                mom_traffic = get_change(m_traffic, p_traffic)
-                mom_rev = get_change(m_rev, p_rev)
-                mom_digital = get_change(m_digital, p_digital)
+                if p_traffic > 0:
+                    mom_traffic_pct = ((m_traffic - p_traffic) / p_traffic) * 100
+                    raw_mom_values["traffic"].append(mom_traffic_pct)
+                    mom_traffic_str = f"{mom_traffic_pct:+.1f}%"
+                if p_rev > 0:
+                    mom_rev_pct = ((m_rev - p_rev) / p_rev) * 100
+                    raw_mom_values["revenue"].append(mom_rev_pct)
+                    mom_rev_str = f"{mom_rev_pct:+.1f}%"
+                if p_digital > 0:
+                    mom_digital_pct = ((m_digital - p_digital) / p_digital) * 100
+                    raw_mom_values["digital"].append(mom_digital_pct)
+                    mom_digital_str = f"{mom_digital_pct:+.1f}%"
 
             summary_list.append({
                 "Month": month.strftime('%B %Y'),
                 "Traffic": m_traffic,
-                "Traffic MoM": mom_traffic,
+                "Traffic MoM": mom_traffic_str,
                 "Actual Revenue": m_rev,
-                "Revenue MoM": mom_rev,
+                "Revenue MoM": mom_rev_str,
                 "Digital Lift": m_digital,
-                "Digital MoM": mom_digital,
+                "Digital MoM": mom_digital_str,
                 "Digital $ Impact": m_digital_dollar,
                 "Weather Penalty": -m_friction
             })
 
-        # --- CREATE DATAFRAME AND ADD TOTAL ROW ---
         df_summary_table = pd.DataFrame(summary_list)
         
-        # Calculate Totals
+        # --- CALCULATE TOTALS & MoM AVERAGES ---
+        def get_avg_str(val_list):
+            if not val_list: return "---"
+            return f"{np.mean(val_list):+.1f}% Avg"
+
         total_row = pd.Series({
             "Month": "**TOTAL AUDIT WINDOW**",
             "Traffic": df_summary_table["Traffic"].sum(),
-            "Traffic MoM": "",
+            "Traffic MoM": get_avg_str(raw_mom_values["traffic"]),
             "Actual Revenue": df_summary_table["Actual Revenue"].sum(),
-            "Revenue MoM": "",
+            "Revenue MoM": get_avg_str(raw_mom_values["revenue"]),
             "Digital Lift": df_summary_table["Digital Lift"].sum(),
-            "Digital MoM": "",
+            "Digital MoM": get_avg_str(raw_mom_values["digital"]),
             "Digital $ Impact": df_summary_table["Digital $ Impact"].sum(),
             "Weather Penalty": df_summary_table["Weather Penalty"].sum()
         })
         
         df_summary_table = pd.concat([df_summary_table, total_row.to_frame().T], ignore_index=True)
 
-        # Formatting for Display
+        # Apply formatting to ensure commas and dollar signs are correct
         format_mapping = {
             "Traffic": "{:,.0f}",
             "Actual Revenue": "${:,.0f}",
@@ -1000,7 +1009,6 @@ elif page == "Master Audit Report":
             "Weather Penalty": "{:,.0f}"
         }
 
-        # Apply formatting to numeric columns for display
         for col, fmt in format_mapping.items():
             df_summary_table[col] = df_summary_table[col].apply(lambda x: fmt.format(x) if isinstance(x, (int, float)) else x)
 
