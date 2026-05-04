@@ -871,7 +871,7 @@ elif page == "Master Audit Report":
             st.stop()
 
         # --- 1. ENGINE & GLOBAL VARIABLE INITIALIZATION ---
-        # This section ensures NO NameErrors occur in the cards below
+        # [Keep your existing engine execution code here...]
         m = get_forensic_metrics(df_audit_filtered.to_dict(orient='records'), st.session_state.coeffs)
         df_final = m['df'] 
         c = st.session_state.coeffs
@@ -882,34 +882,39 @@ elif page == "Master Audit Report":
         avg_coin = float(c.get('Avg_Coin_In', 112.50))
         hold_pct = float(c.get('Hold_Pct', 10.2)) / 100
 
-        # Core Metrics
+        # Core Metrics (Calculated from filtered df_final)
         t_traffic = df_final['actual_traffic'].sum()
         t_actual_rev = df_final['actual_coin_in'].sum()
         actual_ggr = t_actual_rev * hold_pct
-        
         t_digital = df_final['residual_lift'].sum()
         t_gravity = df_final['gravity_lift'].sum()
         t_inertia_total = m.get('total_inertia', 0) * num_days
         t_mkt = t_digital + t_inertia_total + t_gravity
-        
         t_mems = df_final['new_members'].sum()
-        
-        friction_total = abs((df_final['snow_cm'].sum() * float(c.get('Snow_cm', -45))) + (df_final['rain_mm'].sum() * float(c.get('Rain_mm', -12))))
-        digital_dollar = t_digital * avg_coin
 
-        # Fetch External ROI Data for BL-ROAS Cards
+        # --- NEW DATE-AWARE ROI FETCH ---
         try:
-            roi_res = supabase.table("monthly_roi").select("brand_value, calculated_bl_roas, ad_spend").execute()
-            if roi_res.data:
+            # We filter the monthly_roi table based on the report_month matching your selection
+            # Converting dates to string format 'YYYY-MM-DD' for Supabase
+            roi_res = supabase.table("monthly_roi") \
+                .select("brand_value, calculated_bl_roas, ad_spend") \
+                .filter("report_month", "gte", s_date.strftime('%Y-%m-%d')) \
+                .filter("report_month", "lte", e_date.strftime('%Y-%m-%d')) \
+                .execute()
+            
+            if roi_res.data and len(roi_res.data) > 0:
                 roi_df = pd.DataFrame(roi_res.data)
                 avg_bl_roas = roi_df['calculated_bl_roas'].mean()
                 total_brand_val = roi_df['brand_value'].sum()
                 total_ad_spend = roi_df['ad_spend'].sum()
             else:
+                # Fallback to 0 if no ROI records exist for the selected window
                 avg_bl_roas, total_brand_val, total_ad_spend = 0.0, 0.0, 0.0
-        except:
+        except Exception as e:
+            st.error(f"ROI Fetch Error: {e}")
             avg_bl_roas, total_brand_val, total_ad_spend = 0.0, 0.0, 0.0
 
+        # This will now be dynamic based on the filtered Brand Value and Ad Spend
         rev_multiplier = (actual_ggr + total_brand_val) / total_ad_spend if total_ad_spend > 0 else 0
 
         # --- 2. EXECUTIVE SUMMARY & MoM PERFORMANCE (v15.9 - TOTALS & MoM AVG) ---
