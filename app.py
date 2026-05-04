@@ -912,39 +912,66 @@ elif page == "Master Audit Report":
 
         rev_multiplier = (actual_ggr + total_brand_val) / total_ad_spend if total_ad_spend > 0 else 0
 
-        # --- 2. EXECUTIVE SUMMARY TABLE & MoM ---
-        st.write("### 📊 Executive Summary & MoM Performance")
-        is_multi_month = (e_date - s_date).days > 28
-        mom_display = []
+        # --- 2. EXECUTIVE SUMMARY & MoM PERFORMANCE (MONTHLY BREAKDOWN) ---
+        st.write("### 📊 Executive Summary & Monthly Performance")
         
-        if is_multi_month:
-            prev_s = s_date - datetime.timedelta(days=num_days)
-            prev_e = s_date - datetime.timedelta(days=1)
-            prev_mask = (df_audit_raw['entry_date'].dt.date >= prev_s) & (df_audit_raw['entry_date'].dt.date <= prev_e)
-            df_prev_raw = df_audit_raw.loc[prev_mask].copy()
+        # Group data by Month-Year to show individual month results
+        df_final['month_year'] = df_final['entry_date'].dt.to_period('M')
+        months = sorted(df_final['month_year'].unique())
+        
+        summary_list = []
+        
+        for i, month in enumerate(months):
+            # Filter data for this specific month
+            df_m = df_final[df_final['month_year'] == month]
             
-            if not df_prev_raw.empty:
-                m_prev = get_forensic_metrics(df_prev_raw.to_dict(orient='records'), c)
-                df_prev = m_prev['df']
-                p_traffic, p_rev, p_digital = df_prev['actual_traffic'].sum(), df_prev['actual_coin_in'].sum(), df_prev['residual_lift'].sum()
+            # Calculate Month Totals
+            m_traffic = df_m['actual_traffic'].sum()
+            m_rev = df_m['actual_coin_in'].sum()
+            m_digital = df_m['residual_lift'].sum()
+            m_friction = abs((df_m['snow_cm'].sum() * float(c.get('Snow_cm', -45))) + (df_m['rain_mm'].sum() * float(c.get('Rain_mm', -12))))
+            m_digital_dollar = m_digital * avg_coin
+            
+            # Initialize MoM placeholders
+            mom_traffic, mom_rev, mom_digital = "---", "---", "---"
+            
+            # Calculate MoM if this isn't the first month in the list
+            if i > 0:
+                prev_month = months[i-1]
+                df_prev = df_final[df_final['month_year'] == prev_month]
+                p_traffic = df_prev['actual_traffic'].sum()
+                p_rev = df_prev['actual_coin_in'].sum()
+                p_digital = df_prev['residual_lift'].sum()
                 
                 def get_change(curr, prev):
-                    if prev == 0: return "N/A"
+                    if prev == 0: return "+0.0%"
                     return f"{(((curr - prev) / prev) * 100):+.1f}%"
+                
+                mom_traffic = get_change(m_traffic, p_traffic)
+                mom_rev = get_change(m_rev, p_rev)
+                mom_digital = get_change(m_digital, p_digital)
 
-                mom_display = [get_change(t_traffic, p_traffic), get_change(t_digital, p_digital), "---", get_change(t_actual_rev, p_rev), get_change(digital_dollar, (p_digital * avg_coin)), "---"]
+            # Append rows for the table
+            summary_list.append({
+                "Month": month.strftime('%B %Y'),
+                "Traffic": f"{m_traffic:,.0f}",
+                "Traffic MoM": mom_traffic,
+                "Actual Revenue": f"${m_rev:,.0f}",
+                "Revenue MoM": mom_rev,
+                "Digital Lift": f"{m_digital:,.0f}",
+                "Digital MoM": mom_digital,
+                "Digital $ Impact": f"${m_digital_dollar:,.0f}",
+                "Weather Penalty": f"-{m_friction:,.0f}"
+            })
 
-        summary_rows = [
-            ["Total Traffic", f"{t_traffic:,.0f} Guests"],
-            ["Digital ROI Lift", f"{t_digital:,.0f} Guests"],
-            ["Weather Penalty", f"-{friction_total:,.0f} Guests"],
-            ["Actual Revenue (Coin-In)", f"${t_actual_rev:,.0f}"],
-            ["Digital $ Contribution", f"${digital_dollar:,.0f}"],
-            ["Weather $ Penalty", f"-${(friction_total * avg_coin):,.0f}"]
-        ]
-        df_summary = pd.DataFrame(summary_rows, columns=["Metric Category", "Current Value"])
-        if is_multi_month and mom_display: df_summary["MoM Growth"] = mom_display
-        st.table(df_summary)
+        # Display as a clean table
+        df_summary_table = pd.DataFrame(summary_list)
+        st.table(df_summary_table)
+        
+        if len(months) > 1:
+            st.caption("MoM calculations are based on the months selected in the current audit window.")
+        else:
+            st.info("💡 Select a date range spanning multiple months to see Month-over-Month comparisons.")
 
         # --- 3. FINANCIAL & LOYALTY INTEGRITY ---
         st.write("### 💰 Financial & Loyalty Integrity")
