@@ -344,7 +344,7 @@ if not st.session_state.authenticated:
 # 8. EXECUTIVE NAVIGATION
 # =================================================================
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/en/thumb/0/04/Hard_Rock_Cafe_logo.svg/1200px-Hard_Rock_Cafe_logo.svg.png", width=150)
+    st.image("https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png?h=171&iar=0&w=224&rev=914ac0eae6734be995b93d76ad2b1e8f", width=150)
     st.title("Admin Command")
     st.divider()
     
