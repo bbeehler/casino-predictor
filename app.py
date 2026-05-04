@@ -999,7 +999,7 @@ elif page == "Master Audit Report":
                 return "⚠️ MONITOR", "#B8860B"
             else: # Efficiency thresholds
                 if val >= 20.0: return "🚀 OPTIMIZED", "#008000"
-                if val >= 15.0: return "📈 STABLE", "#2E8B57"
+                if val >= 10.0: return "📈 STABLE", "#2E8B57"
                 return "🔍 UNDER-LEVERAGED", "#B8860B"
         
         m_status, m_color = get_stat_ui(rev_multiplier, "m")
