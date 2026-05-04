@@ -912,31 +912,37 @@ elif page == "Master Audit Report":
 
         rev_multiplier = (actual_ggr + total_brand_val) / total_ad_spend if total_ad_spend > 0 else 0
 
-        # --- 2. EXECUTIVE SUMMARY & MoM PERFORMANCE (WITH FULL YTD CAPTION) ---
+        # --- 2. EXECUTIVE SUMMARY & MoM PERFORMANCE (v15.7 - KeyError Fix) ---
         st.write("### 📊 Executive Summary & Monthly Performance")
         
-        # Group data by Month-Year to show individual month results
+        # Group data by Month-Year for the table
         df_final['month_year'] = df_final['entry_date'].dt.to_period('M')
         months = sorted(df_final['month_year'].unique())
         
-        # Calculate YTD Totals for the current year (2026)
+        # --- CALCULATE YTD WITH ENGINE SCORES ---
         current_year = 2026
-        df_ytd = df_audit_raw[df_audit_raw['entry_date'].dt.year == current_year]
+        df_ytd_raw = df_audit_raw[df_audit_raw['entry_date'].dt.year == current_year].copy()
         
-        ytd_traffic = df_ytd['actual_traffic'].sum()
-        ytd_rev = df_ytd['actual_coin_in'].sum()
-        ytd_mems = df_ytd['new_members'].sum()
-        
-        # Calculate YTD Digital Lift and % Contribution
-        ytd_digital_lift = df_ytd['residual_lift'].sum()
-        ytd_digital_pct = (ytd_digital_lift / ytd_traffic * 100) if ytd_traffic > 0 else 0
+        if not df_ytd_raw.empty:
+            # We must run the engine on YTD data to generate the 'residual_lift' column
+            m_ytd = get_forensic_metrics(df_ytd_raw.to_dict(orient='records'), c)
+            df_ytd_scored = m_ytd['df']
+            
+            ytd_traffic = df_ytd_scored['actual_traffic'].sum()
+            ytd_rev = df_ytd_scored['actual_coin_in'].sum()
+            ytd_mems = df_ytd_scored['new_members'].sum()
+            
+            # Now 'residual_lift' exists in the scored dataframe
+            ytd_digital_lift = df_ytd_scored['residual_lift'].sum()
+            ytd_digital_pct = (ytd_digital_lift / ytd_traffic * 100) if ytd_traffic > 0 else 0
+        else:
+            ytd_traffic, ytd_rev, ytd_mems, ytd_digital_lift, ytd_digital_pct = 0, 0, 0, 0, 0
         
         summary_list = []
         
         for i, month in enumerate(months):
             df_m = df_final[df_final['month_year'] == month]
             
-            # Month Totals
             m_traffic = df_m['actual_traffic'].sum()
             m_rev = df_m['actual_coin_in'].sum()
             m_digital = df_m['residual_lift'].sum()
@@ -973,7 +979,7 @@ elif page == "Master Audit Report":
         df_summary_table = pd.DataFrame(summary_list)
         st.table(df_summary_table)
         
-        # --- DYNAMIC YTD CAPTION (Includes Digital Lift & %) ---
+        # --- DYNAMIC YTD CAPTION ---
         ytd_perf = f"**2026 Year-to-Date Totals:** {ytd_traffic:,.0f} Guests | ${ytd_rev:,.0f} Revenue | {ytd_mems:,.0f} New Members."
         ytd_mkt = f"**YTD Digital Impact:** {ytd_digital_lift:,.0f} Guests ({ytd_digital_pct:.1f}% of total property volume)."
         
