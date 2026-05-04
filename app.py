@@ -827,7 +827,7 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for Strategic Interpretation.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v14.2)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (EXECUTIVE EDITION v15)
 # =================================================================
 elif page == "Master Audit Report":
     st.markdown("""
@@ -858,7 +858,7 @@ elif page == "Master Audit Report":
             value=(min_audit, max_audit),
             min_value=min_audit,
             max_value=max_audit,
-            key="master_audit_v13_yield"
+            key="master_audit_v15_yield"
         )
 
     if isinstance(audit_range, tuple) and len(audit_range) == 2:
@@ -877,23 +877,24 @@ elif page == "Master Audit Report":
         num_days = len(df_final)
         LTV_VAL = 1900.00
 
-        # 3. FINANCIAL & LOYALTY INTEGRITY
+        # 3. FINANCIAL & LOYALTY INTEGRITY (REVENUE ADDED)
         st.write("### 💰 Financial & Loyalty Integrity")
         k1, k2, k3, k4, k5 = st.columns(5)
         
         t_traffic = df_final['actual_traffic'].sum()
+        t_actual_rev = df_final['actual_coin_in'].sum() # ACTUAL REVENUE FROM LEDGER
         avg_coin = float(c.get('Avg_Coin_In', 112.50))
         hold_pct = float(c.get('Hold_Pct', 10.0)) / 100
-        t_rev = t_traffic * avg_coin
-        actual_ggr = t_rev * hold_pct
+        t_rev_est = t_traffic * avg_coin
+        actual_ggr = t_actual_rev * hold_pct
         t_mems = df_final['new_members'].sum()
         conv_rate = (t_mems / t_traffic * 100) if t_traffic > 0 else 0
 
-        k1.metric("Total Traffic", f"{t_traffic:,}", help="Total verified guest entries for the period.")
-        k2.metric("Est. Total Revenue", f"${t_rev:,.0f}", help="Total estimated property spend based on average coin-in.")
-        k3.metric("Actual GGR (Hold)", f"${actual_ggr:,.0f}", help="Gross Gaming Revenue based on estimated hold percentage.")
-        k4.metric("New Unity Members", f"{t_mems:,}", help="Total new loyalty program signups verified in the ledger.")
-        k5.metric("Member Conv. %", f"{conv_rate:.2f}%", help="Percentage of total traffic converted into new Unity members.")
+        k1.metric("Total Traffic", f"{t_traffic:,}", help="Total verified guest entries.")
+        k2.metric("Actual Revenue", f"${t_actual_rev:,.0f}", help="Total coin-in recorded in the property ledger.")
+        k3.metric("Actual GGR (Hold)", f"${actual_ggr:,.0f}", help="Gross Gaming Revenue based on actual coin-in and hold %.")
+        k4.metric("New Unity Members", f"{t_mems:,}", help="Total new loyalty signups.")
+        k5.metric("Member Conv. %", f"{conv_rate:.2f}%", help="Traffic to Unity member conversion rate.")
 
         # 4. MARKETING EQUITY & FRICTION
         st.write("### 🧬 Marketing Equity & Friction")
@@ -906,15 +907,34 @@ elif page == "Master Audit Report":
         t_mkt = t_digital + t_inertia_total + t_gravity
         mkt_share = (t_mkt / t_traffic * 100) if t_traffic > 0 else 0
         
+        # Calculations for Table Summary
         t_snow_loss = (df_final['snow_cm'].sum() * float(c.get('Snow_cm', -45)))
         t_rain_loss = (df_final['rain_mm'].sum() * float(c.get('Rain_mm', -12)))
         friction_total = abs(t_snow_loss + t_rain_loss)
+        
+        # Digital $ Contribution (Lift * Avg Spend)
+        digital_dollar_impact = t_digital * avg_coin
 
-        k6.metric("Marketing Guests", f"{t_mkt:,.0f}", help="Total guests attributed to Brand, Digital, and Gravity layers.")
-        k7.metric("Marketing Share", f"{mkt_share:.1f}%", help="Percentage of total traffic driven by marketing efforts.")
-        k8.metric("Digital ROI Lift", f"{t_digital:,.0f}", help="Incremental guest flow driven by active social and ad campaigns.")
-        k9.metric("Weather Friction", f"-{friction_total:,.0f}", help="Estimated guest loss due to rain and snow events.")
-        k10.metric("AI Confidence", m.get('predictability', '92.5%'), help="The statistical variance accuracy of the AI projection model.")
+        k6.metric("Marketing Guests", f"{t_mkt:,.0f}")
+        k7.metric("Marketing Share", f"{mkt_share:.1f}%")
+        k8.metric("Digital ROI Lift", f"{t_digital:,.0f}")
+        k9.metric("Weather Friction", f"-{friction_total:,.0f}")
+        k10.metric("AI Confidence", m.get('predictability', '92.5%'))
+
+        # --- NEW SECTION: 4b. EXECUTIVE SUMMARY TABLE (COPY/PASTE READY) ---
+        st.write("### 📊 Executive Summary Table")
+        summary_data = {
+            "Metric Category": ["Total Traffic", "Digital ROI Lift", "Weather Penalty", "Actual Revenue (Coin-In)", "Digital $ Contribution", "Weather $ Penalty"],
+            "Value": [
+                f"{t_traffic:,.0f} Guests",
+                f"{t_digital:,.0f} Guests",
+                f"-{friction_total:,.0f} Guests",
+                f"${t_actual_rev:,.0f}",
+                f"${digital_dollar_impact:,.0f}",
+                f"-${(friction_total * avg_coin):,.0f}"
+            ]
+        }
+        st.table(pd.DataFrame(summary_data))
 
         # 5. BL-ROAS & EQUITY EFFICIENCY
         st.write("### 💎 BL-ROAS & Equity Efficiency")
