@@ -1094,7 +1094,7 @@ elif page == "Master Audit Report":
             st.download_button("📥 Export Audit to CSV", data=df_final.to_csv(index=False).encode('utf-8'), file_name=f"HR_Audit_{s_date}_{e_date}.csv", use_container_width=True)
             
 # =================================================================
-# 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS (v16)
+# 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS (v16.1)
 # =================================================================
 elif page == "AI Calibration":
     st.markdown("""
@@ -1119,36 +1119,55 @@ elif page == "AI Calibration":
     st.metric("Current Model Predictability", m_audit.get('predictability', '92.5%'))
 
     with st.form("master_calibration_form"):
-        # SECTION 1: FINANCIAL DNA (NEW: COIN-IN CALIBRATION)
+        # SECTION 1: FINANCIAL DNA & BENCHMARKS
         st.subheader("💰 Financial DNA & Benchmarks")
         st.write(f"**Current Ledger Performance:** Average Coin-In is `${live_avg_coin_in:.2f}` per guest.")
         
         b1, b2 = st.columns(2)
         with b1:
-            # The user can now choose to use the live data or a custom benchmark
             n_avg_coin = st.number_input(
                 "Target Avg Coin-In ($)", 
                 value=float(st.session_state.coeffs.get('Avg_Coin_In', live_avg_coin_in)),
-                help="Set this to the live average above to use actual performance, or a higher value for projections."
+                step=0.01,
+                help="Set this to the live average above to use actual performance."
             )
         with b2:
-            n_hold = st.slider("Property Hold %", 5.0, 15.0, float(st.session_state.coeffs.get('Hold_Pct', 10.0)))
+            n_hold = st.number_input(
+                "Property Hold %", 
+                value=float(st.session_state.coeffs.get('Hold_Pct', 10.0)),
+                step=0.1,
+                format="%.1f"
+            )
 
         st.divider()
 
-        # SECTION 2: DIGITAL & SOCIAL
+        # SECTION 2: DIGITAL & SOCIAL DRIVERS
         st.subheader("🌐 Digital & Social Drivers")
         d1, d2, d3 = st.columns(3)
         with d1:
-            n_clicks = st.slider("Click Weight", 0.0, 1.0, float(st.session_state.coeffs.get('Clicks', 0.05)))
+            n_clicks = st.number_input(
+                "Click Weight (Traffic per Click)", 
+                value=float(st.session_state.coeffs.get('Clicks', 0.05)),
+                step=0.01,
+                format="%.2f"
+            )
         with d2:
-            n_social = st.slider("Social Imp Weight", 0.0, 0.01, float(st.session_state.coeffs.get('Social_Imp', 0.0002)), format="%.4f")
+            n_social = st.number_input(
+                "Social Impression Weight", 
+                value=float(st.session_state.coeffs.get('Social_Imp', 0.0002)),
+                step=0.0001,
+                format="%.4f"
+            )
         with d3:
-            n_decay = st.slider("Adstock Retention %", 50, 100, int(st.session_state.coeffs.get('Ad_Decay', 85)))
+            n_decay = st.number_input(
+                "Adstock Retention %", 
+                value=int(st.session_state.coeffs.get('Ad_Decay', 85)),
+                step=1
+            )
 
         st.divider()
 
-        # SECTION 3: MASS MEDIA & OOH (The Inertia)
+        # SECTION 3: MASS MEDIA & OOH
         st.subheader("📡 Mass Media & Brand Inertia")
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -1158,14 +1177,30 @@ elif page == "AI Calibration":
         with c3:
             n_print = st.number_input("Print (Mag/News) Daily Lift", value=int(st.session_state.coeffs.get('Print_Lift', 75)))
 
-        # SECTION 4: FRICTION
         st.divider()
+
+        # SECTION 4: GRAVITY & PROMOTIONS
+        st.subheader("🚀 Gravity & Event Impact")
+        g1, g2 = st.columns(2)
+        with g1:
+            n_grav = st.number_input(
+                "Event Gravity (Multiplier)", 
+                value=float(st.session_state.coeffs.get('Event_Gravity', 0.25)),
+                step=0.01,
+                format="%.2f"
+            )
+        with g2:
+            n_promo = st.number_input("Standard Promo Lift", value=int(st.session_state.coeffs.get('Promo', 550)))
+
+        st.divider()
+
+        # SECTION 5: ENVIRONMENTAL FRICTION
         st.subheader("🌦️ Environmental Friction")
         w1, w2 = st.columns(2)
         with w1:
-            n_rain = st.slider("Rain Impact (per mm)", -100, 0, int(st.session_state.coeffs.get('Rain_mm', -12)))
+            n_rain = st.number_input("Rain Impact (Loss per mm)", value=int(st.session_state.coeffs.get('Rain_mm', -12)))
         with w2:
-            n_snow = st.slider("Snow Impact (per cm)", -500, 0, int(st.session_state.coeffs.get('Snow_cm', -45)))
+            n_snow = st.number_input("Snow Impact (Loss per cm)", value=int(st.session_state.coeffs.get('Snow_cm', -45)))
 
         if st.form_submit_button("🚀 Recalibrate Property Engine", use_container_width=True):
             updated_coeffs = {
@@ -1177,20 +1212,29 @@ elif page == "AI Calibration":
                 "Ad_Decay": int(n_decay),
                 "Broadcast_Weight": float(n_broad),
                 "OOH_Weight": float(n_ooh),
+                "OOH_Count": 1 if n_ooh > 0 else 0,
                 "Print_Lift": float(n_print),
+                "Event_Gravity": float(n_grav),
+                "Promo": float(n_promo),
                 "Rain_mm": float(n_rain),
-                "Snow_cm": float(n_snow)
+                "Snow_cm": float(n_snow),
+                "Static_Weight": float(n_ooh),
+                "Static_Count": 1 if n_ooh > 0 else 0
             }
             
             st.session_state.coeffs.update(updated_coeffs)
             
             try:
+                # Push to Supabase - specifically targeting ID 1
                 supabase.table("coefficients").upsert(updated_coeffs).execute()
-                st.success(f"✅ Weights and Coin-In Benchmark Saved.")
+                st.success(f"✅ Weights and Benchmarks Hard-Saved to Database.")
                 st.cache_data.clear()
                 st.rerun()
             except Exception as e:
                 st.error(f"Sync Error: {e}")
+
+    with st.expander("🔍 View Active Sensitivity Manifest"):
+        st.json(st.session_state.coeffs)
 
 # =================================================================
 # 14. PAGE 6: AI STRATEGIC ANALYST (v16 - Direct Chronology)
