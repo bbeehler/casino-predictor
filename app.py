@@ -827,7 +827,7 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for Strategic Interpretation.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (v16.1 - Initialization Fix)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (v16.4 - Unified Fix)
 # =================================================================
 elif page == "Master Audit Report":
     st.markdown("""
@@ -853,7 +853,7 @@ elif page == "Master Audit Report":
 
     col_date, col_export = st.columns([2, 1])
     with col_date:
-        audit_range = st.date_input("Audit Window:", value=(min_audit, max_audit), key="master_audit_v16_yield")
+        audit_range = st.date_input("Audit Window:", value=(min_audit, max_audit), key="master_audit_v16_final")
 
     if isinstance(audit_range, tuple) and len(audit_range) == 2:
         s_date, e_date = audit_range
@@ -870,35 +870,28 @@ elif page == "Master Audit Report":
         c = st.session_state.coeffs
         num_days = len(df_final)
         
-        # Benchmarks
+        # Benchmarks & Config
         LTV_VAL = 1900.00
         avg_coin = float(c.get('Avg_Coin_In', 112.50))
         hold_pct = float(c.get('Hold_Pct', 10.2)) / 100
 
-        # GLOBAL TOTALS (Pre-calculating for both the Table and the Metric Cards)
+        # Global Totals Calculation
         t_traffic = df_final['actual_traffic'].sum()
         t_actual_rev = df_final['actual_coin_in'].sum()
         actual_ggr = t_actual_rev * hold_pct
-        
         t_digital = df_final['residual_lift'].sum()
         t_gravity = df_final['gravity_lift'].sum()
         t_inertia_total = m.get('total_inertia', 0) * num_days
         t_mkt = t_digital + t_inertia_total + t_gravity
-        
         t_mems = df_final['new_members'].sum()
-        
-        # This fixes your NameError:
         friction_total = abs((df_final['snow_cm'].sum() * float(c.get('Snow_cm', -45))) + (df_final['rain_mm'].sum() * float(c.get('Rain_mm', -12))))
         digital_dollar = t_digital * avg_coin
 
         # --- 2. DATE-AWARE ROI FETCH ---
         try:
-            roi_res = supabase.table("monthly_roi") \
-                .select("brand_value, calculated_bl_roas, ad_spend") \
+            roi_res = supabase.table("monthly_roi").select("brand_value, calculated_bl_roas, ad_spend") \
                 .filter("report_month", "gte", s_date.strftime('%Y-%m-%d')) \
-                .filter("report_month", "lte", e_date.strftime('%Y-%m-%d')) \
-                .execute()
-            
+                .filter("report_month", "lte", e_date.strftime('%Y-%m-%d')).execute()
             if roi_res.data:
                 roi_df = pd.DataFrame(roi_res.data)
                 avg_bl_roas = roi_df['calculated_bl_roas'].mean()
@@ -911,73 +904,119 @@ elif page == "Master Audit Report":
 
         rev_multiplier = (actual_ggr + total_brand_val) / total_ad_spend if total_ad_spend > 0 else 0
 
-        # --- 3. EXECUTIVE SUMMARY & MoM PERFORMANCE ---
+        # --- 3. EXECUTIVE SUMMARY & MoM PERFORMANCE TABLE ---
         st.write("### 📊 Executive Summary & Monthly Performance")
-        # [The rest of your summary table and metric card code follows...]
+        df_final['month_year'] = df_final['entry_date'].dt.to_period('M')
+        months = sorted(df_final['month_year'].unique())
+        
+        summary_list = []
+        raw_mom_values = {"traffic": [], "revenue": [], "digital": []}
+        
+        for i, month in enumerate(months):
+            df_m = df_final[df_final['month_year'] == month]
+            m_traffic = df_m['actual_traffic'].sum()
+            m_rev = df_m['actual_coin_in'].sum()
+            m_digital = df_m['residual_lift'].sum()
+            m_fric = abs((df_m['snow_cm'].sum() * float(c.get('Snow_cm', -45))) + (df_m['rain_mm'].sum() * float(c.get('Rain_mm', -12))))
+            
+            mom_t, mom_r, mom_d = "---", "---", "---"
+            if i > 0:
+                p_m = months[i-1]
+                df_p = df_final[df_final['month_year'] == p_m]
+                p_t, p_r, p_d = df_p['actual_traffic'].sum(), df_p['actual_coin_in'].sum(), df_p['residual_lift'].sum()
+                if p_t > 0: 
+                    chg = ((m_traffic - p_t)/p_t)*100
+                    raw_mom_values["traffic"].append(chg)
+                    mom_t = f"{chg:+.1f}%"
+                if p_r > 0:
+                    chg = ((m_rev - p_r)/p_r)*100
+                    raw_mom_values["revenue"].append(chg)
+                    mom_r = f"{chg:+.1f}%"
+                if p_d > 0:
+                    chg = ((m_digital - p_d)/p_d)*100
+                    raw_mom_values["digital"].append(chg)
+                    mom_d = f"{chg:+.1f}%"
 
-        # --- 3. FINANCIAL & LOYALTY INTEGRITY ---
+            summary_list.append({
+                "Month": month.strftime('%B %Y'), "Traffic": m_traffic, "Traffic MoM": mom_t,
+                "Actual Revenue": m_rev, "Revenue MoM": mom_r, "Digital Lift": m_digital,
+                "Digital MoM": mom_d, "Digital $ Impact": m_digital * avg_coin, "Weather Penalty": -m_fric
+            })
+
+        df_summary_table = pd.DataFrame(summary_list)
+        
+        # Add Total Row
+        def get_avg_str(v_list): return f"{np.mean(v_list):+.1f}% Avg" if v_list else "---"
+        total_row = pd.Series({
+            "Month": "**TOTAL AUDIT WINDOW**", "Traffic": df_summary_table["Traffic"].sum(),
+            "Traffic MoM": get_avg_str(raw_mom_values["traffic"]), "Actual Revenue": df_summary_table["Actual Revenue"].sum(),
+            "Revenue MoM": get_avg_str(raw_mom_values["revenue"]), "Digital Lift": df_summary_table["Digital Lift"].sum(),
+            "Digital MoM": get_avg_str(raw_mom_values["digital"]), "Digital $ Impact": df_summary_table["Digital $ Impact"].sum(),
+            "Weather Penalty": df_summary_table["Weather Penalty"].sum()
+        })
+        df_summary_table = pd.concat([df_summary_table, total_row.to_frame().T], ignore_index=True)
+
+        # Formatting Table
+        fmt_map = {"Traffic": "{:,.0f}", "Actual Revenue": "${:,.0f}", "Digital Lift": "{:,.0f}", "Digital $ Impact": "${:,.0f}", "Weather Penalty": "{:,.0f}"}
+        for col, f_string in fmt_map.items():
+            df_summary_table[col] = df_summary_table[col].apply(lambda x: f_string.format(x) if isinstance(x, (int, float)) else x)
+        
+        st.table(df_summary_table)
+
+        # --- 4. YTD CAPTION ---
+        current_year = 2026
+        ytd_df_raw = df_audit_raw[df_audit_raw['entry_date'].dt.year == current_year].copy()
+        if not ytd_df_raw.empty:
+            m_ytd = get_forensic_metrics(ytd_df_raw.to_dict(orient='records'), c)
+            df_y = m_ytd['df']
+            y_traf, y_dig = df_y['actual_traffic'].sum(), df_y['residual_lift'].sum()
+            st.caption(f"**{current_year} YTD:** {y_traf:,.0f} Guests | ${df_y['actual_coin_in'].sum():,.0f} Revenue | {df_y['new_members'].sum():,.0f} Members.  \n**YTD Digital Impact:** {y_dig:,.0f} Guests ({(y_dig/y_traf*100 if y_traf > 0 else 0):.1f}% contribution).")
+
+        # --- 5. METRIC CARDS SECTIONS ---
         st.write("### 💰 Financial & Loyalty Integrity")
         k1, k2, k3, k4, k5 = st.columns(5)
-        conv_rate = (t_mems / t_traffic * 100) if t_traffic > 0 else 0
+        k1.metric("Total Traffic", f"{t_traffic:,}")
+        k2.metric("Actual Revenue", f"${t_actual_rev:,.0f}")
+        k3.metric("Actual GGR (Hold)", f"${actual_ggr:,.0f}")
+        k4.metric("New Unity Members", f"{t_mems:,}")
+        k5.metric("Member Conv. %", f"{(t_mems/t_traffic*100 if t_traffic > 0 else 0):.2f}%")
 
-        k1.metric("Total Traffic", f"{t_traffic:,}", help="Total verified guest entries.")
-        k2.metric("Actual Revenue", f"${t_actual_rev:,.0f}", help="Total coin-in recorded in the property ledger.")
-        k3.metric("Actual GGR (Hold)", f"${actual_ggr:,.0f}", help="Gross Gaming Revenue based on actual coin-in.")
-        k4.metric("New Unity Members", f"{t_mems:,}", help="Total new loyalty signups.")
-        k5.metric("Member Conv. %", f"{conv_rate:.2f}%", help="Conversion of traffic to Unity members.")
-
-        # --- 4. MARKETING EQUITY & FRICTION ---
         st.write("### 🧬 Marketing Equity & Friction")
         k6, k7, k8, k9, k10 = st.columns(5)
-        mkt_share = (t_mkt / t_traffic * 100) if t_traffic > 0 else 0
+        k6.metric("Marketing Guests", f"{t_mkt:,.0f}")
+        k7.metric("Marketing Share", f"{(t_mkt/t_traffic*100 if t_traffic > 0 else 0):.1f}%")
+        k8.metric("Digital ROI Lift", f"{t_digital:,.0f}")
+        k9.metric("Weather Friction", f"-{friction_total:,.0f}")
+        k10.metric("AI Confidence", m.get('predictability', '92.5%'))
 
-        k6.metric("Marketing Guests", f"{t_mkt:,.0f}", help="Guests driven by Brand, Digital, and Gravity layers.")
-        k7.metric("Marketing Share", f"{mkt_share:.1f}%", help="Percentage of traffic driven by marketing.")
-        k8.metric("Digital ROI Lift", f"{t_digital:,.0f}", help="Incremental guest flow from active campaigns.")
-        k9.metric("Weather Friction", f"-{friction_total:,.0f}", help="Estimated guest loss due to weather.")
-        k10.metric("AI Confidence", m.get('predictability', '92.5%'), help="Model accuracy rating.")
-
-        # --- 5. BL-ROAS & EQUITY EFFICIENCY (v16.2 - Integrated Strength Badges) ---
         st.write("### 💎 BL-ROAS & Equity Efficiency")
         
-        # Define Strength Logic inside the section
-        def get_status_ui(val, type="multiplier"):
-            if type == "multiplier":
+        # Strength UI Logic
+        def get_stat_ui(val, mode="m"):
+            if mode=="m": # Multiplier thresholds
                 if val >= 5.0: return "💎 ELITE", "#008000"
                 if val >= 3.0: return "✅ STRONG", "#2E8B57"
                 return "⚠️ MONITOR", "#B8860B"
-            else:
+            else: # Efficiency thresholds
                 if val >= 20.0: return "🚀 OPTIMIZED", "#008000"
                 if val >= 15.0: return "📈 STABLE", "#2E8B57"
                 return "🔍 UNDER-LEVERAGED", "#B8860B"
-
-        m_status, m_color = get_status_ui(rev_multiplier, "multiplier")
-        e_pct = (t_mkt / t_traffic * 100) if t_traffic > 0 else 0
-        e_status, e_color = get_status_ui(e_pct, "efficiency")
-
-        # Metric Cards
-        kb1, kb2, kb3, kb4, kb5 = st.columns(5)
         
-        kb1.metric("Avg. BL-ROAS", f"{avg_bl_roas:.2f}x", help="Brand Value generated per dollar spent.")
-        kb2.metric("Total Brand Value", f"${total_brand_val:,.0f}", help="Aggregated equity from digital and brand layers.")
-        kb3.metric("Revenue Multiplier", f"{rev_multiplier:.1f}x", help="GGR + Brand Value divided by Ad Spend.")
-        kb4.metric("Equity Efficiency", f"{e_pct:.1f}%", help="Marketing's share of total property traffic.")
-        kb5.metric("LTV Equity Growth", f"${(t_mems * LTV_VAL):,.0f}", help="Long-term value of new loyalty members.")
+        m_status, m_color = get_stat_ui(rev_multiplier, "m")
+        e_pct = (t_mkt/t_traffic*100 if t_traffic > 0 else 0)
+        e_status, e_color = get_stat_ui(e_pct, "e")
 
-        # Status Badge Row (Directly below metrics)
+        kb1, kb2, kb3, kb4, kb5 = st.columns(5)
+        kb1.metric("Avg. BL-ROAS", f"{avg_bl_roas:.2f}x")
+        kb2.metric("Total Brand Value", f"${total_brand_val:,.0f}")
+        kb3.metric("Rev Multiplier", f"{rev_multiplier:.1f}x")
+        kb4.metric("Equity Efficiency", f"{e_pct:.1f}%")
+        kb5.metric("LTV Equity Growth", f"${(t_mems*LTV_VAL):,.0f}")
+
+        # Integrated Status Badges
         sb1, sb2, sb3, sb4, sb5 = st.columns(5)
-        with sb3: # Under Multiplier
-            st.markdown(f"""
-                <div style="text-align:center; padding:5px; border-radius:5px; background-color:{m_color}; color:white; font-size:0.7rem; font-weight:bold; margin-top:-10px;">
-                    {m_status}
-                </div>
-                """, unsafe_allow_html=True)
-        with sb4: # Under Efficiency
-            st.markdown(f"""
-                <div style="text-align:center; padding:5px; border-radius:5px; background-color:{e_color}; color:white; font-size:0.7rem; font-weight:bold; margin-top:-10px;">
-                    {e_status}
-                </div>
-                """, unsafe_allow_html=True)
+        with sb3: st.markdown(f"<div style='text-align:center;padding:5px;border-radius:5px;background-color:{m_color};color:white;font-size:0.7rem;font-weight:bold;margin-top:-10px;'>{m_status}</div>", unsafe_allow_html=True)
+        with sb4: st.markdown(f"<div style='text-align:center;padding:5px;border-radius:5px;background-color:{e_color};color:white;font-size:0.7rem;font-weight:bold;margin-top:-10px;'>{e_status}</div>", unsafe_allow_html=True)
 
         # --- 6. SOCIAL PERFORMANCE & AWARENESS ---
         st.write("### 📱 Social Performance & Awareness")
