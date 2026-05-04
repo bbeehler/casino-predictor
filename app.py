@@ -912,36 +912,38 @@ elif page == "Master Audit Report":
 
         rev_multiplier = (actual_ggr + total_brand_val) / total_ad_spend if total_ad_spend > 0 else 0
 
-        # --- 2. EXECUTIVE SUMMARY & MoM PERFORMANCE (MONTHLY BREAKDOWN) ---
+        # --- 2. EXECUTIVE SUMMARY & MoM PERFORMANCE (WITH YTD CAPTION) ---
         st.write("### 📊 Executive Summary & Monthly Performance")
         
         # Group data by Month-Year to show individual month results
         df_final['month_year'] = df_final['entry_date'].dt.to_period('M')
         months = sorted(df_final['month_year'].unique())
         
+        # Calculate YTD Totals for the current year (2026)
+        current_year = 2026
+        df_ytd = df_audit_raw[df_audit_raw['entry_date'].dt.year == current_year]
+        ytd_traffic = df_ytd['actual_traffic'].sum()
+        ytd_rev = df_ytd['actual_coin_in'].sum()
+        ytd_mems = df_ytd['new_members'].sum()
+        
         summary_list = []
         
         for i, month in enumerate(months):
-            # Filter data for this specific month
             df_m = df_final[df_final['month_year'] == month]
             
-            # Calculate Month Totals
+            # Month Totals
             m_traffic = df_m['actual_traffic'].sum()
             m_rev = df_m['actual_coin_in'].sum()
             m_digital = df_m['residual_lift'].sum()
             m_friction = abs((df_m['snow_cm'].sum() * float(c.get('Snow_cm', -45))) + (df_m['rain_mm'].sum() * float(c.get('Rain_mm', -12))))
             m_digital_dollar = m_digital * avg_coin
             
-            # Initialize MoM placeholders
             mom_traffic, mom_rev, mom_digital = "---", "---", "---"
             
-            # Calculate MoM if this isn't the first month in the list
             if i > 0:
                 prev_month = months[i-1]
                 df_prev = df_final[df_final['month_year'] == prev_month]
-                p_traffic = df_prev['actual_traffic'].sum()
-                p_rev = df_prev['actual_coin_in'].sum()
-                p_digital = df_prev['residual_lift'].sum()
+                p_traffic, p_rev, p_digital = df_prev['actual_traffic'].sum(), df_prev['actual_coin_in'].sum(), df_prev['residual_lift'].sum()
                 
                 def get_change(curr, prev):
                     if prev == 0: return "+0.0%"
@@ -951,7 +953,6 @@ elif page == "Master Audit Report":
                 mom_rev = get_change(m_rev, p_rev)
                 mom_digital = get_change(m_digital, p_digital)
 
-            # Append rows for the table
             summary_list.append({
                 "Month": month.strftime('%B %Y'),
                 "Traffic": f"{m_traffic:,.0f}",
@@ -964,14 +965,16 @@ elif page == "Master Audit Report":
                 "Weather Penalty": f"-{m_friction:,.0f}"
             })
 
-        # Display as a clean table
         df_summary_table = pd.DataFrame(summary_list)
         st.table(df_summary_table)
         
+        # --- NEW DYNAMIC YTD CAPTION ---
+        ytd_statement = f"**2026 Year-to-Date Totals:** {ytd_traffic:,.0f} Guests | ${ytd_rev:,.0f} Revenue | {ytd_mems:,.0f} New Unity Members."
+        
         if len(months) > 1:
-            st.caption("MoM calculations are based on the months selected in the current audit window.")
+            st.caption(f"MoM calculations based on selected audit window. {ytd_statement}")
         else:
-            st.info("💡 Select a date range spanning multiple months to see Month-over-Month comparisons.")
+            st.caption(f"💡 Select multiple months for MoM comparisons. {ytd_statement}")
 
         # --- 3. FINANCIAL & LOYALTY INTEGRITY ---
         st.write("### 💰 Financial & Loyalty Integrity")
