@@ -912,7 +912,7 @@ elif page == "Master Audit Report":
 
         rev_multiplier = (actual_ggr + total_brand_val) / total_ad_spend if total_ad_spend > 0 else 0
 
-        # --- 2. EXECUTIVE SUMMARY & MoM PERFORMANCE (v15.7 - KeyError Fix) ---
+        # --- 2. EXECUTIVE SUMMARY & MoM PERFORMANCE (v15.8 - WITH TOTAL ROW) ---
         st.write("### 📊 Executive Summary & Monthly Performance")
         
         # Group data by Month-Year for the table
@@ -924,15 +924,11 @@ elif page == "Master Audit Report":
         df_ytd_raw = df_audit_raw[df_audit_raw['entry_date'].dt.year == current_year].copy()
         
         if not df_ytd_raw.empty:
-            # We must run the engine on YTD data to generate the 'residual_lift' column
             m_ytd = get_forensic_metrics(df_ytd_raw.to_dict(orient='records'), c)
             df_ytd_scored = m_ytd['df']
-            
             ytd_traffic = df_ytd_scored['actual_traffic'].sum()
             ytd_rev = df_ytd_scored['actual_coin_in'].sum()
             ytd_mems = df_ytd_scored['new_members'].sum()
-            
-            # Now 'residual_lift' exists in the scored dataframe
             ytd_digital_lift = df_ytd_scored['residual_lift'].sum()
             ytd_digital_pct = (ytd_digital_lift / ytd_traffic * 100) if ytd_traffic > 0 else 0
         else:
@@ -940,6 +936,7 @@ elif page == "Master Audit Report":
         
         summary_list = []
         
+        # Loop through months to build table rows
         for i, month in enumerate(months):
             df_m = df_final[df_final['month_year'] == month]
             
@@ -966,17 +963,47 @@ elif page == "Master Audit Report":
 
             summary_list.append({
                 "Month": month.strftime('%B %Y'),
-                "Traffic": f"{m_traffic:,.0f}",
+                "Traffic": m_traffic,
                 "Traffic MoM": mom_traffic,
-                "Actual Revenue": f"${m_rev:,.0f}",
+                "Actual Revenue": m_rev,
                 "Revenue MoM": mom_rev,
-                "Digital Lift": f"{m_digital:,.0f}",
+                "Digital Lift": m_digital,
                 "Digital MoM": mom_digital,
-                "Digital $ Impact": f"${m_digital_dollar:,.0f}",
-                "Weather Penalty": f"-{m_friction:,.0f}"
+                "Digital $ Impact": m_digital_dollar,
+                "Weather Penalty": -m_friction
             })
 
+        # --- CREATE DATAFRAME AND ADD TOTAL ROW ---
         df_summary_table = pd.DataFrame(summary_list)
+        
+        # Calculate Totals
+        total_row = pd.Series({
+            "Month": "**TOTAL AUDIT WINDOW**",
+            "Traffic": df_summary_table["Traffic"].sum(),
+            "Traffic MoM": "",
+            "Actual Revenue": df_summary_table["Actual Revenue"].sum(),
+            "Revenue MoM": "",
+            "Digital Lift": df_summary_table["Digital Lift"].sum(),
+            "Digital MoM": "",
+            "Digital $ Impact": df_summary_table["Digital $ Impact"].sum(),
+            "Weather Penalty": df_summary_table["Weather Penalty"].sum()
+        })
+        
+        df_summary_table = pd.concat([df_summary_table, total_row.to_frame().T], ignore_index=True)
+
+        # Formatting for Display
+        format_mapping = {
+            "Traffic": "{:,.0f}",
+            "Actual Revenue": "${:,.0f}",
+            "Digital Lift": "{:,.0f}",
+            "Digital $ Impact": "${:,.0f}",
+            "Weather Penalty": "{:,.0f}"
+        }
+
+        # Apply formatting to numeric columns for display
+        for col, fmt in format_mapping.items():
+            df_summary_table[col] = df_summary_table[col].apply(lambda x: fmt.format(x) if isinstance(x, (int, float)) else x)
+
         st.table(df_summary_table)
         
         # --- DYNAMIC YTD CAPTION ---
