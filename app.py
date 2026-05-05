@@ -520,7 +520,7 @@ if page == "Executive Dashboard":
         
         col_h1, col_h2 = st.columns([2, 1])
         with col_h2:
-            g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
+            g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(3)]
             g_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in g_months[1:]]
             sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select")
 
