@@ -375,7 +375,7 @@ with st.sidebar:
             st.rerun()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v47 - Revenue Variance Fix)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v47.1 - Indentation & Sample Fix)
 # =================================================================
 if page == "Executive Dashboard":
     # 1. HEADER
@@ -472,7 +472,6 @@ if page == "Executive Dashboard":
 
         # --- 7. EXECUTIVE KPI GRID (v47 - Revenue Variance Fixed) ---
         st.write("### 🏛️ Property Vital Signs")
-        # Expanded to 5 columns to fit the Revenue Variance card
         k1, k2, k3, k4, k5 = st.columns(5)
         LTV_VAL, AVG_SPEND = 1900.00, 1100.31
 
@@ -490,17 +489,14 @@ if page == "Executive Dashboard":
             actual_signups = df_final['new_members'].sum()
             ledger_rev = df_final['actual_coin_in'].sum()
             
-            # Audited Revenue Impact (Estimated based on spend benchmarks + LTV)
             base_est_rev = (total_act * AVG_SPEND)
             act_impact_rev = base_est_rev + (actual_signups * LTV_VAL)
 
-            # Calculation for variance between Recorded Ledger Revenue and Impact Estimate
             if act_impact_rev > 0:
                 rev_diff_pct = ((ledger_rev - act_impact_rev) / act_impact_rev) * 100
             else:
                 rev_diff_pct = 0
 
-            # Calculation for Audited Accuracy
             if total_act > 0:
                 expected_sum = df_final['expected'].sum()
                 acc_val = (1 - abs(total_act - expected_sum) / total_act) * 100
@@ -515,81 +511,78 @@ if page == "Executive Dashboard":
             k5.metric("Audited Accuracy", accuracy_display)
 
         # --- 8. BRAND SENTIMENT PULSE (v17.2 - 50 Entry Sample) ---
-st.divider()
-st.write("### 🏛️ Executive Brand Sentiment Pulse")
+        st.divider()
+        st.write("### 🏛️ Executive Brand Sentiment Pulse")
 
-col_h1, col_h2 = st.columns([2, 1])
-with col_h2:
-    g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
-    g_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in g_months[1:]]
-    sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select")
+        col_h1, col_h2 = st.columns([2, 1])
+        with col_h2:
+            g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
+            g_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in g_months[1:]]
+            sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select")
 
-overall_score = 0.0
-try:
-    global_query = supabase.table("sentiment_history").select("sentiment_score")
-    if sel_period == "Current (Live)":
-        # UPDATED: Increased to 50 entries for property-wide pulse
-        g_res = global_query.order("timestamp", desc=True).limit(50).execute()
-    else:
-        sel_date = g_months[g_labels.index(sel_period)]
-        s_d = sel_date.strftime("%Y-%m-%d")
-        e_d = (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")
-        g_res = global_query.filter("timestamp", "gte", s_d).filter("timestamp", "lt", e_d).execute()
-    
-    if g_res.data:
-        overall_score = np.mean([d['sentiment_score'] for d in g_res.data])
-except:
-    pass
-
-st.metric(
-    label=f"Consolidated Property Pulse ({sel_period})", 
-    value=f"{overall_score:+.2f}",
-    delta="Positive Impact" if overall_score > 0.3 else "High Friction" if overall_score < -0.3 else "Neutral",
-    delta_color="normal" if abs(overall_score) > 0.3 else "off"
-)
-
-# 8c. Multi-Gauge Grid
-tags = ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"]
-cols = st.columns(len(tags))
-
-for i, tag in enumerate(tags):
-    with cols[i]:
-        tag_score = 0.0
+        overall_score = 0.0
         try:
-            tag_query = supabase.table("sentiment_history").select("sentiment_score").eq("asset", tag)
+            global_query = supabase.table("sentiment_history").select("sentiment_score")
             if sel_period == "Current (Live)":
-                # UPDATED: Increased to 50 entries for each individual gauge
-                t_res = tag_query.order("timestamp", desc=True).limit(50).execute()
+                g_res = global_query.order("timestamp", desc=True).limit(50).execute()
             else:
                 sel_date = g_months[g_labels.index(sel_period)]
                 s_d = sel_date.strftime("%Y-%m-%d")
                 e_d = (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")
-                t_res = tag_query.filter("timestamp", "gte", s_d).filter("timestamp", "lt", e_d).execute()
+                g_res = global_query.filter("timestamp", "gte", s_d).filter("timestamp", "lt", e_d).execute()
             
-            if t_res.data:
-                tag_score = np.mean([d['sentiment_score'] for d in t_res.data])
+            if g_res.data:
+                overall_score = np.mean([d['sentiment_score'] for d in g_res.data])
         except:
             pass
 
-        fig = go.Figure(go.Indicator(
-            mode = "gauge+number", 
-            value = tag_score,
-            number = {'font': {'size': 20}, 'valueformat': ".2f"},
-            gauge = {
-                'axis': {'range': [-1, 1], 'tickwidth': 1},
-                'bar': {'color': "#0047AB"},
-                'steps': [
-                    {'range': [-1, -0.3], 'color': "#FF4B4B"},
-                    {'range': [-0.3, 0.3], 'color': "#F0F2F6"},
-                    {'range': [0.3, 1], 'color': "#28A745"}
-                ],
-                'threshold': {'line': {'color': "black", 'width': 3}, 'value': tag_score}
-            }
-        ))
-        fig.update_layout(height=150, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig, use_container_width=True)
-        st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 14px;'>{tag}</p>", unsafe_allow_html=True)
+        st.metric(
+            label=f"Consolidated Property Pulse ({sel_period})", 
+            value=f"{overall_score:+.2f}",
+            delta="Positive Impact" if overall_score > 0.3 else "High Friction" if overall_score < -0.3 else "Neutral",
+            delta_color="normal" if abs(overall_score) > 0.3 else "off"
+        )
 
+        # 8c. Multi-Gauge Grid
+        tags = ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"]
+        gauge_cols = st.columns(len(tags))
+
+        for i, tag in enumerate(tags):
+            with gauge_cols[i]:
+                tag_score = 0.0
+                try:
+                    tag_query = supabase.table("sentiment_history").select("sentiment_score").eq("asset", tag)
+                    if sel_period == "Current (Live)":
+                        t_res = tag_query.order("timestamp", desc=True).limit(50).execute()
+                    else:
+                        sel_date = g_months[g_labels.index(sel_period)]
+                        s_d = sel_date.strftime("%Y-%m-%d")
+                        e_d = (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")
+                        t_res = tag_query.filter("timestamp", "gte", s_d).filter("timestamp", "lt", e_d).execute()
+                    
+                    if t_res.data:
+                        tag_score = np.mean([d['sentiment_score'] for d in t_res.data])
+                except:
+                    pass
+
+                fig = go.Figure(go.Indicator(
+                    mode = "gauge+number", 
+                    value = tag_score,
+                    number = {'font': {'size': 20}, 'valueformat': ".2f"},
+                    gauge = {
+                        'axis': {'range': [-1, 1], 'tickwidth': 1},
+                        'bar': {'color': "#0047AB"},
+                        'steps': [
+                            {'range': [-1, -0.3], 'color': "#FF4B4B"},
+                            {'range': [-0.3, 0.3], 'color': "#F0F2F6"},
+                            {'range': [0.3, 1], 'color': "#28A745"}
+                        ],
+                        'threshold': {'line': {'color': "black", 'width': 3}, 'value': tag_score}
+                    }
+                ))
+                fig.update_layout(height=150, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+                st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 14px;'>{tag}</p>", unsafe_allow_html=True)
         
 # =================================================================
 # 10. PAGE 2: DAILY LEDGER AUDIT (DYNAMIC PERFORMANCE v8.5)
