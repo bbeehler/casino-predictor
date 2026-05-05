@@ -1228,16 +1228,59 @@ elif page == "FloorCast AI Analyst":
         st.warning("Forensic Vault is empty.")
         st.stop()
 
-    # --- 14.1 ENTRY MODULES ---
+    # --- 14.1 ENTRY MODULES (Restored) ---
     col_input1, col_input2 = st.columns(2)
+
     with col_input1:
         with st.expander("📝 Manual Sentiment Entry", expanded=False):
-            # [Keep your existing manual entry form code here]
-            pass
+            st.write("Log a specific review or high-value comment.")
+            with st.form("manual_sentiment_form", clear_on_submit=True):
+                manual_tag = st.selectbox("Assign to Asset (Tag):", 
+                                       ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"],
+                                       key="manual_tag_select")
+                f_text = st.text_area("Review Text", placeholder="Type or paste a single review...")
+                
+                if st.form_submit_button("🛡️ Archive & AI Score"):
+                    if f_text:
+                        cat, icon, intens = archive_sentiment_entry(f_text, manual_tag, 0.0)
+                        st.success(f"**Archived to {manual_tag}!** {cat} {icon}")
+                        st.cache_data.clear()
+
     with col_input2:
+        from docx import Document
         with st.expander("📄 Intelligent Word Doc Upload", expanded=False):
-            # [Keep your existing word doc upload code here]
-            pass
+            st.write("Extracts reviews from text AND pasted tables.")
+            uploaded_doc = st.file_uploader("Select .docx file", type="docx", key="word_sent_upload")
+            bulk_tag = st.selectbox("Assign ALL to Asset (Tag):", 
+                                   ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"],
+                                   key="bulk_tag_select")
+            
+            if uploaded_doc and st.button("🚀 Parse & AI Score Bulk"):
+                doc = Document(uploaded_doc)
+                entries = []
+                # 1. PARSE TABLES
+                for table in doc.tables:
+                    for row in table.rows:
+                        row_text = " ".join([cell.text.strip() for cell in row.cells if cell.text.strip()])
+                        if len(row_text) > 10:
+                            entries.append({"user": "Table Entry", "text": row_text})
+                # 2. PARSE PARAGRAPHS
+                current_user = "Unknown User"
+                for para in doc.paragraphs:
+                    text = para.text.strip()
+                    if not text: continue
+                    if len(text) < 45 and not text.endswith(('.', '!', '?')):
+                        current_user = text
+                    else:
+                        entries.append({"user": current_user, "text": text})
+                
+                if entries:
+                    total_reviews = len(entries)
+                    for i, entry in enumerate(entries):
+                        full_audit_text = f"Source: {entry['user']} | Review: {entry['text']}"
+                        archive_sentiment_entry(full_audit_text, bulk_tag, 0.0)
+                    st.success(f"✅ Successfully archived {total_reviews} reviews!")
+                    st.cache_data.clear()
 
     # --- 14.2 MULTI-DATABASE AGGREGATION ---
     with st.status("🔗 Synchronizing All Property Databases...", expanded=False) as status:
