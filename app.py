@@ -590,6 +590,7 @@ for i, tag in enumerate(tags):
         st.plotly_chart(fig, use_container_width=True)
         st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 14px;'>{tag}</p>", unsafe_allow_html=True)
 
+        
 # =================================================================
 # 10. PAGE 2: DAILY LEDGER AUDIT (DYNAMIC PERFORMANCE v8.5)
 # =================================================================
