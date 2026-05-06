@@ -16,7 +16,7 @@ import uuid
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 # =================================================================
-# 1. DATABASE CONNECTION (CLEANED)
+# 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
 # =================================================================
 try:
     url = st.secrets["SUPABASE_URL"]
@@ -26,20 +26,35 @@ except Exception as e:
     st.error(f"Critical System Error: Connection secrets missing. {e}")
     st.stop()
 
+# --- NEW: SAAS IDENTITY LAYER ---
+if 'current_property_name' not in st.session_state:
+    st.session_state.current_property_name = "Hard Rock Ottawa"
+
+if 'current_property_id' not in st.session_state:
+    try:
+        # Fetch the UUID for the active property
+        prop_res = supabase.table("properties").select("id").eq("property_name", st.session_state.current_property_name).single().execute()
+        st.session_state.current_property_id = prop_res.data['id']
+    except:
+        st.session_state.current_property_id = None
+
 # =================================================================
-# 2. PERMANENT INITIALIZATION
+# 2. PERMANENT INITIALIZATION (SaaS Aware)
 # =================================================================
 if 'coeffs' not in st.session_state:
     try:
-        response = supabase.table("coefficients").select("*").eq("id", 1).execute()
+        # UPDATED: Filter by property_id instead of hardcoded ID 1
+        response = supabase.table("coefficients")\
+            .select("*")\
+            .eq("property_id", st.session_state.current_property_id)\
+            .execute()
         
         if response.data and len(response.data) > 0:
             st.session_state.coeffs = response.data[0]
-            st.session_state.coeffs['OOH_Count'] = st.session_state.coeffs.get('OOH_Count', 1) or 1
-            st.session_state.coeffs['Static_Count'] = st.session_state.coeffs.get('Static_Count', 1) or 1
         else:
+            # SaaS Default Coefficients for new properties
             st.session_state.coeffs = {
-                'id': 1,
+                'property_id': st.session_state.current_property_id,
                 'Promo': 500.0,
                 'Broadcast_Weight': 150.0,
                 'OOH_Weight': 100.0,
@@ -57,11 +72,12 @@ if 'coeffs' not in st.session_state:
                 'Digital_OOH_Weight': 25.0,
                 'Digital_OOH_Count': 5
             }
+            # Upsert ensures the new property gets its own specific coefficients row
             supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
             
     except Exception as e:
         st.error(f"Initialization Error: {e}")
-        st.session_state.coeffs = {'id': 1, 'Promo': 500.0, 'OOH_Weight': 100.0, 'OOH_Count': 1}
+        st.session_state.coeffs = {'Promo': 500.0, 'OOH_Weight': 100.0}
 
 # =================================================================
 # 3. GLOBAL PAGE CONFIG & EXECUTIVE THEME
@@ -210,9 +226,7 @@ def get_forensic_metrics(df_input, coeffs):
         "heartbeats": heartbeats
     }
 
-# =================================================================
-# 4.5 CLOUD SENTIMENT ENGINE (v3.0 - AI-Automated Scoring)
-# =================================================================
+# --- 4.5 CLOUD SENTIMENT ENGINE (v17.6 SaaS Update) ---
 def archive_sentiment_entry(raw_text, asset_name, manual_score=0.0):
     """
     Evaluates sentiment via Gemini if no manual score is provided, 
@@ -252,7 +266,8 @@ def archive_sentiment_entry(raw_text, asset_name, manual_score=0.0):
         "asset": asset_name,
         "sentiment_score": round(float(nlp_score), 2),
         "sentiment_category": category,
-        "intensity_level": intensity
+        "intensity_level": intensity,
+        "property_id": st.session_state.current_property_id  # <--- CRITICAL ADDITION
     }
 
     try:
@@ -285,20 +300,29 @@ if 'weather_data' not in st.session_state:
     st.session_state.weather_data = asyncio.run(fetch_weather())
 
 # =================================================================
-# 6. HYDRATION & RECOVERY
+# 6. HYDRATION & RECOVERY (SaaS Filtered)
 # =================================================================
 try:
-    c_res = supabase.table("coefficients").select("*").eq("id", 1).execute()
+    # UPDATED: Only pull data belonging to THIS property
+    c_res = supabase.table("coefficients")\
+        .select("*")\
+        .eq("property_id", st.session_state.current_property_id)\
+        .execute()
+    
     if c_res.data:
         st.session_state.coeffs = c_res.data[0]
     
-    l_res = supabase.table("ledger").select("*").execute()
+    l_res = supabase.table("ledger")\
+        .select("*")\
+        .eq("property_id", st.session_state.current_property_id)\
+        .execute()
     ledger_data = l_res.data if l_res.data else []
+    
 except Exception as e:
     ledger_data = []
 
 # =================================================================
-# 7. SIDEBAR NAVIGATION & AUTH
+# 7. SIDEBAR NAVIGATION, AUTH & SAAS GATEKEEPER (v18.5)
 # =================================================================
 st.markdown("""
     <style>
@@ -310,7 +334,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.sidebar.markdown("<h1 style='color:#0047AB; font-size: 28px; margin-bottom: 0;'>🎰 FloorCast AI</h1><p style='color:#888;'>Hotel & Casino Marketing</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<h1 style='color:#0047AB; font-size: 28px; margin-bottom: 0;'>🎰 FloorCast AI</h1><p style='color:#888;'>Global Casino Intelligence</p>", unsafe_allow_html=True)
 st.sidebar.divider()
 
 if 'authenticated' not in st.session_state:
@@ -329,60 +353,109 @@ if not st.session_state.authenticated:
             
             if submit:
                 try:
+                    # 1. Authenticate with Supabase Auth
                     res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
                     if res.user:
-                        st.session_state.authenticated = True
-                        st.session_state.user_email = res.user.email
-                        st.rerun() 
+                        # 2. SAAS MULTI-TENANT MAPPING: Link user to their property
+                        access_res = supabase.table("user_property_access")\
+                            .select("property_id, properties(property_name), user_role")\
+                            .eq("user_email", e_mail).single().execute()
+                        
+                        if access_res.data:
+                            st.session_state.authenticated = True
+                            st.session_state.user_email = e_mail
+                            st.session_state.user_role = access_res.data['user_role']
+                            st.session_state.current_property_id = access_res.data['property_id']
+                            st.session_state.current_property_name = access_res.data['properties']['property_name']
+                            st.rerun()
+                        else:
+                            st.error("Authentication successful, but no property assigned. Contact Global Admin.")
                     else:
                         st.error("Authentication failed.")
                 except Exception as e:
-                    st.error("Access Denied: Invalid credentials.")
+                    st.error("Access Denied: Invalid credentials or database link error.")
     st.stop() 
 
+# --- PORTFOLIO SWITCHER (For Global Admin Demos) ---
+# This allows you to switch properties on the fly for sales pitches
+if st.session_state.get('user_role') == "Admin":
+    with st.sidebar.expander("🏢 Global Portfolio Switcher", expanded=False):
+        try:
+            # Fetch all properties in the system
+            all_props = supabase.table("properties").select("*").execute()
+            if all_props.data:
+                prop_map = {p['property_name']: p['id'] for p in all_props.data}
+                selected_name = st.selectbox(
+                    "Active View:", 
+                    options=list(prop_map.keys()),
+                    index=list(prop_map.keys()).index(st.session_state.current_property_name)
+                )
+                
+                if selected_name != st.session_state.current_property_name:
+                    st.session_state.current_property_name = selected_name
+                    st.session_state.current_property_id = prop_map[selected_name]
+                    # Clear cache to force data reload for the new property
+                    st.cache_data.clear()
+                    st.rerun()
+        except:
+            st.sidebar.warning("Could not load portfolio list.") 
+
 # =================================================================
-# 8. EXECUTIVE NAVIGATION
+# 8. EXECUTIVE NAVIGATION (v18.6 SaaS Enabled)
 # =================================================================
 with st.sidebar:
+    # SaaS Branding: In the future, replace this URL with st.session_state.get('logo_url')
     st.image("https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png?h=171&iar=0&w=224&rev=914ac0eae6734be995b93d76ad2b1e8f", width=150)
-    st.title("Admin Command")
+    
+    st.title(f"{st.session_state.current_property_name}")
+    st.caption(f"User: {st.session_state.get('user_email', 'Internal')}")
     st.divider()
     
+    # 1. DYNAMIC NAV LIST
+    nav_options = [
+        "Executive Dashboard", 
+        "Daily Ledger Audit", 
+        "Attribution Analytics", 
+        "Master Audit Report", 
+        "AI Calibration",
+        "FloorCast AI Analyst",
+        "BL-ROAS Calculator"
+    ]
+
+    # 2. PROVISIONING GATE: Only show Admin Console to "Admin" role
+    if st.session_state.get('user_role') == "Admin":
+        nav_options.append("Global Admin Console")
+
     page = st.radio(
         "Intelligence Decks:",
-        [
-            "Executive Dashboard", 
-            "Daily Ledger Audit", 
-            "Attribution Analytics", 
-            "Master Audit Report", 
-            "AI Calibration",
-            "FloorCast AI Analyst",
-            "BL-ROAS Calculator"
-        ],
+        nav_options,
         index=0,
-        key="nav_list_v12"
+        key="nav_list_v18_6"
     )
     
     st.divider()
+    
+    # 3. LOGOUT & SESSION MANAGEMENT
     if st.button("🚪 Logout / Reset Session", use_container_width=True):
+        # We clear session state to ensure no property data leaks to the next user
         st.session_state.clear()
         st.rerun()
 
-    # Analyst thread reset (Hidden if not on Analyst page)
+    # Analyst thread reset (Only visible on Analyst page)
     if page == "FloorCast AI Analyst" and st.session_state.get('messages'):
         if st.button("🗑️ Reset Analyst Thread", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v47.1 - Indentation & Sample Fix)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v48.0 - SaaS Dynamic Assets)
 # =================================================================
 if page == "Executive Dashboard":
     # 1. HEADER
-    st.markdown("""
+    st.markdown(f"""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
-            <h2 style="color: #0047AB; margin: 0;">📈 Executive Performance Pulse</h2>
-            <p style="color: #444; margin: 0;">Strategic Demand Projection & Marketing Impact.</p>
+            <h2 style="color: #0047AB; margin: 0;">📈 Executive Performance Pulse: {st.session_state.current_property_name}</h2>
+            <p style="color: #444; margin: 0;">Strategic Demand Projection & Marketing Impact for this property.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -390,10 +463,10 @@ if page == "Executive Dashboard":
     current_weights = st.session_state.get('coeffs', {})
 
     if not ledger_data:
-        st.warning("Forensic Vault is empty. Please populate the Ledger.")
+        st.warning(f"Forensic Vault for {st.session_state.current_property_name} is empty. Please populate the Ledger.")
         st.stop()
 
-    # --- 2. PREPARE RAW DATA ---
+    # --- 2. PREPARE RAW DATA (Filtered via Section 6 Hydration) ---
     df_raw = pd.DataFrame(ledger_data)
     df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
     df_raw['dow'] = df_raw['entry_date'].dt.day_name()
@@ -470,13 +543,12 @@ if page == "Executive Dashboard":
         fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
         st.plotly_chart(fig_pulse, use_container_width=True)
 
-        # --- 7. EXECUTIVE KPI GRID (v47 - Revenue Variance Fixed) ---
+        # --- 7. EXECUTIVE KPI GRID ---
         st.write("### 🏛️ Property Vital Signs")
         k1, k2, k3, k4, k5 = st.columns(5)
         LTV_VAL, AVG_SPEND = 1900.00, 1100.31
 
         if start_p >= today:
-            # PROJECTION MODE
             proj_rev = (total_vol * AVG_SPEND) + ((total_vol * 0.05) * LTV_VAL)
             k1.metric("Projected Demand", f"{total_vol:,.0f} Guests")
             k2.metric("Target Signups", f"{(total_vol * 0.0170):,.0f}")
@@ -484,7 +556,6 @@ if page == "Executive Dashboard":
             k4.metric("Marketing Impact %", f"{mkt_impact_pct:.1f}%")
             k5.metric("Ledger Revenue", "$0.00")
         else:
-            # AUDIT MODE
             total_act = df_final['actual_traffic'].sum()
             actual_signups = df_final['new_members'].sum()
             ledger_rev = df_final['actual_coin_in'].sum()
@@ -510,7 +581,7 @@ if page == "Executive Dashboard":
             k4.metric("Ledger Revenue", f"${ledger_rev:,.0f}", delta=f"{rev_diff_pct:.1f}% Diff")
             k5.metric("Audited Accuracy", accuracy_display)
 
-        # --- 8. BRAND SENTIMENT PULSE (v17.2 - 50 Entry Sample) ---
+        # --- 8. BRAND SENTIMENT PULSE (SaaS Dynamic Assets) ---
         st.divider()
         st.write("### 🏛️ Executive Brand Sentiment Pulse")
 
@@ -522,7 +593,8 @@ if page == "Executive Dashboard":
 
         overall_score = 0.0
         try:
-            global_query = supabase.table("sentiment_history").select("sentiment_score")
+            # SaaS: Filter Global Score by Property
+            global_query = supabase.table("sentiment_history").select("sentiment_score").eq("property_id", st.session_state.current_property_id)
             if sel_period == "Current (Live)":
                 g_res = global_query.order("timestamp", desc=True).limit(50).execute()
             else:
@@ -543,15 +615,24 @@ if page == "Executive Dashboard":
             delta_color="normal" if abs(overall_score) > 0.3 else "off"
         )
 
-        # 8c. Multi-Gauge Grid
-        tags = ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"]
+        # 8c. DYNAMIC ASSET GRID (SaaS Step 5 Implementation)
+        try:
+            asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
+            tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall Property"]
+        except:
+            tags = ["Overall Property"]
+
         gauge_cols = st.columns(len(tags))
 
         for i, tag in enumerate(tags):
             with gauge_cols[i]:
                 tag_score = 0.0
                 try:
-                    tag_query = supabase.table("sentiment_history").select("sentiment_score").eq("asset", tag)
+                    # SaaS: Filter each asset's score by Property and Tag
+                    tag_query = supabase.table("sentiment_history").select("sentiment_score")\
+                        .eq("property_id", st.session_state.current_property_id)\
+                        .eq("asset", tag)
+                    
                     if sel_period == "Current (Live)":
                         t_res = tag_query.order("timestamp", desc=True).limit(50).execute()
                     else:
@@ -585,25 +666,26 @@ if page == "Executive Dashboard":
                 st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 14px;'>{tag}</p>", unsafe_allow_html=True)
         
 # =================================================================
-# 10. PAGE 2: DAILY LEDGER AUDIT (DYNAMIC PERFORMANCE v8.5)
+# 10. PAGE 2: DAILY LEDGER AUDIT (SAAS MULTI-TENANT v9.0)
 # =================================================================
 elif page == "Daily Ledger Audit":
     # 1. HEADER
-    st.markdown("""
+    st.markdown(f"""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
-            <h2 style="color: #0047AB; margin: 0;">📈 Daily Ledger Audit</h2>
-            <p style="color: #444; margin: 0;">Enter daily results or see past performance.</p>
+            <h2 style="color: #0047AB; margin: 0;">📈 Daily Ledger Audit: {st.session_state.current_property_name}</h2>
+            <p style="color: #444; margin: 0;">Enter daily results or see past performance for this property.</p>
         </div>
     """, unsafe_allow_html=True)
     
-    # --- 2. THE DATA ENGINE ---
+    # --- 2. THE DATA ENGINE (Filtered by Property) ---
     if not ledger_data:
         df_ledger = pd.DataFrame(columns=[
             'entry_date', 'actual_traffic', 'new_members', 'actual_coin_in', 
             'active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 
-            'rain_mm', 'snow_cm'
+            'rain_mm', 'snow_cm', 'property_id'
         ])
     else:
+        # DATA IS ALREADY FILTERED IN SECTION 6 (HYDRATION)
         df_ledger = pd.DataFrame(ledger_data)
         df_ledger['entry_date'] = pd.to_datetime(df_ledger['entry_date']).dt.date
         
@@ -616,7 +698,7 @@ elif page == "Daily Ledger Audit":
         df_ledger['active_promo'] = df_ledger['active_promo'].astype(str).replace(['nan', 'None', '0', '0.0'], '')
         df_ledger = df_ledger.sort_values('entry_date', ascending=False)
 
-    # --- 3. RAPID ENTRY FORM ---
+    # --- 3. RAPID ENTRY FORM (Tagged with Property ID) ---
     with st.expander("➕ Log New Daily Actuals", expanded=False):
         with st.form("rapid_entry_form", clear_on_submit=True):
             f1, f2, f3 = st.columns(3)
@@ -645,56 +727,48 @@ elif page == "Daily Ledger Audit":
                     "ad_clicks": int(e_clicks),
                     "ad_impressions": int(e_imps),
                     "rain_mm": float(e_rain),
-                    "snow_cm": 0.0
+                    "snow_cm": 0.0,
+                    "property_id": st.session_state.current_property_id  # <--- SAAS TAG
                 }
                 try:
                     supabase.table("ledger").upsert(new_row).execute()
-                    st.success(f"✅ Successfully logged: {e_date}")
+                    st.success(f"✅ Successfully logged: {e_date} for {st.session_state.current_property_name}")
                     st.cache_data.clear()
                     st.rerun()
                 except Exception as e:
                     st.error(f"Database Error: {e}")
 
-    # --- 4. HISTORICAL VIEW SLIDER (Now at the top to drive the Scoreboard) ---
+    # --- 4. HISTORICAL VIEW SLIDER ---
     st.write("### 📂 Performance Audit Range")
     view_limit = st.slider("Select Audit Depth (Days):", 7, 100, 30, key="audit_slider_top")
+    df_audit_period = df_ledger.head(view_limit).copy()
     
-    # Slice the dataframe based on the user's selection
-    df_audit_period = df_ledger.head(view_limit)
-    
-    # --- 5. DYNAMIC PERFORMANCE SCOREBOARD (Based on Slider) ---
+    # --- 5. DYNAMIC PERFORMANCE SCOREBOARD ---
     st.write(f"### 🎯 Performance Scoreboard: Last {view_limit} Days")
     
     if not df_audit_period.empty:
-        # Calculate totals for the selected historical window
         total_period_traffic = df_audit_period['actual_traffic'].sum()
         total_period_signups = df_audit_period['new_members'].sum()
-        
-        # Benchmarks: $1,279.33 avg spend and $1,900 LTV
         total_potential = (total_period_traffic * 1100.31) + (total_period_signups * 1900.00)
-        
-        # Calculate averages per day for the Delta comparison
         avg_traffic = total_period_traffic / len(df_audit_period)
         
         m1, m2, m3 = st.columns(3)
-        m1.metric("Total Period Traffic", f"{total_period_traffic:,.0f}", 
-                  delta=f"{avg_traffic:,.0f} avg/day")
-        
-        m2.metric("Total New Members", f"{total_period_signups:,.0f}", 
-                  delta=f"{total_period_signups / len(df_audit_period):,.1f} avg/day")
-                  
-        m3.metric("Audited Potential", f"${total_potential:,.2f}", 
-                  help="Aggregated Revenue Potential for the selected period.")
+        m1.metric("Total Period Traffic", f"{total_period_traffic:,.0f}", delta=f"{avg_traffic:,.0f} avg/day")
+        m2.metric("Total New Members", f"{total_period_signups:,.0f}", delta=f"{total_period_signups / len(df_audit_period):,.1f} avg/day")
+        m3.metric("Audited Potential", f"${total_potential:,.2f}")
     else:
         st.info("No data available for the selected range.")
 
     st.divider()
 
-    # --- 6. THE HISTORICAL EDITABLE LEDGER ---
+    # --- 6. THE HISTORICAL EDITABLE LEDGER (Bulk Sync Fix) ---
     st.write("### 📂 Bulk Audit & Corrections")
     with st.form("bulk_ledger_sync"):
+        # We don't want the user editing property_id manually, so we hide it from view
+        display_df = df_audit_period.drop(columns=['property_id']) if 'property_id' in df_audit_period.columns else df_audit_period
+        
         edited_ledger = st.data_editor(
-            df_audit_period, # Driven by the same slider
+            display_df, 
             column_config={
                 "entry_date": st.column_config.DateColumn("Date", required=True),
                 "actual_traffic": st.column_config.NumberColumn("Actual Traffic", format="%d"),
@@ -706,16 +780,20 @@ elif page == "Daily Ledger Audit":
             hide_index=True,
             use_container_width=True,
             num_rows="dynamic",
-            key="property_ledger_v8_5"
+            key="property_ledger_v9_0"
         )
         
         if st.form_submit_button("💾 Sync Table Updates", use_container_width=True):
             try:
                 df_sync = edited_ledger.copy()
                 df_sync['entry_date'] = df_sync['entry_date'].astype(str)
+                # CRITICAL: Re-attach the property_id to every row before syncing back
+                df_sync['property_id'] = st.session_state.current_property_id
+                
                 sync_payload = df_sync.fillna(0).to_dict(orient='records')
                 supabase.table("ledger").upsert(sync_payload).execute()
-                st.success("✅ Bulk updates synced successfully.")
+                
+                st.success(f"✅ Bulk updates synced for {st.session_state.current_property_name}.")
                 st.cache_data.clear()
                 st.rerun()
             except Exception as e:
@@ -1067,29 +1145,29 @@ elif page == "Master Audit Report":
             st.download_button("📥 Export Audit to CSV", data=df_final.to_csv(index=False).encode('utf-8'), file_name=f"HR_Audit_{s_date}_{e_date}.csv", use_container_width=True)
             
 # =================================================================
-# 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS (v16.1)
+# 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS (v18.0 SaaS Multi-Tenant)
 # =================================================================
 elif page == "AI Calibration":
-    st.markdown("""
+    st.markdown(f"""
         <div style="background-color:#F8F9FA;padding:20px;border-radius:12px;border-left:6px solid #FFCC00;margin-bottom:20px;">
-            <h2 style="color:#343a40;margin:0;">⚙️ Engine Weight Calibration</h2>
-            <p style="color:#666;margin:0;">Calibrate the "Why" behind the traffic and the "Value" behind the guest.</p>
+            <h2 style="color:#343a40;margin:0;">⚙️ Engine Weight Calibration: {st.session_state.current_property_name}</h2>
+            <p style="color:#666;margin:0;">Calibrate the unique 'DNA' for this specific property location.</p>
         </div>
     """, unsafe_allow_html=True)
 
     # --- LIVE LEDGER FINANCIAL CALCULATION ---
+    # ledger_data is already filtered by property_id in the Section 6 hydration
     df_ledger = pd.DataFrame(ledger_data)
     if not df_ledger.empty and 'actual_coin_in' in df_ledger.columns:
         total_rev = pd.to_numeric(df_ledger['actual_coin_in']).sum()
         total_traf = pd.to_numeric(df_ledger['actual_traffic']).sum()
-        # Calculate the actual ledger average
         live_avg_coin_in = (total_rev / total_traf) if total_traf > 0 else 112.50
     else:
         live_avg_coin_in = 112.50
 
     # Current Model Health Check
     m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
-    st.metric("Current Model Predictability", m_audit.get('predictability', '92.5%'))
+    st.metric(f"Model Predictability ({st.session_state.current_property_name})", m_audit.get('predictability', '92.5%'))
 
     with st.form("master_calibration_form"):
         # SECTION 1: FINANCIAL DNA & BENCHMARKS
@@ -1101,8 +1179,7 @@ elif page == "AI Calibration":
             n_avg_coin = st.number_input(
                 "Target Avg Coin-In ($)", 
                 value=float(st.session_state.coeffs.get('Avg_Coin_In', live_avg_coin_in)),
-                step=0.01,
-                help="Set this to the live average above to use actual performance."
+                step=0.01
             )
         with b2:
             n_hold = st.number_input(
@@ -1177,7 +1254,7 @@ elif page == "AI Calibration":
 
         if st.form_submit_button("🚀 Recalibrate Property Engine", use_container_width=True):
             updated_coeffs = {
-                "id": 1,
+                "property_id": st.session_state.current_property_id, # <--- SAAS TAG
                 "Avg_Coin_In": float(n_avg_coin),
                 "Hold_Pct": float(n_hold),
                 "Clicks": float(n_clicks),
@@ -1195,12 +1272,11 @@ elif page == "AI Calibration":
                 "Static_Count": 1 if n_ooh > 0 else 0
             }
             
-            st.session_state.coeffs.update(updated_coeffs)
-            
             try:
-                # Push to Supabase - specifically targeting ID 1
-                supabase.table("coefficients").upsert(updated_coeffs).execute()
-                st.success(f"✅ Weights and Benchmarks Hard-Saved to Database.")
+                # Use upsert with property_id as the unique constraint to keep settings isolated
+                supabase.table("coefficients").upsert(updated_coeffs, on_conflict="property_id").execute()
+                st.session_state.coeffs.update(updated_coeffs)
+                st.success(f"✅ Intelligence Weights hard-saved for {st.session_state.current_property_name}.")
                 st.cache_data.clear()
                 st.rerun()
             except Exception as e:
@@ -1210,12 +1286,12 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: AI STRATEGIC ANALYST (v17.6 - Gate Removed)
+# 14. PAGE 6: AI STRATEGIC ANALYST (v18.0 - SaaS Multi-Tenant)
 # =================================================================
 elif page == "FloorCast AI Analyst":
-    st.markdown("""
+    st.markdown(f"""
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
-            <h2 style="color: #0047AB; margin: 0;">🕵️ FloorCast Strategic AI Analyst</h2>
+            <h2 style="color: #0047AB; margin: 0;">🕵️ FloorCast Strategic AI Analyst: {st.session_state.current_property_name}</h2>
             <p style="color: #444; margin: 0;">Unified Intelligence: Correlating Ledger, Sentiment, ROI Audits, & Events.</p>
         </div>
     """, unsafe_allow_html=True)
@@ -1227,6 +1303,13 @@ elif page == "FloorCast AI Analyst":
     roi_csv = "No ROI records available."
     promo_csv = "No promotion data available."
 
+    # --- DYNAMIC ASSET FETCH (For Selection Boxes) ---
+    try:
+        asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
+        tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall Property"]
+    except:
+        tags = ["Overall Property"]
+
     # --- 14.1 ENTRY MODULES ---
     col_input1, col_input2 = st.columns(2)
 
@@ -1234,13 +1317,12 @@ elif page == "FloorCast AI Analyst":
         with st.expander("📝 Manual Sentiment Entry", expanded=True):
             st.write("Log a specific review or high-value comment.")
             with st.form("manual_sentiment_form", clear_on_submit=True):
-                manual_tag = st.selectbox("Assign to Asset (Tag):", 
-                                       ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"],
-                                       key="manual_tag_select")
+                manual_tag = st.selectbox("Assign to Asset (Tag):", tags, key="manual_tag_select")
                 f_text = st.text_area("Review Text", placeholder="Paste Google review here...")
                 
                 if st.form_submit_button("🛡️ Archive & AI Score"):
                     if f_text:
+                        # archive_sentiment_entry was updated in Step 3 to be SaaS aware
                         cat, icon, intens = archive_sentiment_entry(f_text, manual_tag, 0.0)
                         st.success(f"**Archived to {manual_tag}!**")
                         st.cache_data.clear()
@@ -1250,14 +1332,26 @@ elif page == "FloorCast AI Analyst":
         with st.expander("📄 Intelligent Word Doc Upload", expanded=False):
             st.write("Extracts reviews from text AND pasted tables.")
             uploaded_doc = st.file_uploader("Select .docx file", type="docx", key="word_sent_upload")
-            bulk_tag = st.selectbox("Assign ALL to Asset (Tag):", 
-                                   ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"],
-                                   key="bulk_tag_select")
+            bulk_tag = st.selectbox("Assign ALL to Asset (Tag):", tags, key="bulk_tag_select")
             
             if uploaded_doc and st.button("🚀 Parse & AI Score Bulk"):
                 doc = Document(uploaded_doc)
                 entries = []
-                # ... [Keep existing parsing logic here] ...
+                for table in doc.tables:
+                    for row in table.rows:
+                        row_text = " ".join([cell.text.strip() for cell in row.cells if cell.text.strip()])
+                        if len(row_text) > 10:
+                            entries.append({"user": "Table Entry", "text": row_text})
+                
+                current_user = "Unknown User"
+                for para in doc.paragraphs:
+                    text = para.text.strip()
+                    if not text: continue
+                    if len(text) < 45 and not text.endswith(('.', '!', '?')):
+                        current_user = text
+                    else:
+                        entries.append({"user": current_user, "text": text})
+                
                 if entries:
                     for entry in entries:
                         archive_sentiment_entry(f"Source: {entry['user']} | {entry['text']}", bulk_tag, 0.0)
@@ -1266,31 +1360,35 @@ elif page == "FloorCast AI Analyst":
 
     st.divider()
 
-    # --- 14.2 SILENT DATA AGGREGATION (Gate Removed) ---
-    with st.status("🔗 Synchronizing Property Intelligence...", expanded=False) as status:
-        # 1. LEDGER
+    # --- 14.2 SILENT DATA AGGREGATION (Filtered by property_id) ---
+    with st.status(f"🔗 Synchronizing {st.session_state.current_property_name} Intelligence...", expanded=False) as status:
+        # 1. LEDGER (Already filtered by Section 6 Hydration)
         if ledger:
             try:
                 m_audit = get_forensic_metrics(ledger, st.session_state.coeffs)
                 ledger_csv = m_audit['df'].to_csv(index=False)
             except: pass
 
-        # 2. SENTIMENT
+        # 2. SENTIMENT (Filtered by Property)
         try:
-            sent_res = supabase.table("sentiment_history").select("*").order("timestamp", desc=True).limit(100).execute()
+            sent_res = supabase.table("sentiment_history").select("*")\
+                .eq("property_id", st.session_state.current_property_id)\
+                .order("timestamp", desc=True).limit(100).execute()
             if sent_res.data: sent_csv = pd.DataFrame(sent_res.data).to_csv(index=False)
         except: pass
 
-        # 3. ROI & PROMOS (Try fetching silently)
+        # 3. ROI & PROMOS (Filtered by Property)
         try:
-            roi_res = supabase.table("monthly_roi").select("*").execute()
+            roi_res = supabase.table("monthly_roi").select("*")\
+                .eq("property_id", st.session_state.current_property_id).execute()
             if roi_res.data: roi_csv = pd.DataFrame(roi_res.data).to_csv(index=False)
             
-            promo_res = supabase.table("promotions").select("*").execute()
+            promo_res = supabase.table("promotions").select("*")\
+                .eq("property_id", st.session_state.current_property_id).execute()
             if promo_res.data: promo_csv = pd.DataFrame(promo_res.data).to_csv(index=False)
         except: pass
 
-        status.update(label="✅ Systems Synchronized", state="complete")
+        status.update(label="✅ All Property Nodes Synchronized", state="complete")
 
     # --- 14.3 THE CHAT INTERFACE ---
     if "messages" not in st.session_state:
@@ -1312,9 +1410,10 @@ elif page == "FloorCast AI Analyst":
             model = genai.GenerativeModel('gemini-2.5-flash') 
             
             with st.chat_message("assistant"):
-                with st.spinner("🕵️ Correlating data..."):
-                    dossier = f"LEDGER:\n{ledger_csv}\n\nSENTIMENT:\n{sent_csv}\n\nROI:\n{roi_csv}\n\nPROMOS:\n{promo_csv}"
-                    full_query = f"Context: Use this property data to answer: {prompt}\n\nDossier:\n{dossier}"
+                with st.spinner("🕵️ AI Analyst is correlating data points..."):
+                    # The Dossier now contains ONLY this property's information
+                    dossier = f"PROPERTY: {st.session_state.current_property_name}\n\nLEDGER:\n{ledger_csv}\n\nSENTIMENT:\n{sent_csv}\n\nROI:\n{roi_csv}\n\nPROMOS:\n{promo_csv}"
+                    full_query = f"Context: You are the lead consultant for {st.session_state.current_property_name}. Use this dossier to answer: {prompt}\n\nDossier:\n{dossier}"
                     res = model.generate_content(full_query)
                     st.markdown(res.text)
             
@@ -1464,6 +1563,91 @@ Enhanced Total Impact = ${curr['enhanced_revenue']:,.0f}"""
 
             st.write("### 📜 Audit History")
             st.dataframe(df_hist[['report_month', 'calculated_bl_roas', 'brand_value', 'enhanced_revenue']], use_container_width=True, hide_index=True)
+
+# =================================================================
+# 15. PAGE: GLOBAL ADMIN CONSOLE (SaaS Provisioning Factory)
+# =================================================================
+elif page == "Global Admin Console":
+    st.markdown("""
+        <div style="background-color: #0047AB; padding: 20px; border-radius: 12px; margin-bottom: 25px;">
+            <h2 style="color: white; margin: 0;">🌐 Global SaaS Provisioning</h2>
+            <p style="color: #E1E8F0; margin: 0;">Onboard new properties and manage executive access credentials.</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    tab1, tab2, tab3 = st.tabs(["🏢 Property Manager", "👤 User Provisioning", "🛠️ System Health"])
+
+    # --- TAB 1: PROPERTY MANAGER ---
+    with tab1:
+        st.subheader("Register a New Property Tenant")
+        with st.form("new_property_form"):
+            new_p_name = st.text_input("Property Name", placeholder="e.g., Caesars Palace Las Vegas")
+            new_p_region = st.selectbox("Region", ["North America", "EMEA", "APAC", "LATAM"])
+            
+            if st.form_submit_button("🏗️ Build Tenant Space", use_container_width=True):
+                if new_p_name:
+                    try:
+                        # 1. Create the Property Entry
+                        prop_data = {"property_name": new_p_name, "region": new_p_region}
+                        res = supabase.table("properties").insert(prop_data).execute()
+                        new_id = res.data[0]['id']
+                        
+                        # 2. SEED: Initialize default assets for the new property
+                        # This ensures the dashboard gauges work immediately
+                        default_assets = [{"property_id": new_id, "asset_name": a} for a in ["Overall Property", "Hotel", "Gaming Floor"]]
+                        supabase.table("property_assets").insert(default_assets).execute()
+                        
+                        # 3. SEED: Initialize default AI weights (Coefficients)
+                        # Prevents the "empty vault" error on first login
+                        seed_coeffs = {"property_id": new_id, "Promo": 500, "Ad_Decay": 85, "Clicks": 0.05}
+                        supabase.table("coefficients").insert(seed_coeffs).execute()
+
+                        st.success(f"🎉 Tenant '{new_p_name}' successfully provisioned with ID: {new_id}")
+                    except Exception as e:
+                        st.error(f"Provisioning Failure: {e}")
+
+    # --- TAB 2: USER PROVISIONING ---
+    with tab2:
+        st.subheader("Executive Account Creation")
+        # Fetch current properties to map the user
+        props = supabase.table("properties").select("id, property_name").execute()
+        prop_options = {p['property_name']: p['id'] for p in props.data} if props.data else {}
+
+        with st.form("new_user_provision_form"):
+            u_email = st.text_input("Corporate Email Address")
+            u_pass = st.text_input("Initial Temporary Password", type="password")
+            u_prop = st.selectbox("Assign to Property", options=list(prop_options.keys()))
+            u_role = st.selectbox("Authorization Level", ["Executive", "Manager", "Analyst", "Admin"])
+            
+            if st.form_submit_button("🔐 Create & Map Account", use_container_width=True):
+                try:
+                    # 1. Create the User in Supabase Auth (Handles the encryption/login)
+                    auth_res = supabase.auth.sign_up({"email": u_email, "password": u_pass})
+                    
+                    if auth_res.user:
+                        # 2. Map the User to the Property in our access table
+                        mapping = {
+                            "user_email": u_email,
+                            "property_id": prop_options[u_prop],
+                            "user_role": u_role
+                        }
+                        supabase.table("user_property_access").insert(mapping).execute()
+                        st.success(f"✅ Credentials active. {u_email} now has access to {u_prop}.")
+                except Exception as e:
+                    st.error(f"Error provisioning user: {e}")
+
+    # --- TAB 3: SYSTEM HEALTH ---
+    with tab3:
+        st.subheader("Global Tenant Statistics")
+        try:
+            p_count = len(supabase.table("properties").select("id").execute().data)
+            u_count = len(supabase.table("user_property_access").select("id").execute().data)
+            
+            col_a, col_b = st.columns(2)
+            col_a.metric("Total Properties", p_count)
+            col_b.metric("Active Global Users", u_count)
+        except:
+            st.info("Statistics unavailable during sync.")
 
 # =================================================================
 # 16. FOOTER
