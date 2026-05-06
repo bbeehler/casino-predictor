@@ -1210,7 +1210,7 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: AI STRATEGIC ANALYST (v17.3 - Table Name Fix)
+# 14. PAGE 6: AI STRATEGIC ANALYST (v17.4 - NameError Fix)
 # =================================================================
 elif page == "FloorCast AI Analyst":
     st.markdown("""
@@ -1220,6 +1220,9 @@ elif page == "FloorCast AI Analyst":
         </div>
     """, unsafe_allow_html=True)
     
+    # FIX: Explicitly fetch ledger from session state to avoid NameError
+    ledger = st.session_state.get('ledger', [])
+
     # --- 14.1 ENTRY MODULES ---
     col_input1, col_input2 = st.columns(2)
 
@@ -1275,12 +1278,11 @@ elif page == "FloorCast AI Analyst":
     st.divider()
 
     # --- 14.2 AI ANALYST GATING & AGGREGATION ---
-    # FIXED: Checking 'ledger' instead of 'ledger_data'
     if not ledger:
-        st.info("📊 **AI Correlation Mode:** The 'ledger' table is currently empty. Populate it to enable cross-database AI analysis.")
+        st.info("📊 **AI Correlation Mode:** The 'ledger' is currently empty. Populate the Ledger page to enable cross-database AI analysis.")
     else:
         with st.status("🔗 Synchronizing All Property Databases...", expanded=False) as status:
-            # 1. LEDGER DATA (Using the 'ledger' variable)
+            # 1. LEDGER DATA (Process with attribution engine)
             m_audit = get_forensic_metrics(ledger, st.session_state.coeffs)
             ledger_csv = m_audit['df'].to_csv(index=False)
 
