@@ -1433,36 +1433,32 @@ elif page == "BL-ROAS Calculator":
     # SAFETY: Prevent division by zero[cite: 1]
     avg_spend_actual = float(ledger_coin_in / ledger_traffic) if ledger_traffic > 0 else DEFAULT_AVG_SPEND
 
-    # --- 3. THE INPUT FORM ---
-    with st.form("roas_input_form"):
-        st.subheader(f"📊 {selected_label} Metrics")
-        
-        # Check for existing data in Supabase[cite: 1]
-        existing_res = supabase.table("monthly_roi").select("*").eq("report_month", str(selected_month)).execute()
-        existing = existing_res.data[0] if existing_res.data else {}
+    # 3. SEED: Initialize Master AI weights for the new tenant
+# This ensures every property starts with the Hard Rock Ottawa baseline
+seed_coeffs = {
+    "property_id": new_id, 
+    "Promo": 500.0, 
+    "Broadcast_Weight": 150.0,
+    "OOH_Weight": 100.0,
+    "OOH_Count": 1,
+    "Print_Lift": 75.0,
+    "PR_Weight": 1.2,
+    "Clicks": 0.05,
+    "Social_Imp": 0.0002,
+    "Ad_Decay": 85,
+    "Rain_mm": -12.0,
+    "Snow_cm": -45.0,
+    "Event_Gravity": 0.25,
+    "Static_Weight": 100.0,
+    "Static_Count": 1,
+    "Digital_OOH_Weight": 25.0,
+    "Digital_OOH_Count": 5,
+    "Avg_Coin_In": 112.50,
+    "Hold_Pct": 10.0
+}
 
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            utm_s = st.number_input("UTM Sessions", value=int(existing.get('utm_sessions', 0)))
-            org_s = st.number_input("Organic Sessions", value=int(existing.get('organic_sessions', 0)))
-            ad_spend = st.number_input("Total Ad Spend ($)", value=float(existing.get('ad_spend', 0.0)), step=100.0)
-        
-        with c2:
-            likes = st.number_input("Social Likes", value=int(existing.get('social_likes', 0)))
-            comments = st.number_input("Social Comments", value=int(existing.get('social_comments', 0)))
-            shares = st.number_input("Social Shares", value=int(existing.get('social_shares', 0)))
-            views = st.number_input("Post Views", value=int(existing.get('post_views', 0)))
-
-        with c3:
-            time_site = st.number_input("Time on Site Sessions", value=int(existing.get('site_time_sessions', 0)))
-            cta_clicks = st.number_input("Booking CTA Clicks", value=int(existing.get('booking_clicks', 0)))
-            reviews = st.number_input("Net Positive Reviews", value=int(existing.get('pos_reviews', 0)))
-            geo_lift = st.number_input("Incremental Geo Traffic", value=int(existing.get('geo_lift_traffic', 0)))
-
-        st.divider()
-        st.info(f"**Ledger Sync ({selected_label}):** Coin-In: ${ledger_coin_in:,.2f} | Traffic: {ledger_traffic:,} | Signups: {ledger_signups:,}")
-
-        submit = st.form_submit_button("🚀 Save & Calculate ROI")
+# Using UPSERT to prevent crashes if the property is partially created
+supabase.table("coefficients").upsert(seed_coeffs, on_conflict="property_id").execute()
 
     # --- 4. CALCULATION LOGIC (Streamlined - No Unused Columns) ---
     if submit:
