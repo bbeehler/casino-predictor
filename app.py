@@ -1388,146 +1388,7 @@ elif page == "FloorCast AI Analyst":
             st.error(f"AI Error: {e}")
 
 # =================================================================
-# 15. PAGE 7: BL-ROAS COMMAND CENTER (FINAL v23 - Zero-Proof Edition)
-# =================================================================
-elif page == "BL-ROAS Calculator":
-    st.markdown("""
-        <div style="background-color: #F8F9FA; padding: 20px; border-radius: 12px; border-left: 6px solid #28A745; margin-bottom: 25px;">
-            <h2 style="color: #28A745; margin: 0;">💰 BL-ROAS Command Center</h2>
-            <p style="color: #444; margin: 0;">Audit past performance or calculate current monthly ROI.</p>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # --- 0. GLOBAL PAGE BENCHMARKS ---
-    LTV_BENCHMARK = 1900.00 
-    DEFAULT_AVG_SPEND = 1100.31
-
-    # --- 1. MONTH SELECTION ---
-    today = datetime.date.today()
-    month_options = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
-    month_labels = [m.strftime("%B %Y") for m in month_options]
-
-    selected_label = st.selectbox("Select Audit Month:", month_labels)
-    selected_month = month_options[month_labels.index(selected_label)]
-
-    # --- 2. DYNAMIC LEDGER AGGREGATION[cite: 1] ---
-    df_roas = pd.DataFrame(ledger_data)
-    if not df_roas.empty:
-        df_roas['entry_date'] = pd.to_datetime(df_roas['entry_date'])
-        
-        m_mask = (df_roas['entry_date'].dt.month == selected_month.month) & \
-                 (df_roas['entry_date'].dt.year == selected_month.year)
-        selected_month_df = df_roas.loc[m_mask].copy()
-
-        if not selected_month_df.empty:
-            # Group by date and take the MAX value for each day to ensure full month coverage[cite: 1]
-            monthly_summary = selected_month_df.groupby(selected_month_df['entry_date'].dt.date).max()
-            ledger_traffic = int(monthly_summary['actual_traffic'].sum())
-            ledger_signups = int(monthly_summary['new_members'].sum())
-            ledger_coin_in = float(monthly_summary['actual_coin_in'].sum())
-        else:
-            ledger_traffic, ledger_signups, ledger_coin_in = 0, 0, 0.0
-    else:
-        ledger_traffic, ledger_signups, ledger_coin_in = 0, 0, 0.0
-
-    # SAFETY: Prevent division by zero[cite: 1]
-    avg_spend_actual = float(ledger_coin_in / ledger_traffic) if ledger_traffic > 0 else DEFAULT_AVG_SPEND
-
-    # 3. SEED: Initialize Master AI weights for the new tenant
-# This ensures every property starts with the Hard Rock Ottawa baseline
-seed_coeffs = {
-    "property_id": new_id, 
-    "Promo": 500.0, 
-    "Broadcast_Weight": 150.0,
-    "OOH_Weight": 100.0,
-    "OOH_Count": 1,
-    "Print_Lift": 75.0,
-    "PR_Weight": 1.2,
-    "Clicks": 0.05,
-    "Social_Imp": 0.0002,
-    "Ad_Decay": 85,
-    "Rain_mm": -12.0,
-    "Snow_cm": -45.0,
-    "Event_Gravity": 0.25,
-    "Static_Weight": 100.0,
-    "Static_Count": 1,
-    "Digital_OOH_Weight": 25.0,
-    "Digital_OOH_Count": 5,
-    "Avg_Coin_In": 112.50,
-    "Hold_Pct": 10.0
-}
-
-# Using UPSERT to prevent crashes if the property is partially created
-supabase.table("coefficients").upsert(seed_coeffs, on_conflict="property_id").execute()
-
-    # --- 4. CALCULATION LOGIC (Streamlined - No Unused Columns) ---
-    if submit:
-        # Business logic for Brand Value calculation
-        brand_value = (utm_s * 1.5) + (org_s * 0.5) + (likes * 0.1) + (shares * 0.5) + (geo_lift * 2.0)
-        bl_roas = brand_value / ad_spend if ad_spend > 0 else 0
-        
-        # We still use ledger_signups for the local calculation, but we don't save it to the DB
-        enhanced_rev = brand_value + ledger_coin_in + (ledger_signups * LTV_BENCHMARK)
-
-        # Removed 'ledger_signups' from this dictionary to stop the Sync Failure
-        roi_payload = {
-            "report_month": str(selected_month),
-            "utm_sessions": utm_s, 
-            "organic_sessions": org_s, 
-            "ad_spend": ad_spend,
-            "social_likes": likes, 
-            "social_comments": comments, 
-            "social_shares": shares, 
-            "post_views": views,
-            "site_time_sessions": time_site, 
-            "booking_clicks": cta_clicks, 
-            "pos_reviews": reviews, 
-            "geo_lift_traffic": geo_lift, 
-            "brand_value": brand_value, 
-            "calculated_bl_roas": bl_roas, 
-            "enhanced_revenue": enhanced_rev
-        }
-        
-        try:
-            # This will now succeed because all keys match existing Supabase columns
-            supabase.table("monthly_roi").upsert(roi_payload).execute()
-            st.success(f"✅ ROI for {selected_label} saved successfully!")
-            st.rerun() 
-        except Exception as e:
-            st.error(f"Sync Failure: {e}")
-
-    # --- 5. REPORT GENERATOR[cite: 1] ---
-    st.divider()
-    history_res = supabase.table("monthly_roi").select("*").order("report_month", desc=True).execute()
-    if history_res.data:
-        df_hist = pd.DataFrame(history_res.data)
-        curr_row = df_hist[df_hist['report_month'] == str(selected_month)]
-        
-        if not curr_row.empty:
-            curr = curr_row.iloc[0]
-            prop_potential = ledger_coin_in + (ledger_signups * LTV_BENCHMARK)
-            
-            report_text = f"""{selected_label} ROAS Results
-Brand Health Performance
-
-BL-ROAS = {curr['calculated_bl_roas']:.2f}x
-For every $1 spent in advertising, we generated ${curr['brand_value']:,.2f} in measurable brand value.
-
-🎯 Attributed Revenue Impact (Floor)
-• 10% Attribution: ${(prop_potential * 0.1):,.0f}
-• 20% Attribution: ${(prop_potential * 0.2):,.0f}
-• 30% Attribution: ${(prop_potential * 0.3):,.0f}
-
-Enhanced Total Impact = ${curr['enhanced_revenue']:,.0f}"""
-            
-            st.subheader("📄 SharePoint Ready Text")
-            st.text_area("Copy/Paste this into the monthly report:", value=report_text, height=250)
-
-            st.write("### 📜 Audit History")
-            st.dataframe(df_hist[['report_month', 'calculated_bl_roas', 'brand_value', 'enhanced_revenue']], use_container_width=True, hide_index=True)
-
-# =================================================================
-# 15. PAGE: GLOBAL ADMIN CONSOLE (v18.9 SaaS Factory)
+# 15. PAGE: GLOBAL ADMIN CONSOLE (v19.0 SaaS Factory)
 # =================================================================
 elif page == "Global Admin Console":
     st.markdown("""
@@ -1552,8 +1413,8 @@ elif page == "Global Admin Console":
                 else:
                     try:
                         # 1. Create the Property Entry
-                        prop_data = {"property_name": new_p_name, "region": new_p_region}
-                        res = supabase.table("properties").insert(prop_data).execute()
+                        p_entry = {"property_name": new_p_name, "region": new_p_region}
+                        res = supabase.table("properties").insert(p_entry).execute()
                         
                         if res.data:
                             new_id = res.data[0]['id']
@@ -1562,8 +1423,7 @@ elif page == "Global Admin Console":
                             default_assets = [{"property_id": new_id, "asset_name": a} for a in ["Overall Property", "Hotel", "Gaming Floor"]]
                             supabase.table("property_assets").insert(default_assets).execute()
                             
-                            # 3. SEED: Full AI weights (Ottawa Mirror)
-                            # NO 'id' field here to prevent 23505 Duplicate Key error
+                            # 3. SEED: Complete Hard Rock Ottawa Coefficient Mirror
                             seed_coeffs = {
                                 "property_id": new_id, 
                                 "Promo": 500.0, 
@@ -1585,7 +1445,7 @@ elif page == "Global Admin Console":
                                 "Avg_Coin_In": 112.50,
                                 "Hold_Pct": 10.0
                             }
-                            # UPSERT handles creation and prevents duplicate crashes
+                            # Using upsert with the unique constraint we built
                             supabase.table("coefficients").upsert(seed_coeffs, on_conflict="property_id").execute()
 
                             st.success(f"🎉 Property '{new_p_name}' successfully provisioned!")
@@ -1599,7 +1459,6 @@ elif page == "Global Admin Console":
     # --- TAB 2: USER PROVISIONING ---
     with tab2:
         st.subheader("Executive Account Creation")
-        # Fresh fetch of properties for the dropdown
         try:
             p_res = supabase.table("properties").select("id, property_name").execute()
             prop_options = {p['property_name']: p['id'] for p in p_res.data} if p_res.data else {}
@@ -1617,11 +1476,9 @@ elif page == "Global Admin Console":
                     st.warning("Valid email and password (min 6 chars) required.")
                 else:
                     try:
-                        # 1. Auth Creation
+                        # Create in Supabase Auth
                         auth_res = supabase.auth.sign_up({"email": u_email, "password": u_pass})
-                        
                         if auth_res.user:
-                            # 2. SaaS Mapping
                             mapping = {
                                 "user_email": u_email,
                                 "property_id": prop_options[u_prop],
@@ -1640,7 +1497,6 @@ elif page == "Global Admin Console":
         try:
             p_all = supabase.table("properties").select("id").execute()
             u_all = supabase.table("user_property_access").select("id").execute()
-            
             c1, c2 = st.columns(2)
             c1.metric("Active Properties", len(p_all.data) if p_all.data else 0)
             c2.metric("Total Authorized Users", len(u_all.data) if u_all.data else 0)
