@@ -1210,7 +1210,7 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: AI STRATEGIC ANALYST (v16 - Direct Chronology)
+# 14. PAGE 6: AI STRATEGIC ANALYST (v17.3 - Table Name Fix)
 # =================================================================
 elif page == "FloorCast AI Analyst":
     st.markdown("""
@@ -1220,21 +1220,17 @@ elif page == "FloorCast AI Analyst":
         </div>
     """, unsafe_allow_html=True)
     
-    if not ledger_data:
-        st.warning("Forensic Vault is empty.")
-        st.stop()
-
-    # --- 14.1 ENTRY MODULES (Restored) ---
+    # --- 14.1 ENTRY MODULES ---
     col_input1, col_input2 = st.columns(2)
 
     with col_input1:
-        with st.expander("📝 Manual Sentiment Entry", expanded=False):
+        with st.expander("📝 Manual Sentiment Entry", expanded=True):
             st.write("Log a specific review or high-value comment.")
             with st.form("manual_sentiment_form", clear_on_submit=True):
                 manual_tag = st.selectbox("Assign to Asset (Tag):", 
                                        ["Overall Property", "Hard Rock Hotel", "Hard Rock Cafe", "Council Oak", "Social Inbox"],
                                        key="manual_tag_select")
-                f_text = st.text_area("Review Text", placeholder="Type or paste a single review...")
+                f_text = st.text_area("Review Text", placeholder="Paste Google review here...")
                 
                 if st.form_submit_button("🛡️ Archive & AI Score"):
                     if f_text:
@@ -1254,13 +1250,12 @@ elif page == "FloorCast AI Analyst":
             if uploaded_doc and st.button("🚀 Parse & AI Score Bulk"):
                 doc = Document(uploaded_doc)
                 entries = []
-                # 1. PARSE TABLES
                 for table in doc.tables:
                     for row in table.rows:
                         row_text = " ".join([cell.text.strip() for cell in row.cells if cell.text.strip()])
                         if len(row_text) > 10:
                             entries.append({"user": "Table Entry", "text": row_text})
-                # 2. PARSE PARAGRAPHS
+                
                 current_user = "Unknown User"
                 for para in doc.paragraphs:
                     text = para.text.strip()
@@ -1271,39 +1266,43 @@ elif page == "FloorCast AI Analyst":
                         entries.append({"user": current_user, "text": text})
                 
                 if entries:
-                    total_reviews = len(entries)
-                    for i, entry in enumerate(entries):
+                    for entry in entries:
                         full_audit_text = f"Source: {entry['user']} | Review: {entry['text']}"
                         archive_sentiment_entry(full_audit_text, bulk_tag, 0.0)
-                    st.success(f"✅ Successfully archived {total_reviews} reviews!")
+                    st.success(f"✅ Successfully archived {len(entries)} reviews!")
                     st.cache_data.clear()
 
-    # --- 14.2 MULTI-DATABASE AGGREGATION ---
-    with st.status("🔗 Synchronizing All Property Databases...", expanded=False) as status:
-        # 1. LEDGER DATA (Process with attribution engine)
-        m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
-        ledger_csv = m_audit['df'].to_csv(index=False)
+    st.divider()
 
-        # 2. SENTIMENT DATA
-        try:
-            sent_res = supabase.table("sentiment_history").select("*").order("timestamp", desc=True).execute()
-            sent_csv = pd.DataFrame(sent_res.data).to_csv(index=False) if sent_res.data else "No sentiment."
-        except: sent_csv = "Error fetching sentiment."
+    # --- 14.2 AI ANALYST GATING & AGGREGATION ---
+    # FIXED: Checking 'ledger' instead of 'ledger_data'
+    if not ledger:
+        st.info("📊 **AI Correlation Mode:** The 'ledger' table is currently empty. Populate it to enable cross-database AI analysis.")
+    else:
+        with st.status("🔗 Synchronizing All Property Databases...", expanded=False) as status:
+            # 1. LEDGER DATA (Using the 'ledger' variable)
+            m_audit = get_forensic_metrics(ledger, st.session_state.coeffs)
+            ledger_csv = m_audit['df'].to_csv(index=False)
 
-        # 3. ROI DATA
-        try:
-            roi_res = supabase.table("monthly_roi").select("*").execute()
-            roi_csv = pd.DataFrame(roi_res.data).to_csv(index=False) if roi_res.data else "No ROI records."
-        except: roi_csv = "Error fetching ROI."
+            # 2. SENTIMENT DATA
+            try:
+                sent_res = supabase.table("sentiment_history").select("*").order("timestamp", desc=True).execute()
+                sent_csv = pd.DataFrame(sent_res.data).to_csv(index=False) if sent_res.data else "No sentiment."
+            except: sent_csv = "Error fetching sentiment."
 
-        # 4. EVENTS/PROMO DATA
-        try:
-            # Note: Ensure your table name matches (e.g., 'promotions' or 'events')
-            promo_res = supabase.table("promotions").select("*").execute()
-            promo_csv = pd.DataFrame(promo_res.data).to_csv(index=False) if promo_res.data else "No promos."
-        except: promo_csv = "Error fetching promotions."
+            # 3. ROI DATA
+            try:
+                roi_res = supabase.table("monthly_roi").select("*").execute()
+                roi_csv = pd.DataFrame(roi_res.data).to_csv(index=False) if roi_res.data else "No ROI records."
+            except: roi_csv = "Error fetching ROI."
 
-        status.update(label="✅ Databases Synced", state="complete")
+            # 4. EVENTS/PROMO DATA
+            try:
+                promo_res = supabase.table("promotions").select("*").execute()
+                promo_csv = pd.DataFrame(promo_res.data).to_csv(index=False) if promo_res.data else "No promos."
+            except: promo_csv = "Error fetching promotions."
+
+            status.update(label="✅ Databases Synced", state="complete")
 
     # --- 14.3 THE CHAT INTERFACE (CHRONOLOGICAL ORDER) ---
     if "messages" not in st.session_state:
