@@ -1531,7 +1531,7 @@ Enhanced Total Impact = ${curr['enhanced_revenue']:,.0f}"""
             st.dataframe(df_hist[['report_month', 'calculated_bl_roas', 'brand_value', 'enhanced_revenue']], use_container_width=True, hide_index=True)
 
 # =================================================================
-# 15. PAGE: GLOBAL ADMIN CONSOLE (SaaS Provisioning Factory)
+# 15. PAGE: GLOBAL ADMIN CONSOLE (v18.7 SaaS Factory)
 # =================================================================
 elif page == "Global Admin Console":
     st.markdown("""
@@ -1556,68 +1556,84 @@ elif page == "Global Admin Console":
                         # 1. Create the Property Entry
                         prop_data = {"property_name": new_p_name, "region": new_p_region}
                         res = supabase.table("properties").insert(prop_data).execute()
-                        new_id = res.data[0]['id']
                         
-                        # 2. SEED: Initialize default assets for the new property
-                        # This ensures the dashboard gauges work immediately
-                        default_assets = [{"property_id": new_id, "asset_name": a} for a in ["Overall Property", "Hotel", "Gaming Floor"]]
-                        supabase.table("property_assets").insert(default_assets).execute()
-                        
-                        # 3. SEED: Initialize default AI weights (Coefficients)
-                        # REMOVE any 'id': 1 from this dictionary!
-                        seed_coeffs = {
-                        "property_id": new_id, 
-                        "Promo": 500.0, 
-                        "Ad_Decay": 85, 
-                        "Clicks": 0.05,
-                        "Avg_Coin_In": 112.50,
-                        "Hold_Pct": 10.0
-                        }
-                        # Use insert without specifying an 'id'
-                        supabase.table("coefficients").insert(seed_coeffs).execute()
+                        if res.data:
+                            new_id = res.data[0]['id']
+                            
+                            # 2. SEED: Initialize default assets
+                            default_assets = [{"property_id": new_id, "asset_name": a} for a in ["Overall Property", "Hotel", "Gaming Floor"]]
+                            supabase.table("property_assets").insert(default_assets).execute()
+                            
+                            # 3. SEED: Initialize AI weights (NO HARDCODED ID)
+                            seed_coeffs = {
+                                "property_id": new_id, 
+                                "Promo": 500.0, 
+                                "Ad_Decay": 85, 
+                                "Clicks": 0.05,
+                                "Avg_Coin_In": 112.50,
+                                "Hold_Pct": 10.0,
+                                "Broadcast_Weight": 150.0,
+                                "OOH_Weight": 100.0
+                            }
+                            # Using insert without 'id' key lets Supabase handle the primary key auto-increment
+                            supabase.table("coefficients").insert(seed_coeffs).execute()
+
+                            st.success(f"🎉 Property '{new_p_name}' successfully provisioned!")
+                            st.balloons()
+                            st.cache_data.clear() # Refresh lists for Tab 2
+                        else:
+                            st.error("Failed to create property record.")
+                    except Exception as e:
+                        st.error(f"Provisioning Failure: {e}")
 
     # --- TAB 2: USER PROVISIONING ---
     with tab2:
         st.subheader("Executive Account Creation")
-        # Fetch current properties to map the user
+        # Fresh fetch of properties
         props = supabase.table("properties").select("id, property_name").execute()
         prop_options = {p['property_name']: p['id'] for p in props.data} if props.data else {}
 
         with st.form("new_user_provision_form"):
-            u_email = st.text_input("Corporate Email Address")
+            u_email = st.text_input("Corporate Email Address").strip().lower()
             u_pass = st.text_input("Initial Temporary Password", type="password")
             u_prop = st.selectbox("Assign to Property", options=list(prop_options.keys()))
             u_role = st.selectbox("Authorization Level", ["Executive", "Manager", "Analyst", "Admin"])
             
             if st.form_submit_button("🔐 Create & Map Account", use_container_width=True):
-                try:
-                    # 1. Create the User in Supabase Auth (Handles the encryption/login)
-                    auth_res = supabase.auth.sign_up({"email": u_email, "password": u_pass})
-                    
-                    if auth_res.user:
-                        # 2. Map the User to the Property in our access table
-                        mapping = {
-                            "user_email": u_email,
-                            "property_id": prop_options[u_prop],
-                            "user_role": u_role
-                        }
-                        supabase.table("user_property_access").insert(mapping).execute()
-                        st.success(f"✅ Credentials active. {u_email} now has access to {u_prop}.")
-                except Exception as e:
-                    st.error(f"Error provisioning user: {e}")
+                if not u_email or len(u_pass) < 6:
+                    st.warning("Please provide a valid email and a password (min 6 chars).")
+                else:
+                    try:
+                        # 1. Create in Supabase Auth
+                        auth_res = supabase.auth.sign_up({"email": u_email, "password": u_pass})
+                        
+                        if auth_res.user:
+                            # 2. Map to Property
+                            mapping = {
+                                "user_email": u_email,
+                                "property_id": prop_options[u_prop],
+                                "user_role": u_role
+                            }
+                            supabase.table("user_property_access").insert(mapping).execute()
+                            st.success(f"✅ Credentials active. {u_email} now has access to {u_prop}!")
+                        else:
+                            st.error("Auth creation failed. User might already exist.")
+                    except Exception as e:
+                        st.error(f"Error provisioning user: {e}")
 
     # --- TAB 3: SYSTEM HEALTH ---
     with tab3:
         st.subheader("Global Tenant Statistics")
         try:
-            p_count = len(supabase.table("properties").select("id").execute().data)
-            u_count = len(supabase.table("user_property_access").select("id").execute().data)
+            p_data = supabase.table("properties").select("id", count="exact").execute()
+            u_data = supabase.table("user_property_access").select("id", count="exact").execute()
             
             col_a, col_b = st.columns(2)
-            col_a.metric("Total Properties", p_count)
-            col_b.metric("Active Global Users", u_count)
-        except:
-            st.info("Statistics unavailable during sync.")
+            # Use the count property from Supabase response
+            col_a.metric("Total Properties", len(p_data.data) if p_data.data else 0)
+            col_b.metric("Active Global Users", len(u_data.data) if u_data.data else 0)
+        except Exception as e:
+            st.info(f"Statistics sync pending... {e}")
 
 # =================================================================
 # 16. FOOTER
