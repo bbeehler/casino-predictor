@@ -26,57 +26,60 @@ except Exception as e:
     st.error(f"Critical System Error: Connection secrets missing. {e}")
     st.stop()
 
-# --- NEW: SAAS IDENTITY LAYER ---
+# --- SAAS IDENTITY LAYER ---
+# Default only if not already set by the login gate
 if 'current_property_name' not in st.session_state:
     st.session_state.current_property_name = "Hard Rock Ottawa"
 
-if 'current_property_id' not in st.session_state:
+# Fetch UUID only if we don't have it and avoid querying with None
+if 'current_property_id' not in st.session_state or st.session_state.current_property_id is None:
     try:
-        # Fetch the UUID for the active property
-        prop_res = supabase.table("properties").select("id").eq("property_name", st.session_state.current_property_name).single().execute()
-        st.session_state.current_property_id = prop_res.data['id']
-    except:
+        prop_res = supabase.table("properties").select("id").eq("property_name", st.session_state.current_property_name).execute()
+        if prop_res.data:
+            st.session_state.current_property_id = prop_res.data[0]['id']
+        else:
+            st.session_state.current_property_id = None
+    except Exception as e:
         st.session_state.current_property_id = None
 
 # =================================================================
-# 2. PERMANENT INITIALIZATION (SaaS Aware)
+# 2. PERMANENT INITIALIZATION (SaaS Aware & Crash-Proof)
 # =================================================================
 if 'coeffs' not in st.session_state:
-    try:
-        # UPDATED: Filter by property_id instead of hardcoded ID 1
-        response = supabase.table("coefficients")\
-            .select("*")\
-            .eq("property_id", st.session_state.current_property_id)\
-            .execute()
-        
-        if response.data and len(response.data) > 0:
-            st.session_state.coeffs = response.data[0]
-        else:
-            # SaaS Default Coefficients for new properties
-            st.session_state.coeffs = {
-                'property_id': st.session_state.current_property_id,
-                'Promo': 500.0,
-                'Broadcast_Weight': 150.0,
-                'OOH_Weight': 100.0,
-                'OOH_Count': 1,
-                'Print_Lift': 75.0,
-                'PR_Weight': 1.2,
-                'Clicks': 0.05,
-                'Social_Imp': 0.0002,
-                'Ad_Decay': 85,
-                'Rain_mm': -12.0,
-                'Snow_cm': -45.0,
-                'Event_Gravity': 0.25,
-                'Static_Weight': 100.0,
-                'Static_Count': 1,
-                'Digital_OOH_Weight': 25.0,
-                'Digital_OOH_Count': 5
-            }
-            # Upsert ensures the new property gets its own specific coefficients row
-            supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
+    # CRITICAL: Only query the DB if we have a valid UUID to prevent 22P02 error
+    if st.session_state.get('current_property_id'):
+        try:
+            response = supabase.table("coefficients")\
+                .select("*")\
+                .eq("property_id", st.session_state.current_property_id)\
+                .execute()
             
-    except Exception as e:
-        st.error(f"Initialization Error: {e}")
+            if response.data and len(response.data) > 0:
+                st.session_state.coeffs = response.data[0]
+            else:
+                # Seed default coefficients for a brand new property
+                st.session_state.coeffs = {
+                    'property_id': st.session_state.current_property_id,
+                    'Promo': 500.0,
+                    'Broadcast_Weight': 150.0,
+                    'OOH_Weight': 100.0,
+                    'OOH_Count': 1,
+                    'PR_Weight': 1.2,
+                    'Clicks': 0.05,
+                    'Social_Imp': 0.0002,
+                    'Ad_Decay': 85,
+                    'Rain_mm': -12.0,
+                    'Snow_cm': -45.0,
+                    'Event_Gravity': 0.25,
+                    'Static_Weight': 100.0,
+                    'Static_Count': 1
+                }
+                supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
+        except Exception as e:
+            # Silent fallback to prevent login screen crash
+            st.session_state.coeffs = {'Promo': 500.0, 'OOH_Weight': 100.0}
+    else:
+        # Initial fallback before property ID is resolved
         st.session_state.coeffs = {'Promo': 500.0, 'OOH_Weight': 100.0}
 
 # =================================================================
