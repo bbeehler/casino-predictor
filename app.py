@@ -325,95 +325,46 @@ except Exception as e:
     ledger_data = []
 
 # =================================================================
-# 7. SIDEBAR NAVIGATION, AUTH & SAAS GATEKEEPER (v18.5)
+# 7. FORENSIC LOGIN GATEKEEPER
 # =================================================================
-st.markdown("""
-    <style>
-    div.stButton > button > div > p,
-    div.stButton > button span,
-    div.stButton > button p {
-        color: #FFFFFF !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-st.sidebar.markdown("<h1 style='color:#0047AB; font-size: 28px; margin-bottom: 0;'>🎰 FloorCast AI</h1><p style='color:#888;'>Global Casino Intelligence</p>", unsafe_allow_html=True)
-st.sidebar.divider()
-
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
-# --- THE GATEKEEPER ---
 if not st.session_state.authenticated:
-    st.markdown("<h1 style='color:#0047AB; text-align:center;'>Executive Access Required</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center;'>Executive Access Required</h1>", unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        with st.form("login_form"):
-            e_mail = st.text_input("Email")
-            p_word = st.text_input("Password", type="password")
-            submit = st.form_submit_button("Unlock Engine", use_container_width=True)
-            
-            if submit:
-                try:
-                    # 1. Authenticate with Supabase Auth
-                    res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
-                    if res.user:
-                        # 2. SAAS MULTI-TENANT MAPPING: Link user to their property
-                        access_res = supabase.table("user_property_access").select("property_id, properties(property_name), user_role").eq("user_email", e_mail).single().execute()
-                        
-                        if access_res.data:
-                            st.session_state.authenticated = True
-                            st.session_state.user_email = e_mail
-                            st.session_state.user_role = access_res.data['user_role']
-                            st.session_state.current_property_id = access_res.data['property_id']
-                            st.session_state.current_property_name = access_res.data['properties']['property_name']
-                            st.rerun()
-                        else:
-                            st.error("Authentication successful, but no property assigned. Contact Global Admin.")
-                    else:
-                        st.error("Authentication failed.")
-                except Exception as e:
-                    st.error("Access Denied: Invalid credentials or database link error.")
-    st.stop() 
-
-# --- PORTFOLIO SWITCHER (For Global Admin Demos) ---
-# This allows you to switch properties on the fly for sales pitches
-if st.session_state.get('user_role') == "Admin":
-    with st.sidebar.expander("🏢 Global Portfolio Switcher", expanded=False):
+    with st.form("login_form"):
+        e_mail = st.text_input("Email").strip().lower()
+        p_word = st.text_input("Password", type="password")
+        submit = st.form_submit_button("Unlock Engine")
+        
         if submit:
-                try:
-                    # 1. AUTHENTICATE
-                    res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
+            # STEP 1: Check Auth
+            res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
+            
+            if res.user:
+                # STEP 2: Check Mapping
+                access_res = supabase.table("user_property_access").select("*, properties(property_name)").eq("user_email", e_mail).execute()
+                
+                if access_res.data:
+                    u_data = access_res.data[0]
+                    st.session_state.authenticated = True
+                    st.session_state.user_email = e_mail
+                    st.session_state.user_role = u_data['user_role']
+                    st.session_state.current_property_id = u_data['property_id']
                     
-                    if res.user:
-                        # 2. FETCH MAPPING (Removed .single() to prevent crashes)
-                        access_res = supabase.table("user_property_access")\
-                            .select("property_id, properties(property_name), user_role")\
-                            .eq("user_email", e_mail).execute()
-                        
-                        # Check if we actually got data back
-                        if access_res.data and len(access_res.data) > 0:
-                            user_data = access_res.data[0]
-                            
-                            # SUCCESS: SET SESSION
-                            st.session_state.authenticated = True
-                            st.session_state.user_email = e_mail
-                            st.session_state.user_role = user_data['user_role']
-                            st.session_state.current_property_id = user_data['property_id']
-                            
-                            # Safely get property name from the joined table
-                            st.session_state.current_property_name = user_data['properties']['property_name']
-                            st.rerun()
-                        else:
-                            # If auth worked but the table lookup failed
-                            st.error(f"⚠️ Login worked, but I can't find '{e_mail}' in the user_property_access table.")
-                    else:
-                        st.error("❌ Invalid Email or Password.")
-                        
-                except Exception as e:
-                    # This will now show the ACTUAL error instead of just "Access Denied"
-                    st.error(f"🛑 System Error: {e}")
+                    # Handle the join result carefully
+                    prop_info = u_data.get('properties')
+                    st.session_state.current_property_name = prop_info['property_name'] if prop_info else "Unknown"
+                    
+                    st.success("Access Granted! Loading...")
+                    st.rerun()
+                else:
+                    # If this shows, your email isn't in the user_property_access table
+                    st.error(f"AUTH SUCCESS, but no Mapping found for {e_mail} in user_property_access.")
+            else:
+                st.error("Invalid Email or Password (Auth Failed).")
+    st.stop()
 
 # =================================================================
 # 8. EXECUTIVE NAVIGATION (v18.6 SaaS Enabled)
