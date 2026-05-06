@@ -1527,7 +1527,7 @@ Enhanced Total Impact = ${curr['enhanced_revenue']:,.0f}"""
             st.dataframe(df_hist[['report_month', 'calculated_bl_roas', 'brand_value', 'enhanced_revenue']], use_container_width=True, hide_index=True)
 
 # =================================================================
-# 15. PAGE: GLOBAL ADMIN CONSOLE (v18.8 SaaS Factory)
+# 15. PAGE: GLOBAL ADMIN CONSOLE (v18.9 SaaS Factory)
 # =================================================================
 elif page == "Global Admin Console":
     st.markdown("""
@@ -1562,34 +1562,49 @@ elif page == "Global Admin Console":
                             default_assets = [{"property_id": new_id, "asset_name": a} for a in ["Overall Property", "Hotel", "Gaming Floor"]]
                             supabase.table("property_assets").insert(default_assets).execute()
                             
-                            # 3. SEED: Initialize AI weights (Defensive Check)
-                            # We use an upsert here to avoid the "Duplicate Key" crash entirely
+                            # 3. SEED: Full AI weights (Ottawa Mirror)
+                            # NO 'id' field here to prevent 23505 Duplicate Key error
                             seed_coeffs = {
                                 "property_id": new_id, 
                                 "Promo": 500.0, 
-                                "Ad_Decay": 85, 
-                                "Clicks": 0.05,
-                                "Avg_Coin_In": 112.50,
-                                "Hold_Pct": 10.0,
                                 "Broadcast_Weight": 150.0,
-                                "OOH_Weight": 100.0
+                                "OOH_Weight": 100.0,
+                                "OOH_Count": 1,
+                                "Print_Lift": 75.0,
+                                "PR_Weight": 1.2,
+                                "Clicks": 0.05,
+                                "Social_Imp": 0.0002,
+                                "Ad_Decay": 85,
+                                "Rain_mm": -12.0,
+                                "Snow_cm": -45.0,
+                                "Event_Gravity": 0.25,
+                                "Static_Weight": 100.0,
+                                "Static_Count": 1,
+                                "Digital_OOH_Weight": 25.0,
+                                "Digital_OOH_Count": 5,
+                                "Avg_Coin_In": 112.50,
+                                "Hold_Pct": 10.0
                             }
-                            # UPSERT is safer than INSERT for provisioning
+                            # UPSERT handles creation and prevents duplicate crashes
                             supabase.table("coefficients").upsert(seed_coeffs, on_conflict="property_id").execute()
 
                             st.success(f"🎉 Property '{new_p_name}' successfully provisioned!")
                             st.balloons()
                             st.cache_data.clear() 
                         else:
-                            st.error("Failed to create property record. Check database permissions.")
+                            st.error("Failed to create property record.")
                     except Exception as e:
                         st.error(f"Provisioning Failure: {e}")
 
     # --- TAB 2: USER PROVISIONING ---
     with tab2:
         st.subheader("Executive Account Creation")
-        props = supabase.table("properties").select("id, property_name").execute()
-        prop_options = {p['property_name']: p['id'] for p in props.data} if props.data else {}
+        # Fresh fetch of properties for the dropdown
+        try:
+            p_res = supabase.table("properties").select("id, property_name").execute()
+            prop_options = {p['property_name']: p['id'] for p in p_res.data} if p_res.data else {}
+        except:
+            prop_options = {}
 
         with st.form("new_user_provision_form", clear_on_submit=True):
             u_email = st.text_input("Corporate Email Address").strip().lower()
@@ -1602,11 +1617,11 @@ elif page == "Global Admin Console":
                     st.warning("Valid email and password (min 6 chars) required.")
                 else:
                     try:
-                        # 1. Create in Supabase Auth
+                        # 1. Auth Creation
                         auth_res = supabase.auth.sign_up({"email": u_email, "password": u_pass})
                         
                         if auth_res.user:
-                            # 2. Map to Property
+                            # 2. SaaS Mapping
                             mapping = {
                                 "user_email": u_email,
                                 "property_id": prop_options[u_prop],
@@ -1623,7 +1638,6 @@ elif page == "Global Admin Console":
     with tab3:
         st.subheader("Global Tenant Statistics")
         try:
-            # We fetch full data to be safe with lengths
             p_all = supabase.table("properties").select("id").execute()
             u_all = supabase.table("user_property_access").select("id").execute()
             
