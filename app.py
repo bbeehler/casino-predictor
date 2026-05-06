@@ -1564,13 +1564,17 @@ elif page == "Global Admin Console":
                         supabase.table("property_assets").insert(default_assets).execute()
                         
                         # 3. SEED: Initialize default AI weights (Coefficients)
-                        # Prevents the "empty vault" error on first login
-                        seed_coeffs = {"property_id": new_id, "Promo": 500, "Ad_Decay": 85, "Clicks": 0.05}
+                        # REMOVE any 'id': 1 from this dictionary!
+                        seed_coeffs = {
+                        "property_id": new_id, 
+                        "Promo": 500.0, 
+                        "Ad_Decay": 85, 
+                        "Clicks": 0.05,
+                        "Avg_Coin_In": 112.50,
+                        "Hold_Pct": 10.0
+                        }
+                        # Use insert without specifying an 'id'
                         supabase.table("coefficients").insert(seed_coeffs).execute()
-
-                        st.success(f"🎉 Tenant '{new_p_name}' successfully provisioned with ID: {new_id}")
-                    except Exception as e:
-                        st.error(f"Provisioning Failure: {e}")
 
     # --- TAB 2: USER PROVISIONING ---
     with tab2:
