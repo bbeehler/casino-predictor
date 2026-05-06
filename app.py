@@ -1210,7 +1210,7 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: AI STRATEGIC ANALYST (v17.4 - NameError Fix)
+# 14. PAGE 6: AI STRATEGIC ANALYST (v17.5 - Variable Initialization Fix)
 # =================================================================
 elif page == "FloorCast AI Analyst":
     st.markdown("""
@@ -1220,8 +1220,12 @@ elif page == "FloorCast AI Analyst":
         </div>
     """, unsafe_allow_html=True)
     
-    # FIX: Explicitly fetch ledger from session state to avoid NameError
+    # --- INITIALIZE VARIABLES (Prevents NameError if data is missing) ---
     ledger = st.session_state.get('ledger', [])
+    ledger_csv = "No ledger data available."
+    sent_csv = "No sentiment data available."
+    roi_csv = "No ROI records available."
+    promo_csv = "No promotion data available."
 
     # --- 14.1 ENTRY MODULES ---
     col_input1, col_input2 = st.columns(2)
@@ -1283,26 +1287,28 @@ elif page == "FloorCast AI Analyst":
     else:
         with st.status("🔗 Synchronizing All Property Databases...", expanded=False) as status:
             # 1. LEDGER DATA (Process with attribution engine)
-            m_audit = get_forensic_metrics(ledger, st.session_state.coeffs)
-            ledger_csv = m_audit['df'].to_csv(index=False)
+            try:
+                m_audit = get_forensic_metrics(ledger, st.session_state.coeffs)
+                ledger_csv = m_audit['df'].to_csv(index=False)
+            except: pass
 
             # 2. SENTIMENT DATA
             try:
                 sent_res = supabase.table("sentiment_history").select("*").order("timestamp", desc=True).execute()
                 sent_csv = pd.DataFrame(sent_res.data).to_csv(index=False) if sent_res.data else "No sentiment."
-            except: sent_csv = "Error fetching sentiment."
+            except: pass
 
             # 3. ROI DATA
             try:
                 roi_res = supabase.table("monthly_roi").select("*").execute()
                 roi_csv = pd.DataFrame(roi_res.data).to_csv(index=False) if roi_res.data else "No ROI records."
-            except: roi_csv = "Error fetching ROI."
+            except: pass
 
             # 4. EVENTS/PROMO DATA
             try:
                 promo_res = supabase.table("promotions").select("*").execute()
                 promo_csv = pd.DataFrame(promo_res.data).to_csv(index=False) if promo_res.data else "No promos."
-            except: promo_csv = "Error fetching promotions."
+            except: pass
 
             status.update(label="✅ Databases Synced", state="complete")
 
@@ -1310,16 +1316,13 @@ elif page == "FloorCast AI Analyst":
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # REMOVED reversed() so that the latest message appears at the bottom
     for m in st.session_state.messages:
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-    # Chat Input field stays at the bottom
     prompt = st.chat_input("Ask a cross-database question...")
     
     if prompt:
-        # Display user message immediately
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -1347,8 +1350,6 @@ elif page == "FloorCast AI Analyst":
                     st.markdown(response_text)
             
             st.session_state.messages.append({"role": "assistant", "content": response_text})
-            # No st.rerun() needed here if using the standard chat flow, 
-            # but keep it if you want to force a state refresh.
             
         except Exception as e:
             st.error(f"AI Error: {e}")
