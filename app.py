@@ -67,7 +67,7 @@ if 'coeffs' not in st.session_state:
 # 3. GLOBAL PAGE CONFIG & EXECUTIVE THEME
 # =================================================================
 st.set_page_config(
-    page_title="FloorCast Pro | Hard Rock Ottawa", 
+    page_title="FloorCast Pro", 
     layout="wide", 
     page_icon="🎰",
     initial_sidebar_state="expanded"
@@ -310,7 +310,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.sidebar.markdown("<h1 style='color:#0047AB; font-size: 28px; margin-bottom: 0;'>🎰 FloorCast</h1><p style='color:#888;'>Hard Rock Ottawa v4.0</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<h1 style='color:#0047AB; font-size: 28px; margin-bottom: 0;'>🎰 FloorCast AI</h1><p style='color:#888;'>Hotel & Casino Marketing</p>", unsafe_allow_html=True)
 st.sidebar.divider()
 
 if 'authenticated' not in st.session_state:
