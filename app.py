@@ -381,25 +381,39 @@ if not st.session_state.authenticated:
 # This allows you to switch properties on the fly for sales pitches
 if st.session_state.get('user_role') == "Admin":
     with st.sidebar.expander("🏢 Global Portfolio Switcher", expanded=False):
-        try:
-            # Fetch all properties in the system
-            all_props = supabase.table("properties").select("*").execute()
-            if all_props.data:
-                prop_map = {p['property_name']: p['id'] for p in all_props.data}
-                selected_name = st.selectbox(
-                    "Active View:", 
-                    options=list(prop_map.keys()),
-                    index=list(prop_map.keys()).index(st.session_state.current_property_name)
-                )
-                
-                if selected_name != st.session_state.current_property_name:
-                    st.session_state.current_property_name = selected_name
-                    st.session_state.current_property_id = prop_map[selected_name]
-                    # Clear cache to force data reload for the new property
-                    st.cache_data.clear()
-                    st.rerun()
-        except:
-            st.sidebar.warning("Could not load portfolio list.") 
+        if submit:
+                try:
+                    # 1. AUTHENTICATE
+                    res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
+                    
+                    if res.user:
+                        # 2. FETCH MAPPING (Removed .single() to prevent crashes)
+                        access_res = supabase.table("user_property_access")\
+                            .select("property_id, properties(property_name), user_role")\
+                            .eq("user_email", e_mail).execute()
+                        
+                        # Check if we actually got data back
+                        if access_res.data and len(access_res.data) > 0:
+                            user_data = access_res.data[0]
+                            
+                            # SUCCESS: SET SESSION
+                            st.session_state.authenticated = True
+                            st.session_state.user_email = e_mail
+                            st.session_state.user_role = user_data['user_role']
+                            st.session_state.current_property_id = user_data['property_id']
+                            
+                            # Safely get property name from the joined table
+                            st.session_state.current_property_name = user_data['properties']['property_name']
+                            st.rerun()
+                        else:
+                            # If auth worked but the table lookup failed
+                            st.error(f"⚠️ Login worked, but I can't find '{e_mail}' in the user_property_access table.")
+                    else:
+                        st.error("❌ Invalid Email or Password.")
+                        
+                except Exception as e:
+                    # This will now show the ACTUAL error instead of just "Access Denied"
+                    st.error(f"🛑 System Error: {e}")
 
 # =================================================================
 # 8. EXECUTIVE NAVIGATION (v18.6 SaaS Enabled)
