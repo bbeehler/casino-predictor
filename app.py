@@ -360,9 +360,7 @@ if not st.session_state.authenticated:
                     res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
                     if res.user:
                         # 2. SAAS MULTI-TENANT MAPPING: Link user to their property
-                        access_res = supabase.table("user_property_access")\
-                            .select("property_id, properties(property_name), user_role")\
-                            .eq("user_email", e_mail).single().execute()
+                        access_res = supabase.table("user_property_access").select("property_id, properties(property_name), user_role").eq("user_email", e_mail).single().execute()
                         
                         if access_res.data:
                             st.session_state.authenticated = True
