@@ -1531,7 +1531,7 @@ Enhanced Total Impact = ${curr['enhanced_revenue']:,.0f}"""
             st.dataframe(df_hist[['report_month', 'calculated_bl_roas', 'brand_value', 'enhanced_revenue']], use_container_width=True, hide_index=True)
 
 # =================================================================
-# 15. PAGE: GLOBAL ADMIN CONSOLE (v18.7 SaaS Factory)
+# 15. PAGE: GLOBAL ADMIN CONSOLE (v18.8 SaaS Factory)
 # =================================================================
 elif page == "Global Admin Console":
     st.markdown("""
@@ -1546,12 +1546,14 @@ elif page == "Global Admin Console":
     # --- TAB 1: PROPERTY MANAGER ---
     with tab1:
         st.subheader("Register a New Property Tenant")
-        with st.form("new_property_form"):
+        with st.form("new_property_form", clear_on_submit=True):
             new_p_name = st.text_input("Property Name", placeholder="e.g., Caesars Palace Las Vegas")
             new_p_region = st.selectbox("Region", ["North America", "EMEA", "APAC", "LATAM"])
             
             if st.form_submit_button("🏗️ Build Tenant Space", use_container_width=True):
-                if new_p_name:
+                if not new_p_name:
+                    st.error("Property Name is required.")
+                else:
                     try:
                         # 1. Create the Property Entry
                         prop_data = {"property_name": new_p_name, "region": new_p_region}
@@ -1564,7 +1566,8 @@ elif page == "Global Admin Console":
                             default_assets = [{"property_id": new_id, "asset_name": a} for a in ["Overall Property", "Hotel", "Gaming Floor"]]
                             supabase.table("property_assets").insert(default_assets).execute()
                             
-                            # 3. SEED: Initialize AI weights (NO HARDCODED ID)
+                            # 3. SEED: Initialize AI weights (Defensive Check)
+                            # We use an upsert here to avoid the "Duplicate Key" crash entirely
                             seed_coeffs = {
                                 "property_id": new_id, 
                                 "Promo": 500.0, 
@@ -1575,25 +1578,24 @@ elif page == "Global Admin Console":
                                 "Broadcast_Weight": 150.0,
                                 "OOH_Weight": 100.0
                             }
-                            # Using insert without 'id' key lets Supabase handle the primary key auto-increment
-                            supabase.table("coefficients").insert(seed_coeffs).execute()
+                            # UPSERT is safer than INSERT for provisioning
+                            supabase.table("coefficients").upsert(seed_coeffs, on_conflict="property_id").execute()
 
                             st.success(f"🎉 Property '{new_p_name}' successfully provisioned!")
                             st.balloons()
-                            st.cache_data.clear() # Refresh lists for Tab 2
+                            st.cache_data.clear() 
                         else:
-                            st.error("Failed to create property record.")
+                            st.error("Failed to create property record. Check database permissions.")
                     except Exception as e:
                         st.error(f"Provisioning Failure: {e}")
 
     # --- TAB 2: USER PROVISIONING ---
     with tab2:
         st.subheader("Executive Account Creation")
-        # Fresh fetch of properties
         props = supabase.table("properties").select("id, property_name").execute()
         prop_options = {p['property_name']: p['id'] for p in props.data} if props.data else {}
 
-        with st.form("new_user_provision_form"):
+        with st.form("new_user_provision_form", clear_on_submit=True):
             u_email = st.text_input("Corporate Email Address").strip().lower()
             u_pass = st.text_input("Initial Temporary Password", type="password")
             u_prop = st.selectbox("Assign to Property", options=list(prop_options.keys()))
@@ -1601,7 +1603,7 @@ elif page == "Global Admin Console":
             
             if st.form_submit_button("🔐 Create & Map Account", use_container_width=True):
                 if not u_email or len(u_pass) < 6:
-                    st.warning("Please provide a valid email and a password (min 6 chars).")
+                    st.warning("Valid email and password (min 6 chars) required.")
                 else:
                     try:
                         # 1. Create in Supabase Auth
@@ -1615,25 +1617,25 @@ elif page == "Global Admin Console":
                                 "user_role": u_role
                             }
                             supabase.table("user_property_access").insert(mapping).execute()
-                            st.success(f"✅ Credentials active. {u_email} now has access to {u_prop}!")
+                            st.success(f"✅ Account for {u_email} active for {u_prop}!")
                         else:
-                            st.error("Auth creation failed. User might already exist.")
+                            st.error("User creation failed. Email might already be registered.")
                     except Exception as e:
-                        st.error(f"Error provisioning user: {e}")
+                        st.error(f"User Provisioning Error: {e}")
 
     # --- TAB 3: SYSTEM HEALTH ---
     with tab3:
         st.subheader("Global Tenant Statistics")
         try:
-            p_data = supabase.table("properties").select("id", count="exact").execute()
-            u_data = supabase.table("user_property_access").select("id", count="exact").execute()
+            # We fetch full data to be safe with lengths
+            p_all = supabase.table("properties").select("id").execute()
+            u_all = supabase.table("user_property_access").select("id").execute()
             
-            col_a, col_b = st.columns(2)
-            # Use the count property from Supabase response
-            col_a.metric("Total Properties", len(p_data.data) if p_data.data else 0)
-            col_b.metric("Active Global Users", len(u_data.data) if u_data.data else 0)
+            c1, c2 = st.columns(2)
+            c1.metric("Active Properties", len(p_all.data) if p_all.data else 0)
+            c2.metric("Total Authorized Users", len(u_all.data) if u_all.data else 0)
         except Exception as e:
-            st.info(f"Statistics sync pending... {e}")
+            st.info("Syncing stats...")
 
 # =================================================================
 # 16. FOOTER
