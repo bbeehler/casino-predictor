@@ -157,7 +157,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # =================================================================
-# 8. EXECUTIVE NAVIGATION (v23.1 - Strict Scope Filtering)
+# 8. EXECUTIVE NAVIGATION (v23.2 - Nav Hide Protocol)
 # =================================================================
 with st.sidebar:
     st.image("https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png?h=171&iar=0&w=224&rev=914ac0eae6734be995b93d76ad2b1e8f", width=150)
@@ -182,13 +182,13 @@ with st.sidebar:
             st.session_state.current_property_name = selected_view
             st.rerun()
 
-    # 2. STRICT NAVIGATION FILTERING
-    # Start with the baseline analytical pages available to everyone
-    nav_options = ["Executive Dashboard", "Attribution Analytics", "FloorCast AI Analyst", "Strategic Alerts"]
-
-    # ONLY append operational pages if a specific property is active
-    if st.session_state.current_property_id != "GLOBAL":
-        # We use a specific order for a better UX
+    # 2. DYNAMIC NAVIGATION VISIBILITY
+    # If in GLOBAL mode, we force the page to Executive Dashboard and HIDE the menu
+    if st.session_state.current_property_id == "GLOBAL":
+        page = "Executive Dashboard"
+        st.info("🌐 Network-wide view active. Select a specific property to access operational decks.")
+    else:
+        # Standard Navigation only shows when a property is selected
         nav_options = [
             "Executive Dashboard",
             "Daily Ledger Audit",
@@ -199,16 +199,13 @@ with st.sidebar:
             "Strategic Alerts"
         ]
         
-        # Add Admin-only tools to the property-specific view
         if st.session_state.get('user_role') in ["Admin", "Super Admin"]:
             nav_options.append("AI Calibration")
+        
+        if st.session_state.get('user_role') == "Super Admin":
+            nav_options.append("Global Admin Console")
 
-    # Super Admin Console stays visible as it's a global management tool
-    if st.session_state.get('user_role') == "Super Admin":
-        nav_options.append("Global Admin Console")
-
-    # Render the radio menu with the strictly filtered list
-    page = st.radio("Intelligence Decks:", nav_options, index=0)
+        page = st.radio("Intelligence Decks:", nav_options, index=0)
 
     st.divider()
     if st.button("🚪 Logout"):
