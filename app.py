@@ -262,18 +262,27 @@ try:
         df = pd.DataFrame(ledger_data)
         df['entry_date'] = pd.to_datetime(df['entry_date'])
         df['Property'] = df['property_id'].map(prop_name_map)
+
+        # --- THE FIX FOR PAGE 3: ADD BASELINE (HEARTBEATS) ---
+        # Historical daily guest floor baselines
+        heartbeats = {
+            'Monday': 3398, 'Tuesday': 3525, 'Wednesday': 6312,
+            'Thursday': 4924, 'Friday': 7523, 'Saturday': 9863, 'Sunday': 5894
+        }
+        # Map the day name to the baseline column so Page 3 can see it
+        df['baseline'] = df['entry_date'].dt.day_name().map(heartbeats).astype(float)
+        
     else:
         ledger_data = []
         df = pd.DataFrame()
 
 except Exception as e:
-    # Fail gracefully: initialize empty to avoid "NameError" or "NoneType" crashes
     st.error(f"Data Hydration Failure: {e}")
     ledger_data = []
     df = pd.DataFrame()
 
 # --- 6. SAFETY SHIELD ---
-# Only block the app if we are actually missing data for a page that needs it
+# This ensures that if df is empty, we don't even try to load Page 3
 if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Strategic Alerts", "AI Calibration"]:
     st.info(f"Forensic Vault Offline for {st.session_state.current_property_name}. Please initialize data.")
     st.stop()
