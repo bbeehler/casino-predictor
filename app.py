@@ -75,18 +75,25 @@ st.set_page_config(page_title="FloorCast Pro", layout="wide", page_icon="🎰", 
 def apply_corporate_styling():
     st.markdown("""
         <style>
-        .stApp { background-color: #F0F2F6 !important; }
-        h1, h2, h3, h4, h5, h6, p, span, label, div, [data-testid="stMarkdownContainer"] p {
-            color: #1A1A1B !important; font-family: 'Segoe UI', sans-serif;
+        /* ... existing styles ... */
+
+        /* Force Input Fields to White for High Contrast */
+        div[data-baseweb="input"] > div, 
+        input, 
+        textarea, 
+        select {
+            background-color: #FFFFFF !important;
+            color: #1A1A1B !important;
+            border-radius: 8px !important;
+            border: 1px solid #CED4DA !important;
         }
-        section[data-testid="stSidebar"] {
-            background-color: #FFFFFF !important; border-right: 2px solid #DEE2E6 !important;
+
+        /* Ensure text stays black inside white inputs */
+        input {
+            color: #1A1A1B !important;
         }
-        div[data-testid="metric-container"] {
-            background-color: #E1E8F0 !important; border-left: 6px solid #0047AB !important;
-            padding: 20px !important; border-radius: 12px !important;
-        }
-        .stButton>button { background-color: #0047AB !important; color: white !important; border-radius: 8px !important; }
+        
+        /* ... existing styles ... */
         </style>
     """, unsafe_allow_html=True)
 
