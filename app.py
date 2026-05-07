@@ -1609,9 +1609,9 @@ Enhanced Total Impact = ${curr['enhanced_revenue']:,.0f}"""
 # =================================================================
 elif page == "Global Admin Console":
     st.markdown("""
-        <div style="background-color: #0047AB; padding: 20px; border-radius: 12px; margin-bottom: 25px;">
-            <h2 style="color: white; margin: 0;">🌐 Global SaaS Provisioning</h2>
-            <p style="color: #E1E8F0; margin: 0;">Onboard new properties and manage executive access credentials.</p>
+        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
+            <h2 style="color: #0047AB; margin: 0;">Global SaaS Provisioning {st.session_state.current_property_name}</h2>
+            <p style="color: #444; margin: 0;">Onboarding new properties and manage executive access.</p>
         </div>
     """, unsafe_allow_html=True)
     
