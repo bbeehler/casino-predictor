@@ -1683,27 +1683,38 @@ elif page == "Strategic Alerts":
     with col_b:
         st.subheader("📋 Active Property Watchdogs")
         
-        # CORE FIX: Conditional Query to prevent 22P02 UUID Error
-        if st.session_state.current_property_id == "GLOBAL":
-            # Pull every alert across the entire network
-            alerts_res = supabase.table("strategic_alerts").select("*").execute()
-            st.caption("Displaying all Network-wide alerts.")
-        else:
-            # Pull only for the specific active property
-            alerts_res = supabase.table("strategic_alerts").select("*")\
-                .eq("property_id", st.session_state.current_property_id).execute()
+        # 1. Capture and sanitize the ID
+        target_id = st.session_state.get('current_property_id')
+        
+        # 2. Execute query with strict formatting
+        try:
+            if target_id == "GLOBAL":
+                alerts_res = supabase.table("strategic_alerts").select("*").execute()
+                st.caption("Displaying all Network-wide alerts.")
+            elif target_id and len(str(target_id)) > 10:
+                # Force ID to string to prevent Postgrest type-check errors
+                alerts_res = supabase.table("strategic_alerts").select("*")\
+                    .eq("property_id", str(target_id)).execute()
+            else:
+                # This prevents the app from sending "None" or "" to the DB
+                alerts_res = None
+                st.warning("⚠️ Property Context is re-initializing. Please wait.")
 
-        if alerts_res.data:
-            for alert in alerts_res.data:
-                # Add property name context if in Global view
-                display_name = alert['alert_name']
-                with st.expander(f"🔔 {display_name}"):
-                    st.write(f"Condition: **{alert['metric_target']}** {alert['comparison_operator']} **{alert['threshold_val']}**")
-                    if st.button("Disable", key=f"dis_{alert['id']}"):
-                        supabase.table("strategic_alerts").delete().eq("id", alert['id']).execute()
-                        st.rerun()
-        else:
-            st.info("No active alerts found for this scope.")
+            # 3. Render Data Safely
+            if alerts_res and alerts_res.data:
+                for alert in alerts_res.data:
+                    display_name = alert.get('alert_name', 'Unnamed Alert')
+                    with st.expander(f"🔔 {display_name}"):
+                        st.write(f"Condition: **{alert.get('metric_target')}** {alert.get('comparison_operator')} **{alert.get('threshold_val')}**")
+                        if st.button("Disable", key=f"dis_{alert['id']}"):
+                            supabase.table("strategic_alerts").delete().eq("id", alert['id']).execute()
+                            st.rerun()
+            elif alerts_res:
+                st.info("No active alerts found for this property.")
+                
+        except Exception as e:
+            # This captures the exact DB error for debugging without crashing the app
+            st.error(f"Database Sync Error: {e}")
 
     st.divider()
 
