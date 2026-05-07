@@ -1552,7 +1552,7 @@ elif page == "Global Admin Console":
                     except Exception as e:
                         st.error(f"Provisioning Error: {e}")
 
-    # --- TAB 2: USER ACCESS & ROLES (v22.5 Management Suite) ---
+    # --- TAB 2: USER ACCESS & ROLES (v23.2 Management Suite) ---
     with tabs[1]:
         st.subheader("👥 System User Directory")
         
@@ -1560,11 +1560,13 @@ elif page == "Global Admin Console":
         search_q = st.text_input("🔍 Search by Email:", placeholder="Enter email to filter users...")
         
         # 2. FETCH & DISPLAY
+        # We use a join to get the Property Name directly from the properties table
         access_res = supabase.table("user_property_access").select("*, properties(property_name)").execute()
         
         if access_res.data:
             df_access = pd.DataFrame(access_res.data)
-            df_access['Property Name'] = df_access['properties'].apply(lambda x: x['property_name'] if x else "GLOBAL")
+            # Handle cases where properties might be null
+            df_access['Property Name'] = df_access['properties'].apply(lambda x: x['property_name'] if x else "N/A")
             
             # Apply search filter
             if search_q:
@@ -1576,16 +1578,20 @@ elif page == "Global Admin Console":
                     c1, c2, c3 = st.columns([2, 2, 1])
                     
                     with c1:
+                        # Ensure the current role is in the list to avoid index errors
+                        role_list = ["Viewer", "Manager", "Admin", "Super Admin"]
+                        current_role = row['user_role'] if row['user_role'] in role_list else "Viewer"
+                        
                         new_role = st.selectbox(
                             "Change Authorization:", 
-                            ["Viewer", "Manager", "Admin", "Super Admin"],
-                            index=["Viewer", "Manager", "Admin", "Super Admin"].index(row['user_role']),
+                            role_list,
+                            index=role_list.index(current_role),
                             key=f"edit_role_{row['id']}"
                         )
                     
                     with c2:
                         st.write(f"**Linked Property:** {row['Property Name']}")
-                        st.caption(f"ID: {row['id']}")
+                        st.caption(f"Access Record ID: {row['id']}")
                     
                     with c3:
                         if st.button("Update", key=f"save_{row['id']}", use_container_width=True):
@@ -1597,26 +1603,52 @@ elif page == "Global Admin Console":
                             supabase.table("user_property_access").delete().eq("id", row['id']).execute()
                             st.warning("Access Revoked.")
                             st.rerun()
+        else:
+            st.info("No user access records found.")
 
         st.divider()
         st.subheader("➕ Assign User to Additional Property")
+        
         with st.form("assign_multi_prop"):
-            target_email = st.text_input("User Email")
-            # Fetch all properties for dropdown
-            all_p = supabase.table("properties").select("id, property_name").execute()
-            p_opts = {p['property_name']: p['id'] for p in all_p.data}
-            target_prop = st.selectbox("Select Property to Link", list(p_opts.keys()))
-            target_role = st.selectbox("Assign Role", ["Viewer", "Manager", "Admin"])
+            target_email = st.text_input("User Email (Primary Key)")
+            
+            # Fetch fresh property list for the dropdown
+            all_p_res = supabase.table("properties").select("id, property_name").execute()
+            p_opts = {p['property_name']: p['id'] for p in all_p_res.data} if all_p_res.data else {}
+            
+            target_prop_name = st.selectbox("Select Property to Link", list(p_opts.keys()))
+            target_role = st.selectbox("Assign Role", ["Viewer", "Manager", "Admin", "Super Admin"])
             
             if st.form_submit_button("Link User to Property"):
-                link_data = {
-                    "user_email": target_email.lower().strip(),
-                    "property_id": p_opts[target_prop],
-                    "user_role": target_role
-                }
-                supabase.table("user_property_access").insert(link_data).execute()
-                st.success(f"Linked {target_email} to {target_prop}")
-                st.rerun()
+                if target_email and target_prop_name:
+                    clean_email = target_email.lower().strip()
+                    target_uuid = p_opts.get(target_prop_name)
+                    
+                    # 1. PRE-CHECK FOR DUPLICATES (Prevents 409 API Errors)
+                    check = supabase.table("user_property_access")\
+                        .select("*")\
+                        .eq("user_email", clean_email)\
+                        .eq("property_id", target_uuid)\
+                        .execute()
+                    
+                    if check.data:
+                        st.error(f"User {clean_email} already has an active link to {target_prop_name}.")
+                    else:
+                        # 2. ATTEMPT INSERT
+                        link_payload = {
+                            "user_email": clean_email,
+                            "property_id": target_uuid,
+                            "user_role": target_role
+                        }
+                        
+                        try:
+                            supabase.table("user_property_access").insert(link_payload).execute()
+                            st.success(f"Successfully linked {clean_email} to {target_prop_name}")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Database Error: {e}")
+                else:
+                    st.error("Please provide both an email and a property selection.")
 
     # --- TAB 3: SYSTEM HEALTH (v22.1 Fix) ---
     with tabs[2]:
