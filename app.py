@@ -668,8 +668,10 @@ if page == "Executive Dashboard":
                     }
                 ))
                 fig.update_layout(height=150, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor='rgba(0,0,0,0)')
-                # We use the property name and page in the key to ensure it's always unique
-                chart_key = f"dash_chart_{st.session_state.current_property_name}_{page}"
+                # --- THE FIX: DYNAMIC UNIQUE KEY ---
+                # We combine Property + Page + Tag + Index to make it mathematically unique
+                chart_key = f"gauge_{st.session_state.current_property_name}_{page}_{tag}_{i}"
+                
                 st.plotly_chart(fig, use_container_width=True, key=chart_key)
                 st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 14px;'>{tag}</p>", unsafe_allow_html=True)
         
