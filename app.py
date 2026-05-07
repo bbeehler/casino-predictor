@@ -30,7 +30,7 @@ except Exception as e:
 if 'current_property_name' not in st.session_state:
     st.session_state.current_property_name = "Hard Rock Ottawa"
 
-# FIX: Only query property ID if we are NOT in Global mode
+# SHIELD: Only query property ID if we are NOT in Global mode to prevent UUID errors
 if 'current_property_id' not in st.session_state or st.session_state.current_property_id is None:
     if st.session_state.current_property_name == "All Properties":
         st.session_state.current_property_id = "GLOBAL"
@@ -48,7 +48,6 @@ if 'current_property_id' not in st.session_state or st.session_state.current_pro
 # 2. PERMANENT INITIALIZATION (SaaS Aware & Crash-Proof)
 # =================================================================
 if 'coeffs' not in st.session_state:
-    # SHIELD: Do not query coefficients table with "GLOBAL" string
     cur_id = st.session_state.get('current_property_id')
     if cur_id and cur_id != "GLOBAL":
         try:
@@ -56,7 +55,14 @@ if 'coeffs' not in st.session_state:
             if response.data:
                 st.session_state.coeffs = response.data[0]
             else:
-                st.session_state.coeffs = {'Promo': 500.0, 'OOH_Weight': 100.0}
+                # Seed default coefficients for brand new property
+                st.session_state.coeffs = {
+                    'property_id': cur_id, 'Promo': 500.0, 'Broadcast_Weight': 150.0,
+                    'OOH_Weight': 100.0, 'OOH_Count': 1, 'PR_Weight': 1.2, 'Clicks': 0.05,
+                    'Social_Imp': 0.0002, 'Ad_Decay': 85, 'Rain_mm': -12.0, 'Snow_cm': -45.0,
+                    'Event_Gravity': 0.25, 'Static_Weight': 100.0, 'Static_Count': 1
+                }
+                supabase.table("coefficients").upsert(st.session_state.coeffs).execute()
         except:
             st.session_state.coeffs = {'Promo': 500.0, 'OOH_Weight': 100.0}
     else:
@@ -65,37 +71,78 @@ if 'coeffs' not in st.session_state:
 # =================================================================
 # 3. GLOBAL PAGE CONFIG & EXECUTIVE THEME
 # =================================================================
-st.set_page_config(page_title="FloorCast Pro", layout="wide", page_icon="🎰")
+st.set_page_config(page_title="FloorCast Pro", layout="wide", page_icon="🎰", initial_sidebar_state="expanded")
 
 def apply_corporate_styling():
     st.markdown("""
         <style>
         .stApp { background-color: #F0F2F6 !important; }
-        h1, h2, h3, p, span { color: #1A1A1B !important; font-family: 'Segoe UI', sans-serif; }
-        section[data-testid="stSidebar"] { background-color: #FFFFFF !important; border-right: 2px solid #DEE2E6 !important; }
-        div[data-testid="metric-container"] { 
-            background-color: #E1E8F0 !important; border-left: 6px solid #0047AB !important; 
-            padding: 20px !important; border-radius: 12px !important; 
+        h1, h2, h3, h4, h5, h6, p, span, label, div, [data-testid="stMarkdownContainer"] p {
+            color: #1A1A1B !important; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         }
-        .stButton>button { background-color: #0047AB !important; color: white !important; border-radius: 8px !important; }
+        section[data-testid="stSidebar"] {
+            background-color: #FFFFFF !important; border-right: 2px solid #DEE2E6 !important; padding-top: 2rem;
+        }
+        div[data-testid="metric-container"] {
+            background-color: #E1E8F0 !important; border: 1px solid #B0C4DE !important;
+            border-left: 6px solid #0047AB !important; padding: 20px !important; border-radius: 12px !important;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        [data-testid="stMetricLabel"] p {
+            color: #0047AB !important; font-weight: 700 !important; text-transform: uppercase;
+            letter-spacing: 1px; font-size: 0.85rem !important;
+        }
+        .stButton>button {
+            background-color: #0047AB !important; color: white !important; border-radius: 8px !important;
+            font-weight: 600 !important; border: none !important; transition: all 0.3s ease;
+        }
+        input, textarea, select { background-color: #FFFFFF !important; border-radius: 8px !important; border: 1px solid #CED4DA !important; }
         </style>
     """, unsafe_allow_html=True)
 
 apply_corporate_styling()
 
 # =================================================================
-# 4. FORENSIC ENGINE: CALCULATION CORE
+# 4. FORENSIC ENGINE: CALCULATION CORE (v6.14)
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
-    if not df_input: return {"df": pd.DataFrame()}
+    if not df_input: return {"predictability": "0.0%", "df": pd.DataFrame(), "total_inertia": 0}
     df = pd.DataFrame(df_input).copy()
     df['entry_date'] = pd.to_datetime(df['entry_date'])
+    today = pd.Timestamp(datetime.date.today())
     
+    # Coefficients
+    c_clicks, c_social = float(coeffs.get('Clicks', 0.05)), float(coeffs.get('Social_Imp', 0.0002))
+    decay, gravity = float(coeffs.get('Ad_Decay', 85)) / 100, float(coeffs.get('Event_Gravity', 0.25))
+    promo_lift_weight, c_pr_mult = float(coeffs.get('Promo', 500.0)), float(coeffs.get('PR_Weight', 1.2))
+
+    # Brand Inertia
+    ooh_daily = (float(coeffs.get('Static_Weight', 100.0)) * int(coeffs.get('Static_Count', 1)))
+    total_brand_inertia = ooh_daily + float(coeffs.get('Broadcast_Weight', 150.0)) + float(coeffs.get('OOH_Weight', 100.0))
+
+    # Processing
+    df['clean_attendance'] = pd.to_numeric(df['attendance'], errors='coerce').fillna(0).astype(float)
+    df['gravity_lift'] = df['clean_attendance'] * gravity
+    
+    awareness_pool, current_pool = [], 0.0
+    for _, row in df.iterrows():
+        daily_in = (float(row.get('ad_clicks', 0)) * c_clicks) + (float(row.get('ad_impressions', 0)) * c_social)
+        current_pool = daily_in + (current_pool * decay)
+        awareness_pool.append(current_pool)
+    df['residual_lift'] = awareness_pool
+
     heartbeats = {'Monday': 3398, 'Tuesday': 3525, 'Wednesday': 6312, 'Thursday': 4924, 'Friday': 7523, 'Saturday': 9863, 'Sunday': 5894}
-    
-    # Simple predictive logic for Dashboard
-    df['expected'] = df['entry_date'].dt.day_name().map(heartbeats).astype(float) + float(coeffs.get('Promo', 500))
-    return {"df": df, "heartbeats": heartbeats}
+
+    def predict_guests(row):
+        day_name = row['entry_date'].strftime('%A')
+        base = float(heartbeats.get(day_name, 4000))
+        p_val = str(row.get('active_promo', '0'))
+        current_base = base * c_pr_mult if "PR" in p_val.upper() else base
+        promo_impact = promo_lift_weight if p_val not in ['0', '0.0', 'nan', 'None', ''] else 0
+        return max(0, current_base + row['residual_lift'] + total_brand_inertia + row['gravity_lift'] + promo_impact)
+
+    df['expected'] = df.apply(predict_guests, axis=1)
+    return {"df": df, "total_inertia": total_brand_inertia, "heartbeats": heartbeats}
 
 # =================================================================
 # 5. WEATHER INFRASTRUCTURE
@@ -104,11 +151,21 @@ async def fetch_weather():
     try:
         ec = ECWeather(coordinates=(45.33, -75.71))
         await ec.update()
-        return {"current": ec.conditions}
-    except: return {"error": "Station Offline"}
+        return {"current": ec.conditions, "forecast": ec.daily_forecasts, "alerts": ec.alerts}
+    except: return {"error": "Station Unavailable"}
 
 if 'weather_data' not in st.session_state:
     st.session_state.weather_data = asyncio.run(fetch_weather())
+
+# =================================================================
+# 6. HYDRATION & RECOVERY (SaaS Filtered)
+# =================================================================
+try:
+    if st.session_state.current_property_id and st.session_state.current_property_id != "GLOBAL":
+        c_res = supabase.table("coefficients").select("*").eq("property_id", st.session_state.current_property_id).execute()
+        if c_res.data: st.session_state.coeffs = c_res.data[0]
+except Exception as e:
+    st.error(f"Hydration Error: {e}")
 
 # =================================================================
 # 7. FORENSIC LOGIN GATEKEEPER
@@ -118,87 +175,138 @@ if 'authenticated' not in st.session_state:
 
 if not st.session_state.authenticated:
     st.markdown("<h1 style='text-align:center;'>Executive Access Required</h1>", unsafe_allow_html=True)
+    
     with st.form("login_form"):
         e_mail = st.text_input("Email").strip().lower()
         p_word = st.text_input("Password", type="password")
-        if st.form_submit_button("Unlock Engine"):
-            res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
-            if res.user:
-                access_res = supabase.table("user_property_access").select("*, properties(property_name)").eq("user_email", e_mail).execute()
-                if access_res.data:
-                    u_data = access_res.data[0]
-                    st.session_state.authenticated = True
-                    st.session_state.user_email = e_mail
-                    st.session_state.user_role = u_data['user_role']
-                    st.session_state.current_property_id = u_data['property_id']
-                    st.session_state.current_property_name = u_data['properties']['property_name'] if u_data.get('properties') else "Unknown"
-                    st.rerun()
+        submit = st.form_submit_button("Unlock Engine")
+        
+        if submit:
+            try:
+                res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
+                
+                if res.user:
+                    # Check Mapping & Role
+                    access_res = supabase.table("user_property_access")\
+                        .select("*, properties(property_name)")\
+                        .eq("user_email", e_mail).execute()
+                    
+                    if access_res.data:
+                        u_data = access_res.data[0]
+                        st.session_state.authenticated = True
+                        st.session_state.user_email = e_mail
+                        st.session_state.user_role = u_data['user_role']
+                        st.session_state.current_property_id = u_data['property_id']
+                        
+                        prop_info = u_data.get('properties')
+                        st.session_state.current_property_name = prop_info['property_name'] if prop_info else "Unknown"
+                        
+                        st.success("Access Granted! Loading Intelligence Decks...")
+                        st.rerun()
+                    else:
+                        st.error(f"Mapping error: {e_mail} not found in property access vault.")
+                else:
+                    st.error("Authentication failed. Check credentials.")
+            except Exception as e:
+                st.error(f"Login Error: {e}")
     st.stop()
 
 # =================================================================
-# 8. EXECUTIVE NAVIGATION (v21.0 SaaS)
+# 8. EXECUTIVE NAVIGATION (v22.0 - SaaS "God Mode" Enabled)
 # =================================================================
 with st.sidebar:
+    # 1. Branding
     st.image("https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png?h=171&iar=0&w=224&rev=914ac0eae6734be995b93d76ad2b1e8f", width=150)
+    
     st.title(f"{st.session_state.current_property_name}")
+    st.caption(f"User: {st.session_state.get('user_email', 'Internal')}")
     st.divider()
 
+    # 2. INTELLIGENCE SCOPE (SaaS Switcher)
     if st.session_state.get('user_role') == "Super Admin":
-        all_props = supabase.table("properties").select("id, property_name").execute()
-        prop_map = {p['property_name']: p['id'] for p in all_props.data}
-        options = ["📊 CONSOLIDATED VIEW"] + list(prop_map.keys())
-        
-        # Sync the index
-        curr_name = "📊 CONSOLIDATED VIEW" if st.session_state.current_property_id == "GLOBAL" else st.session_state.current_property_name
-        sel_view = st.selectbox("🎯 Intelligence Scope:", options, index=options.index(curr_name) if curr_name in options else 0)
-        
-        if sel_view == "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != "GLOBAL":
-            st.session_state.current_property_id = "GLOBAL"
-            st.session_state.current_property_name = "All Properties"
-            st.rerun()
-        elif sel_view != "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != prop_map[sel_view]:
-            st.session_state.current_property_id = prop_map[sel_view]
-            st.session_state.current_property_name = sel_view
-            st.rerun()
+        try:
+            all_props_res = supabase.table("properties").select("id, property_name").execute()
+            if all_props_res.data:
+                prop_map = {p['property_name']: p['id'] for p in all_props_res.data}
+                scope_options = ["📊 CONSOLIDATED VIEW"] + list(prop_map.keys())
+                
+                # Determine current selection index
+                curr_sel = "📊 CONSOLIDATED VIEW" if st.session_state.current_property_id == "GLOBAL" else st.session_state.current_property_name
+                current_idx = scope_options.index(curr_sel) if curr_sel in scope_options else 0
 
+                selected_view = st.selectbox("🎯 Intelligence Scope:", scope_options, index=current_idx)
+                
+                if selected_view == "📊 CONSOLIDATED VIEW":
+                    if st.session_state.current_property_id != "GLOBAL":
+                        st.session_state.current_property_id = "GLOBAL"
+                        st.session_state.current_property_name = "All Properties"
+                        st.rerun()
+                else:
+                    new_id = prop_map[selected_view]
+                    if st.session_state.current_property_id != new_id:
+                        st.session_state.current_property_id = new_id
+                        st.session_state.current_property_name = selected_view
+                        st.rerun()
+        except Exception as e:
+            st.error(f"Scope Routing Error: {e}")
+
+    st.divider()
+    
+    # 3. NAV LIST
     nav_options = ["Executive Dashboard", "Daily Ledger Audit", "Attribution Analytics", "Master Audit Report", "FloorCast AI Analyst", "BL-ROAS Calculator"]
-    if st.session_state.user_role in ["Admin", "Super Admin"]:
+    
+    if st.session_state.get('user_role') in ["Admin", "Super Admin"]:
         nav_options += ["AI Calibration", "Strategic Alerts", "Global Admin Console"]
 
-    page = st.radio("Intelligence Decks:", nav_options)
-    if st.button("🚪 Logout"):
+    page = st.radio("Intelligence Decks:", nav_options, index=0)
+    
+    st.divider()
+    if st.button("🚪 Logout / Reset Session", use_container_width=True):
         st.session_state.clear()
         st.rerun()
 
 # =================================================================
-# 9. DATA GATEKEEPER: THE IRONCLAD SHIELD (v21.0)
+# 9. DATA GATEKEEPER: THE MAPPING & BENCHMARK ENGINE (v22.1)
 # =================================================================
 try:
-    # 1. Background Benchmarking (Always Safe)
+    # 1. NETWORK BENCHMARKING (Reference Data)
     g_ref = supabase.table("ledger").select("actual_traffic, actual_coin_in, new_members").execute()
     if g_ref.data:
         g_df = pd.DataFrame(g_ref.data)
         st.session_state.net_avg_yield = (g_df['actual_coin_in'].sum() / g_df['actual_traffic'].sum()) if g_df['actual_traffic'].sum() > 0 else 0
         st.session_state.net_avg_conv = (g_df['new_members'].sum() / g_df['actual_traffic'].sum() * 100) if g_df['actual_traffic'].sum() > 0 else 0
 
-    # 2. Scope-Aware Ledger Fetch
-    l_query = supabase.table("ledger").select("*")
+    # 2. NAME MAPPING DICTIONARY (For Consolidated View)
+    prop_list_res = supabase.table("properties").select("id, property_name").execute()
+    prop_name_map = {p['id']: p['property_name'] for p in prop_list_res.data} if prop_list_res.data else {}
+
+    # 3. SCOPE-AWARE FETCH
+    query = supabase.table("ledger").select("*")
     if st.session_state.current_property_id == "GLOBAL":
-        l_res = l_query.order("entry_date", desc=True).execute()
+        l_res = query.order("entry_date", desc=True).execute()
     else:
-        l_res = l_query.eq("property_id", st.session_state.current_property_id).order("entry_date", desc=True).execute()
+        l_res = query.eq("property_id", st.session_state.current_property_id).order("entry_date", desc=True).execute()
     
     ledger_data = l_res.data if l_res.data else []
     df = pd.DataFrame(ledger_data)
-    if not df.empty: df['entry_date'] = pd.to_datetime(df['entry_date'])
+
+    if not df.empty:
+        df['entry_date'] = pd.to_datetime(df['entry_date'])
+        # Translate UUIDs to Names for charts
+        df['Property'] = df['property_id'].map(prop_name_map)
 
 except Exception as e:
     st.error(f"Data Hydration Error: {e}")
     st.stop()
 
-# Safety Shield for Empty Tenants
-if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Strategic Alerts"]:
-    st.info(f"Welcome to {st.session_state.current_property_name}. Please initialize data in Master Audit Report.")
+# SAFETY SHIELD
+if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Strategic Alerts", "AI Calibration"]:
+    st.markdown(f"""
+        <div style="background-color: #FFFFFF; padding: 40px; border-radius: 15px; border-left: 10px solid #0047AB;">
+            <h1 style="color: #0047AB;">🏢 {st.session_state.current_property_name}</h1>
+            <p>Intelligence Engine: Offline. Please populate data in <b>Master Audit Report</b>.</p>
+        </div>
+    """, unsafe_allow_html=True)
     st.stop()
 
 # =================================================================
