@@ -29,7 +29,7 @@ except Exception as e:
 # --- SAAS IDENTITY LAYER ---
 # Default only if not already set by the login gate
 if 'current_property_name' not in st.session_state:
-    st.session_state.current_property_name = "Hard Rock Ottawa"
+    st.session_state.current_property_name = "Hard Rock Ottawa"
 
 # Fetch UUID only if we don't have it and avoid querying with None
 if 'current_property_id' not in st.session_state or st.session_state.current_property_id is None:
