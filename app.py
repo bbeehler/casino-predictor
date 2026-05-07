@@ -103,16 +103,29 @@ apply_corporate_styling()
 # 4. FORENSIC ENGINE: CALCULATION CORE
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
-    if not df_input: return {"predictability": "0.0%", "df": pd.DataFrame(), "total_inertia": 0}
+    if not df_input: return {"df": pd.DataFrame()}
     df = pd.DataFrame(df_input).copy()
     df['entry_date'] = pd.to_datetime(df['entry_date'])
+
+    # --- DYNAMIC HEARTBEATS ---
+    # We look for 'Mon_Base', 'Tue_Base', etc., in the property coefficients
+    # If they don't exist yet, we use 4000 as a safe generic fallback
+    heartbeats = {
+        'Monday': float(coeffs.get('Mon_Base', 3398)),
+        'Tuesday': float(coeffs.get('Tue_Base', 3525)),
+        'Wednesday': float(coeffs.get('Wed_Base', 6312)),
+        'Thursday': float(coeffs.get('Thu_Base', 4924)),
+        'Friday': float(coeffs.get('Fri_Base', 7523)),
+        'Saturday': float(coeffs.get('Sat_Base', 9863)),
+        'Sunday': float(coeffs.get('Sun_Base', 5894))
+    }
+
+    # Now we map the baseline using the property-specific heartbeats
+    df['baseline'] = df['entry_date'].dt.day_name().map(heartbeats).astype(float)
     
-    heartbeats = {'Monday': 3398, 'Tuesday': 3525, 'Wednesday': 6312, 'Thursday': 4924, 'Friday': 7523, 'Saturday': 9863, 'Sunday': 5894}
-    
-    # Core Logic
-    decay = float(coeffs.get('Ad_Decay', 85)) / 100
-    df['clean_attendance'] = pd.to_numeric(df['attendance'], errors='coerce').fillna(0)
-    df['expected'] = df['entry_date'].dt.day_name().map(heartbeats).astype(float) + float(coeffs.get('Promo', 500))
+    # Calculate lifts using property-specific weights
+    promo_weight = float(coeffs.get('Promo', 500.0))
+    df['expected'] = df['baseline'] + promo_weight
     
     return {"df": df, "heartbeats": heartbeats}
 
@@ -224,61 +237,60 @@ with st.sidebar:
         st.rerun()
 
 # =================================================================
-# 9. DATA GATEKEEPER: THE MAPPING & BENCHMARK ENGINE (v23.6)
+# 9. DATA GATEKEEPER: THE DYNAMIC SAAS HYDRATOR (v23.7)
 # =================================================================
 
-# 1. PRE-INITIALIZE TO PREVENT DOWNSTREAM ERRORS (Line 518 FIX)
+# 1. Initialize variables
 ledger_data = [] 
 df = pd.DataFrame()
-prop_name_map = {}
 
 try:
-    # 2. NETWORK BENCHMARKING (Always Safe - Global Context)
-    g_ref = supabase.table("ledger").select("actual_traffic, actual_coin_in, new_members").execute()
-    if g_ref.data:
-        g_df = pd.DataFrame(g_ref.data)
-        st.session_state.net_avg_yield = (g_df['actual_coin_in'].sum() / g_df['actual_traffic'].sum()) if g_df['actual_traffic'].sum() > 0 else 0
-        st.session_state.net_avg_conv = (g_df['new_members'].sum() / g_df['actual_traffic'].sum() * 100) if g_df['actual_traffic'].sum() > 0 else 0
+    # 2. Get the Translator (IDs to Names)
+    prop_res = supabase.table("properties").select("id, property_name").execute()
+    prop_map = {p['id']: p['property_name'] for p in prop_res.data} if prop_res.data else {}
 
-    # 3. NAME MAPPING DICTIONARY (Translator for UUIDs)
-    prop_list_res = supabase.table("properties").select("id, property_name").execute()
-    prop_name_map = {p['id']: p['property_name'] for p in prop_list_res.data} if prop_list_res.data else {}
-
-    # 4. SCOPE-AWARE DATA FETCH
-    query = supabase.table("ledger").select("*")
-    
-    if st.session_state.get('current_property_id') == "GLOBAL":
-        l_res = query.order("entry_date", desc=True).execute()
-    elif st.session_state.get('current_property_id'):
-        l_res = query.eq("property_id", st.session_state.current_property_id).order("entry_date", desc=True).execute()
+    # 3. Scope-Aware Fetch
+    if st.session_state.current_property_id == "GLOBAL":
+        l_res = supabase.table("ledger").select("*").order("entry_date", desc=True).execute()
     else:
-        l_res = None
+        l_res = supabase.table("ledger").select("*").eq("property_id", st.session_state.current_property_id).order("entry_date", desc=True).execute()
 
-    # 5. DATA HYDRATION & FORENSIC ENRICHMENT (The Fix for Page 3)
     if l_res and l_res.data:
         ledger_data = l_res.data
         
-        # CRITICAL: Run the Forensic Engine immediately to generate all required columns
-        # This adds 'baseline', 'expected', 'residual_lift', etc.
-        forensic_results = get_forensic_metrics(ledger_data, st.session_state.coeffs)
-        df = forensic_results['df']
-        
-        # Add the Property Name mapping for consolidated charts
-        df['Property'] = df['property_id'].map(prop_name_map)
-        
-    else:
-        ledger_data = []
-        df = pd.DataFrame()
+        # --- THE DYNAMIC JOIN ---
+        # If in Global View, we loop through the data to apply property-specific math
+        # If in Single View, we just run the engine once
+        if st.session_state.current_property_id == "GLOBAL":
+            full_list = []
+            for p_id in prop_map.keys():
+                # Filter rows for this specific property
+                p_rows = [row for row in ledger_data if row['property_id'] == p_id]
+                if p_rows:
+                    # Fetch THIS property's specific coefficients (with its unique heartbeats)
+                    p_coeffs_res = supabase.table("coefficients").select("*").eq("property_id", p_id).execute()
+                    p_coeffs = p_coeffs_res.data[0] if p_coeffs_res.data else st.session_state.coeffs
+                    
+                    # Run engine for THIS property
+                    p_hydrated = get_forensic_metrics(p_rows, p_coeffs)
+                    full_list.append(p_hydrated['df'])
+            
+            df = pd.concat(full_list) if full_list else pd.DataFrame()
+        else:
+            # Single property: use the session's current coeffs
+            hydrated = get_forensic_metrics(ledger_data, st.session_state.coeffs)
+            df = hydrated['df']
 
+        # Finalize names for the charts
+        if not df.empty:
+            df['Property'] = df['property_id'].map(prop_map)
+            
 except Exception as e:
-    st.error(f"Data Hydration Failure: {e}")
-    ledger_data = []
+    st.error(f"Dynamic Hydration Error: {e}")
     df = pd.DataFrame()
 
-# --- 6. SAFETY SHIELD ---
-# Prevents downstream pages from crashing if data is missing
-if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Strategic Alerts", "AI Calibration"]:
-    st.info(f"Forensic Vault Offline for {st.session_state.current_property_name}. Please initialize data.")
+# 4. SAFETY SHIELD: This kills the KeyError by stopping the app if df is empty
+if df.empty and page not in ["Global Admin Console", "Master Audit Report"]:
     st.stop()
 
 # =================================================================
