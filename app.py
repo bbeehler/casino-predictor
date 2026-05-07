@@ -1807,7 +1807,6 @@ elif page == "Strategic Alerts":
                 alerts_res = supabase.table("strategic_alerts").select("*")\
                     .eq("property_id", str(target_id)).execute()
             else:
-                # This prevents the app from sending "None" or "" to the DB
                 alerts_res = None
                 st.warning("⚠️ Property Context is re-initializing. Please wait.")
 
@@ -1824,7 +1823,6 @@ elif page == "Strategic Alerts":
                 st.info("No active alerts found for this property.")
                 
         except Exception as e:
-            # This captures the exact DB error for debugging without crashing the app
             st.error(f"Database Sync Error: {e}")
 
     st.divider()
@@ -1833,20 +1831,24 @@ elif page == "Strategic Alerts":
     st.subheader("📄 One-Click Executive Briefing")
     if st.button("🪄 Generate 24-Hour Strategic Brief"):
         with st.spinner("AI is analyzing recent ledger and sentiment trends..."):
-            # We pass the last 7 days of data to Gemini
-            recent_data = df.head(7).to_string()
-            prompt = f"Based on this data, write a 3-paragraph executive brief for the General Manager of {st.session_state.current_property_name}. Focus on revenue risks and guest sentiment anomalies: {recent_data}"
-            
-            import google.generativeai as genai
-            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model = genai.GenerativeModel('gemini-2.5-flash')
-            brief = model.generate_content(prompt)
-            
-            st.markdown(f"""
-                <div style="background-color: #F0F2F6; padding: 20px; border-radius: 10px; border: 1px solid #CCC;">
-                    {brief.text}
-                </div>
-            """, unsafe_allow_html=True)
+            # Ensure 'df' exists from Section 9
+            if not df.empty:
+                recent_data = df.head(7).to_string()
+                prompt = f"Based on this data, write a 3-paragraph executive brief for the General Manager of {st.session_state.current_property_name}. Focus on revenue risks and guest sentiment anomalies: {recent_data}"
+                
+                # Import handled inside to prevent bloat if unused
+                import google.generativeai as genai
+                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                model = genai.GenerativeModel('gemini-2.0-flash') # Updated to current stable
+                brief = model.generate_content(prompt)
+                
+                st.markdown(f"""
+                    <div style="background-color: #F0F2F6; padding: 20px; border-radius: 10px; border: 1px solid #CCC; color: #111;">
+                        {brief.text}
+                    </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.error("No data available to generate brief.")
 
 # =================================================================
 # 16. FOOTER
