@@ -157,13 +157,14 @@ if not st.session_state.authenticated:
     st.stop()
 
 # =================================================================
-# 8. EXECUTIVE NAVIGATION
+# 8. EXECUTIVE NAVIGATION (v23.0 - Scope-Aware Filtering)
 # =================================================================
 with st.sidebar:
     st.image("https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png?h=171&iar=0&w=224&rev=914ac0eae6734be995b93d76ad2b1e8f", width=150)
     st.title(f"{st.session_state.current_property_name}")
     st.divider()
 
+    # 1. INTELLIGENCE SCOPE SWITCHER
     if st.session_state.get('user_role') == "Super Admin":
         all_props = supabase.table("properties").select("id, property_name").execute()
         prop_map = {p['property_name']: p['id'] for p in all_props.data}
@@ -181,11 +182,28 @@ with st.sidebar:
             st.session_state.current_property_name = selected_view
             st.rerun()
 
-    nav_options = ["Executive Dashboard", "Daily Ledger Audit", "Attribution Analytics", "Master Audit Report", "FloorCast AI Analyst", "BL-ROAS Calculator"]
-    if st.session_state.user_role in ["Admin", "Super Admin"]:
-        nav_options += ["AI Calibration", "Strategic Alerts", "Global Admin Console"]
+    # 2. DYNAMIC NAVIGATION FILTERING
+    # Analysis-focused pages (Always visible)
+    nav_options = ["Executive Dashboard", "Attribution Analytics", "FloorCast AI Analyst", "Strategic Alerts"]
 
-    page = st.radio("Intelligence Decks:", nav_options)
+    # Operational-focused pages (Hidden in GLOBAL mode to prevent UUID errors)
+    if st.session_state.current_property_id != "GLOBAL":
+        nav_options.insert(1, "Daily Ledger Audit")
+        nav_options.insert(3, "Master Audit Report")
+        nav_options.append("BL-ROAS Calculator")
+        
+        # Admin-only operational pages
+        if st.session_state.get('user_role') in ["Admin", "Super Admin"]:
+            nav_options.append("AI Calibration")
+
+    # Global Admin Console is always available to Super Admins
+    if st.session_state.get('user_role') == "Super Admin":
+        if "Global Admin Console" not in nav_options:
+            nav_options.append("Global Admin Console")
+
+    page = st.radio("Intelligence Decks:", nav_options, index=0)
+
+    st.divider()
     if st.button("🚪 Logout"):
         st.session_state.clear()
         st.rerun()
