@@ -456,58 +456,39 @@ with st.sidebar:
             st.rerun()
 
 # =================================================================
-# 9. DATA GATEKEEPER: THE "HYBRID" SAAS SHIELD (v20.2)
+# 9. DATA GATEKEEPER: THE "HYBRID" SAAS SHIELD (v20.2 - Fixed)
 # =================================================================
 
-# 1. FETCH DATA BASED ON SCOPE
 try:
-    # --- STEP 1: INITIALIZE QUERY ---
-    # We start with a base query to the ledger table
+    # 1. Start the query builder
     query = supabase.table("ledger").select("*")
 
-    # --- STEP 2: APPLY CONDITIONAL FILTERING ---
+    # 2. THE FIX: Only apply the .eq() filter if we AREN'T in Global mode
     if st.session_state.current_property_id == "GLOBAL":
-        # DO NOT apply any filters. This pulls the full network data.
-        pass 
+        # Pull everything (No filter applied)
+        l_res = query.order("entry_date", desc=True).execute()
     else:
-        # ONLY apply the UUID filter if we are NOT in Global mode.
-        # This prevents the 'invalid input syntax for type uuid' error.
-        query = query.eq("property_id", st.session_state.current_property_id)
-
-    # --- STEP 3: EXECUTE & ORDER ---
-    l_res = query.order("entry_date", desc=True).execute()
+        # Pull only for the specific UUID
+        l_res = query.eq("property_id", st.session_state.current_property_id)\
+                     .order("entry_date", desc=True).execute()
     
     ledger_data = l_res.data if l_res.data else []
     df = pd.DataFrame(ledger_data)
 
 except Exception as e:
-    # This will now catch actual errors, not syntax mismatches
     st.error(f"Data Hydration Error: {e}")
     st.stop()
-# 3. ONBOARDING SHIELD & SAFETY CHECK
+
+# --- 3. SAFETY CHECK: Handle Empty Properties ---
 if df.empty:
-    # Bypass shield for critical Admin/Management pages
     bypass_pages = ["Global Admin Console", "AI Calibration", "Master Audit Report", "Strategic Alerts"]
     if page not in bypass_pages:
-        st.markdown(f"""
-            <div style="background-color: #FFFFFF; padding: 40px; border-radius: 15px; border-left: 10px solid #0047AB; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
-                <h1 style="color: #0047AB;">🏢 {st.session_state.current_property_name}</h1>
-                <h3>Intelligence Engine: Offline</h3>
-                <p>No forensic ledger data was found for this property or scope.</p>
-                <hr>
-                <p>Navigate to the <b>Master Audit Report</b> to initialize this tenant's data vault.</p>
-            </div>
-        """, unsafe_allow_html=True)
+        st.info(f"Welcome to {st.session_state.current_property_name}. Please initialize the Master Audit Report.")
         st.stop()
 
-# 4. DATA PROCESSING
+# --- 4. GLOBAL DATA PROCESSING ---
 if not df.empty:
     df['entry_date'] = pd.to_datetime(df['entry_date'])
-    # In Global mode, we ensure the property_id stays as a reference for charts
-    if st.session_state.current_property_id == "GLOBAL":
-        df['scope_label'] = "Network"
-    else:
-        df['scope_label'] = st.session_state.current_property_name
 
 # =================================================================
 # 9. PAGE 1: EXECUTIVE DASHBOARD (v51.5 - SaaS Hybrid & Restored Pulse)
