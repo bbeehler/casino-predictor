@@ -1456,7 +1456,88 @@ elif page == "FloorCast AI Analyst":
             st.error(f"Consultation Error: {e}")
 
 # =================================================================
-# 15. PAGE: GLOBAL ADMIN CONSOLE (v19.0 SaaS Factory)
+# 15. PAGE 7: BL-ROAS CALCULATOR (v19.0 SaaS Enabled)
+# =================================================================
+elif page == "BL-ROAS Calculator":
+    st.markdown(f"""
+        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
+            <h2 style="color: #0047AB; margin: 0;">💎 BL-ROAS Calculator: {st.session_state.current_property_name}</h2>
+            <p style="color: #444; margin: 0;">Bottom-Line Return on Ad Spend: Measuring actual GGR impact vs. Marketing Investment.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # --- 1. DATA PULL (Filtered by Property) ---
+    c = st.session_state.coeffs
+    avg_coin = float(c.get('Avg_Coin_In', 112.50))
+    hold_pct = float(c.get('Hold_Pct', 10.0)) / 100
+
+    col_calc1, col_calc2 = st.columns([1, 2])
+
+    with col_calc1:
+        st.subheader("Manual Calibration")
+        in_spend = st.number_input("Monthly Ad Spend ($)", min_value=0.0, value=50000.0, step=1000.0)
+        in_lift = st.number_input("Digital Guest Lift (Monthly)", min_value=0, value=2500, step=100)
+        in_brand = st.number_input("Total Brand Value ($)", min_value=0.0, value=15000.0, step=1000.0)
+        
+        # Calculate Math
+        incremental_ggr = (in_lift * avg_coin) * hold_pct
+        total_marketing_contribution = incremental_ggr + in_brand
+        
+        bl_roas = total_marketing_contribution / in_spend if in_spend > 0 else 0.0
+
+    with col_calc2:
+        st.subheader("Performance Breakdown")
+        
+        # Display Gauges/Metrics
+        m1, m2 = st.columns(2)
+        m1.metric("Incremental GGR", f"${incremental_ggr:,.2f}")
+        m2.metric("Total Brand + GGR", f"${total_marketing_contribution:,.2f}")
+        
+        # BL-ROAS Gauge
+        fig_roas = go.Figure(go.Indicator(
+            mode = "gauge+number",
+            value = bl_roas,
+            title = {'text': "BL-ROAS Multiplier"},
+            gauge = {
+                'axis': {'range': [0, 10]},
+                'bar': {'color': "#0047AB"},
+                'steps': [
+                    {'range': [0, 2], 'color': "#FF4B4B"},
+                    {'range': [2, 4], 'color': "#F0F2F6"},
+                    {'range': [4, 10], 'color': "#28A745"}
+                ],
+                'threshold': {'line': {'color': "black", 'width': 4}, 'value': 4.0}
+            }
+        ))
+        fig_roas.update_layout(height=300, margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_roas, use_container_width=True, key=f"roas_gauge_{st.session_state.current_property_id}")
+
+    st.divider()
+
+    # --- 2. ARCHIVE RECORD (SaaS Tagged) ---
+    st.subheader("💾 Archive Monthly Performance")
+    with st.form("archive_roi_form"):
+        ar_month = st.date_input("Reporting Month", value=datetime.date.today())
+        ar_notes = st.text_input("Performance Notes", placeholder="e.g. High snowfall impacted OOH visibility")
+        
+        if st.form_submit_button("Archive ROI Record"):
+            roi_payload = {
+                "property_id": st.session_state.current_property_id,
+                "report_month": str(ar_month),
+                "ad_spend": in_spend,
+                "digital_lift": in_lift,
+                "brand_value": in_brand,
+                "calculated_bl_roas": bl_roas,
+                "notes": ar_notes
+            }
+            try:
+                supabase.table("monthly_roi").upsert(roi_payload).execute()
+                st.success(f"ROI Record for {ar_month.strftime('%B %Y')} archived for {st.session_state.current_property_name}.")
+            except Exception as e:
+                st.error(f"Archive Error: {e}")
+
+# =================================================================
+# 15. PAGE 8: GLOBAL ADMIN CONSOLE (v19.0 SaaS Factory)
 # =================================================================
 elif page == "Global Admin Console":
     st.markdown("""
