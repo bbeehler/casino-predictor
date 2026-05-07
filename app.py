@@ -15,6 +15,12 @@ import os
 import uuid
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
+def check_permission(capability):
+    """Checks if the user's current role allows for a specific action."""
+    # We pull from session_state which is hydrated at login
+    perms = st.session_state.get('user_permissions', {})
+    return perms.get(capability, False)
+
 # =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
 # =================================================================
@@ -166,7 +172,7 @@ if 'weather_data' not in st.session_state:
     st.session_state.weather_data = asyncio.run(fetch_weather())
 
 # =================================================================
-# 7. FORENSIC LOGIN GATEKEEPER
+# 7. FORENSIC LOGIN GATEKEEPER (v24.6 - Permission Hydrated)
 # =================================================================
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
@@ -176,35 +182,61 @@ if not st.session_state.authenticated:
     with st.form("login_form"):
         e_mail = st.text_input("Email").strip().lower()
         p_word = st.text_input("Password", type="password")
+        
         if st.form_submit_button("Unlock Engine"):
-            res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
-            if res.user:
-                access_res = supabase.table("user_property_access").select("*, properties(property_name)").eq("user_email", e_mail).execute()
-                if access_res.data:
-                    u_data = access_res.data[0]
-                    st.session_state.authenticated = True
-                    st.session_state.user_email = e_mail
-                    st.session_state.user_role = u_data['user_role']
-                    st.session_state.current_property_id = u_data['property_id']
-                    st.session_state.current_property_name = u_data['properties']['property_name'] if u_data.get('properties') else "Unknown"
-                    st.rerun()
-                else: st.error("No Property Mapping found.")
-            else: st.error("Invalid Credentials.")
+            try:
+                res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
+                
+                if res.user:
+                    # 1. Fetch User Identity & Property Access
+                    access_res = supabase.table("user_property_access").select("*, properties(property_name)").eq("user_email", e_mail).execute()
+                    
+                    if access_res.data:
+                        u_data = access_res.data[0]
+                        user_role = u_data['user_role'] # Temporary variable for the next step
+                        
+                        # 2. DYNAMIC PERMISSIONS FETCH (The Step 3 Logic)
+                        perm_res = supabase.table("role_permissions").select("perms").eq("role_name", user_role).execute()
+                        
+                        # 3. HYDRATE SESSION STATE
+                        st.session_state.authenticated = True
+                        st.session_state.user_email = e_mail
+                        st.session_state.user_role = user_role
+                        st.session_state.current_property_id = u_data['property_id']
+                        st.session_state.current_property_name = u_data['properties']['property_name'] if u_data.get('properties') else "Unknown"
+                        
+                        # Save the specific capabilities dictionary (e.g., {"view_ledger": True})
+                        if perm_res.data:
+                            st.session_state.user_permissions = perm_res.data[0]['perms']
+                        else:
+                            # Fallback if no specific matrix is set for this role yet
+                            st.session_state.user_permissions = {"view_analytics": True}
+                        
+                        st.success(f"Access Granted: {user_role} Verified.")
+                        st.rerun()
+                    else:
+                        st.error("Access Denied: No Property Mapping found for this email.")
+                else:
+                    st.error("Invalid Credentials.")
+            except Exception as e:
+                st.error(f"Auth System Error: {e}")
+                
     st.stop()
 
 # =================================================================
-# 8. EXECUTIVE NAVIGATION (v23.3 - Stable Nav Protocol)
+# 8. EXECUTIVE NAVIGATION (v24.5 - Permission-Aware Protocol)
 # =================================================================
 
-# Initialize page default to prevent NameErrors elsewhere
+# Initialize page default to prevent NameErrors downstream
 page = "Executive Dashboard"
 
 with st.sidebar:
+    # Branding Header
     st.image("https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png?h=171&iar=0&w=224&rev=914ac0eae6734be995b93d76ad2b1e8f", width=150)
     st.title(f"{st.session_state.current_property_name}")
     st.divider()
 
-    # 1. SCOPE SWITCHER (The Brain)
+    # 1. SCOPE SWITCHER (Super Admin Exclusive)
     if st.session_state.get('user_role') == "Super Admin":
         try:
             all_props = supabase.table("properties").select("id, property_name").execute()
@@ -213,7 +245,7 @@ with st.sidebar:
             
             curr_label = "📊 CONSOLIDATED VIEW" if st.session_state.current_property_id == "GLOBAL" else st.session_state.current_property_name
             
-            # Use a safe index lookup
+            # Safe index lookup to prevent crash on refresh
             s_idx = options.index(curr_label) if curr_label in options else 0
             selected_view = st.selectbox("🎯 Intelligence Scope:", options, index=s_idx)
             
@@ -226,36 +258,50 @@ with st.sidebar:
                 st.session_state.current_property_name = selected_view
                 st.rerun()
         except Exception as e:
-            st.error(f"Switcher Error: {e}")
+            st.error(f"Switcher Sync Failure: {e}")
 
-    # 2. DYNAMIC NAVIGATION VISIBILITY
+    # 2. DYNAMIC NAVIGATION (Capability-Based)
     if st.session_state.current_property_id == "GLOBAL":
-        # HIDE NAVIGATION: Force page to Dashboard and show context message
+        # HIDE NAVIGATION: Lockdown mode for Network View
         page = "Executive Dashboard"
-        st.info("🌐 Network-wide view active. Select a specific property to unlock operational decks.")
+        st.info("🌐 Network-wide view active. Select a property to access operational decks.")
     else:
-        # SHOW NAVIGATION: Property-specific menu
-        nav_options = [
-            "Executive Dashboard",
-            "Daily Ledger Audit",
-            "Attribution Analytics",
-            "Master Audit Report",
-            "FloorCast AI Analyst",
-            "BL-ROAS Calculator",
-            "Strategic Alerts"
-        ]
+        # SHOW NAVIGATION: Filtered by Permissions
+        # Core pages available to all authenticated users
+        nav_options = ["Executive Dashboard"]
         
-        if st.session_state.get('user_role') in ["Admin", "Super Admin"]:
+        # Capability Checks (Step 3 Implementation)
+        if check_permission("view_ledger"):
+            nav_options.append("Daily Ledger Audit")
+            
+        if check_permission("view_analytics"):
+            nav_options.append("Attribution Analytics")
+            nav_options.append("FloorCast AI Analyst")
+            
+        if check_permission("view_reports"):
+            nav_options.append("Master Audit Report")
+            
+        if check_permission("manage_alerts"):
+            nav_options.append("Strategic Alerts")
+            
+        if check_permission("calibrate_ai"):
             nav_options.append("AI Calibration")
-        
+            nav_options.append("BL-ROAS Calculator")
+
+        # Admin-Only Console
         if st.session_state.get('user_role') == "Super Admin":
             nav_options.append("Global Admin Console")
 
-        # Define the page via radio button
+        # Render the Nav Radio
         page = st.radio("Intelligence Decks:", nav_options, index=0)
 
     st.divider()
-    if st.button("🚪 Logout"):
+    
+    # 3. USER CONTEXT
+    st.caption(f"Logged in as: {st.session_state.get('user_email', 'User')}")
+    st.caption(f"Role: {st.session_state.get('user_role', 'Viewer')}")
+
+    if st.button("🚪 Logout", use_container_width=True):
         st.session_state.clear()
         st.rerun()
 
@@ -1672,6 +1718,39 @@ elif page == "Global Admin Console":
             
         except Exception as e:
             st.error(f"Diagnostic Error: {e}")
+
+# --- TAB 4: Role Permissions Manager ---
+with tabs[2]:
+    st.subheader("🛡️ Global Role Authorization Matrix")
+    
+    # 1. Select the Role to Edit
+    target_role = st.selectbox("Select Role to Configure:", ["Viewer", "Manager", "Admin"])
+    
+    # 2. Define Capabilities
+    capabilities = {
+        "view_analytics": "Access Attribution & Executive Dashboards",
+        "edit_ledger": "Add/Edit Daily Ledger Entries",
+        "manage_alerts": "Create and Delete Strategic Watchdogs",
+        "calibrate_ai": "Access and Change AI Coefficients",
+        "export_reports": "Download Master Audit CSVs"
+    }
+    
+    # 3. Create Toggle Form
+    with st.form(f"perm_matrix_{target_role}"):
+        st.write(f"Adjusting capabilities for **{target_role}**")
+        updated_perms = {}
+        
+        for cap_id, cap_desc in capabilities.items():
+            # In a real app, you'd fetch the current state from Supabase first
+            updated_perms[cap_id] = st.checkbox(cap_desc, key=f"cap_{cap_id}")
+            
+        if st.form_submit_button("💾 Save Role Configuration"):
+            # Update the 'permissions' table in Supabase
+            supabase.table("role_permissions").upsert({
+                "role_name": target_role,
+                "perms": updated_perms # Store as a JSONB object
+            }).execute()
+            st.success(f"Global permissions for {target_role} updated.")
 
 # =================================================================
 # 17. PAGE 9: STRATEGIC ALERTS & REPORTING (v1.1 SaaS Ironclad)
