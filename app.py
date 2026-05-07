@@ -456,45 +456,34 @@ with st.sidebar:
             st.rerun()
 
 # =================================================================
-# 9. DATA GATEKEEPER: THE BENCHMARKING ENGINE (v21.0 SaaS)
+# 9. DATA GATEKEEPER: THE "HYBRID" SAAS SHIELD (v20.2)
 # =================================================================
 
+# 1. FETCH DATA BASED ON SCOPE
 try:
-    # 1. NETWORK BENCHMARKING (Silent Background Pull)
-    # We fetch lightweight data from all properties to calculate the "Corporate Standard"
-    global_ref_res = supabase.table("ledger").select("actual_traffic, actual_coin_in, new_members").execute()
-    
-    if global_ref_res.data:
-        g_df = pd.DataFrame(global_ref_res.data)
-        # Calculate Network Averages for comparison deltas
-        st.session_state.net_avg_yield = (g_df['actual_coin_in'].sum() / g_df['actual_traffic'].sum()) if g_df['actual_traffic'].sum() > 0 else 0
-        st.session_state.net_avg_conv = (g_df['new_members'].sum() / g_df['actual_traffic'].sum() * 100) if g_df['actual_traffic'].sum() > 0 else 0
-    else:
-        st.session_state.net_avg_yield = 0
-        st.session_state.net_avg_conv = 0
+    # --- STEP 1: INITIALIZE QUERY ---
+    # We start with a base query to the ledger table
+    query = supabase.table("ledger").select("*")
 
-    # 2. SCOPE-SPECIFIC DATA FETCH
+    # --- STEP 2: APPLY CONDITIONAL FILTERING ---
     if st.session_state.current_property_id == "GLOBAL":
-        # Global Mode: Pull every record for Consolidated Intelligence
-        l_res = supabase.table("ledger")\
-            .select("*")\
-            .order("entry_date", desc=True)\
-            .execute()
+        # DO NOT apply any filters. This pulls the full network data.
+        pass 
     else:
-        # Standard Mode: Pull only for the active property
-        l_res = supabase.table("ledger")\
-            .select("*")\
-            .eq("property_id", st.session_state.current_property_id)\
-            .order("entry_date", desc=True)\
-            .execute()
+        # ONLY apply the UUID filter if we are NOT in Global mode.
+        # This prevents the 'invalid input syntax for type uuid' error.
+        query = query.eq("property_id", st.session_state.current_property_id)
+
+    # --- STEP 3: EXECUTE & ORDER ---
+    l_res = query.order("entry_date", desc=True).execute()
     
     ledger_data = l_res.data if l_res.data else []
     df = pd.DataFrame(ledger_data)
 
 except Exception as e:
-    st.error(f"⚠️ Intelligence Sync Error: {e}")
+    # This will now catch actual errors, not syntax mismatches
+    st.error(f"Data Hydration Error: {e}")
     st.stop()
-
 # 3. ONBOARDING SHIELD & SAFETY CHECK
 if df.empty:
     # Bypass shield for critical Admin/Management pages
