@@ -19,12 +19,12 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
 # =================================================================
 try:
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    supabase: Client = create_client(url, key)
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    supabase: Client = create_client(url, key)
 except Exception as e:
-    st.error(f"Critical System Error: Connection secrets missing. {e}")
-    st.stop()
+    st.error(f"Critical System Error: Connection secrets missing. {e}")
+    st.stop()
 
 # --- SAAS IDENTITY LAYER ---
 # Default only if not already set by the login gate
