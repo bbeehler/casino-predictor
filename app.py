@@ -1534,7 +1534,7 @@ elif page == "Global Admin Console":
             st.error(f"Diagnostic Error: {e}")
 
 # =================================================================
-# 17. PAGE 9: STRATEGIC ALERTS & REPORTING (v1.0 SaaS)
+# 17. PAGE 9: STRATEGIC ALERTS & REPORTING (v1.1 SaaS Ironclad)
 # =================================================================
 elif page == "Strategic Alerts":
     st.markdown(f"""
@@ -1548,37 +1548,54 @@ elif page == "Strategic Alerts":
 
     with col_a:
         st.subheader("🛠️ Create New Trigger")
-        with st.form("new_alert_form"):
-            a_name = st.text_input("Alert Name", placeholder="e.g. Low Yield Warning")
-            a_metric = st.selectbox("Metric to Watch", ["Revenue", "Guest Traffic", "Sentiment Score", "Conv %"])
-            a_op = st.selectbox("Condition", ["Drops Below", "Exceeds"])
-            a_val = st.number_input("Threshold Value", value=0.0)
-            
-            if st.form_submit_button("🛰️ Deploy Watchdog"):
-                alert_payload = {
-                    "property_id": st.session_state.current_property_id,
-                    "alert_name": a_name,
-                    "metric_target": a_metric,
-                    "threshold_val": a_val,
-                    "comparison_operator": "<" if a_op == "Drops Below" else ">",
-                    "user_email": st.session_state.user_email
-                }
-                supabase.table("strategic_alerts").insert(alert_payload).execute()
-                st.success(f"Watchdog '{a_name}' is now live.")
-                st.rerun()
+        
+        # SAFETY CHECK: Only allow trigger creation if a specific property is selected
+        if st.session_state.current_property_id == "GLOBAL":
+            st.warning("⚠️ Deployment Disabled: Please select a specific property from the sidebar to deploy a new Watchdog.")
+        else:
+            with st.form("new_alert_form"):
+                a_name = st.text_input("Alert Name", placeholder="e.g. Low Yield Warning")
+                a_metric = st.selectbox("Metric to Watch", ["Revenue", "Guest Traffic", "Sentiment Score", "Conv %"])
+                a_op = st.selectbox("Condition", ["Drops Below", "Exceeds"])
+                a_val = st.number_input("Threshold Value", value=0.0)
+                
+                if st.form_submit_button("🛰️ Deploy Watchdog"):
+                    alert_payload = {
+                        "property_id": st.session_state.current_property_id,
+                        "alert_name": a_name,
+                        "metric_target": a_metric,
+                        "threshold_val": a_val,
+                        "comparison_operator": "<" if a_op == "Drops Below" else ">",
+                        "user_email": st.session_state.user_email
+                    }
+                    supabase.table("strategic_alerts").insert(alert_payload).execute()
+                    st.success(f"Watchdog '{a_name}' is now live.")
+                    st.rerun()
 
     with col_b:
         st.subheader("📋 Active Property Watchdogs")
-        alerts_res = supabase.table("strategic_alerts").select("*").eq("property_id", st.session_state.current_property_id).execute()
+        
+        # CORE FIX: Conditional Query to prevent 22P02 UUID Error
+        if st.session_state.current_property_id == "GLOBAL":
+            # Pull every alert across the entire network
+            alerts_res = supabase.table("strategic_alerts").select("*").execute()
+            st.caption("Displaying all Network-wide alerts.")
+        else:
+            # Pull only for the specific active property
+            alerts_res = supabase.table("strategic_alerts").select("*")\
+                .eq("property_id", st.session_state.current_property_id).execute()
+
         if alerts_res.data:
             for alert in alerts_res.data:
-                with st.expander(f"🔔 {alert['alert_name']}"):
+                # Add property name context if in Global view
+                display_name = alert['alert_name']
+                with st.expander(f"🔔 {display_name}"):
                     st.write(f"Condition: **{alert['metric_target']}** {alert['comparison_operator']} **{alert['threshold_val']}**")
                     if st.button("Disable", key=f"dis_{alert['id']}"):
                         supabase.table("strategic_alerts").delete().eq("id", alert['id']).execute()
                         st.rerun()
         else:
-            st.info("No active alerts for this property.")
+            st.info("No active alerts found for this scope.")
 
     st.divider()
 
