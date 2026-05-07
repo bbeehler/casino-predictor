@@ -1456,7 +1456,7 @@ elif page == "FloorCast AI Analyst":
             st.error(f"Consultation Error: {e}")
 
 # =================================================================
-# 15. PAGE 7: BL-ROAS COMMAND CENTER (v24 SaaS Mirror)
+# 15. PAGE 7: BL-ROAS COMMAND CENTER (v24.1 SaaS - Conflict Fixed)
 # =================================================================
 elif page == "BL-ROAS Calculator":
     st.markdown(f"""
@@ -1478,8 +1478,7 @@ elif page == "BL-ROAS Calculator":
     selected_label = st.selectbox("Select Audit Month:", month_labels)
     selected_month = month_options[month_labels.index(selected_label)]
 
-    # --- 2. DYNAMIC LEDGER AGGREGATION (Filtered by current Property) ---
-    # We use the 'ledger_data' pulled in Section 6/9 which is already SaaS filtered
+    # --- 2. DYNAMIC LEDGER AGGREGATION ---
     df_roas = pd.DataFrame(ledger_data)
     if not df_roas.empty:
         df_roas['entry_date'] = pd.to_datetime(df_roas['entry_date'])
@@ -1489,7 +1488,6 @@ elif page == "BL-ROAS Calculator":
         selected_month_df = df_roas.loc[m_mask].copy()
 
         if not selected_month_df.empty:
-            # Group by date and take the MAX value for each day to ensure full month coverage
             monthly_summary = selected_month_df.groupby(selected_month_df['entry_date'].dt.date).max()
             ledger_traffic = int(monthly_summary['actual_traffic'].sum())
             ledger_signups = int(monthly_summary['new_members'].sum())
@@ -1499,14 +1497,12 @@ elif page == "BL-ROAS Calculator":
     else:
         ledger_traffic, ledger_signups, ledger_coin_in = 0, 0, 0.0
 
-    # SAFETY: Prevent division by zero
     avg_spend_actual = float(ledger_coin_in / ledger_traffic) if ledger_traffic > 0 else DEFAULT_AVG_SPEND
 
     # --- 3. THE INPUT FORM ---
     with st.form("roas_input_form"):
         st.subheader(f"📊 {selected_label} Metrics")
         
-        # SAAS CHECK: Only query ROI records for THIS property
         existing_res = supabase.table("monthly_roi")\
             .select("*")\
             .eq("property_id", st.session_state.current_property_id)\
@@ -1537,15 +1533,14 @@ elif page == "BL-ROAS Calculator":
 
         submit = st.form_submit_button("🚀 Save & Calculate ROI")
 
-    # --- 4. CALCULATION LOGIC ---
+    # --- 4. CALCULATION & UPSERT LOGIC ---
     if submit:
-        # Brand Value logic (consistent with your benchmark)
         brand_value = (utm_s * 1.5) + (org_s * 0.5) + (likes * 0.1) + (shares * 0.5) + (geo_lift * 2.0)
         bl_roas = brand_value / ad_spend if ad_spend > 0 else 0
         enhanced_rev = brand_value + ledger_coin_in + (ledger_signups * LTV_BENCHMARK)
 
         roi_payload = {
-            "property_id": st.session_state.current_property_id, # <--- SAAS TAG
+            "property_id": st.session_state.current_property_id,
             "report_month": str(selected_month),
             "utm_sessions": utm_s, 
             "organic_sessions": org_s, 
@@ -1564,7 +1559,11 @@ elif page == "BL-ROAS Calculator":
         }
         
         try:
-            supabase.table("monthly_roi").upsert(roi_payload).execute()
+            # FIX: Explicitly handle conflict on the composite key (Property + Month)
+            supabase.table("monthly_roi").upsert(
+                roi_payload, 
+                on_conflict="property_id, report_month"
+            ).execute()
             st.success(f"✅ ROI for {selected_label} saved successfully!")
             st.rerun() 
         except Exception as e:
@@ -1572,7 +1571,6 @@ elif page == "BL-ROAS Calculator":
 
     # --- 5. REPORT GENERATOR ---
     st.divider()
-    # SAAS FILTER: Only show history for THIS property
     history_res = supabase.table("monthly_roi")\
         .select("*")\
         .eq("property_id", st.session_state.current_property_id)\
