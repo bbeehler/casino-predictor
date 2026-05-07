@@ -237,15 +237,15 @@ with st.sidebar:
         st.rerun()
 
 # =================================================================
-# 9. DATA GATEKEEPER: THE DYNAMIC SAAS HYDRATOR (v23.7)
+# 9. DATA GATEKEEPER: THE UNIVERSAL HYDRATOR (v23.8)
 # =================================================================
 
-# 1. Initialize variables
+# 1. PRE-INITIALIZE
 ledger_data = [] 
 df = pd.DataFrame()
 
 try:
-    # 2. Get the Translator (IDs to Names)
+    # 2. Get Property Translator
     prop_res = supabase.table("properties").select("id, property_name").execute()
     prop_map = {p['id']: p['property_name'] for p in prop_res.data} if prop_res.data else {}
 
@@ -258,39 +258,41 @@ try:
     if l_res and l_res.data:
         ledger_data = l_res.data
         
-        # --- THE DYNAMIC JOIN ---
-        # If in Global View, we loop through the data to apply property-specific math
-        # If in Single View, we just run the engine once
-        if st.session_state.current_property_id == "GLOBAL":
-            full_list = []
-            for p_id in prop_map.keys():
-                # Filter rows for this specific property
-                p_rows = [row for row in ledger_data if row['property_id'] == p_id]
-                if p_rows:
-                    # Fetch THIS property's specific coefficients (with its unique heartbeats)
-                    p_coeffs_res = supabase.table("coefficients").select("*").eq("property_id", p_id).execute()
-                    p_coeffs = p_coeffs_res.data[0] if p_coeffs_res.data else st.session_state.coeffs
-                    
-                    # Run engine for THIS property
-                    p_hydrated = get_forensic_metrics(p_rows, p_coeffs)
-                    full_list.append(p_hydrated['df'])
+        # --- THE DYNAMIC PROCESSING LOOP ---
+        full_list = []
+        
+        # Get unique property IDs present in the current data batch
+        active_p_ids = list(set([row['property_id'] for row in ledger_data]))
+        
+        for p_id in active_p_ids:
+            p_rows = [row for row in ledger_data if row['property_id'] == p_id]
             
-            df = pd.concat(full_list) if full_list else pd.DataFrame()
-        else:
-            # Single property: use the session's current coeffs
-            hydrated = get_forensic_metrics(ledger_data, st.session_state.coeffs)
-            df = hydrated['df']
-
-        # Finalize names for the charts
-        if not df.empty:
+            # Fetch THIS property's coefficients
+            p_coeffs_res = supabase.table("coefficients").select("*").eq("property_id", p_id).execute()
+            
+            # FALLBACK: If no coefficients exist in DB, use the session defaults
+            # This ensures 'residual_lift' and 'baseline' are ALWAYS generated
+            p_coeffs = p_coeffs_res.data[0] if (p_coeffs_res.data and len(p_coeffs_res.data) > 0) else st.session_state.coeffs
+            
+            # Run the engine
+            hydrated_batch = get_forensic_metrics(p_rows, p_coeffs)
+            if not hydrated_batch['df'].empty:
+                full_list.append(hydrated_batch['df'])
+        
+        # Combine all properties into one master dataframe
+        if full_list:
+            df = pd.concat(full_list, ignore_index=True)
             df['Property'] = df['property_id'].map(prop_map)
-            
+        else:
+            df = pd.DataFrame()
+
 except Exception as e:
-    st.error(f"Dynamic Hydration Error: {e}")
+    st.error(f"Global Hydration Error: {e}")
     df = pd.DataFrame()
 
-# 4. SAFETY SHIELD: This kills the KeyError by stopping the app if df is empty
+# 4. FINAL SAFETY SHIELD (Prevents Page 3 from even attempting to load without data)
 if df.empty and page not in ["Global Admin Console", "Master Audit Report"]:
+    st.info("Gathering forensic intelligence... If this persists, check your Master Audit data.")
     st.stop()
 
 # =================================================================
