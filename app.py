@@ -1456,85 +1456,155 @@ elif page == "FloorCast AI Analyst":
             st.error(f"Consultation Error: {e}")
 
 # =================================================================
-# 15. PAGE 7: BL-ROAS CALCULATOR (v19.0 SaaS Enabled)
+# 15. PAGE 7: BL-ROAS COMMAND CENTER (v24 SaaS Mirror)
 # =================================================================
 elif page == "BL-ROAS Calculator":
     st.markdown(f"""
-        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
-            <h2 style="color: #0047AB; margin: 0;">💎 BL-ROAS Calculator: {st.session_state.current_property_name}</h2>
-            <p style="color: #444; margin: 0;">Bottom-Line Return on Ad Spend: Measuring actual GGR impact vs. Marketing Investment.</p>
+        <div style="background-color: #F8F9FA; padding: 20px; border-radius: 12px; border-left: 6px solid #28A745; margin-bottom: 25px;">
+            <h2 style="color: #28A745; margin: 0;">💰 BL-ROAS Command Center: {st.session_state.current_property_name}</h2>
+            <p style="color: #444; margin: 0;">Audit past performance or calculate current monthly ROI.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # --- 1. DATA PULL (Filtered by Property) ---
-    c = st.session_state.coeffs
-    avg_coin = float(c.get('Avg_Coin_In', 112.50))
-    hold_pct = float(c.get('Hold_Pct', 10.0)) / 100
+    # --- 0. GLOBAL PAGE BENCHMARKS ---
+    LTV_BENCHMARK = 1900.00 
+    DEFAULT_AVG_SPEND = 1100.31
 
-    col_calc1, col_calc2 = st.columns([1, 2])
+    # --- 1. MONTH SELECTION ---
+    today = datetime.date.today()
+    month_options = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
+    month_labels = [m.strftime("%B %Y") for m in month_options]
 
-    with col_calc1:
-        st.subheader("Manual Calibration")
-        in_spend = st.number_input("Monthly Ad Spend ($)", min_value=0.0, value=50000.0, step=1000.0)
-        in_lift = st.number_input("Digital Guest Lift (Monthly)", min_value=0, value=2500, step=100)
-        in_brand = st.number_input("Total Brand Value ($)", min_value=0.0, value=15000.0, step=1000.0)
-        
-        # Calculate Math
-        incremental_ggr = (in_lift * avg_coin) * hold_pct
-        total_marketing_contribution = incremental_ggr + in_brand
-        
-        bl_roas = total_marketing_contribution / in_spend if in_spend > 0 else 0.0
+    selected_label = st.selectbox("Select Audit Month:", month_labels)
+    selected_month = month_options[month_labels.index(selected_label)]
 
-    with col_calc2:
-        st.subheader("Performance Breakdown")
+    # --- 2. DYNAMIC LEDGER AGGREGATION (Filtered by current Property) ---
+    # We use the 'ledger_data' pulled in Section 6/9 which is already SaaS filtered
+    df_roas = pd.DataFrame(ledger_data)
+    if not df_roas.empty:
+        df_roas['entry_date'] = pd.to_datetime(df_roas['entry_date'])
         
-        # Display Gauges/Metrics
-        m1, m2 = st.columns(2)
-        m1.metric("Incremental GGR", f"${incremental_ggr:,.2f}")
-        m2.metric("Total Brand + GGR", f"${total_marketing_contribution:,.2f}")
-        
-        # BL-ROAS Gauge
-        fig_roas = go.Figure(go.Indicator(
-            mode = "gauge+number",
-            value = bl_roas,
-            title = {'text': "BL-ROAS Multiplier"},
-            gauge = {
-                'axis': {'range': [0, 10]},
-                'bar': {'color': "#0047AB"},
-                'steps': [
-                    {'range': [0, 2], 'color': "#FF4B4B"},
-                    {'range': [2, 4], 'color': "#F0F2F6"},
-                    {'range': [4, 10], 'color': "#28A745"}
-                ],
-                'threshold': {'line': {'color': "black", 'width': 4}, 'value': 4.0}
-            }
-        ))
-        fig_roas.update_layout(height=300, margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_roas, use_container_width=True, key=f"roas_gauge_{st.session_state.current_property_id}")
+        m_mask = (df_roas['entry_date'].dt.month == selected_month.month) & \
+                 (df_roas['entry_date'].dt.year == selected_month.year)
+        selected_month_df = df_roas.loc[m_mask].copy()
 
+        if not selected_month_df.empty:
+            # Group by date and take the MAX value for each day to ensure full month coverage
+            monthly_summary = selected_month_df.groupby(selected_month_df['entry_date'].dt.date).max()
+            ledger_traffic = int(monthly_summary['actual_traffic'].sum())
+            ledger_signups = int(monthly_summary['new_members'].sum())
+            ledger_coin_in = float(monthly_summary['actual_coin_in'].sum())
+        else:
+            ledger_traffic, ledger_signups, ledger_coin_in = 0, 0, 0.0
+    else:
+        ledger_traffic, ledger_signups, ledger_coin_in = 0, 0, 0.0
+
+    # SAFETY: Prevent division by zero
+    avg_spend_actual = float(ledger_coin_in / ledger_traffic) if ledger_traffic > 0 else DEFAULT_AVG_SPEND
+
+    # --- 3. THE INPUT FORM ---
+    with st.form("roas_input_form"):
+        st.subheader(f"📊 {selected_label} Metrics")
+        
+        # SAAS CHECK: Only query ROI records for THIS property
+        existing_res = supabase.table("monthly_roi")\
+            .select("*")\
+            .eq("property_id", st.session_state.current_property_id)\
+            .eq("report_month", str(selected_month))\
+            .execute()
+        existing = existing_res.data[0] if existing_res.data else {}
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            utm_s = st.number_input("UTM Sessions", value=int(existing.get('utm_sessions', 0)))
+            org_s = st.number_input("Organic Sessions", value=int(existing.get('organic_sessions', 0)))
+            ad_spend = st.number_input("Total Ad Spend ($)", value=float(existing.get('ad_spend', 0.0)), step=100.0)
+        
+        with c2:
+            likes = st.number_input("Social Likes", value=int(existing.get('social_likes', 0)))
+            comments = st.number_input("Social Comments", value=int(existing.get('social_comments', 0)))
+            shares = st.number_input("Social Shares", value=int(existing.get('social_shares', 0)))
+            views = st.number_input("Post Views", value=int(existing.get('post_views', 0)))
+
+        with c3:
+            time_site = st.number_input("Time on Site Sessions", value=int(existing.get('site_time_sessions', 0)))
+            cta_clicks = st.number_input("Booking CTA Clicks", value=int(existing.get('booking_clicks', 0)))
+            reviews = st.number_input("Net Positive Reviews", value=int(existing.get('pos_reviews', 0)))
+            geo_lift = st.number_input("Incremental Geo Traffic", value=int(existing.get('geo_lift_traffic', 0)))
+
+        st.divider()
+        st.info(f"**Ledger Sync ({selected_label}):** Coin-In: ${ledger_coin_in:,.2f} | Traffic: {ledger_traffic:,} | Signups: {ledger_signups:,}")
+
+        submit = st.form_submit_button("🚀 Save & Calculate ROI")
+
+    # --- 4. CALCULATION LOGIC ---
+    if submit:
+        # Brand Value logic (consistent with your benchmark)
+        brand_value = (utm_s * 1.5) + (org_s * 0.5) + (likes * 0.1) + (shares * 0.5) + (geo_lift * 2.0)
+        bl_roas = brand_value / ad_spend if ad_spend > 0 else 0
+        enhanced_rev = brand_value + ledger_coin_in + (ledger_signups * LTV_BENCHMARK)
+
+        roi_payload = {
+            "property_id": st.session_state.current_property_id, # <--- SAAS TAG
+            "report_month": str(selected_month),
+            "utm_sessions": utm_s, 
+            "organic_sessions": org_s, 
+            "ad_spend": ad_spend,
+            "social_likes": likes, 
+            "social_comments": comments, 
+            "social_shares": shares, 
+            "post_views": views,
+            "site_time_sessions": time_site, 
+            "booking_clicks": cta_clicks, 
+            "pos_reviews": reviews, 
+            "geo_lift_traffic": geo_lift, 
+            "brand_value": brand_value, 
+            "calculated_bl_roas": bl_roas, 
+            "enhanced_revenue": enhanced_rev
+        }
+        
+        try:
+            supabase.table("monthly_roi").upsert(roi_payload).execute()
+            st.success(f"✅ ROI for {selected_label} saved successfully!")
+            st.rerun() 
+        except Exception as e:
+            st.error(f"Sync Failure: {e}")
+
+    # --- 5. REPORT GENERATOR ---
     st.divider()
-
-    # --- 2. ARCHIVE RECORD (SaaS Tagged) ---
-    st.subheader("💾 Archive Monthly Performance")
-    with st.form("archive_roi_form"):
-        ar_month = st.date_input("Reporting Month", value=datetime.date.today())
-        ar_notes = st.text_input("Performance Notes", placeholder="e.g. High snowfall impacted OOH visibility")
+    # SAAS FILTER: Only show history for THIS property
+    history_res = supabase.table("monthly_roi")\
+        .select("*")\
+        .eq("property_id", st.session_state.current_property_id)\
+        .order("report_month", desc=True)\
+        .execute()
         
-        if st.form_submit_button("Archive ROI Record"):
-            roi_payload = {
-                "property_id": st.session_state.current_property_id,
-                "report_month": str(ar_month),
-                "ad_spend": in_spend,
-                "digital_lift": in_lift,
-                "brand_value": in_brand,
-                "calculated_bl_roas": bl_roas,
-                "notes": ar_notes
-            }
-            try:
-                supabase.table("monthly_roi").upsert(roi_payload).execute()
-                st.success(f"ROI Record for {ar_month.strftime('%B %Y')} archived for {st.session_state.current_property_name}.")
-            except Exception as e:
-                st.error(f"Archive Error: {e}")
+    if history_res.data:
+        df_hist = pd.DataFrame(history_res.data)
+        curr_row = df_hist[df_hist['report_month'] == str(selected_month)]
+        
+        if not curr_row.empty:
+            curr = curr_row.iloc[0]
+            prop_potential = ledger_coin_in + (ledger_signups * LTV_BENCHMARK)
+            
+            report_text = f"""{selected_label} ROAS Results for {st.session_state.current_property_name}
+Brand Health Performance
+
+BL-ROAS = {curr['calculated_bl_roas']:.2f}x
+For every $1 spent in advertising, we generated ${curr['brand_value']:,.2f} in measurable brand value.
+
+🎯 Attributed Revenue Impact (Floor)
+• 10% Attribution: ${(prop_potential * 0.1):,.0f}
+• 20% Attribution: ${(prop_potential * 0.2):,.0f}
+• 30% Attribution: ${(prop_potential * 0.3):,.0f}
+
+Enhanced Total Impact = ${curr['enhanced_revenue']:,.0f}"""
+            
+            st.subheader("📄 SharePoint Ready Text")
+            st.text_area("Copy/Paste this into the monthly report:", value=report_text, height=250)
+
+            st.write("### 📜 Audit History")
+            st.dataframe(df_hist[['report_month', 'calculated_bl_roas', 'brand_value', 'enhanced_revenue']], use_container_width=True, hide_index=True)
 
 # =================================================================
 # 15. PAGE 8: GLOBAL ADMIN CONSOLE (v19.0 SaaS Factory)
