@@ -284,12 +284,28 @@ def get_hydrated_data(property_id, _supabase_client):
     except Exception as e:
         return pd.DataFrame()
 
-# --- EXECUTION ---
-# This line ensures 'df' is ALWAYS a fully-featured dataframe before Page 3 runs
-df = get_hydrated_data(st.session_state.current_property_id, supabase)
+# --- EXECUTION (Updated for Variable Scope) ---
+
+# 1. We call the function and unpack BOTH variables
+# Note: get_hydrated_data must now return (df, raw_list)
+@st.cache_data(ttl=600)
+def get_hydrated_data(property_id, _supabase_client):
+    try:
+        # ... (All your logic from the previous version stays the same) ...
+        
+        # At the end of the logic, after all_frames is concatenated:
+        final_df = pd.concat(all_frames, ignore_index=True) if all_frames else pd.DataFrame()
+        
+        # We return BOTH the DataFrame and the raw ledger_data list
+        return final_df, raw_data 
+    except Exception as e:
+        return pd.DataFrame(), []
+
+# 2. Unpack them here so they are "Global" to the rest of the script
+df, ledger_data = get_hydrated_data(st.session_state.current_property_id, supabase)
 
 # --- 10. THE IRONCLAD SAFETY GATE ---
-if df.empty:
+if df.empty or not ledger_data:
     if page not in ["Global Admin Console", "Master Audit Report"]:
         st.warning("Intelligence Engine is warming up. Please ensure data is present in the Master Audit Report.")
         st.stop()
