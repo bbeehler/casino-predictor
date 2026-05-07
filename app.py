@@ -157,38 +157,48 @@ if not st.session_state.authenticated:
     st.stop()
 
 # =================================================================
-# 8. EXECUTIVE NAVIGATION (v23.2 - Nav Hide Protocol)
+# 8. EXECUTIVE NAVIGATION (v23.3 - Stable Nav Protocol)
 # =================================================================
+
+# Initialize page default to prevent NameErrors elsewhere
+page = "Executive Dashboard"
+
 with st.sidebar:
     st.image("https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png?h=171&iar=0&w=224&rev=914ac0eae6734be995b93d76ad2b1e8f", width=150)
     st.title(f"{st.session_state.current_property_name}")
     st.divider()
 
-    # 1. SCOPE SWITCHER
+    # 1. SCOPE SWITCHER (The Brain)
     if st.session_state.get('user_role') == "Super Admin":
-        all_props = supabase.table("properties").select("id, property_name").execute()
-        prop_map = {p['property_name']: p['id'] for p in all_props.data}
-        options = ["📊 CONSOLIDATED VIEW"] + list(prop_map.keys())
-        
-        curr_label = "📊 CONSOLIDATED VIEW" if st.session_state.current_property_id == "GLOBAL" else st.session_state.current_property_name
-        selected_view = st.selectbox("🎯 Intelligence Scope:", options, index=options.index(curr_label) if curr_label in options else 0)
-        
-        if selected_view == "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != "GLOBAL":
-            st.session_state.current_property_id = "GLOBAL"
-            st.session_state.current_property_name = "All Properties"
-            st.rerun()
-        elif selected_view != "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != prop_map[selected_view]:
-            st.session_state.current_property_id = prop_map[selected_view]
-            st.session_state.current_property_name = selected_view
-            st.rerun()
+        try:
+            all_props = supabase.table("properties").select("id, property_name").execute()
+            prop_map = {p['property_name']: p['id'] for p in all_props.data}
+            options = ["📊 CONSOLIDATED VIEW"] + list(prop_map.keys())
+            
+            curr_label = "📊 CONSOLIDATED VIEW" if st.session_state.current_property_id == "GLOBAL" else st.session_state.current_property_name
+            
+            # Use a safe index lookup
+            s_idx = options.index(curr_label) if curr_label in options else 0
+            selected_view = st.selectbox("🎯 Intelligence Scope:", options, index=s_idx)
+            
+            if selected_view == "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != "GLOBAL":
+                st.session_state.current_property_id = "GLOBAL"
+                st.session_state.current_property_name = "All Properties"
+                st.rerun()
+            elif selected_view != "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != prop_map.get(selected_view):
+                st.session_state.current_property_id = prop_map[selected_view]
+                st.session_state.current_property_name = selected_view
+                st.rerun()
+        except Exception as e:
+            st.error(f"Switcher Error: {e}")
 
     # 2. DYNAMIC NAVIGATION VISIBILITY
-    # If in GLOBAL mode, we force the page to Executive Dashboard and HIDE the menu
     if st.session_state.current_property_id == "GLOBAL":
+        # HIDE NAVIGATION: Force page to Dashboard and show context message
         page = "Executive Dashboard"
-        st.info("🌐 Network-wide view active. Select a specific property to access operational decks.")
+        st.info("🌐 Network-wide view active. Select a specific property to unlock operational decks.")
     else:
-        # Standard Navigation only shows when a property is selected
+        # SHOW NAVIGATION: Property-specific menu
         nav_options = [
             "Executive Dashboard",
             "Daily Ledger Audit",
@@ -205,6 +215,7 @@ with st.sidebar:
         if st.session_state.get('user_role') == "Super Admin":
             nav_options.append("Global Admin Console")
 
+        # Define the page via radio button
         page = st.radio("Intelligence Decks:", nav_options, index=0)
 
     st.divider()
