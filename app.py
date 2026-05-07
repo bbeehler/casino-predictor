@@ -224,38 +224,56 @@ with st.sidebar:
         st.rerun()
 
 # =================================================================
-# 9. DATA GATEKEEPER: THE MAPPING & BENCHMARK ENGINE (v22.1)
+# 9. DATA GATEKEEPER: THE MAPPING & BENCHMARK ENGINE (v23.5)
 # =================================================================
+
+# 1. PRE-INITIALIZE TO PREVENT DOWNSTREAM ERRORS (Line 518 FIX)
+ledger_data = [] 
+df = pd.DataFrame()
+prop_name_map = {}
+
 try:
-    # 1. Benchmarking (Safe reference pull)
+    # 2. NETWORK BENCHMARKING (Always Safe - Global Context)
     g_ref = supabase.table("ledger").select("actual_traffic, actual_coin_in, new_members").execute()
     if g_ref.data:
         g_df = pd.DataFrame(g_ref.data)
         st.session_state.net_avg_yield = (g_df['actual_coin_in'].sum() / g_df['actual_traffic'].sum()) if g_df['actual_traffic'].sum() > 0 else 0
         st.session_state.net_avg_conv = (g_df['new_members'].sum() / g_df['actual_traffic'].sum() * 100) if g_df['actual_traffic'].sum() > 0 else 0
 
-    # 2. Property Map (Translator)
+    # 3. NAME MAPPING DICTIONARY (Translator for UUIDs)
     prop_list_res = supabase.table("properties").select("id, property_name").execute()
     prop_name_map = {p['id']: p['property_name'] for p in prop_list_res.data} if prop_list_res.data else {}
 
-    # 3. Data Fetching
+    # 4. SCOPE-AWARE DATA FETCH
     query = supabase.table("ledger").select("*")
-    if st.session_state.current_property_id == "GLOBAL":
-        l_res = query.order("entry_date", desc=True).execute()
-    else:
-        l_res = query.eq("property_id", st.session_state.current_property_id).order("entry_date", desc=True).execute()
     
-    df = pd.DataFrame(l_res.data) if l_res.data else pd.DataFrame()
+    if st.session_state.get('current_property_id') == "GLOBAL":
+        # Pull everything for Consolidated View
+        l_res = query.order("entry_date", desc=True).execute()
+    elif st.session_state.get('current_property_id'):
+        # Pull specific property UUID
+        l_res = query.eq("property_id", st.session_state.current_property_id).order("entry_date", desc=True).execute()
+    else:
+        l_res = None
 
-    if not df.empty:
+    # 5. DATA HYDRATION & MAPPING
+    if l_res and l_res.data:
+        ledger_data = l_res.data
+        df = pd.DataFrame(ledger_data)
         df['entry_date'] = pd.to_datetime(df['entry_date'])
         df['Property'] = df['property_id'].map(prop_name_map)
+    else:
+        ledger_data = []
+        df = pd.DataFrame()
 
 except Exception as e:
-    st.error(f"Data Hydration Error: {e}")
-    st.stop()
+    # Fail gracefully: initialize empty to avoid "NameError" or "NoneType" crashes
+    st.error(f"Data Hydration Failure: {e}")
+    ledger_data = []
+    df = pd.DataFrame()
 
-# Safety Shield
+# --- 6. SAFETY SHIELD ---
+# Only block the app if we are actually missing data for a page that needs it
 if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Strategic Alerts", "AI Calibration"]:
     st.info(f"Forensic Vault Offline for {st.session_state.current_property_name}. Please initialize data.")
     st.stop()
