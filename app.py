@@ -237,63 +237,62 @@ with st.sidebar:
         st.rerun()
 
 # =================================================================
-# 9. DATA GATEKEEPER: THE UNIVERSAL HYDRATOR (v23.8)
+# 9. THE DATA VAULT (v24.0 - CACHED & THREAD-SAFE)
 # =================================================================
 
-# 1. PRE-INITIALIZE
-ledger_data = [] 
-df = pd.DataFrame()
+@st.cache_data(ttl=600) # Cache for 10 minutes to prevent DB spam
+def get_hydrated_data(property_id, _supabase_client):
+    """
+    This function is the ONLY way data enters the app.
+    It guarantees that every column (baseline, residual_lift, etc.) 
+    is created before the app sees the dataframe.
+    """
+    try:
+        # 1. Fetch Names
+        p_res = _supabase_client.table("properties").select("id, property_name").execute()
+        p_map = {p['id']: p['property_name'] for p in p_res.data} if p_res.data else {}
 
-try:
-    # 2. Get Property Translator
-    prop_res = supabase.table("properties").select("id, property_name").execute()
-    prop_map = {p['id']: p['property_name'] for p in prop_res.data} if prop_res.data else {}
-
-    # 3. Scope-Aware Fetch
-    if st.session_state.current_property_id == "GLOBAL":
-        l_res = supabase.table("ledger").select("*").order("entry_date", desc=True).execute()
-    else:
-        l_res = supabase.table("ledger").select("*").eq("property_id", st.session_state.current_property_id).order("entry_date", desc=True).execute()
-
-    if l_res and l_res.data:
-        ledger_data = l_res.data
-        
-        # --- THE DYNAMIC PROCESSING LOOP ---
-        full_list = []
-        
-        # Get unique property IDs present in the current data batch
-        active_p_ids = list(set([row['property_id'] for row in ledger_data]))
-        
-        for p_id in active_p_ids:
-            p_rows = [row for row in ledger_data if row['property_id'] == p_id]
-            
-            # Fetch THIS property's coefficients
-            p_coeffs_res = supabase.table("coefficients").select("*").eq("property_id", p_id).execute()
-            
-            # FALLBACK: If no coefficients exist in DB, use the session defaults
-            # This ensures 'residual_lift' and 'baseline' are ALWAYS generated
-            p_coeffs = p_coeffs_res.data[0] if (p_coeffs_res.data and len(p_coeffs_res.data) > 0) else st.session_state.coeffs
-            
-            # Run the engine
-            hydrated_batch = get_forensic_metrics(p_rows, p_coeffs)
-            if not hydrated_batch['df'].empty:
-                full_list.append(hydrated_batch['df'])
-        
-        # Combine all properties into one master dataframe
-        if full_list:
-            df = pd.concat(full_list, ignore_index=True)
-            df['Property'] = df['property_id'].map(prop_map)
+        # 2. Fetch Ledger
+        query = _supabase_client.table("ledger").select("*")
+        if property_id == "GLOBAL":
+            l_res = query.order("entry_date", desc=True).execute()
         else:
-            df = pd.DataFrame()
+            l_res = query.eq("property_id", property_id).order("entry_date", desc=True).execute()
 
-except Exception as e:
-    st.error(f"Global Hydration Error: {e}")
-    df = pd.DataFrame()
+        if not l_res.data:
+            return pd.DataFrame()
 
-# 4. FINAL SAFETY SHIELD (Prevents Page 3 from even attempting to load without data)
-if df.empty and page not in ["Global Admin Console", "Master Audit Report"]:
-    st.info("Gathering forensic intelligence... If this persists, check your Master Audit data.")
-    st.stop()
+        raw_data = l_res.data
+        all_frames = []
+        unique_ids = list(set([r['property_id'] for r in raw_data]))
+
+        for p_uuid in unique_ids:
+            p_rows = [r for r in raw_data if r['property_id'] == p_uuid]
+            
+            # Fetch Coeffs for this specific property
+            c_res = _supabase_client.table("coefficients").select("*").eq("property_id", p_uuid).execute()
+            # Use a strict default if no coeffs found
+            c_data = c_res.data[0] if c_res.data else {'Ad_Decay': 85, 'Promo': 500}
+            
+            # RUN FORENSIC ENGINE (This creates the missing columns)
+            processed = get_forensic_metrics(p_rows, c_data)
+            p_df = processed['df']
+            p_df['Property'] = p_map.get(p_uuid, "Unknown")
+            all_frames.append(p_df)
+
+        return pd.concat(all_frames, ignore_index=True)
+    except Exception as e:
+        return pd.DataFrame()
+
+# --- EXECUTION ---
+# This line ensures 'df' is ALWAYS a fully-featured dataframe before Page 3 runs
+df = get_hydrated_data(st.session_state.current_property_id, supabase)
+
+# --- 10. THE IRONCLAD SAFETY GATE ---
+if df.empty:
+    if page not in ["Global Admin Console", "Master Audit Report"]:
+        st.warning("Intelligence Engine is warming up. Please ensure data is present in the Master Audit Report.")
+        st.stop()
 
 # =================================================================
 # 9. PAGE 1: EXECUTIVE DASHBOARD (v51.5 - SaaS Hybrid & Restored Pulse)
