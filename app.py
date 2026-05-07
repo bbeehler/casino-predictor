@@ -1803,16 +1803,28 @@ elif page == "Global Admin Console":
                 st.success(f"Linked {target_email} to {target_prop}")
                 st.rerun()
 
-    # --- TAB 3: SYSTEM HEALTH ---
+    # --- TAB 3: SYSTEM HEALTH (v22.1 Fix) ---
     with tabs[2]:
         st.write("### Database Orchestration Stats")
-        # Quick counts of your SaaS environment
-        prop_count = len(supabase.table("properties").select("id", count="exact").execute().count)
-        user_count = len(supabase.table("user_property_access").select("user_email", count="exact").execute().count)
         
-        h1, h2 = st.columns(2)
-        h1.metric("Active Tenants", prop_count)
-        h2.metric("Managed Users", user_count)
+        try:
+            # FIX: In the post-2.0 Supabase CLI, the count is accessed via the .count attribute 
+            # of the response object, but we don't wrap it in len()
+            prop_res = supabase.table("properties").select("*", count="exact").execute()
+            prop_count = prop_res.count if prop_res.count is not None else 0
+            
+            user_res = supabase.table("user_property_access").select("*", count="exact").execute()
+            user_count = user_res.count if user_res.count is not None else 0
+            
+            h1, h2 = st.columns(2)
+            h1.metric("Active Tenants", prop_count)
+            h2.metric("Managed Users", user_count)
+            
+            st.divider()
+            st.caption(f"System Status: Connected to Supabase Vault | Property ID: {st.session_state.current_property_id}")
+            
+        except Exception as e:
+            st.error(f"Diagnostic Error: {e}")
 
 # =================================================================
 # 17. PAGE 9: STRATEGIC ALERTS & REPORTING (v1.0 SaaS)
