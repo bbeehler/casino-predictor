@@ -935,24 +935,46 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for full ROI Audit.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (v16.4 - Unified Fix)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (v17.2 SaaS Factory)
 # =================================================================
 elif page == "Master Audit Report":
-    st.markdown("""
+    st.markdown(f"""
         <style>
-        [data-testid="stMetricLabel"] p { font-size: 0.75rem !important; white-space: nowrap !important; }
-        [data-testid="stMetricValue"] > div { font-size: 1.5rem !important; }
+        [data-testid="stMetricLabel"] p {{ font-size: 0.75rem !important; white-space: nowrap !important; }}
+        [data-testid="stMetricValue"] > div {{ font-size: 1.5rem !important; }}
         </style>
         <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
-            <h2 style="color: #0047AB; margin: 0;">📋 Master Property Audit</h2>
+            <h2 style="color: #0047AB; margin: 0;">📋 Master Property Audit: {st.session_state.current_property_name}</h2>
             <p style="color: #444; margin: 0;">Comprehensive Forensic Ledger: Financials, Loyalty, & Marketing Attribution.</p>
         </div>
     """, unsafe_allow_html=True)
     
+    # --- 1. SAAS INGESTION FACTORY (New Additions) ---
+    with st.expander("📥 Bulk Ingest Forensic Ledger (CSV)", expanded=not ledger_data):
+        st.write("Upload a Daily Ledger CSV to initialize or update this property's forensic vault.")
+        uploaded_file = st.file_uploader("Choose CSV File", type="csv", key="vault_uploader")
+        
+        if uploaded_file:
+            try:
+                up_df = pd.read_csv(uploaded_file)
+                # Ensure the data is tagged to THIS property UUID
+                up_df['property_id'] = st.session_state.current_property_id
+                
+                if st.button("🚀 Commit Bulk Upload to Vault", use_container_width=True):
+                    payload = up_df.to_dict(orient='records')
+                    supabase.table("ledger").upsert(payload).execute()
+                    st.success(f"Successfully ingested {len(up_df)} records into {st.session_state.current_property_name}!")
+                    st.cache_data.clear()
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Ingestion Error: {e}")
+
+    # --- 2. DATA AVAILABILITY CHECK ---
     if not ledger_data:
-        st.warning("Audit Vault is empty.")
+        st.warning(f"⚠️ The Audit Vault for **{st.session_state.current_property_name}** is empty. Please use the uploader above to begin.")
         st.stop()
 
+    # --- 3. AUDIT ENGINE & VARIABLE INITIALIZATION ---
     df_audit_raw = pd.DataFrame(ledger_data)
     df_audit_raw['entry_date'] = pd.to_datetime(df_audit_raw['entry_date'])
     
@@ -961,7 +983,7 @@ elif page == "Master Audit Report":
 
     col_date, col_export = st.columns([2, 1])
     with col_date:
-        audit_range = st.date_input("Audit Window:", value=(min_audit, max_audit), key="master_audit_v16_final")
+        audit_range = st.date_input("Audit Window:", value=(min_audit, max_audit), key="master_audit_v17_final")
 
     if isinstance(audit_range, tuple) and len(audit_range) == 2:
         s_date, e_date = audit_range
@@ -972,7 +994,7 @@ elif page == "Master Audit Report":
             st.error(f"No records found between {s_date} and {e_date}.")
             st.stop()
 
-        # --- 1. ENGINE & GLOBAL VARIABLE INITIALIZATION ---
+        # Engine Sync
         m = get_forensic_metrics(df_audit_filtered.to_dict(orient='records'), st.session_state.coeffs)
         df_final = m['df'] 
         c = st.session_state.coeffs
@@ -995,7 +1017,7 @@ elif page == "Master Audit Report":
         friction_total = abs((df_final['snow_cm'].sum() * float(c.get('Snow_cm', -45))) + (df_final['rain_mm'].sum() * float(c.get('Rain_mm', -12))))
         digital_dollar = t_digital * avg_coin
 
-        # --- 2. DATE-AWARE ROI FETCH ---
+        # --- 4. DATE-AWARE ROI FETCH ---
         try:
             roi_res = supabase.table("monthly_roi").select("brand_value, calculated_bl_roas, ad_spend") \
                 .filter("report_month", "gte", s_date.strftime('%Y-%m-%d')) \
@@ -1012,7 +1034,7 @@ elif page == "Master Audit Report":
 
         rev_multiplier = (actual_ggr + total_brand_val) / total_ad_spend if total_ad_spend > 0 else 0
 
-        # --- 3. EXECUTIVE SUMMARY & MoM PERFORMANCE TABLE ---
+        # --- 5. EXECUTIVE SUMMARY & MoM PERFORMANCE TABLE ---
         st.write("### 📊 Executive Summary & Monthly Performance")
         df_final['month_year'] = df_final['entry_date'].dt.to_period('M')
         months = sorted(df_final['month_year'].unique())
@@ -1053,7 +1075,7 @@ elif page == "Master Audit Report":
 
         df_summary_table = pd.DataFrame(summary_list)
         
-        # Add Total Row
+        # Total Row Logic
         def get_avg_str(v_list): return f"{np.mean(v_list):+.1f}% Avg" if v_list else "---"
         total_row = pd.Series({
             "Month": "**TOTAL AUDIT WINDOW**", "Traffic": df_summary_table["Traffic"].sum(),
@@ -1064,15 +1086,15 @@ elif page == "Master Audit Report":
         })
         df_summary_table = pd.concat([df_summary_table, total_row.to_frame().T], ignore_index=True)
 
-        # Formatting Table
+        # Apply Table Formatting
         fmt_map = {"Traffic": "{:,.0f}", "Actual Revenue": "${:,.0f}", "Digital Lift": "{:,.0f}", "Digital $ Impact": "${:,.0f}", "Weather Penalty": "{:,.0f}"}
         for col, f_string in fmt_map.items():
             df_summary_table[col] = df_summary_table[col].apply(lambda x: f_string.format(x) if isinstance(x, (int, float)) else x)
         
         st.table(df_summary_table)
 
-        # --- 4. YTD CAPTION ---
-        current_year = 2026
+        # --- 6. YTD CAPTION ---
+        current_year = datetime.date.today().year
         ytd_df_raw = df_audit_raw[df_audit_raw['entry_date'].dt.year == current_year].copy()
         if not ytd_df_raw.empty:
             m_ytd = get_forensic_metrics(ytd_df_raw.to_dict(orient='records'), c)
@@ -1080,7 +1102,7 @@ elif page == "Master Audit Report":
             y_traf, y_dig = df_y['actual_traffic'].sum(), df_y['residual_lift'].sum()
             st.caption(f"**{current_year} YTD:** {y_traf:,.0f} Guests | ${df_y['actual_coin_in'].sum():,.0f} Revenue | {df_y['new_members'].sum():,.0f} Members.  \n**YTD Digital Impact:** {y_dig:,.0f} Guests ({(y_dig/y_traf*100 if y_traf > 0 else 0):.1f}% contribution).")
 
-        # --- 5. METRIC CARDS SECTIONS ---
+        # --- 7. METRIC CARDS ---
         st.write("### 💰 Financial & Loyalty Integrity")
         k1, k2, k3, k4, k5 = st.columns(5)
         k1.metric("Total Traffic", f"{t_traffic:,}")
@@ -1097,15 +1119,14 @@ elif page == "Master Audit Report":
         k9.metric("Weather Friction", f"-{friction_total:,.0f}")
         k10.metric("AI Confidence", m.get('predictability', '92.5%'))
 
+        # --- 8. ROI & EFFICIENCY ---
         st.write("### 💎 BL-ROAS & Equity Efficiency")
-        
-        # Strength UI Logic
         def get_stat_ui(val, mode="m"):
-            if mode=="m": # Multiplier thresholds
+            if mode=="m":
                 if val >= 5.0: return "💎 ELITE", "#008000"
                 if val >= 3.0: return "✅ STRONG", "#2E8B57"
                 return "⚠️ MONITOR", "#B8860B"
-            else: # Efficiency thresholds
+            else:
                 if val >= 20.0: return "🚀 OPTIMIZED", "#008000"
                 if val >= 10.0: return "📈 STABLE", "#2E8B57"
                 return "🔍 UNDER-LEVERAGED", "#B8860B"
@@ -1121,27 +1142,13 @@ elif page == "Master Audit Report":
         kb4.metric("Equity Efficiency", f"{e_pct:.1f}%")
         kb5.metric("LTV Equity Growth", f"${(t_mems*LTV_VAL):,.0f}")
 
-        # Integrated Status Badges
+        # Status Badges
         sb1, sb2, sb3, sb4, sb5 = st.columns(5)
         with sb3: st.markdown(f"<div style='text-align:center;padding:5px;border-radius:5px;background-color:{m_color};color:white;font-size:0.7rem;font-weight:bold;margin-top:-10px;'>{m_status}</div>", unsafe_allow_html=True)
         with sb4: st.markdown(f"<div style='text-align:center;padding:5px;border-radius:5px;background-color:{e_color};color:white;font-size:0.7rem;font-weight:bold;margin-top:-10px;'>{e_status}</div>", unsafe_allow_html=True)
 
-        # --- 6. SOCIAL PERFORMANCE & AWARENESS ---
-        st.write("### 📱 Social Performance & Awareness")
-        ks1, ks2, ks3, ks4, ks5 = st.columns(5)
-        t_imps, t_clicks = df_final['ad_impressions'].sum(), df_final['ad_clicks'].sum()
-        ctr = (t_clicks / t_imps * 100) if t_imps > 0 else 0
-        reach_efficiency = (t_traffic / t_imps * 1000) if t_imps > 0 else 0
-
-        ks1.metric("Ad Impressions", f"{t_imps:,.0f}", help="Total times content was displayed.")
-        ks2.metric("Ad Clicks", f"{t_clicks:,.0f}", help="Total clicks on digital content.")
-        ks3.metric("Total Engagement", f"{(t_imps + t_clicks):,.0f}", help="Combined impressions and clicks.")
-        ks4.metric("Click-Thru Rate", f"{ctr:.2f}%", help="Percentage of impressions resulting in clicks.")
-        ks5.metric("Traffic per 1k Imps", f"{reach_efficiency:.1f}", help="Guests per 1,000 ad impressions.")
-
+        # --- 9. SOCIAL & ATTRIBUTION CHART ---
         st.divider()
-
-        # --- 7. FORENSIC ATTRIBUTION FLOW ---
         st.write("### 🌊 Multi-Channel Attribution Flow")
         df_stack = df_final.copy()
         df_stack['Brand_Inertia_Layer'] = m.get('total_inertia', 0)
@@ -1156,10 +1163,12 @@ elif page == "Master Audit Report":
             if col in df_stack.columns:
                 fig_stack.add_trace(go.Scatter(x=df_stack['entry_date'], y=df_stack[col], name=name, mode='lines', 
                                               stackgroup='one', fillcolor=fill_color, line=dict(width=0.5, color=line_color)))
+        
+        # UNIQUE KEY FIX: Prevents StreamlitDuplicateElementId
         fig_stack.update_layout(height=500, margin=dict(l=10, r=10, t=10, b=10), hovermode="x unified", template="plotly_white")
-        st.plotly_chart(fig_stack, use_container_width=True)
+        st.plotly_chart(fig_stack, use_container_width=True, key=f"stack_chart_{st.session_state.current_property_id}")
 
-        # --- 8. DETAILED FORENSIC LEDGER ---
+        # --- 10. DETAILED LEDGER & EXPORT ---
         st.write("### 📋 Detailed Forensic Ledger")
         df_final['Variance'] = df_final['actual_traffic'] - df_final['expected'].round(0)
         st.dataframe(df_final[['entry_date', 'actual_traffic', 'expected', 'Variance', 'residual_lift', 'gravity_lift', 'new_members']].sort_values('entry_date', ascending=False), use_container_width=True, hide_index=True)
