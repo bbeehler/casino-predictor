@@ -240,27 +240,25 @@ with st.sidebar:
 # 9. THE DATA VAULT (v24.0 - CACHED & THREAD-SAFE)
 # =================================================================
 
-@st.cache_data(ttl=600) # Cache for 10 minutes to prevent DB spam
+@st.cache_data(ttl=60) # Dropped TTL to 60s for easier debugging
 def get_hydrated_data(property_id, _supabase_client):
-    """
-    This function is the ONLY way data enters the app.
-    It guarantees that every column (baseline, residual_lift, etc.) 
-    is created before the app sees the dataframe.
-    """
     try:
-        # 1. Fetch Names
+        # 1. Fetch Property Map
         p_res = _supabase_client.table("properties").select("id, property_name").execute()
         p_map = {p['id']: p['property_name'] for p in p_res.data} if p_res.data else {}
 
-        # 2. Fetch Ledger
+        # 2. Build Query
         query = _supabase_client.table("ledger").select("*")
+        
         if property_id == "GLOBAL":
             l_res = query.order("entry_date", desc=True).execute()
         else:
-            l_res = query.eq("property_id", property_id).order("entry_date", desc=True).execute()
+            # Ensure we are passing a clean string
+            l_res = query.eq("property_id", str(property_id)).order("entry_date", desc=True).execute()
 
-        if not l_res.data:
-            return pd.DataFrame()
+        # Check if data actually exists
+        if not l_res.data or len(l_res.data) == 0:
+            return pd.DataFrame(), []
 
         raw_data = l_res.data
         all_frames = []
@@ -269,45 +267,49 @@ def get_hydrated_data(property_id, _supabase_client):
         for p_uuid in unique_ids:
             p_rows = [r for r in raw_data if r['property_id'] == p_uuid]
             
-            # Fetch Coeffs for this specific property
+            # Pull Coeffs for this specific property
             c_res = _supabase_client.table("coefficients").select("*").eq("property_id", p_uuid).execute()
-            # Use a strict default if no coeffs found
-            c_data = c_res.data[0] if c_res.data else {'Ad_Decay': 85, 'Promo': 500}
             
-            # RUN FORENSIC ENGINE (This creates the missing columns)
+            # CRITICAL FALLBACK: If a property has NO coefficients, the engine 
+            # still needs a dictionary to run, otherwise it returns an empty DF.
+            if c_res.data and len(c_res.data) > 0:
+                c_data = c_res.data[0]
+            else:
+                # Use a safe default dictionary if DB is missing weights for this property
+                c_data = {
+                    'property_id': p_uuid, 'Promo': 500.0, 'Ad_Decay': 85, 
+                    'PR_Weight': 1.2, 'Clicks': 0.05, 'Social_Imp': 0.0002
+                }
+            
             processed = get_forensic_metrics(p_rows, c_data)
             p_df = processed['df']
-            p_df['Property'] = p_map.get(p_uuid, "Unknown")
-            all_frames.append(p_df)
+            
+            if not p_df.empty:
+                p_df['Property'] = p_map.get(p_uuid, "Unknown Property")
+                all_frames.append(p_df)
 
-        return pd.concat(all_frames, ignore_index=True)
+        if not all_frames:
+            return pd.DataFrame(), raw_data
+
+        final_df = pd.concat(all_frames, ignore_index=True)
+        return final_df, raw_data
+
     except Exception as e:
-        return pd.DataFrame()
-
-# --- EXECUTION (Updated for Variable Scope) ---
-
-# 1. We call the function and unpack BOTH variables
-# Note: get_hydrated_data must now return (df, raw_list)
-@st.cache_data(ttl=600)
-def get_hydrated_data(property_id, _supabase_client):
-    try:
-        # ... (All your logic from the previous version stays the same) ...
-        
-        # At the end of the logic, after all_frames is concatenated:
-        final_df = pd.concat(all_frames, ignore_index=True) if all_frames else pd.DataFrame()
-        
-        # We return BOTH the DataFrame and the raw ledger_data list
-        return final_df, raw_data 
-    except Exception as e:
+        # This will show you exactly what failed in the logs
+        st.sidebar.error(f"Hydration Logic Error: {e}")
         return pd.DataFrame(), []
 
-# 2. Unpack them here so they are "Global" to the rest of the script
+# --- EXECUTION ---
 df, ledger_data = get_hydrated_data(st.session_state.current_property_id, supabase)
 
-# --- 10. THE IRONCLAD SAFETY GATE ---
-if df.empty or not ledger_data:
+# --- 10. REFINED SAFETY GATE ---
+# If df is empty but ledger_data exists, it means the Forensic Engine failed to process the rows.
+if df.empty:
     if page not in ["Global Admin Console", "Master Audit Report"]:
-        st.warning("Intelligence Engine is warming up. Please ensure data is present in the Master Audit Report.")
+        if not ledger_data:
+            st.warning(f"🎰 No ledger data found for {st.session_state.current_property_name}. Please check the Master Audit Report.")
+        else:
+            st.error("🧪 Forensic Engine failed to process rows. Check AI Calibration settings.")
         st.stop()
 
 # =================================================================
