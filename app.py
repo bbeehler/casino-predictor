@@ -418,39 +418,34 @@ with st.sidebar:
             st.rerun()
 
 # =================================================================
-# 9. DATA GATEKEEPER: THE "DAY 0" ONBOARDING SHIELD
+# 9. DATA GATEKEEPER: THE "DAY 0" ONBOARDING SHIELD (v19.2)
 # =================================================================
 
 # Convert ledger data to a DataFrame for global use
 df = pd.DataFrame(ledger_data)
 
-# THE SAFETY CHECK: If this property has no data yet...
-if df.empty:
-    # Allow the Admin to still use the Provisioning Console and Calibration
-    if page not in ["Global Admin Console", "AI Calibration"]:
-        st.markdown(f"""
-            <div style="background-color: #FFFFFF; padding: 40px; border-radius: 15px; border-left: 10px solid #0047AB; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
-                <h1 style="color: #0047AB; margin-bottom: 10px;">🏢 {st.session_state.current_property_name}</h1>
-                <h3 style="color: #1A1A1B;">Intelligence Engine: Awaiting Data Initialization</h3>
-                <p style="font-size: 1.1rem; color: #4A4A4A;">
-                    Your SaaS tenant space is live, but the predictive models require historical 
-                    ledger data to activate the dashboard gauges and AI Analyst.
-                </p>
-                <hr style="margin: 25px 0;">
-                <h4 style="color: #0047AB;">🚀 How to activate this property:</h4>
-                <ul style="list-style-type: none; padding-left: 0;">
-                    <li style="margin-bottom: 15px;"><b>1. Navigate to 'Master Audit Report'</b> in the sidebar.</li>
-                    <li style="margin-bottom: 15px;"><b>2. Upload your historical Daily Ledger CSV</b>.</li>
-                    <li style="margin-bottom: 15px;"><b>3. Refresh</b> to initialize the Forensic AI models.</li>
-                </ul>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        st.info("💡 **Pro Tip:** You can navigate to **AI Calibration** right now to set your brand's baseline weights before uploading data.")
-        st.stop() # THIS PREVENTS ALL ERRORS DOWNSTREAM
-        
-# If data exists, format it for the rest of the app
-else:
+# THE SAFETY CHECK: Only trigger the shield on "Data-Heavy" pages
+data_required_pages = ["Executive Dashboard", "FloorCast AI Analyst", "Attribution Analytics"]
+
+if df.empty and page in data_required_pages:
+    st.markdown(f"""
+        <div style="background-color: #FFFFFF; padding: 40px; border-radius: 15px; border-left: 10px solid #0047AB; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
+            <h1 style="color: #0047AB; margin-bottom: 10px;">🏢 {st.session_state.current_property_name}</h1>
+            <h3 style="color: #1A1A1B;">Intelligence Engine: Awaiting Data Initialization</h3>
+            <p style="font-size: 1.1rem; color: #4A4A4A;">
+                Your SaaS tenant space is live, but the predictive models require historical 
+                ledger data to activate these specific intelligence decks.
+            </p>
+            <hr style="margin: 25px 0;">
+            <h4 style="color: #0047AB;">🚀 Next Steps:</h4>
+            <p>1. Navigate to <b>'Master Audit Report'</b> in the sidebar.</p>
+            <p>2. Upload your historical Daily Ledger CSV.</p>
+        </div>
+    """, unsafe_allow_html=True)
+    st.stop() 
+
+# If we have data, ensure date formatting is active for the rest of the app
+elif not df.empty:
     df['entry_date'] = pd.to_datetime(df['entry_date'])
 
 # =================================================================
