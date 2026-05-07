@@ -456,37 +456,67 @@ with st.sidebar:
             st.rerun()
 
 # =================================================================
-# 9. DATA GATEKEEPER: THE "HYBRID" SAAS SHIELD (v20.2 - Fixed)
+# 9. DATA GATEKEEPER: THE "HYBRID" SAAS SHIELD (v20.3 - Ironclad)
 # =================================================================
 
 try:
-    # 1. Start the query builder
-    query = supabase.table("ledger").select("*")
-
-    # 2. THE FIX: Only apply the .eq() filter if we AREN'T in Global mode
-    if st.session_state.current_property_id == "GLOBAL":
-        # Pull everything (No filter applied)
-        l_res = query.order("entry_date", desc=True).execute()
+    # --- 1. NETWORK BENCHMARKING (Global Reference) ---
+    # We pull this every time to ensure we have network-wide averages
+    global_ref_res = supabase.table("ledger").select("actual_traffic, actual_coin_in, new_members").execute()
+    
+    if global_ref_res.data:
+        g_df = pd.DataFrame(global_ref_res.data)
+        st.session_state.net_avg_yield = (g_df['actual_coin_in'].sum() / g_df['actual_traffic'].sum()) if g_df['actual_traffic'].sum() > 0 else 0
+        st.session_state.net_avg_conv = (g_df['new_members'].sum() / g_df['actual_traffic'].sum() * 100) if g_df['actual_traffic'].sum() > 0 else 0
     else:
-        # Pull only for the specific UUID
-        l_res = query.eq("property_id", st.session_state.current_property_id)\
-                     .order("entry_date", desc=True).execute()
+        st.session_state.net_avg_yield, st.session_state.net_avg_conv = 0, 0
+
+    # --- 2. DYNAMIC QUERY BUILDER (LEDGER) ---
+    # The Core Fix: Conditional branching for every query
+    l_query = supabase.table("ledger").select("*")
+    
+    if st.session_state.current_property_id == "GLOBAL":
+        # Pull ALL records
+        l_res = l_query.order("entry_date", desc=True).execute()
+    else:
+        # Pull only for this UUID
+        l_res = l_query.eq("property_id", st.session_state.current_property_id)\
+                       .order("entry_date", desc=True).execute()
     
     ledger_data = l_res.data if l_res.data else []
     df = pd.DataFrame(ledger_data)
 
+    # --- 3. DYNAMIC QUERY BUILDER (SENTIMENT) ---
+    # We must also protect the sentiment scores from the GLOBAL string
+    s_query = supabase.table("sentiment_history").select("sentiment_score")
+    
+    if st.session_state.current_property_id == "GLOBAL":
+        s_res = s_query.order("timestamp", desc=True).limit(100).execute()
+    else:
+        s_res = s_query.eq("property_id", st.session_state.current_property_id)\
+                       .order("timestamp", desc=True).limit(100).execute()
+    
+    # Store global sentiment context for the gauges
+    st.session_state.global_sentiment_cache = [d['sentiment_score'] for d in s_res.data] if s_res.data else []
+
 except Exception as e:
+    # If it's still 22P02, it means another query is hidden in your app
     st.error(f"Data Hydration Error: {e}")
     st.stop()
 
-# --- 3. SAFETY CHECK: Handle Empty Properties ---
+# --- 4. ONBOARDING SHIELD ---
 if df.empty:
     bypass_pages = ["Global Admin Console", "AI Calibration", "Master Audit Report", "Strategic Alerts"]
     if page not in bypass_pages:
-        st.info(f"Welcome to {st.session_state.current_property_name}. Please initialize the Master Audit Report.")
+        st.markdown(f"""
+            <div style="background-color: #FFFFFF; padding: 40px; border-radius: 15px; border-left: 10px solid #0047AB;">
+                <h1 style="color: #0047AB;">🏢 {st.session_state.current_property_name}</h1>
+                <p>Forensic Vault Offline. Populate data in <b>Master Audit Report</b>.</p>
+            </div>
+        """, unsafe_allow_html=True)
         st.stop()
 
-# --- 4. GLOBAL DATA PROCESSING ---
+# --- 5. DATA CLEANING ---
 if not df.empty:
     df['entry_date'] = pd.to_datetime(df['entry_date'])
 
