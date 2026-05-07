@@ -33,8 +33,8 @@ if 'current_property_name' not in st.session_state:
 
 # Fetch UUID only if we don't have it and avoid querying with None
 if 'current_property_id' not in st.session_state or st.session_state.current_property_id is None:
-    try:
-        prop_res = supabase.table("properties").select("id").eq("property_name", st.session_state.current_property_name).execute()
+    try:
+        prop_res = supabase.table("properties").select("id").eq("property_name", st.session_state.current_property_name).execute()
         if prop_res.data:
             st.session_state.current_property_id = prop_res.data[0]['id']
         else:
