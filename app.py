@@ -224,7 +224,7 @@ with st.sidebar:
         st.rerun()
 
 # =================================================================
-# 9. DATA GATEKEEPER: THE MAPPING & BENCHMARK ENGINE (v23.5)
+# 9. DATA GATEKEEPER: THE MAPPING & BENCHMARK ENGINE (v23.6)
 # =================================================================
 
 # 1. PRE-INITIALIZE TO PREVENT DOWNSTREAM ERRORS (Line 518 FIX)
@@ -248,29 +248,23 @@ try:
     query = supabase.table("ledger").select("*")
     
     if st.session_state.get('current_property_id') == "GLOBAL":
-        # Pull everything for Consolidated View
         l_res = query.order("entry_date", desc=True).execute()
     elif st.session_state.get('current_property_id'):
-        # Pull specific property UUID
         l_res = query.eq("property_id", st.session_state.current_property_id).order("entry_date", desc=True).execute()
     else:
         l_res = None
 
-    # 5. DATA HYDRATION & MAPPING
+    # 5. DATA HYDRATION & FORENSIC ENRICHMENT (The Fix for Page 3)
     if l_res and l_res.data:
         ledger_data = l_res.data
-        df = pd.DataFrame(ledger_data)
-        df['entry_date'] = pd.to_datetime(df['entry_date'])
+        
+        # CRITICAL: Run the Forensic Engine immediately to generate all required columns
+        # This adds 'baseline', 'expected', 'residual_lift', etc.
+        forensic_results = get_forensic_metrics(ledger_data, st.session_state.coeffs)
+        df = forensic_results['df']
+        
+        # Add the Property Name mapping for consolidated charts
         df['Property'] = df['property_id'].map(prop_name_map)
-
-        # --- THE FIX FOR PAGE 3: ADD BASELINE (HEARTBEATS) ---
-        # Historical daily guest floor baselines
-        heartbeats = {
-            'Monday': 3398, 'Tuesday': 3525, 'Wednesday': 6312,
-            'Thursday': 4924, 'Friday': 7523, 'Saturday': 9863, 'Sunday': 5894
-        }
-        # Map the day name to the baseline column so Page 3 can see it
-        df['baseline'] = df['entry_date'].dt.day_name().map(heartbeats).astype(float)
         
     else:
         ledger_data = []
@@ -282,7 +276,7 @@ except Exception as e:
     df = pd.DataFrame()
 
 # --- 6. SAFETY SHIELD ---
-# This ensures that if df is empty, we don't even try to load Page 3
+# Prevents downstream pages from crashing if data is missing
 if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Strategic Alerts", "AI Calibration"]:
     st.info(f"Forensic Vault Offline for {st.session_state.current_property_name}. Please initialize data.")
     st.stop()
