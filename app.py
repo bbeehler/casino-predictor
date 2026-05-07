@@ -100,16 +100,20 @@ def apply_corporate_styling():
 apply_corporate_styling()
 
 # =================================================================
-# 4. FORENSIC ENGINE: CALCULATION CORE
+# 4. FORENSIC ENGINE: CALCULATION CORE (v24.1 - Attribution Enabled)
 # =================================================================
 def get_forensic_metrics(df_input, coeffs):
-    if not df_input: return {"df": pd.DataFrame()}
+    if not df_input: 
+        return {"df": pd.DataFrame(columns=['baseline', 'expected', 'residual_lift', 'gravity_lift'])}
+    
     df = pd.DataFrame(df_input).copy()
     df['entry_date'] = pd.to_datetime(df['entry_date'])
 
-    # --- DYNAMIC HEARTBEATS ---
-    # We look for 'Mon_Base', 'Tue_Base', etc., in the property coefficients
-    # If they don't exist yet, we use 4000 as a safe generic fallback
+    # 1. INITIALIZE KEYS (The "KeyError" Insurance)
+    df['residual_lift'] = 0.0
+    df['gravity_lift'] = 0.0
+
+    # 2. DYNAMIC HEARTBEATS
     heartbeats = {
         'Monday': float(coeffs.get('Mon_Base', 3398)),
         'Tuesday': float(coeffs.get('Tue_Base', 3525)),
@@ -119,13 +123,32 @@ def get_forensic_metrics(df_input, coeffs):
         'Saturday': float(coeffs.get('Sat_Base', 9863)),
         'Sunday': float(coeffs.get('Sun_Base', 5894))
     }
-
-    # Now we map the baseline using the property-specific heartbeats
     df['baseline'] = df['entry_date'].dt.day_name().map(heartbeats).astype(float)
     
-    # Calculate lifts using property-specific weights
+    # 3. ATTRIBUTION LOGIC (Ad Decay Modeling)
+    c_clicks = float(coeffs.get('Clicks', 0.05))
+    c_social = float(coeffs.get('Social_Imp', 0.0002))
+    decay = float(coeffs.get('Ad_Decay', 85)) / 100 
+    gravity = float(coeffs.get('Event_Gravity', 0.25))
+
+    # Calculate Residual Lift
+    current_pool = 0.0
+    awareness_pool = []
+    for _, row in df.iterrows():
+        daily_in = (float(row.get('ad_clicks', 0) or 0) * c_clicks) + \
+                   (float(row.get('ad_impressions', 0) or 0) * c_social)
+        current_pool = daily_in + (current_pool * decay)
+        awareness_pool.append(current_pool)
+    
+    df['residual_lift'] = awareness_pool
+    
+    # Calculate Event Gravity Lift
+    if 'attendance' in df.columns:
+        df['gravity_lift'] = pd.to_numeric(df['attendance'], errors='coerce').fillna(0) * gravity
+
+    # 4. CALCULATE EXPECTED (Total Sum of All Lifts)
     promo_weight = float(coeffs.get('Promo', 500.0))
-    df['expected'] = df['baseline'] + promo_weight
+    df['expected'] = df['baseline'] + df['residual_lift'] + df['gravity_lift'] + promo_weight
     
     return {"df": df, "heartbeats": heartbeats}
 
