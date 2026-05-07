@@ -157,14 +157,14 @@ if not st.session_state.authenticated:
     st.stop()
 
 # =================================================================
-# 8. EXECUTIVE NAVIGATION (v23.0 - Scope-Aware Filtering)
+# 8. EXECUTIVE NAVIGATION (v23.1 - Strict Scope Filtering)
 # =================================================================
 with st.sidebar:
     st.image("https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png?h=171&iar=0&w=224&rev=914ac0eae6734be995b93d76ad2b1e8f", width=150)
     st.title(f"{st.session_state.current_property_name}")
     st.divider()
 
-    # 1. INTELLIGENCE SCOPE SWITCHER
+    # 1. SCOPE SWITCHER
     if st.session_state.get('user_role') == "Super Admin":
         all_props = supabase.table("properties").select("id, property_name").execute()
         prop_map = {p['property_name']: p['id'] for p in all_props.data}
@@ -182,25 +182,32 @@ with st.sidebar:
             st.session_state.current_property_name = selected_view
             st.rerun()
 
-    # 2. DYNAMIC NAVIGATION FILTERING
-    # Analysis-focused pages (Always visible)
+    # 2. STRICT NAVIGATION FILTERING
+    # Start with the baseline analytical pages available to everyone
     nav_options = ["Executive Dashboard", "Attribution Analytics", "FloorCast AI Analyst", "Strategic Alerts"]
 
-    # Operational-focused pages (Hidden in GLOBAL mode to prevent UUID errors)
+    # ONLY append operational pages if a specific property is active
     if st.session_state.current_property_id != "GLOBAL":
-        nav_options.insert(1, "Daily Ledger Audit")
-        nav_options.insert(3, "Master Audit Report")
-        nav_options.append("BL-ROAS Calculator")
+        # We use a specific order for a better UX
+        nav_options = [
+            "Executive Dashboard",
+            "Daily Ledger Audit",
+            "Attribution Analytics",
+            "Master Audit Report",
+            "FloorCast AI Analyst",
+            "BL-ROAS Calculator",
+            "Strategic Alerts"
+        ]
         
-        # Admin-only operational pages
+        # Add Admin-only tools to the property-specific view
         if st.session_state.get('user_role') in ["Admin", "Super Admin"]:
             nav_options.append("AI Calibration")
 
-    # Global Admin Console is always available to Super Admins
+    # Super Admin Console stays visible as it's a global management tool
     if st.session_state.get('user_role') == "Super Admin":
-        if "Global Admin Console" not in nav_options:
-            nav_options.append("Global Admin Console")
+        nav_options.append("Global Admin Console")
 
+    # Render the radio menu with the strictly filtered list
     page = st.radio("Intelligence Decks:", nav_options, index=0)
 
     st.divider()
