@@ -15,7 +15,7 @@ import os
 import uuid
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-# =================================================================F
+# =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
 # =================================================================
 try:
