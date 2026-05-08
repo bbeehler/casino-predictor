@@ -1617,8 +1617,8 @@ elif page == "Global Admin Console":
                         st.error(f"Provisioning Error: {e}")
 
     # --- TAB 2: USER ACCESS & ROLES (v23.5 Management Suite) ---
-with tabs[1]:
-    st.subheader("👥 System User Directory")
+    with tabs[1]:
+        st.subheader("👥 System User Directory")
     
     # 1. SEARCH & FILTER
     search_q = st.text_input("🔍 Search by Email:", placeholder="Enter email to find user access records...")
