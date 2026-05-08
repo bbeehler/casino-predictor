@@ -1672,6 +1672,52 @@ elif page == "Global Admin Console":
     else:
         st.info("No user access records found.")
 
+    st.divider()
+        st.subheader("➕ Assign User to Additional Property")
+        
+        with st.form("assign_multi_prop"):
+            st.write("Link an existing email to a property or provision a new user access record.")
+            target_email = st.text_input("User Email (Primary Key)", placeholder="user@company.com")
+            
+            # 1. Fetch fresh property list for the dropdown
+            all_p_res = supabase.table("properties").select("id, property_name").execute()
+            p_opts = {p['property_name']: p['id'] for p in all_p_res.data} if all_p_res.data else {}
+            
+            target_prop_name = st.selectbox("Select Property to Link", list(p_opts.keys()))
+            target_role = st.selectbox("Assign Role", ["Viewer", "Manager", "Admin", "Super Admin"])
+            
+            if st.form_submit_button("🚀 Link User to Property", use_container_width=True):
+                if target_email and target_prop_name:
+                    clean_email = target_email.lower().strip()
+                    target_uuid = p_opts.get(target_prop_name)
+                    
+                    # 2. PRE-CHECK FOR DUPLICATES (Prevents 409 API Errors)
+                    check = supabase.table("user_property_access")\
+                        .select("*")\
+                        .eq("user_email", clean_email)\
+                        .eq("property_id", target_uuid)\
+                        .execute()
+                    
+                    if check.data:
+                        st.error(f"User {clean_email} already has an active link to {target_prop_name}.")
+                    else:
+                        # 3. ATTEMPT INSERT
+                        link_payload = {
+                            "user_email": clean_email,
+                            "property_id": target_uuid,
+                            "user_role": target_role
+                        }
+                        
+                        try:
+                            supabase.table("user_property_access").insert(link_payload).execute()
+                            st.success(f"✅ Successfully linked {clean_email} to {target_prop_name}")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Database Error: {e}")
+                else:
+                    st.error("Please provide both an email and a property selection.")
+
     # --- TAB 3: SYSTEM HEALTH & PERMISSIONS (Consolidated v24.8) ---
     with tabs[2]:
         st.write("### 📊 Database Orchestration Stats")
