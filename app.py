@@ -37,14 +37,24 @@ def archive_sentiment_entry(text, asset_tag):
         except:
             sentiment_score = 0.0 # Fallback for non-numeric AI responses
 
-        # 2. Construct Payload with explicit message_id
+        # --- NEW: Sentiment Category Logic ---
+        if sentiment_score > 0.3:
+            sentiment_category = "Positive"
+        elif sentiment_score < -0.3:
+            sentiment_category = "Negative"
+        else:
+            sentiment_category = "Neutral"
+
+        # 2. Construct Payload with explicit message_id and sentiment_category
         payload = {
-            "message_id": str(uuid.uuid4()),  # Explicitly sending the missing column data
+            "message_id": str(uuid.uuid4()),  
             "property_id": st.session_state.current_property_id,
             "asset": asset_tag,
             "sentiment_score": sentiment_score,
+            "sentiment_category": sentiment_category,
             "raw_text": text,
-            "timestamp": datetime.datetime.now().isoformat()
+            "timestamp": datetime.datetime.now().isoformat(),
+            "user_email": st.session_state.user_email
         }
         
         # 3. Execute Insert
