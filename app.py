@@ -2042,11 +2042,18 @@ elif page == "Experiment Vault":
 
     # --- 2. THE ANALYTICS ENGINE ---
     if 'df' in locals() and not df.empty:
-        # Filter ledger for tagged days
-        df_a = df[df['experiment_tag'] == tag_a]
-        df_b = df[df['experiment_tag'] == tag_b]
-        
-        if not df_a.empty and not df_b.empty:
+    
+    # THE SAFETY SHIELD: Ensure the column exists in the dataframe
+    if 'experiment_tag' not in df.columns:
+        st.info("🧬 Initializing Experimentation Layer...")
+        # Create a temporary empty column so the app doesn't crash
+        df['experiment_tag'] = None 
+
+    # Now filter ledger for tagged days
+    df_a = df[df['experiment_tag'] == tag_a]
+    df_b = df[df['experiment_tag'] == tag_b]
+    
+    if not df_a.empty and not df_b.empty:
             st.divider()
             
             # Calculate Averages
