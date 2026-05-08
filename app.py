@@ -2095,7 +2095,7 @@ elif page == "Experiment Vault":
                         with st.expander("🕵️ AI Experiment Audit", expanded=True):
                             with st.spinner("Analyzing performance variances..."):
                                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                                model = genai.GenerativeModel('gemini-1.5-flash')
+                                model = genai.GenerativeModel('gemini-2.5-flash')
                                 t_context = f"Test: {test_name} | A: {avg_a} | B: {avg_b} | Lift: {lift:.1f}%"
                                 prompt = f"As a Casino Data Scientist for {st.session_state.current_property_name}, analyze this A/B test results: {t_context}"
                                 ai_report = model.generate_content(prompt)
