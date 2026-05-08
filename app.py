@@ -165,7 +165,7 @@ def apply_high_end_styling():
             color: #FFFFFF !important;
         }
 
-        /* Specifically target Sidebar Captions (Grey for visual hierarchy) */
+        /* Specifically target Sidebar Captions */
         [data-testid="stSidebar"] .stCaption {
             color: #A1A1A1 !important;
             font-weight: 600;
@@ -177,15 +177,11 @@ def apply_high_end_styling():
             border-color: #333333 !important;
         }
 
-        /* Sidebar Button Visibility (Logout etc) */
+        /* Sidebar Button Visibility */
         [data-testid="stSidebar"] .stButton>button {
             background-color: #1A1A1A !important;
             color: #FFFFFF !important;
             border: 1px solid #333333 !important;
-        }
-        [data-testid="stSidebar"] .stButton>button:hover {
-            border-color: #FFCC00 !important;
-            color: #FFCC00 !important;
         }
 
         /* RESPONSIVE PADDING & VIEWPORT OPTIMIZATION */
@@ -202,10 +198,9 @@ def apply_high_end_styling():
             .main .block-container {
                 padding-left: 1rem;
                 padding-right: 1rem;
-                padding-top: 5rem !important; /* Extra space for the header */
+                padding-top: 5rem !important;
             }
             
-            /* FORCES THE MOBILE SIDEBAR TOGGLE TO BE VISIBLE */
             button[kind="headerNoContext"] {
                 display: flex !important;
                 color: #1A1C1E !important; 
@@ -218,13 +213,9 @@ def apply_high_end_styling():
                 width: 40px !important;
                 height: 40px !important;
             }
-
-            [data-testid="stMetricValue"] {
-                font-size: 1.8rem !important;
-            }
         }
 
-        /* HIGH-END EXECUTIVE HEADER (Dark Command Center Style) */
+        /* HIGH-END EXECUTIVE HEADER */
         .glass-header {
             background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -235,13 +226,28 @@ def apply_high_end_styling():
             color: white !important;
         }
 
-        /* HIGH-END METRIC CARDS */
+        /* --- HIGH-END METRIC CARDS VISIBILITY FIX --- */
         [data-testid="stMetric"] {
-            background: #FFFFFF;
-            border: 1px solid #E1E8F0;
+            background: #FFFFFF !important;
+            border: 1px solid #E1E8F0 !important;
             padding: 20px !important;
             border-radius: 12px !important;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+        }
+
+        /* Force Metric Labels and Values to be DARK CHARCOAL for Mobile Visibility */
+        [data-testid="stMetricLabel"] > div, 
+        [data-testid="stMetricValue"] > div,
+        [data-testid="stMetricLabel"] p {
+            color: #1A1C1E !important;
+            -webkit-text-fill-color: #1A1C1E !important;
+        }
+
+        /* Adjust Metric Value Size for Mobile */
+        @media (max-width: 768px) {
+            [data-testid="stMetricValue"] > div {
+                font-size: 1.6rem !important;
+            }
         }
 
         /* --- INPUT & DROPDOWN VISIBILITY KIT --- */
@@ -257,7 +263,6 @@ def apply_high_end_styling():
             -webkit-text-fill-color: #1A1C1E !important;
         }
 
-        /* Dropdown Popover List Styling */
         div[data-baseweb="popover"] ul {
             background-color: #FFFFFF !important;
         }
@@ -285,12 +290,7 @@ def apply_high_end_styling():
             padding: 0.5rem 1rem !important;
             transition: all 0.2s;
         }
-        .stButton>button:hover {
-            background-color: #003380 !important;
-            box-shadow: 0 4px 12px rgba(0, 71, 171, 0.3) !important;
-        }
 
-        /* HIDE DEFAULT STREAMLIT ELEMENTS BUT KEEP MOBILE BUTTON */
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         header[data-testid="stHeader"] {
@@ -299,7 +299,7 @@ def apply_high_end_styling():
         </style>
     """, unsafe_allow_html=True)
 
-# Define the Responsive Header Component with Premium Dark Theme
+# Define the Responsive Header Component
 def render_styled_header(title, subtitle, badge_text="Live"):
     st.markdown(f"""
         <div class="glass-header">
