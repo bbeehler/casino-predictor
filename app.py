@@ -446,7 +446,7 @@ with st.sidebar:
     
     # 1. SCOPE SWITCHER
     if is_global_admin:
-        st.caption("NETWORK SCOPE")
+        st.caption("PROPERTIES")
         try:
             all_props = supabase.table("properties").select("id, property_name").execute()
             prop_map = {p['property_name']: p['id'] for p in all_props.data}
@@ -476,7 +476,7 @@ with st.sidebar:
             st.error(f"Switcher Error: {e}")
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.caption("OPERATIONAL DECKS")
+    st.caption("NAVIGATION")
     
     # 2. NAVIGATION
     if st.session_state.current_property_id == "GLOBAL":
@@ -501,14 +501,16 @@ with st.sidebar:
     st.markdown("<div style='position: fixed; bottom: 20px; width: 260px;'>", unsafe_allow_html=True)
     st.divider()
     st.caption(f"ID: {st.session_state.get('user_email')}")
+    
+    # Added margin-bottom: 15px to create the space
     st.markdown(f"""
-        <div style="background: #1e1e1e; padding: 10px; border-radius: 8px; border: 1px solid #333;">
+        <div style="background: #1e1e1e; padding: 10px; border-radius: 8px; border: 1px solid #333; margin-bottom: 15px;">
             <p style="margin:0; font-size: 0.75rem; color: #888;">CURRENT ROLE</p>
             <p style="margin:0; font-size: 0.9rem; font-weight: 600; color: #FFCC00;">{st.session_state.get('user_role', 'Viewer')}</p>
         </div>
     """, unsafe_allow_html=True)
     
-    if st.button("🚪 Terminate Session", use_container_width=True):
+    if st.button("LOGOUT", use_container_width=True):
         st.session_state.clear()
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
