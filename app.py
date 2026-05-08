@@ -143,7 +143,7 @@ def apply_high_end_styling():
     st.markdown("""
         <style>
         /* IMPORT HIGH-END FONTS */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
 
         /* GLOBAL RESET & TYPOGRAPHY */
         html, body, [class*="css"] {
@@ -172,7 +172,18 @@ def apply_high_end_styling():
             }
         }
 
-        /* HIGH-END METRIC CARDS (Glassmorphism Lite) */
+        /* HIGH-END EXECUTIVE HEADER (Dark Command Center Style) */
+        .glass-header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 28px;
+            border-radius: 18px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+            margin-bottom: 35px;
+            color: white !important;
+        }
+
+        /* HIGH-END METRIC CARDS */
         [data-testid="stMetric"] {
             background: #FFFFFF;
             border: 1px solid #E1E8F0;
@@ -210,17 +221,6 @@ def apply_high_end_styling():
             box-shadow: 0 4px 12px rgba(0, 71, 171, 0.3) !important;
         }
 
-        /* CUSTOM UTILITY: GLASS HEADER */
-        .glass-header {
-            background: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            padding: 25px;
-            border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
-            margin-bottom: 30px;
-        }
-
         /* HIDE DEFAULT STREAMLIT ELEMENTS */
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
@@ -228,17 +228,22 @@ def apply_high_end_styling():
         </style>
     """, unsafe_allow_html=True)
 
-# Define the Responsive Header Component
+# Define the Responsive Header Component with Premium Dark Theme
 def render_styled_header(title, subtitle, badge_text="Live"):
     st.markdown(f"""
         <div class="glass-header">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <h1 style="margin: 0; font-size: 1.8rem; font-weight: 700; color: #101828;">{title}</h1>
-                    <p style="margin: 5px 0 0 0; color: #667085; font-size: 1rem;">{subtitle}</p>
+                    <h1 style="margin: 0; font-size: 2rem; font-weight: 800; color: #FFFFFF; letter-spacing: -0.025em;">{title}</h1>
+                    <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 1.1rem; font-weight: 400;">{subtitle}</p>
                 </div>
-                <div style="background: #ECFDF3; color: #027A48; padding: 4px 12px; border-radius: 16px; font-size: 0.8rem; font-weight: 600; border: 1px solid #ABEFC6;">
-                    ● {badge_text}
+                <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                    <div style="background: rgba(255, 204, 0, 0.15); color: #FFCC00; padding: 6px 16px; border-radius: 12px; font-size: 0.85rem; font-weight: 700; border: 1px solid rgba(255, 204, 0, 0.3); text-transform: uppercase; letter-spacing: 0.05em;">
+                        ● {badge_text}
+                    </div>
+                    <div style="margin-top: 8px; color: #64748b; font-size: 0.75rem; font-family: monospace;">
+                        SYSTEM_v52.0_STABLE
+                    </div>
                 </div>
             </div>
         </div>
