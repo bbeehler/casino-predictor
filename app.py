@@ -238,7 +238,7 @@ user_links_res = supabase.table("user_property_access")\
     .execute()
 
 all_my_roles = [r['user_role'] for r in user_links_res.data] if user_links_res.data else []
-is_global_admin = "Super Admin" in all_my_roles
+is_global_admin = any(role in ["Super Admin", "Manager", "Admin"] for role in all_my_roles)
 
 with st.sidebar:
     # Branding Header
