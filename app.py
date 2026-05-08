@@ -933,21 +933,21 @@ elif page == "Daily Ledger Audit":
                 st.error(f"Bulk Sync Error: {e}")
 
 # =================================================================
-# 11. PAGE 3: ATTRIBUTION ANALYTICS (PRO-MARKETING SUITE v17.0)
+# 11. PAGE 3: ATTRIBUTION ANALYTICS (v52.0 - High-End Suite)
 # =================================================================
 elif page == "Attribution Analytics":
-    st.markdown("""
-        <div style="background-color:#F8F9FA;padding:20px;border-radius:12px;border-left:6px solid #0047AB;margin-bottom:20px;">
-            <h2 style="color:#0047AB;margin:0;">📊 Marketing Attribution & ROI</h2>
-            <p style="color:#666;margin:0;">Multi-Touch Analysis: Correlating Digital Signal with Physical Property Yield.</p>
-        </div>
-    """, unsafe_allow_html=True)
+    # 1. PREMIUM HEADER
+    render_styled_header(
+        "Marketing Attribution & ROI", 
+        "Multi-Touch Analysis: Correlating Digital Signal with Physical Property Yield", 
+        "Analytics"
+    )
 
     if not ledger_data:
-        st.info("💡 Forensic Vault empty. Populate the Ledger to unlock attribution.")
+        st.info("💡 Forensic Vault empty. Populate the Ledger to unlock attribution modeling.")
         st.stop()
 
-    # 1. DATA PREP & MTA LOGIC
+    # --- 1. DATA PREP & MTA ENGINE ---
     current_weights = st.session_state.get('coeffs', {})
     m_full = get_forensic_metrics(ledger_data, current_weights)
     df_attr = m_full['df']
@@ -957,37 +957,49 @@ elif page == "Attribution Analytics":
     organic_base = df_attr['baseline'].sum()
     digital_lift = df_attr['residual_lift'].sum()
     gravity_lift = df_attr['gravity_lift'].sum()
-    brand_inertia = (current_weights.get('Broadcast_Weight', 150) + current_weights.get('OOH_Weight', 100)) * len(df_attr)
+    
+    # Brand Inertia calculation based on established weights
+    num_days = len(df_attr)
+    brand_inertia = (current_weights.get('Broadcast_Weight', 150) + current_weights.get('OOH_Weight', 100)) * num_days
 
-    # --- 2. MULTI-TOUCH ATTRIBUTION (TIME DECAY VIEW) ---
-    st.write("### 🕰️ Multi-Touch Attribution (Time Decay Model)")
+    # --- 2. EXECUTIVE ATTRIBUTION SUMMARY (Responsive Grid) ---
+    st.markdown("### 🕰️ Multi-Touch Attribution (Time Decay Model)")
     st.caption("Weighting the guest journey based on proximity to visit date (Adstock Decay).")
     
-    # Simulating MTA split based on your Adstock Decay coefficient
-    decay_val = current_weights.get('Ad_Decay', 85) / 100
-    mta_digital = digital_lift * decay_val
-    mta_brand = brand_inertia * (1 - decay_val)
-    mta_gravity = gravity_lift
-    
     mta_cols = st.columns(3)
-    mta_cols[0].metric("Last-Touch (Digital)", f"{digital_lift:,.0f}", help="Immediate click-to-floor conversion.")
-    mta_cols[1].metric("Assisted (Brand)", f"{brand_inertia:,.0f}", help="OOH/Broadcast awareness priming.")
-    mta_cols[2].metric("Conversion (Gravity)", f"{gravity_lift:,.0f}", help="Event-driven floor closure.")
+    mta_cols[0].metric(
+        "Last-Touch (Digital)", 
+        f"{digital_lift:,.0f}", 
+        help="Immediate click-to-floor conversion."
+    )
+    mta_cols[1].metric(
+        "Assisted (Brand)", 
+        f"{brand_inertia:,.0f}", 
+        help="OOH/Broadcast awareness priming."
+    )
+    mta_cols[2].metric(
+        "Conversion (Gravity)", 
+        f"{gravity_lift:,.0f}", 
+        help="Event-driven floor closure."
+    )
 
     st.divider()
 
-    # --- 3. OFFLINE-TO-ONLINE CONTRIBUTION ---
-    st.write("### 📡 Offline-to-Online Attribution Channel Contribution")
+    # --- 3. CHANNEL CONTRIBUTION VISUALS (Split Layout) ---
+    st.markdown("### 📡 Offline-to-Online Attribution Contribution")
     col_pie, col_water = st.columns([1, 1.5])
 
     with col_pie:
-        pie_labels = ['Organic (Baseline)', 'Online (Digital)', 'Offline (Brand/Media)', 'Event Gravity']
+        pie_labels = ['Organic (Baseline)', 'Online (Digital)', 'Offline (Brand)', 'Event Gravity']
         pie_values = [organic_base, digital_lift, brand_inertia, gravity_lift]
-        fig_pie = px.pie(names=pie_labels, values=pie_values, 
-                         color_discrete_sequence=['#E1E8F0', '#0047AB', '#5D707F', '#FFCC00'],
-                         hole=0.5)
+        fig_pie = px.pie(
+            names=pie_labels, 
+            values=pie_values, 
+            color_discrete_sequence=['#E1E8F0', '#0047AB', '#5D707F', '#FFCC00'],
+            hole=0.6
+        )
         fig_pie.update_layout(showlegend=True, height=350, margin=dict(l=0,r=0,t=0,b=0))
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, use_container_width=True, key="attr_pie_v52")
 
     with col_water:
         # Waterfall showing how different layers build to the final traffic
@@ -1000,47 +1012,53 @@ elif page == "Attribution Analytics":
             increasing = {"marker":{"color":"#0047AB"}},
             totals = {"marker":{"color":"#FFCC00"}}
         ))
-        fig_water.update_layout(height=350, margin=dict(l=10,r=10,t=10,b=10))
-        st.plotly_chart(fig_water, use_container_width=True)
+        fig_water.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=10), template="plotly_white")
+        st.plotly_chart(fig_water, use_container_width=True, key="attr_waterfall_v52")
 
     st.divider()
 
     # --- 4. LIFT CORRELATION ---
-    st.write("### 📈 Lift Correlation")
-    # Scatter plot correlating Marketing Spend/Signals with Actual Traffic
-    fig_corr = px.scatter(df_attr, x='ad_clicks', y='actual_traffic', 
-                          trendline="ols", 
-                          labels={'ad_clicks': 'Digital Signal (Clicks)', 'actual_traffic': 'Property Traffic'},
-                          color_discrete_sequence=['#0047AB'])
-    fig_corr.update_layout(height=400, plot_bgcolor='rgba(248,249,250,1)')
-    st.plotly_chart(fig_corr, use_container_width=True)
+    st.markdown("### 📈 Signal Correlation Analysis")
+    fig_corr = px.scatter(
+        df_attr, x='ad_clicks', y='actual_traffic', 
+        trendline="ols", 
+        labels={'ad_clicks': 'Digital Signal (Clicks)', 'actual_traffic': 'Property Traffic'},
+        color_discrete_sequence=['#0047AB']
+    )
+    fig_corr.update_layout(height=400, plot_bgcolor='rgba(248,249,250,1)', template="plotly_white")
+    st.plotly_chart(fig_corr, use_container_width=True, key="attr_corr_v52")
 
     st.divider()
 
     # --- 5. STRATEGIC INTERPRETATION & ROI AUDIT ---
-    st.write("### 💎 Strategic Interpretation & ROI Audit")
+    st.markdown("### 💎 Strategic Interpretation & ROI Audit")
     
     if not df_attr.empty:
-        # Fetching average coin-in for ROI audit
         avg_coin = float(current_weights.get('Avg_Coin_In', 112.50))
         mkt_guests = digital_lift + brand_inertia + gravity_lift
         mkt_revenue = mkt_guests * avg_coin
         
         # Calculate Efficiency Metrics
         yield_per_click = digital_lift / df_attr['ad_clicks'].sum() if df_attr['ad_clicks'].sum() > 0 else 0
-        brand_leverage = (brand_inertia / organic_base) if organic_base > 0 else 0
         
+        # Action Cards for ROI
         c1, c2, c3 = st.columns(3)
-        c1.metric("Marketing Yield (Est. $)", f"${mkt_revenue:,.0f}", help="Total revenue attributed to marketing layers.")
-        c2.metric("Guest Pull Efficiency", f"{(mkt_guests/total_guests)*100:.1f}%", help="Percentage of total traffic driven by marketing.")
-        c3.metric("Digital Conversion Rate", f"{yield_per_click:.2f}x", help="Guests gained per digital click signal.")
+        c1.metric("Marketing Yield (Est. $)", f"${mkt_revenue:,.0f}")
+        c2.metric("Guest Pull Efficiency", f"{(mkt_guests/total_guests)*100:.1f}%")
+        c3.metric("Digital Conversion", f"{yield_per_click:.2f}x")
 
-        st.info(f"""
-        **FloorCast Strategic Audit Summary:**
-        * **MTA Insight:** The {current_weights.get('Ad_Decay', 85)}% Adstock retention indicates a strong **Time Decay** effect, meaning marketing influence remains active on the floor for multiple days post-exposure.
-        * **Channel Mix:** **{'Digital' if digital_lift > brand_inertia else 'Offline Media'}** is currently providing the highest marginal lift per dollar.
-        * **ROI Validation:** Based on a ${avg_coin:.2f} Avg Coin-In, marketing activities have contributed an estimated **{mkt_guests:,.0f}** guests to the audit window, effectively supporting property revenue goals.
-        """)
+        # Premium Themed Summary Box
+        st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); 
+                        padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin-top: 20px;">
+                <h4 style="margin-top:0; color: #0f172a;">FloorCast Strategic Audit Summary</h4>
+                <ul style="color: #475569; font-size: 0.95rem; line-height: 1.6;">
+                    <li><b>MTA Insight:</b> The {current_weights.get('Ad_Decay', 85)}% Adstock retention indicates a strong <b>Time Decay</b> effect, ensuring marketing remains active for multiple days post-exposure.</li>
+                    <li><b>Channel Mix:</b> <b>{'Digital' if digital_lift > brand_inertia else 'Offline Media'}</b> is currently delivering the highest marginal lift per dollar.</li>
+                    <li><b>ROI Validation:</b> Based on a ${avg_coin:.2f} Avg Coin-In, marketing contributed an estimated <b>{mkt_guests:,.0f}</b> guests to the audit window.</li>
+                </ul>
+            </div>
+        """, unsafe_allow_html=True)
     else:
         st.warning("Insufficient data for full ROI Audit.")
 
