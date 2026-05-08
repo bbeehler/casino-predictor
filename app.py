@@ -1616,52 +1616,61 @@ elif page == "Global Admin Console":
                     except Exception as e:
                         st.error(f"Provisioning Error: {e}")
 
-    # --- TAB 2: USER ACCESS & ROLES (v23.2 Management Suite) ---
-    with tabs[1]:
-        st.subheader("👥 System User Directory")
-        search_q = st.text_input("🔍 Search by Email:", placeholder="Enter email to filter users...")
-        access_res = supabase.table("user_property_access").select("*, properties(property_name)").execute()
+    # --- TAB 2: USER ACCESS & ROLES (v23.5 Management Suite) ---
+with tabs[1]:
+    st.subheader("👥 System User Directory")
+    
+    # 1. SEARCH & FILTER
+    search_q = st.text_input("🔍 Search by Email:", placeholder="Enter email to find user access records...")
+    
+    # 2. FETCH & DISPLAY
+    access_res = supabase.table("user_property_access").select("*, properties(property_name)").execute()
+    
+    if access_res.data:
+        df_access = pd.DataFrame(access_res.data)
+        df_access['Property Name'] = df_access['properties'].apply(lambda x: x['property_name'] if x else "N/A")
         
-        if access_res.data:
-            df_access = pd.DataFrame(access_res.data)
-            df_access['Property Name'] = df_access['properties'].apply(lambda x: x['property_name'] if x else "N/A")
-            if search_q:
-                df_access = df_access[df_access['user_email'].str.contains(search_q, case=False)]
+        if search_q:
+            df_access = df_access[df_access['user_email'].str.contains(search_q, case=False)]
 
-            for i, row in df_access.iterrows():
-                with st.expander(f"👤 {row['user_email']} | {row['Property Name']} ({row['user_role']})"):
-                    c1, c2, c3 = st.columns([2, 2, 1])
-                    with c1:
-                        role_list = ["Viewer", "Manager", "Admin", "Super Admin"]
-                        current_role = row['user_role'] if row['user_role'] in role_list else "Viewer"
-                        new_role = st.selectbox("Authorization:", role_list, index=role_list.index(current_role), key=f"edit_role_{row['id']}")
-                    with c2:
-                        st.write(f"**Linked Property:** {row['Property Name']}")
-                    with c3:
-                        if st.button("Update", key=f"save_{row['id']}", use_container_width=True):
-                            supabase.table("user_property_access").update({"user_role": new_role}).eq("id", row['id']).execute()
-                            st.success("Synced.")
-                            st.rerun()
-
-        st.divider()
-        st.subheader("➕ Assign User to Additional Property")
-        with st.form("assign_multi_prop"):
-            target_email = st.text_input("User Email")
-            all_p_res = supabase.table("properties").select("id, property_name").execute()
-            p_opts = {p['property_name']: p['id'] for p in all_p_res.data} if all_p_res.data else {}
-            target_prop_name = st.selectbox("Select Property", list(p_opts.keys()))
-            target_role = st.selectbox("Assign Role", ["Viewer", "Manager", "Admin", "Super Admin"])
+        # 3. INTERACTIVE MANAGEMENT LIST
+        st.write(f"Showing **{len(df_access)}** access records:")
+        
+        for i, row in df_access.iterrows():
+            # The Label for the Expander
+            label = f"👤 {row['user_email']} | {row['Property Name']} ({row['user_role']})"
             
-            if st.form_submit_button("Link User to Property"):
-                if target_email and target_prop_name:
-                    clean_email = target_email.lower().strip()
-                    target_uuid = p_opts.get(target_prop_name)
-                    link_payload = {"user_email": clean_email, "property_id": target_uuid, "user_role": target_role}
-                    try:
-                        supabase.table("user_property_access").insert(link_payload).execute()
-                        st.success(f"Linked {clean_email}")
+            with st.expander(label):
+                c1, c2, c3 = st.columns([2, 2, 1])
+                
+                with c1:
+                    role_list = ["Viewer", "Manager", "Admin", "Super Admin"]
+                    current_role = row['user_role'] if row['user_role'] in role_list else "Viewer"
+                    new_role = st.selectbox("Role:", role_list, index=role_list.index(current_role), key=f"role_{row['id']}")
+                
+                with c2:
+                    st.write(f"**Linked Property:** {row['Property Name']}")
+                    st.caption(f"Access ID: {row['id']}")
+                
+                with c3:
+                    # UPDATE BUTTON
+                    if st.button("Update", key=f"upd_{row['id']}", use_container_width=True):
+                        supabase.table("user_property_access").update({"user_role": new_role}).eq("id", row['id']).execute()
+                        st.success("Synced.")
                         st.rerun()
-                    except Exception as e: st.error(f"Error: {e}")
+                    
+                    # DELETE BUTTON (REVOKE ACCESS)
+                    if st.button("🗑️ Revoke", key=f"rev_{row['id']}", type="secondary", use_container_width=True):
+                        try:
+                            # This deletes the link between the user and the property
+                            supabase.table("user_property_access").delete().eq("id", row['id']).execute()
+                            st.warning(f"Access Revoked for {row['user_email']}")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Deletion Error: {e}")
+    else:
+        st.info("No user access records found.")
 
     # --- TAB 3: SYSTEM HEALTH & PERMISSIONS (Consolidated v24.8) ---
     with tabs[2]:
