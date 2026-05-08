@@ -1812,7 +1812,7 @@ elif page == "Strategic Alerts":
             st.error(f"Monitoring Sync Error: {e}")
 
 # =================================================================
-# 18. PAGE 10: SCENARIO SIMULATION (The "What-If" Engine)
+# 18. PAGE 10: SCENARIO SIMULATION (v52.0 - Predictive Engine)
 # =================================================================
 elif page == "Scenario Simulator":
     render_styled_header(
@@ -1837,23 +1837,32 @@ elif page == "Scenario Simulator":
             sim_rain = st.slider("Predicted Rain (mm)", 0, 50, 0)
             sim_snow = st.slider("Predicted Snow (cm)", 0, 30, 0)
 
-        if st.button("🚀 Run Scenario Projection", use_container_width=True):
-            # 1. FETCH DNA
-            weights = st.session_state.coeffs
-            
-            # 2. CALC BASELINE (Day of Week check)
+        st.markdown("<br>", unsafe_allow_html=True)
+        run_sim = st.button("🚀 Run Scenario Projection", use_container_width=True)
+
+    if run_sim:
+        # 1. FETCH DNA & DATA
+        weights = st.session_state.coeffs
+        
+        # 2. CALC BASELINE (Safely checking the hydrated df)
+        try:
+            # We use the 'df' that was hydrated in Section 9
             dow = sim_date.strftime('%A')
-            df_raw = pd.DataFrame(ledger_data)
-            df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
-            baseline = df_raw[df_raw['entry_date'].dt.day_name() == dow]['actual_traffic'].mean()
             
-            # 3. APPLY MULTIPLIERS
+            if not df.empty:
+                # Calculate baseline for this specific day of the week
+                baseline = df[df['entry_date'].dt.day_name() == dow]['actual_traffic'].mean()
+            else:
+                baseline = 1500 # Emergency Fallback if ledger is empty
+            
+            # 3. APPLY DNA MULTIPLIERS
+            # (Traffic Lift = Clicks * Weight)
             digital_lift = (sim_clicks * weights.get('Clicks', 0.05)) + (sim_imps * weights.get('Social_Imp', 0.0002))
             gravity_lift = sim_event * weights.get('Event_Gravity', 0.25)
             friction = (sim_rain * weights.get('Rain_mm', -12)) + (sim_snow * weights.get('Snow_cm', -45))
             
             # 4. FINAL CALC
-            projected_guests = baseline + digital_lift + gravity_lift + friction
+            projected_guests = max(0, baseline + digital_lift + gravity_lift + friction)
             projected_rev = projected_guests * weights.get('Avg_Coin_In', 112.50)
             
             # --- DISPLAY RESULTS ---
@@ -1861,12 +1870,15 @@ elif page == "Scenario Simulator":
             res1, res2, res3 = st.columns(3)
             res1.metric("Projected Traffic", f"{projected_guests:,.0f} Guests")
             res2.metric("Projected Revenue", f"${projected_rev:,.0f}")
-            res3.metric("Marketing Lift", f"{((digital_lift + gravity_lift)/projected_guests)*100:.1f}%")
+            res3.metric("Marketing Lift", f"{((digital_lift + gravity_lift)/projected_guests)*100:.1f}%" if projected_guests > 0 else "0%")
 
             st.info(f"""
-            **AI Analyst Note:** This simulation assumes a **{dow}** baseline of {baseline:,.0f} guests. 
-            The environmental friction (Rain/Snow) is estimated to reduce total potential by **{abs(friction):,.0f}** guests.
+            **AI Analyst Note:** This simulation assumes a **{dow}** baseline of {baseline:,.0f} guests for {st.session_state.current_property_name}. 
+            Environmental friction is estimated to impact the floor by **{friction:,.0f}** guests.
             """)
+            
+        except Exception as e:
+            st.error(f"Simulation Engine Error: {e}")
 
 # =================================================================
 # 19. FOOTER
