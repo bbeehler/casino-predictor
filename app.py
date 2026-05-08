@@ -1663,7 +1663,7 @@ elif page == "Global Admin Console":
                         st.rerun()
                     except Exception as e: st.error(f"Error: {e}")
 
-    # --- TAB 3: SYSTEM HEALTH & PERMISSIONS (Consolidated v24.7) ---
+    # --- TAB 3: SYSTEM HEALTH & PERMISSIONS (Consolidated v24.8) ---
     with tabs[2]:
         st.write("### 📊 Database Orchestration Stats")
         try:
@@ -1678,19 +1678,24 @@ elif page == "Global Admin Console":
         st.divider()
         st.subheader("🛡️ Global Role Authorization Matrix")
         
-        # 1. Select the Role
-        target_role_config = st.selectbox("Select Role to Configure:", ["Viewer", "Manager", "Admin", "Super Admin"])
+        # 1. Select the Role (This triggers a rerun when changed)
+        target_role_config = st.selectbox(
+            "Select Role to Configure:", 
+            ["Viewer", "Manager", "Admin", "Super Admin"],
+            key="role_selector_admin"
+        )
         
-        # 2. FETCH EXISTING PERMS (So checkboxes aren't always empty)
+        # 2. FETCH EXISTING PERMS (The "Hydration" Step)
         existing_perms = {}
         try:
+            # We fetch the current JSON from Supabase for the selected role
             perm_fetch = supabase.table("role_permissions").select("perms").eq("role_name", target_role_config).execute()
             if perm_fetch.data:
                 existing_perms = perm_fetch.data[0].get('perms', {})
-        except:
-            pass
+        except Exception as e:
+            st.caption(f"Note: Role '{target_role_config}' not yet initialized in DB.")
 
-        # 3. Define Capabilities
+        # 3. Define the Global Capabilities List
         capabilities = {
             "view_analytics": "Access Attribution & Executive Dashboards",
             "view_ledger": "Access Daily Ledger Audit",
@@ -1700,32 +1705,42 @@ elif page == "Global Admin Console":
         }
         
         # 4. The Configuration Form
-        with st.form(f"perm_matrix_{target_role_config}"):
-            st.write(f"Adjusting capabilities for **{target_role_config}**")
+        # IMPORTANT: We use the role name in the form key to force a clean reset when switching roles
+        with st.form(f"perm_matrix_form_{target_role_config}"):
+            st.write(f"Adjusting capabilities for: **{target_role_config}**")
             updated_perms = {}
             
-            # Create checkboxes with their current state from the DB
-            for cap_id, cap_desc in capabilities.items():
-                is_checked = existing_perms.get(cap_id, False)
-                updated_perms[cap_id] = st.checkbox(cap_desc, value=is_checked, key=f"cap_{cap_id}")
+            # Create columns for a cleaner layout
+            col1, col2 = st.columns(2)
+            for i, (cap_id, cap_desc) in enumerate(capabilities.items()):
+                target_col = col1 if i % 2 == 0 else col2
                 
-            if st.form_submit_button("💾 Save Role Configuration"):
+                # CRITICAL: 'value' pulls from the 'existing_perms' we just fetched
+                is_checked = existing_perms.get(cap_id, False)
+                
+                updated_perms[cap_id] = target_col.checkbox(
+                    cap_desc, 
+                    value=is_checked, 
+                    key=f"check_{target_role_config}_{cap_id}" # Unique key per role
+                )
+                
+            if st.form_submit_button("💾 Save Role Configuration", use_container_width=True):
                 try:
                     perm_payload = {
                         "role_name": target_role_config, 
                         "perms": updated_perms
                     }
                     
-                    # Upsert with conflict resolution
                     supabase.table("role_permissions").upsert(
                         perm_payload, 
                         on_conflict="role_name"
                     ).execute()
                     
-                    st.success(f"✅ Configuration for '{target_role_config}' synced to cloud vault.")
+                    st.success(f"✅ Vault Updated: '{target_role_config}' permissions are now live.")
                     
-                    # Clear cache to force navigation update on next rerun
+                    # Clear cache so other parts of the app (like sidebar) see the change
                     st.cache_data.clear()
+                    # Rerun to refresh the 'existing_perms' fetch
                     st.rerun()
                     
                 except Exception as e:
