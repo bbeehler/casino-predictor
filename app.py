@@ -130,36 +130,121 @@ if 'coeffs' not in st.session_state:
         st.session_state.coeffs = {'Promo': 500.0, 'OOH_Weight': 100.0}
 
 # =================================================================
-# 3. GLOBAL PAGE CONFIG & EXECUTIVE THEME
+# 3. GLOBAL PAGE CONFIG & HIGH-END RESPONSIVE DESIGN
 # =================================================================
-st.set_page_config(page_title="FloorCast Pro", layout="wide", page_icon="🎰", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="FloorCast Pro | Strategic Intelligence", 
+    layout="wide", 
+    page_icon="🎰", 
+    initial_sidebar_state="expanded"
+)
 
-def apply_corporate_styling():
+def apply_high_end_styling():
     st.markdown("""
         <style>
-        /* ... existing styles ... */
+        /* IMPORT HIGH-END FONTS */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 
-        /* Force Input Fields to White for High Contrast */
-        div[data-baseweb="input"] > div, 
-        input, 
-        textarea, 
-        select {
+        /* GLOBAL RESET & TYPOGRAPHY */
+        html, body, [class*="css"] {
+            font-family: 'Inter', sans-serif;
+            color: #1A1C1E;
+        }
+
+        /* RESPONSIVE PADDING & VIEWPORT OPTIMIZATION */
+        .main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 5rem;
+            padding-left: 4rem;
+            padding-right: 4rem;
+            max-width: 1400px;
+        }
+
+        /* MOBILE OVERRIDES (Screens smaller than 768px) */
+        @media (max-width: 768px) {
+            .main .block-container {
+                padding-left: 1rem;
+                padding-right: 1rem;
+                padding-top: 1rem;
+            }
+            [data-testid="stMetricValue"] {
+                font-size: 1.8rem !important;
+            }
+        }
+
+        /* HIGH-END METRIC CARDS (Glassmorphism Lite) */
+        [data-testid="stMetric"] {
+            background: #FFFFFF;
+            border: 1px solid #E1E8F0;
+            padding: 20px !important;
+            border-radius: 12px !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            transition: transform 0.2s ease-in-out;
+        }
+        [data-testid="stMetric"]:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* INPUT FIELD REFINEMENT */
+        div[data-baseweb="input"] > div, input, textarea, select {
             background-color: #FFFFFF !important;
-            color: #1A1A1B !important;
-            border-radius: 8px !important;
-            border: 1px solid #CED4DA !important;
+            color: #1A1C1E !important;
+            border-radius: 10px !important;
+            border: 1px solid #D0D5DD !important;
+            padding: 8px !important;
         }
 
-        /* Ensure text stays black inside white inputs */
-        input {
-            color: #1A1A1B !important;
+        /* BUTTON STYLING (Corporate Primary) */
+        .stButton>button {
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+            background-color: #0047AB !important;
+            color: white !important;
+            border: none !important;
+            padding: 0.5rem 1rem !important;
+            transition: all 0.2s;
         }
-        
-        /* ... existing styles ... */
+        .stButton>button:hover {
+            background-color: #003380 !important;
+            box-shadow: 0 4px 12px rgba(0, 71, 171, 0.3) !important;
+        }
+
+        /* CUSTOM UTILITY: GLASS HEADER */
+        .glass-header {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+            margin-bottom: 30px;
+        }
+
+        /* HIDE DEFAULT STREAMLIT ELEMENTS */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
 
-apply_corporate_styling()
+# Define the Responsive Header Component
+def render_styled_header(title, subtitle, badge_text="Live"):
+    st.markdown(f"""
+        <div class="glass-header">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1 style="margin: 0; font-size: 1.8rem; font-weight: 700; color: #101828;">{title}</h1>
+                    <p style="margin: 5px 0 0 0; color: #667085; font-size: 1rem;">{subtitle}</p>
+                </div>
+                <div style="background: #ECFDF3; color: #027A48; padding: 4px 12px; border-radius: 16px; font-size: 0.8rem; font-weight: 600; border: 1px solid #ABEFC6;">
+                    ● {badge_text}
+                </div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+apply_high_end_styling()
 
 # =================================================================
 # 4. FORENSIC ENGINE: CALCULATION CORE (v24.1 - Attribution Enabled)
