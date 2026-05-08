@@ -197,12 +197,30 @@ def apply_high_end_styling():
             max-width: 1400px;
         }
 
-        /* MOBILE OVERRIDES */
+        /* --- MOBILE OVERRIDES & MENU BUTTON FIX --- */
         @media (max-width: 768px) {
             .main .block-container {
                 padding-left: 1rem;
                 padding-right: 1rem;
-                padding-top: 1rem;
+                padding-top: 5rem !important; /* Extra space for the header */
+            }
+            
+            /* FORCES THE MOBILE SIDEBAR TOGGLE TO BE VISIBLE */
+            button[kind="headerNoContext"] {
+                display: flex !important;
+                color: #1A1C1E !important; 
+                background-color: #FFFFFF !important;
+                border-radius: 50% !important;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+                z-index: 999999 !important;
+                top: 15px !important;
+                left: 15px !important;
+                width: 40px !important;
+                height: 40px !important;
+            }
+
+            [data-testid="stMetricValue"] {
+                font-size: 1.8rem !important;
             }
         }
 
@@ -272,10 +290,12 @@ def apply_high_end_styling():
             box-shadow: 0 4px 12px rgba(0, 71, 171, 0.3) !important;
         }
 
-        /* HIDE DEFAULT STREAMLIT ELEMENTS */
+        /* HIDE DEFAULT STREAMLIT ELEMENTS BUT KEEP MOBILE BUTTON */
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
-        header {visibility: hidden;}
+        header[data-testid="stHeader"] {
+            background-color: transparent !important;
+        }
         </style>
     """, unsafe_allow_html=True)
 
