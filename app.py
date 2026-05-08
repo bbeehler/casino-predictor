@@ -1645,7 +1645,7 @@ elif page == "Global Admin Console":
                         st.rerun()
                     except Exception as e: st.error(f"Error: {e}")
 
-    # --- TAB 3: SYSTEM HEALTH & PERMISSIONS (Consolidated) ---
+    # --- TAB 3: SYSTEM HEALTH & PERMISSIONS (Consolidated v24.7) ---
     with tabs[2]:
         st.write("### 📊 Database Orchestration Stats")
         try:
@@ -1654,12 +1654,25 @@ elif page == "Global Admin Console":
             h1, h2 = st.columns(2)
             h1.metric("Active Tenants", prop_res.count or 0)
             h2.metric("Managed Users", user_res.count or 0)
-        except Exception as e: st.error(f"Stats Error: {e}")
+        except Exception as e: 
+            st.error(f"Stats Error: {e}")
             
         st.divider()
         st.subheader("🛡️ Global Role Authorization Matrix")
+        
+        # 1. Select the Role
         target_role_config = st.selectbox("Select Role to Configure:", ["Viewer", "Manager", "Admin", "Super Admin"])
         
+        # 2. FETCH EXISTING PERMS (So checkboxes aren't always empty)
+        existing_perms = {}
+        try:
+            perm_fetch = supabase.table("role_permissions").select("perms").eq("role_name", target_role_config).execute()
+            if perm_fetch.data:
+                existing_perms = perm_fetch.data[0].get('perms', {})
+        except:
+            pass
+
+        # 3. Define Capabilities
         capabilities = {
             "view_analytics": "Access Attribution & Executive Dashboards",
             "view_ledger": "Access Daily Ledger Audit",
@@ -1668,36 +1681,37 @@ elif page == "Global Admin Console":
             "calibrate_ai": "Change AI Coefficients & ROAS"
         }
         
+        # 4. The Configuration Form
         with st.form(f"perm_matrix_{target_role_config}"):
             st.write(f"Adjusting capabilities for **{target_role_config}**")
             updated_perms = {}
+            
+            # Create checkboxes with their current state from the DB
             for cap_id, cap_desc in capabilities.items():
-                updated_perms[cap_id] = st.checkbox(cap_desc, key=f"cap_{cap_id}")
+                is_checked = existing_perms.get(cap_id, False)
+                updated_perms[cap_id] = st.checkbox(cap_desc, value=is_checked, key=f"cap_{cap_id}")
                 
             if st.form_submit_button("💾 Save Role Configuration"):
-            try:
-                # payload construction
-                perm_payload = {
-                    "role_name": target_role_config, 
-                    "perms": updated_perms
-                }
-                
-                # The "on_conflict" parameter is the secret sauce here.
-                # It tells the DB to look at the 'role_name' column to decide 
-                # whether to UPDATE or INSERT.
-                supabase.table("role_permissions").upsert(
-                    perm_payload, 
-                    on_conflict="role_name"
-                ).execute()
-                
-                st.success(f"✅ Configuration for '{target_role_config}' synced to cloud vault.")
-                
-                # Clear cache so the new permissions are picked up immediately
-                st.cache_data.clear()
-                st.rerun()
-                
-            except Exception as e:
-                st.error(f"❌ Security Matrix Sync Error: {e}")
+                try:
+                    perm_payload = {
+                        "role_name": target_role_config, 
+                        "perms": updated_perms
+                    }
+                    
+                    # Upsert with conflict resolution
+                    supabase.table("role_permissions").upsert(
+                        perm_payload, 
+                        on_conflict="role_name"
+                    ).execute()
+                    
+                    st.success(f"✅ Configuration for '{target_role_config}' synced to cloud vault.")
+                    
+                    # Clear cache to force navigation update on next rerun
+                    st.cache_data.clear()
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"❌ Security Matrix Sync Error: {e}")
 
 # =================================================================
 # 17. PAGE 9: STRATEGIC ALERTS
