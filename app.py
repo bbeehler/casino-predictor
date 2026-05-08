@@ -224,11 +224,21 @@ if not st.session_state.authenticated:
     st.stop()
 
 # =================================================================
-# 8. EXECUTIVE NAVIGATION (v24.5 - Permission-Aware Protocol)
+# 8. EXECUTIVE NAVIGATION (v25.0 - Multi-Role & Property Aware)
 # =================================================================
 
-# Initialize page default to prevent NameErrors downstream
+# Initialize page default
 page = "Executive Dashboard"
+
+# --- 1. GLOBAL PERMISSION SCAN ---
+# Check if the user is a Super Admin ANYWHERE in the network
+user_links_res = supabase.table("user_property_access")\
+    .select("user_role")\
+    .eq("user_email", st.session_state.get('user_email'))\
+    .execute()
+
+all_my_roles = [r['user_role'] for r in user_links_res.data] if user_links_res.data else []
+is_global_admin = "Super Admin" in all_my_roles
 
 with st.sidebar:
     # Branding Header
@@ -236,70 +246,78 @@ with st.sidebar:
     st.title(f"{st.session_state.current_property_name}")
     st.divider()
 
-    # 1. SCOPE SWITCHER (Super Admin Exclusive)
-    if st.session_state.get('user_role') == "Super Admin":
+    # 2. SCOPE SWITCHER (Available if you are a Super Admin on ANY property)
+    if is_global_admin:
         try:
             all_props = supabase.table("properties").select("id, property_name").execute()
             prop_map = {p['property_name']: p['id'] for p in all_props.data}
             options = ["📊 CONSOLIDATED VIEW"] + list(prop_map.keys())
             
             curr_label = "📊 CONSOLIDATED VIEW" if st.session_state.current_property_id == "GLOBAL" else st.session_state.current_property_name
-            
-            # Safe index lookup to prevent crash on refresh
             s_idx = options.index(curr_label) if curr_label in options else 0
+            
             selected_view = st.selectbox("🎯 Intelligence Scope:", options, index=s_idx)
             
             if selected_view == "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != "GLOBAL":
                 st.session_state.current_property_id = "GLOBAL"
                 st.session_state.current_property_name = "All Properties"
+                st.session_state.user_role = "Super Admin" # Global view defaults to top role
                 st.rerun()
             elif selected_view != "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != prop_map.get(selected_view):
-                st.session_state.current_property_id = prop_map[selected_view]
+                # Before switching, find the user's specific role for the NEW property
+                new_id = prop_map[selected_view]
+                role_check = supabase.table("user_property_access")\
+                    .select("user_role")\
+                    .eq("user_email", st.session_state.user_email)\
+                    .eq("property_id", new_id)\
+                    .execute()
+                
+                # Update session states for the new property context
+                st.session_state.current_property_id = new_id
                 st.session_state.current_property_name = selected_view
+                st.session_state.user_role = role_check.data[0]['user_role'] if role_check.data else "Viewer"
+                
+                # Re-fetch permissions for the new role
+                perm_res = supabase.table("role_permissions").select("perms").eq("role_name", st.session_state.user_role).execute()
+                st.session_state.user_permissions = perm_res.data[0]['perms'] if perm_res.data else {}
+                
                 st.rerun()
         except Exception as e:
             st.error(f"Switcher Sync Failure: {e}")
 
-    # 2. DYNAMIC NAVIGATION (Capability-Based)
+    # 3. DYNAMIC NAVIGATION (Capability-Based)
     if st.session_state.current_property_id == "GLOBAL":
-        # HIDE NAVIGATION: Lockdown mode for Network View
         page = "Executive Dashboard"
         st.info("🌐 Network-wide view active. Select a property to access operational decks.")
     else:
-        # SHOW NAVIGATION: Filtered by Permissions
-        # Core pages available to all authenticated users
+        # Core pages
         nav_options = ["Executive Dashboard"]
         
-        # Capability Checks (Step 3 Implementation)
+        # Capability Checks (Permissions are now property-specific)
         if check_permission("view_ledger"):
             nav_options.append("Daily Ledger Audit")
-            
         if check_permission("view_analytics"):
             nav_options.append("Attribution Analytics")
             nav_options.append("FloorCast AI Analyst")
-            
         if check_permission("view_reports"):
             nav_options.append("Master Audit Report")
-            
         if check_permission("manage_alerts"):
             nav_options.append("Strategic Alerts")
-            
         if check_permission("calibrate_ai"):
             nav_options.append("AI Calibration")
             nav_options.append("BL-ROAS Calculator")
 
-        # Admin-Only Console
+        # Global Admin Console - only if role is Super Admin for THIS property
         if st.session_state.get('user_role') == "Super Admin":
             nav_options.append("Global Admin Console")
 
-        # Render the Nav Radio
         page = st.radio("Intelligence Decks:", nav_options, index=0)
 
     st.divider()
     
-    # 3. USER CONTEXT
+    # 4. USER CONTEXT
     st.caption(f"Logged in as: {st.session_state.get('user_email', 'User')}")
-    st.caption(f"Role: {st.session_state.get('user_role', 'Viewer')}")
+    st.caption(f"Current Role: {st.session_state.get('user_role', 'Viewer')}")
 
     if st.button("🚪 Logout", use_container_width=True):
         st.session_state.clear()
