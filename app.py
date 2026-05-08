@@ -416,10 +416,37 @@ if page == "Executive Dashboard":
             st.warning("No network data found across properties.")
             st.stop()
 
-        # 1. NETWORK TOP-LINE METRICS
-        total_rev = df['actual_coin_in'].sum()
-        total_traffic = df['actual_traffic'].sum()
-        total_mems = df['new_members'].sum()
+        # 1. GLOBAL DATE RANGE SELECTION
+        df['entry_date'] = pd.to_datetime(df['entry_date'])
+        min_date = df['entry_date'].min().date()
+        max_date = df['entry_date'].max().date()
+
+        col_date, _ = st.columns([1, 2])
+        with col_date:
+            global_range = st.date_input(
+                "Network Audit Window:", 
+                value=(min_date, max_date),
+                min_value=min_date,
+                max_value=max_date,
+                key="global_audit_range_selector"
+            )
+
+        # Apply the filter mask
+        if isinstance(global_range, tuple) and len(global_range) == 2:
+            start_g, end_g = global_range
+            mask = (df['entry_date'].dt.date >= start_g) & (df['entry_date'].dt.date <= end_g)
+            df_filtered = df.loc[mask].copy()
+        else:
+            df_filtered = df.copy() # Fallback if range is partially selected
+
+        if df_filtered.empty:
+            st.info("No network data found for the selected date range.")
+            st.stop()
+
+        # 2. NETWORK TOP-LINE METRICS (Using Filtered Data)
+        total_rev = df_filtered['actual_coin_in'].sum()
+        total_traffic = df_filtered['actual_traffic'].sum()
+        total_mems = df_filtered['new_members'].sum()
 
         k1, k2, k3 = st.columns(3)
         k1.metric("Network Revenue", f"${total_rev:,.0f}")
@@ -428,25 +455,21 @@ if page == "Executive Dashboard":
 
         st.divider()
 
-        # 2. PROPERTY PERFORMANCE LEADERBOARD (Ranked & Formatted)
-        st.write("### 🏆 Property Performance Leaderboard")
+        # 3. PROPERTY PERFORMANCE LEADERBOARD (Ranked & Formatted)
+        st.write(f"### 🏆 Property Performance Leaderboard ({start_g} to {end_g})")
         
-        # Aggregate data by readable Property Name
-        leaderboard = df.groupby('Property').agg({
+        leaderboard = df_filtered.groupby('Property').agg({
             'actual_coin_in': 'sum',
             'actual_traffic': 'sum',
             'new_members': 'sum'
         }).reset_index()
         
-        # Calculate performance metrics
         leaderboard['Yield_per_Guest'] = (leaderboard['actual_coin_in'] / leaderboard['actual_traffic'])
         leaderboard['Conv_Rate'] = (leaderboard['new_members'] / leaderboard['actual_traffic'] * 100)
         
-        # Add Rank column based on Revenue
         leaderboard['Rank'] = leaderboard['actual_coin_in'].rank(ascending=False, method='min').astype(int)
         leaderboard = leaderboard.sort_values('Rank')
 
-        # Create formatted copy for display
         lb_display = leaderboard.copy()
         lb_display['actual_coin_in'] = lb_display['actual_coin_in'].apply(lambda x: f"${x:,.0f}")
         lb_display['actual_traffic'] = lb_display['actual_traffic'].apply(lambda x: f"{x:,.0f}")
@@ -454,7 +477,6 @@ if page == "Executive Dashboard":
         lb_display['Yield_per_Guest'] = lb_display['Yield_per_Guest'].apply(lambda x: f"${x:,.2f}")
         lb_display['Conv_Rate'] = lb_display['Conv_Rate'].apply(lambda x: f"{x:.2f}%")
 
-        # Organize and rename columns
         cols = ['Rank', 'Property', 'actual_coin_in', 'actual_traffic', 'new_members', 'Yield_per_Guest', 'Conv_Rate']
         st.table(lb_display[cols].rename(columns={
             'actual_coin_in': 'Total Revenue',
@@ -464,18 +486,18 @@ if page == "Executive Dashboard":
             'Conv_Rate': 'Conv %'
         }))
 
-        # 3. COMPARATIVE ANALYTICS
+        # 4. COMPARATIVE ANALYTICS (Using Filtered Data)
         c1, c2 = st.columns(2)
         with c1:
             st.write("### 💰 Revenue Distribution")
-            fig_rev = px.pie(df, values='actual_coin_in', names='Property', hole=0.4,
+            fig_rev = px.pie(df_filtered, values='actual_coin_in', names='Property', hole=0.4,
                              color_discrete_sequence=px.colors.sequential.Blues_r)
             fig_rev.update_layout(margin=dict(l=20, r=20, t=20, b=20))
             st.plotly_chart(fig_rev, use_container_width=True, key="global_rev_pie")
 
         with c2:
             st.write("### 🧬 Network Guest Flow (Stacked)")
-            fig_flow = px.bar(df, x="entry_date", y="actual_traffic", color="Property",
+            fig_flow = px.bar(df_filtered, x="entry_date", y="actual_traffic", color="Property",
                              barmode="stack", color_discrete_sequence=px.colors.qualitative.Prism)
             fig_flow.update_layout(template="plotly_white", margin=dict(l=10, r=10, t=10, b=10))
             st.plotly_chart(fig_flow, use_container_width=True, key="global_flow_chart")
