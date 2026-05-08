@@ -428,9 +428,11 @@ if page == "Executive Dashboard":
 
         st.divider()
 
-        # 2. PROPERTY PERFORMANCE LEADERBOARD
+        # 2. PROPERTY PERFORMANCE LEADERBOARD (Using Property Names)
         st.write("### 🏆 Property Performance Leaderboard")
-        leaderboard = df.groupby('property_id').agg({
+        
+        # Note: 'Property' column is added during the Hydration Step in Section 9
+        leaderboard = df.groupby('Property').agg({
             'actual_coin_in': 'sum',
             'actual_traffic': 'sum',
             'new_members': 'sum'
@@ -440,7 +442,6 @@ if page == "Executive Dashboard":
         leaderboard['Conv_Rate'] = (leaderboard['new_members'] / leaderboard['actual_traffic'] * 100).round(2)
         
         st.table(leaderboard.sort_values('actual_coin_in', ascending=False).rename(columns={
-            'property_id': 'Property ID',
             'actual_coin_in': 'Total Revenue',
             'actual_traffic': 'Total Guests',
             'new_members': 'New Members',
@@ -452,15 +453,16 @@ if page == "Executive Dashboard":
         c1, c2 = st.columns(2)
         with c1:
             st.write("### 💰 Revenue Distribution")
-            rev_comp = df.groupby('property_id')['actual_coin_in'].sum().reset_index()
-            fig_rev = px.pie(rev_comp, values='actual_coin_in', names='property_id', hole=0.4,
+            # Using 'Property' name for pie chart labels
+            fig_rev = px.pie(df, values='actual_coin_in', names='Property', hole=0.4,
                              color_discrete_sequence=px.colors.sequential.Blues_r)
             st.plotly_chart(fig_rev, use_container_width=True, key="global_rev_pie")
 
         with c2:
             st.write("### 🧬 Network Guest Flow (Stacked)")
-            fig_flow = px.bar(df, x="entry_date", y="actual_traffic", color="property_id",
-                             barmode="stack", color_continuous_scale='Blues')
+            # Using 'Property' name for bar chart colors
+            fig_flow = px.bar(df, x="entry_date", y="actual_traffic", color="Property",
+                             barmode="stack", color_discrete_sequence=px.colors.qualitative.Prism)
             fig_flow.update_layout(template="plotly_white", margin=dict(l=10, r=10, t=10, b=10))
             st.plotly_chart(fig_flow, use_container_width=True, key="global_flow_chart")
 
