@@ -428,24 +428,39 @@ if page == "Executive Dashboard":
 
         st.divider()
 
-        # 2. PROPERTY PERFORMANCE LEADERBOARD (Using Property Names)
+        # 2. PROPERTY PERFORMANCE LEADERBOARD (Ranked & Formatted)
         st.write("### 🏆 Property Performance Leaderboard")
         
-        # Note: 'Property' column is added during the Hydration Step in Section 9
+        # Aggregate data by readable Property Name
         leaderboard = df.groupby('Property').agg({
             'actual_coin_in': 'sum',
             'actual_traffic': 'sum',
             'new_members': 'sum'
         }).reset_index()
         
-        leaderboard['Yield_per_Guest'] = (leaderboard['actual_coin_in'] / leaderboard['actual_traffic']).round(2)
-        leaderboard['Conv_Rate'] = (leaderboard['new_members'] / leaderboard['actual_traffic'] * 100).round(2)
+        # Calculate performance metrics
+        leaderboard['Yield_per_Guest'] = (leaderboard['actual_coin_in'] / leaderboard['actual_traffic'])
+        leaderboard['Conv_Rate'] = (leaderboard['new_members'] / leaderboard['actual_traffic'] * 100)
         
-        st.table(leaderboard.sort_values('actual_coin_in', ascending=False).rename(columns={
+        # Add Rank column based on Revenue
+        leaderboard['Rank'] = leaderboard['actual_coin_in'].rank(ascending=False, method='min').astype(int)
+        leaderboard = leaderboard.sort_values('Rank')
+
+        # Create formatted copy for display
+        lb_display = leaderboard.copy()
+        lb_display['actual_coin_in'] = lb_display['actual_coin_in'].apply(lambda x: f"${x:,.0f}")
+        lb_display['actual_traffic'] = lb_display['actual_traffic'].apply(lambda x: f"{x:,.0f}")
+        lb_display['new_members'] = lb_display['new_members'].apply(lambda x: f"{x:,.0f}")
+        lb_display['Yield_per_Guest'] = lb_display['Yield_per_Guest'].apply(lambda x: f"${x:,.2f}")
+        lb_display['Conv_Rate'] = lb_display['Conv_Rate'].apply(lambda x: f"{x:.2f}%")
+
+        # Organize and rename columns
+        cols = ['Rank', 'Property', 'actual_coin_in', 'actual_traffic', 'new_members', 'Yield_per_Guest', 'Conv_Rate']
+        st.table(lb_display[cols].rename(columns={
             'actual_coin_in': 'Total Revenue',
             'actual_traffic': 'Total Guests',
             'new_members': 'New Members',
-            'Yield_per_Guest': 'Yield/Guest ($)',
+            'Yield_per_Guest': 'Yield/Guest',
             'Conv_Rate': 'Conv %'
         }))
 
@@ -453,14 +468,13 @@ if page == "Executive Dashboard":
         c1, c2 = st.columns(2)
         with c1:
             st.write("### 💰 Revenue Distribution")
-            # Using 'Property' name for pie chart labels
             fig_rev = px.pie(df, values='actual_coin_in', names='Property', hole=0.4,
                              color_discrete_sequence=px.colors.sequential.Blues_r)
+            fig_rev.update_layout(margin=dict(l=20, r=20, t=20, b=20))
             st.plotly_chart(fig_rev, use_container_width=True, key="global_rev_pie")
 
         with c2:
             st.write("### 🧬 Network Guest Flow (Stacked)")
-            # Using 'Property' name for bar chart colors
             fig_flow = px.bar(df, x="entry_date", y="actual_traffic", color="Property",
                              barmode="stack", color_discrete_sequence=px.colors.qualitative.Prism)
             fig_flow.update_layout(template="plotly_white", margin=dict(l=10, r=10, t=10, b=10))
