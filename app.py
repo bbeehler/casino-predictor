@@ -455,7 +455,7 @@ all_my_roles = [r['user_role'] for r in user_links_res.data] if user_links_res.d
 is_global_admin = any(role in ["Super Admin", "Manager", "Admin"] for role in all_my_roles)
 
 with st.sidebar:
-    # Sidebar Logo
+    # Sidebar Logo with subtle shadow
     st.markdown("""
         <div style="padding: 10px 0px 30px 0px;">
             <img src="https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png" width="160">
@@ -496,7 +496,7 @@ with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
     st.caption("NAVIGATION")
     
-    # 2. NAVIGATION (Updated with Scenario Simulator)
+    # 2. NAVIGATION
     if st.session_state.current_property_id == "GLOBAL":
         page = "Executive Dashboard"
         st.info("Global View Active")
@@ -507,7 +507,8 @@ with st.sidebar:
             nav_options.extend(["Attribution Analytics", "FloorCast AI Analyst"])
         if check_permission("view_reports"): nav_options.append("Master Audit Report")
         if check_permission("manage_alerts"): nav_options.append("Strategic Alerts")
-            
+        if check_permission("calibrate_ai"):
+            nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
         if st.session_state.get('user_role') == "Super Admin":
             nav_options.append("Global Admin Console")
 
@@ -519,6 +520,7 @@ with st.sidebar:
     st.divider()
     st.caption(f"ID: {st.session_state.get('user_email')}")
     
+    # Added margin-bottom: 15px to create the space
     st.markdown(f"""
         <div style="background: #1e1e1e; padding: 10px; border-radius: 8px; border: 1px solid #333; margin-bottom: 15px;">
             <p style="margin:0; font-size: 0.75rem; color: #888;">CURRENT ROLE</p>
@@ -530,6 +532,82 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
+
+# =================================================================
+# 9. THE DATA VAULT (v24.0 - CACHED & THREAD-SAFE)
+# =================================================================
+
+@st.cache_data(ttl=60) # Dropped TTL to 60s for easier debugging
+def get_hydrated_data(property_id, _supabase_client):
+    try:
+        # 1. Fetch Property Map
+        p_res = _supabase_client.table("properties").select("id, property_name").execute()
+        p_map = {p['id']: p['property_name'] for p in p_res.data} if p_res.data else {}
+
+        # 2. Build Query
+        query = _supabase_client.table("ledger").select("*")
+        
+        if property_id == "GLOBAL":
+            l_res = query.order("entry_date", desc=True).execute()
+        else:
+            # Ensure we are passing a clean string
+            l_res = query.eq("property_id", str(property_id)).order("entry_date", desc=True).execute()
+
+        # Check if data actually exists
+        if not l_res.data or len(l_res.data) == 0:
+            return pd.DataFrame(), []
+
+        raw_data = l_res.data
+        all_frames = []
+        unique_ids = list(set([r['property_id'] for r in raw_data]))
+
+        for p_uuid in unique_ids:
+            p_rows = [r for r in raw_data if r['property_id'] == p_uuid]
+            
+            # Pull Coeffs for this specific property
+            c_res = _supabase_client.table("coefficients").select("*").eq("property_id", p_uuid).execute()
+            
+            # CRITICAL FALLBACK: If a property has NO coefficients, the engine 
+            # still needs a dictionary to run, otherwise it returns an empty DF.
+            if c_res.data and len(c_res.data) > 0:
+                c_data = c_res.data[0]
+            else:
+                # Use a safe default dictionary if DB is missing weights for this property
+                c_data = {
+                    'property_id': p_uuid, 'Promo': 500.0, 'Ad_Decay': 85, 
+                    'PR_Weight': 1.2, 'Clicks': 0.05, 'Social_Imp': 0.0002
+                }
+            
+            processed = get_forensic_metrics(p_rows, c_data)
+            p_df = processed['df']
+            
+            if not p_df.empty:
+                p_df['Property'] = p_map.get(p_uuid, "Unknown Property")
+                all_frames.append(p_df)
+
+        if not all_frames:
+            return pd.DataFrame(), raw_data
+
+        final_df = pd.concat(all_frames, ignore_index=True)
+        return final_df, raw_data
+
+    except Exception as e:
+        # This will show you exactly what failed in the logs
+        st.sidebar.error(f"Hydration Logic Error: {e}")
+        return pd.DataFrame(), []
+
+# --- EXECUTION ---
+df, ledger_data = get_hydrated_data(st.session_state.current_property_id, supabase)
+
+# --- 10. REFINED SAFETY GATE ---
+# If df is empty but ledger_data exists, it means the Forensic Engine failed to process the rows.
+if df.empty:
+    if page not in ["Global Admin Console", "Master Audit Report"]:
+        if not ledger_data:
+            st.warning(f"🎰 No ledger data found for {st.session_state.current_property_name}. Please check the Master Audit Report.")
+        else:
+            st.error("🧪 Forensic Engine failed to process rows. Check AI Calibration settings.")
+        st.stop()
 
 # =================================================================
 # 9. PAGE 1: EXECUTIVE DASHBOARD (v52.0 - SaaS Hybrid & Restored Pulse)
@@ -1808,7 +1886,7 @@ elif page == "Strategic Alerts":
             st.error(f"Monitoring Sync Error: {e}")
 
 # =================================================================
-# 19. FOOTER
+# 18. FOOTER
 # =================================================================
 st.sidebar.divider()
 st.sidebar.caption("© 2026 FloorCast Technologies | Strategic AI Unit")
