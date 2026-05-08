@@ -381,16 +381,16 @@ if not st.session_state.authenticated:
         st.markdown("""
             <div style="margin-top: 20px; margin-bottom: 30px;">
                 <h1 style="font-size: 2rem; margin-bottom: 0;">Executive Portal</h1>
-                <p style="color: #667085;">FloorCast Strategic Intelligence Unit</p>
+                <p style="color: #667085;">FloorCast AI</p>
             </div>
         """, unsafe_allow_html=True)
         
         with st.form("login_form", border=True):
-            e_mail = st.text_input("Corporate Email").strip().lower()
+            e_mail = st.text_input("Email").strip().lower()
             p_word = st.text_input("Password", type="password")
             
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.form_submit_button("Authenticate & Unlock Engine", use_container_width=True):
+            if st.form_submit_button("Login", use_container_width=True):
                 try:
                     res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
                     
