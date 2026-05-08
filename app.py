@@ -1369,15 +1369,15 @@ elif page == "FloorCast AI Analyst":
                 st.error(f"Consultation Error: {e}")
 
 # =================================================================
-# 15. PAGE 7: BL-ROAS COMMAND CENTER (v24.1 SaaS - Conflict Fixed)
+# 15. PAGE 7: BL-ROAS COMMAND CENTER (v52.0 - High-End ROI Audit)
 # =================================================================
 elif page == "BL-ROAS Calculator":
-    st.markdown(f"""
-        <div style="background-color: #F8F9FA; padding: 20px; border-radius: 12px; border-left: 6px solid #28A745; margin-bottom: 25px;">
-            <h2 style="color: #28A745; margin: 0;">💰 BL-ROAS Command Center: {st.session_state.current_property_name}</h2>
-            <p style="color: #444; margin: 0;">Audit past performance or calculate current monthly ROI.</p>
-        </div>
-    """, unsafe_allow_html=True)
+    # 1. PREMIUM HEADER
+    render_styled_header(
+        "BL-ROAS Command Center", 
+        "Monthly Brand Lift & Marketing ROI Validation Engine", 
+        "Financials"
+    )
 
     # --- 0. GLOBAL PAGE BENCHMARKS ---
     LTV_BENCHMARK = 1900.00 
@@ -1388,14 +1388,16 @@ elif page == "BL-ROAS Calculator":
     month_options = [(today - relativedelta(months=i)).replace(day=1) for i in range(12)]
     month_labels = [m.strftime("%B %Y") for m in month_options]
 
-    selected_label = st.selectbox("Select Audit Month:", month_labels)
+    c_sel, _ = st.columns([1.5, 2])
+    with c_sel:
+        selected_label = st.selectbox("Audit Fiscal Period:", month_labels)
+    
     selected_month = month_options[month_labels.index(selected_label)]
 
     # --- 2. DYNAMIC LEDGER AGGREGATION ---
     df_roas = pd.DataFrame(ledger_data)
     if not df_roas.empty:
         df_roas['entry_date'] = pd.to_datetime(df_roas['entry_date'])
-        
         m_mask = (df_roas['entry_date'].dt.month == selected_month.month) & \
                  (df_roas['entry_date'].dt.year == selected_month.year)
         selected_month_df = df_roas.loc[m_mask].copy()
@@ -1410,85 +1412,71 @@ elif page == "BL-ROAS Calculator":
     else:
         ledger_traffic, ledger_signups, ledger_coin_in = 0, 0, 0.0
 
-    avg_spend_actual = float(ledger_coin_in / ledger_traffic) if ledger_traffic > 0 else DEFAULT_AVG_SPEND
-
-    # --- 3. THE INPUT FORM ---
-    with st.form("roas_input_form"):
-        st.subheader(f"📊 {selected_label} Metrics")
+    # --- 3. INPUT ACTION CARD ---
+    with st.form("roas_v52_form", border=True):
+        st.markdown(f"#### 📊 {selected_label} Performance Metrics")
         
-        existing_res = supabase.table("monthly_roi")\
-            .select("*")\
+        # Fetch Existing Data
+        existing_res = supabase.table("monthly_roi").select("*")\
             .eq("property_id", st.session_state.current_property_id)\
-            .eq("report_month", str(selected_month))\
-            .execute()
+            .eq("report_month", str(selected_month)).execute()
         existing = existing_res.data[0] if existing_res.data else {}
 
         c1, c2, c3 = st.columns(3)
         with c1:
             utm_s = st.number_input("UTM Sessions", value=int(existing.get('utm_sessions', 0)))
             org_s = st.number_input("Organic Sessions", value=int(existing.get('organic_sessions', 0)))
-            ad_spend = st.number_input("Total Ad Spend ($)", value=float(existing.get('ad_spend', 0.0)), step=100.0)
+            ad_spend = st.number_input("Total Ad Spend ($)", value=float(existing.get('ad_spend', 0.0)), step=500.0)
         
         with c2:
-            likes = st.number_input("Social Likes", value=int(existing.get('social_likes', 0)))
-            comments = st.number_input("Social Comments", value=int(existing.get('social_comments', 0)))
+            likes = st.number_input("Social Engagement", value=int(existing.get('social_likes', 0)))
             shares = st.number_input("Social Shares", value=int(existing.get('social_shares', 0)))
-            views = st.number_input("Post Views", value=int(existing.get('post_views', 0)))
+            views = st.number_input("Reach / Impressions", value=int(existing.get('post_views', 0)))
 
         with c3:
-            time_site = st.number_input("Time on Site Sessions", value=int(existing.get('site_time_sessions', 0)))
+            time_site = st.number_input("Time-on-Site Sessions", value=int(existing.get('site_time_sessions', 0)))
             cta_clicks = st.number_input("Booking CTA Clicks", value=int(existing.get('booking_clicks', 0)))
-            reviews = st.number_input("Net Positive Reviews", value=int(existing.get('pos_reviews', 0)))
             geo_lift = st.number_input("Incremental Geo Traffic", value=int(existing.get('geo_lift_traffic', 0)))
 
         st.divider()
-        st.info(f"**Ledger Sync ({selected_label}):** Coin-In: ${ledger_coin_in:,.2f} | Traffic: {ledger_traffic:,} | Signups: {ledger_signups:,}")
-
-        submit = st.form_submit_button("🚀 Save & Calculate ROI")
-
-    # --- 4. CALCULATION & UPSERT LOGIC ---
-    if submit:
-        brand_value = (utm_s * 1.5) + (org_s * 0.5) + (likes * 0.1) + (shares * 0.5) + (geo_lift * 2.0)
-        bl_roas = brand_value / ad_spend if ad_spend > 0 else 0
-        enhanced_rev = brand_value + ledger_coin_in + (ledger_signups * LTV_BENCHMARK)
-
-        roi_payload = {
-            "property_id": st.session_state.current_property_id,
-            "report_month": str(selected_month),
-            "utm_sessions": utm_s, 
-            "organic_sessions": org_s, 
-            "ad_spend": ad_spend,
-            "social_likes": likes, 
-            "social_comments": comments, 
-            "social_shares": shares, 
-            "post_views": views,
-            "site_time_sessions": time_site, 
-            "booking_clicks": cta_clicks, 
-            "pos_reviews": reviews, 
-            "geo_lift_traffic": geo_lift, 
-            "brand_value": brand_value, 
-            "calculated_bl_roas": bl_roas, 
-            "enhanced_revenue": enhanced_rev
-        }
         
-        try:
-            # FIX: Explicitly handle conflict on the composite key (Property + Month)
-            supabase.table("monthly_roi").upsert(
-                roi_payload, 
-                on_conflict="property_id, report_month"
-            ).execute()
-            st.success(f"✅ ROI for {selected_label} saved successfully!")
-            st.rerun() 
-        except Exception as e:
-            st.error(f"Sync Failure: {e}")
+        # Live Ledger Preview Card inside Form
+        st.markdown(f"""
+            <div style="background: rgba(0, 71, 171, 0.05); padding: 15px; border-radius: 8px; border: 1px solid rgba(0, 71, 171, 0.2); margin-bottom: 20px;">
+                <p style="margin:0; font-size: 0.8rem; color: #0047AB; font-weight: 700; text-transform: uppercase;">Linked Ledger Sync</p>
+                <p style="margin:0; font-size: 0.95rem; color: #1e293b;">
+                    Coin-In: <b>${ledger_coin_in:,.2f}</b> | Traffic: <b>{ledger_traffic:,}</b> | Signups: <b>{ledger_signups:,}</b>
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
 
-    # --- 5. REPORT GENERATOR ---
+        if st.form_submit_button("🚀 Save & Generate ROI Audit", use_container_width=True):
+            brand_value = (utm_s * 1.5) + (org_s * 0.5) + (likes * 0.1) + (shares * 0.5) + (geo_lift * 2.0)
+            bl_roas = brand_value / ad_spend if ad_spend > 0 else 0
+            enhanced_rev = brand_value + ledger_coin_in + (ledger_signups * LTV_BENCHMARK)
+
+            roi_payload = {
+                "property_id": st.session_state.current_property_id,
+                "report_month": str(selected_month),
+                "utm_sessions": utm_s, "organic_sessions": org_s, "ad_spend": ad_spend,
+                "social_likes": likes, "social_shares": shares, "post_views": views,
+                "site_time_sessions": time_site, "booking_clicks": cta_clicks, 
+                "geo_lift_traffic": geo_lift, "brand_value": brand_value, 
+                "calculated_bl_roas": bl_roas, "enhanced_revenue": enhanced_rev
+            }
+            
+            try:
+                supabase.table("monthly_roi").upsert(roi_payload, on_conflict="property_id, report_month").execute()
+                st.success(f"Audit for {selected_label} Synchronized.")
+                st.rerun() 
+            except Exception as e:
+                st.error(f"Sync Failure: {e}")
+
+    # --- 4. EXECUTIVE REPORT GENERATOR ---
     st.divider()
-    history_res = supabase.table("monthly_roi")\
-        .select("*")\
+    history_res = supabase.table("monthly_roi").select("*")\
         .eq("property_id", st.session_state.current_property_id)\
-        .order("report_month", desc=True)\
-        .execute()
+        .order("report_month", desc=True).execute()
         
     if history_res.data:
         df_hist = pd.DataFrame(history_res.data)
@@ -1498,24 +1486,28 @@ elif page == "BL-ROAS Calculator":
             curr = curr_row.iloc[0]
             prop_potential = ledger_coin_in + (ledger_signups * LTV_BENCHMARK)
             
-            report_text = f"""{selected_label} ROAS Results for {st.session_state.current_property_name}
-Brand Health Performance
-
+            report_text = f"""{selected_label} ROAS Results | {st.session_state.current_property_name}
+--------------------------------------------------
+BRAND HEALTH PERFORMANCE
 BL-ROAS = {curr['calculated_bl_roas']:.2f}x
-For every $1 spent in advertising, we generated ${curr['brand_value']:,.2f} in measurable brand value.
+Measured Brand Value Generated: ${curr['brand_value']:,.2f}
 
-🎯 Attributed Revenue Impact (Floor)
+ATTRIBUTED REVENUE IMPACT (ESTIMATED)
 • 10% Attribution: ${(prop_potential * 0.1):,.0f}
 • 20% Attribution: ${(prop_potential * 0.2):,.0f}
 • 30% Attribution: ${(prop_potential * 0.3):,.0f}
 
-Enhanced Total Impact = ${curr['enhanced_revenue']:,.0f}"""
+ENHANCED TOTAL IMPACT: ${curr['enhanced_revenue']:,.0f}"""
             
-            st.subheader("📄 SharePoint Ready Text")
-            st.text_area("Copy/Paste this into the monthly report:", value=report_text, height=250)
+            st.markdown("### 📄 Executive Summary (SharePoint Ready)")
+            st.text_area("Audit Output Clip:", value=report_text, height=220)
 
-            st.write("### 📜 Audit History")
-            st.dataframe(df_hist[['report_month', 'calculated_bl_roas', 'brand_value', 'enhanced_revenue']], use_container_width=True, hide_index=True)
+            st.markdown("### 📜 Audit History")
+            with st.container(border=True):
+                st.dataframe(
+                    df_hist[['report_month', 'calculated_bl_roas', 'brand_value', 'enhanced_revenue']], 
+                    use_container_width=True, hide_index=True
+                )
 
 # =================================================================
 # 16. PAGE 8: GLOBAL ADMIN CONSOLE (v22.0 RBAC Enabled)
