@@ -501,29 +501,31 @@ with st.sidebar:
         page = "Executive Dashboard"
         st.info("Global View Active")
     else:
-            nav_options = ["Executive Dashboard"]
-            if check_permission("view_ledger"): nav_options.append("Daily Ledger Audit")
-            if check_permission("view_analytics"):
-                nav_options.extend(["Attribution Analytics", "FloorCast AI Analyst"])
-            if check_permission("view_reports"): nav_options.append("Master Audit Report")
+        nav_options = ["Executive Dashboard"]
+        if check_permission("view_ledger"): nav_options.append("Daily Ledger Audit")
+        if check_permission("view_analytics"):
+            nav_options.extend(["Attribution Analytics", "FloorCast AI Analyst"])
+        if check_permission("view_reports"): nav_options.append("Master Audit Report")
+        
+        # THE CHANGE: Check for simulation permissions specifically
+        if check_permission("run_simulations"): 
+            nav_options.append("Scenario Simulator")
             
-            # THE CHANGE: Check for simulation permissions specifically
-            if check_permission("run_simulations"): 
-                nav_options.append("Scenario Simulator")
-                
-            if check_permission("manage_alerts"): nav_options.append("Strategic Alerts")
-            if check_permission("calibrate_ai"):
-                nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
+        if check_permission("manage_alerts"): nav_options.append("Strategic Alerts")
+        if check_permission("calibrate_ai"):
+            nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
+        if st.session_state.get('user_role') == "Super Admin":
+            nav_options.append("Global Admin Console")
 
-        # High-end nav selection
+        # High-end nav selection (Now correctly aligned)
         page = st.radio("Navigation", nav_options, label_visibility="collapsed")
 
     # 3. FOOTER CONTEXT
+    # Note: Using a container for better fixed positioning alignment in Streamlit
     st.markdown("<div style='position: fixed; bottom: 20px; width: 260px;'>", unsafe_allow_html=True)
     st.divider()
     st.caption(f"ID: {st.session_state.get('user_email')}")
     
-    # Added margin-bottom: 15px to create the space
     st.markdown(f"""
         <div style="background: #1e1e1e; padding: 10px; border-radius: 8px; border: 1px solid #333; margin-bottom: 15px;">
             <p style="margin:0; font-size: 0.75rem; color: #888;">CURRENT ROLE</p>
