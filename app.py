@@ -1892,7 +1892,7 @@ elif page == "Strategic Alerts":
             st.error(f"Monitoring Sync Error: {e}")
 
 # =================================================================
-# 18. PAGE 10: SCENARIO SIMULATION (v52.3 - Seasonal Aware)
+# 18. PAGE 10: SCENARIO SIMULATION (v52.4 - Specialist Edition)
 # =================================================================
 elif page == "Scenario Simulator":
     render_styled_header(
@@ -1907,7 +1907,6 @@ elif page == "Scenario Simulator":
         
         with c1:
             sim_date = st.date_input("Target Date", value=datetime.date.today() + datetime.timedelta(days=14))
-            # NEW: Seasonality Toggle based on your business cycle
             sim_season = st.selectbox("Business Season", ["Winter (Jan-Feb)", "Spring (Mar-Jun)", "Summer (Jul-Aug)", "Autumn (Sep-Nov)", "Peak (December)"])
         
         with c2:
@@ -1928,26 +1927,27 @@ elif page == "Scenario Simulator":
         try:
             dow = sim_date.strftime('%A')
             
-            # 1. ESTABLISH LIFETIME BASELINE
+            # 1. ESTABLISH LIFETIME BASELINE (Cleaning out 0-traffic days)
             if 'df' in locals() and not df.empty:
-                dow_history = df[df['entry_date'].dt.day_name() == dow].copy()
+                dow_history = df[(df['entry_date'].dt.day_name() == dow) & (df['actual_traffic'] > 0)].copy()
                 lifetime_baseline = dow_history['actual_traffic'].mean() if not dow_history.empty else 1500
+                sample_size = len(dow_history)
             else:
                 lifetime_baseline = 1500
                 sample_size = 0
 
-            # 2. APPLY SEASONAL MULTIPLIERS (Hard Rock Business Logic)
+            # 2. APPLY SEASONAL MULTIPLIERS
             seasonal_map = {
-                "Winter (Jan-Feb)": 0.85,   # 15% Dip
-                "Spring (Mar-Jun)": 1.05,   # 5% Growth
-                "Summer (Jul-Aug)": 1.15,   # 15% Growth
-                "Autumn (Sep-Nov)": 1.20,   # 20% Steady Climb
-                "Peak (December)": 1.35     # 35% Peak
+                "Winter (Jan-Feb)": 0.85,
+                "Spring (Mar-Jun)": 1.05,
+                "Summer (Jul-Aug)": 1.15,
+                "Autumn (Sep-Nov)": 1.20,
+                "Peak (December)": 1.35
             }
             season_mult = seasonal_map.get(sim_season, 1.0)
             seasonal_baseline = lifetime_baseline * season_mult
 
-            # 3. APPLY DNA MULTIPLIERS (Digital, Events, Weather)
+            # 3. APPLY DNA MULTIPLIERS
             digital_lift = (sim_clicks * weights.get('Clicks', 0.05)) + (sim_imps * weights.get('Social_Imp', 0.0002))
             gravity_lift = sim_event * weights.get('Event_Gravity', 0.25)
             friction = (sim_rain * weights.get('Rain_mm', -12)) + (sim_snow * weights.get('Snow_cm', -45))
@@ -1956,15 +1956,65 @@ elif page == "Scenario Simulator":
             projected_guests = max(0, seasonal_baseline + digital_lift + gravity_lift + friction)
             projected_rev = projected_guests * weights.get('Avg_Coin_In', 112.50)
             
-            # --- OUTPUT ---
+            # --- OUTPUT SCOREBOARD ---
             st.divider()
             res1, res2, res3, res4 = st.columns(4)
-            res1.metric("Lifetime Avg", f"{lifetime_baseline:,.0f}")
-            res2.metric("Seasonal Adjusted", f"{seasonal_baseline:,.0f}", delta=f"{(season_mult-1)*100:+.0f}%")
-            res3.metric("Final Projection", f"{projected_guests:,.0f} Guests")
+            res1.metric(f"Lifetime {dow}", f"{lifetime_baseline:,.0f}")
+            res2.metric("Seasonal Base", f"{seasonal_baseline:,.0f}", delta=f"{(season_mult-1)*100:+.0f}%")
+            res3.metric("AI Projection", f"{projected_guests:,.0f} Guests")
             res4.metric("Proj. Revenue", f"${projected_rev:,.0f}")
 
-            st.info(f"**Forensic Note:** This simulation started with your lifetime **{dow}** average and applied a **{sim_season}** seasonal index. Marketing lift and weather friction were then calculated against the adjusted baseline.")
+            # --- 5. EXECUTIVE SPECIALIST CONSULTATION ---
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.status("🕵️ AI Specialist generating strategic recommendations...", expanded=True) as status:
+                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                # Using 1.5-flash for the highest speed and stability
+                model = genai.GenerativeModel('gemini-2.5-flash')
+                
+                specialist_context = f"""
+                PROPERTY: {st.session_state.current_property_name}
+                DATE: {sim_date} ({dow})
+                SEASON: {sim_season}
+                
+                FORENSIC DATA:
+                - Lifetime Baseline: {lifetime_baseline:,.0f}
+                - Seasonal Baseline: {seasonal_baseline:,.0f}
+                - Marketing/Event Lift: {digital_lift + gravity_lift:,.0f} guests
+                - Weather Friction: {friction:,.0f} guests
+                - Total Projected: {projected_guests:,.0f} guests
+                - Expected Revenue: ${projected_rev:,.0f}
+                """
+                
+                specialist_prompt = f"""
+                You are a world-class Casino Marketing Specialist. Analyze the provided forensic data 
+                for {st.session_state.current_property_name} and provide a strategic executive memo.
+                
+                Focus on:
+                1. **Yield Maximization:** How to squeeze the most revenue out of this {projected_guests:,.0f} guest flow.
+                2. **Tactical Ad-Spending:** Should we increase or decrease the {sim_clicks} clicks based on the weather/seasonal outlook?
+                3. **Operational Optimization:** Advice for handling the {sim_event} event attendance or mitigating the {friction:,.0f} guest weather loss.
+                
+                Keep the tone professional, energetic, and data-driven.
+                
+                DATASET:
+                {specialist_context}
+                """
+                
+                ai_response = model.generate_content(specialist_prompt)
+                status.update(label="✅ Strategic Memo Generated", state="complete")
+
+            # Display the Specialist Memo
+            st.markdown(f"""
+                <div style="background: #FFFFFF; padding: 30px; border-radius: 12px; border: 1px solid #E1E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0047AB; padding-bottom: 10px; margin-bottom: 20px;">
+                        <span style="font-weight: 800; color: #0047AB; font-size: 1.1rem;">INTERNAL STRATEGIC MEMO</span>
+                        <span style="color: #64748b; font-size: 0.8rem; font-family: monospace;">REF: SIM_FS_{sim_date.strftime('%Y%m%d')}</span>
+                    </div>
+                    <div style="color: #1e293b; line-height: 1.6;">
+                        {ai_response.text}
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
             
         except Exception as e:
             st.error(f"Simulation Error: {e}")
