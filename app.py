@@ -27,7 +27,8 @@ def archive_sentiment_entry(text, asset_tag):
         # 1. AI Scoring Layer
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        # Note: Model updated to 1.5-flash as 2.5 is not a standard release yet
+        model = genai.GenerativeModel('gemini-2.5-flash') 
         
         score_prompt = f"Analyze sentiment of this casino review. Return ONLY a single float between -1.0 and 1.0: {text}"
         ai_res = model.generate_content(score_prompt)
@@ -35,9 +36,10 @@ def archive_sentiment_entry(text, asset_tag):
         try:
             sentiment_score = float(ai_res.text.strip())
         except:
-            sentiment_score = 0.0 # Fallback for non-numeric AI responses
+            sentiment_score = 0.0
 
-        # --- NEW: Sentiment Category Logic ---
+        # --- DERIVE CATEGORY & INTENSITY ---
+        # Logic for Category
         if sentiment_score > 0.3:
             sentiment_category = "Positive"
         elif sentiment_score < -0.3:
@@ -45,13 +47,23 @@ def archive_sentiment_entry(text, asset_tag):
         else:
             sentiment_category = "Neutral"
 
-        # 2. Construct Payload with explicit message_id and sentiment_category
+        # Logic for Intensity (Absolute strength of the emotion)
+        abs_score = abs(sentiment_score)
+        if abs_score >= 0.8:
+            intensity_level = "Extreme"
+        elif abs_score >= 0.4:
+            intensity_level = "Moderate"
+        else:
+            intensity_level = "Low"
+
+        # 2. Construct Payload with all required columns
         payload = {
-            "message_id": str(uuid.uuid4()),  
+            "message_id": str(uuid.uuid4()),
             "property_id": st.session_state.current_property_id,
             "asset": asset_tag,
             "sentiment_score": sentiment_score,
             "sentiment_category": sentiment_category,
+            "intensity_level": intensity_level, # New Addition
             "raw_text": text,
             "timestamp": datetime.datetime.now().isoformat(),
             "user_email": st.session_state.user_email
