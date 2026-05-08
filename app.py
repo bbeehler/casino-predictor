@@ -165,26 +165,26 @@ def apply_high_end_styling():
             color: #FFFFFF !important;
         }
 
-        /* Specifically target Sidebar Captions */
+        /* Sidebar Captions */
         [data-testid="stSidebar"] .stCaption {
             color: #A1A1A1 !important;
             font-weight: 600;
             letter-spacing: 0.05em;
         }
 
-        /* Sidebar Divider Color */
+        /* Sidebar Divider */
         [data-testid="stSidebar"] hr {
             border-color: #333333 !important;
         }
 
-        /* Sidebar Button Visibility */
+        /* Sidebar Buttons */
         [data-testid="stSidebar"] .stButton>button {
             background-color: #1A1A1A !important;
             color: #FFFFFF !important;
             border: 1px solid #333333 !important;
         }
 
-        /* RESPONSIVE PADDING & VIEWPORT OPTIMIZATION */
+        /* RESPONSIVE PADDING */
         .main .block-container {
             padding-top: 2rem;
             padding-bottom: 5rem;
@@ -235,7 +235,6 @@ def apply_high_end_styling():
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
         }
 
-        /* Force Metric Labels and Values to be DARK CHARCOAL for Mobile Visibility */
         [data-testid="stMetricLabel"] > div, 
         [data-testid="stMetricValue"] > div,
         [data-testid="stMetricLabel"] p {
@@ -243,14 +242,15 @@ def apply_high_end_styling():
             -webkit-text-fill-color: #1A1C1E !important;
         }
 
-        /* Adjust Metric Value Size for Mobile */
-        @media (max-width: 768px) {
-            [data-testid="stMetricValue"] > div {
-                font-size: 1.6rem !important;
-            }
+        /* --- THE FIX: INPUT & FLOORCAST AI VISIBILITY KIT --- */
+        
+        /* Force Chat Input Container and Text Areas to be white with dark text */
+        .stChatInputContainer, .stTextArea textarea, .stChatInput input {
+            background-color: #FFFFFF !important;
+            color: #1A1C1E !important;
         }
 
-        /* --- INPUT & DROPDOWN VISIBILITY KIT --- */
+        /* Standard Input/Select Styling */
         div[data-baseweb="input"] > div, 
         div[data-baseweb="select"] > div {
             background-color: #FFFFFF !important;
@@ -258,11 +258,13 @@ def apply_high_end_styling():
             border-radius: 8px !important;
         }
 
+        /* Force dark text for all input methods */
         input, textarea, div[data-baseweb="select"] * {
             color: #1A1C1E !important;
             -webkit-text-fill-color: #1A1C1E !important;
         }
 
+        /* Dropdown Popover Lists */
         div[data-baseweb="popover"] ul {
             background-color: #FFFFFF !important;
         }
@@ -272,7 +274,7 @@ def apply_high_end_styling():
             background-color: #FFFFFF !important;
         }
 
-        /* Focus State: Flat Professional Glow */
+        /* Focus Glow */
         div[data-baseweb="input"]:focus-within, 
         div[data-baseweb="select"]:focus-within {
             border: 1px solid #0047AB !important;
@@ -299,7 +301,6 @@ def apply_high_end_styling():
         </style>
     """, unsafe_allow_html=True)
 
-# Define the Responsive Header Component
 def render_styled_header(title, subtitle, badge_text="Live"):
     st.markdown(f"""
         <div class="glass-header">
