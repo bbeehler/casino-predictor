@@ -1744,27 +1744,37 @@ elif page == "Global Admin Console":
                     st.error(f"❌ Security Matrix Sync Error: {e}")
 
 # =================================================================
-# 17. PAGE 9: STRATEGIC ALERTS
+# 17. PAGE 9: STRATEGIC ALERTS (v52.0 - High-End Monitoring)
 # =================================================================
 elif page == "Strategic Alerts":
-    st.markdown("""
-        <div style="background-color: #1A1A1B; padding: 20px; border-radius: 12px; border-left: 6px solid #FF4B4B; margin-bottom: 25px;">
-            <h2 style="color: #FF4B4B; margin: 0;">🚨 Strategic Alert Engine</h2>
-        </div>
-    """, unsafe_allow_html=True)
+    # 1. PREMIUM HEADER
+    render_styled_header(
+        "Strategic Watchdogs", 
+        "Autonomous Performance Monitoring & Threshold Response Engine", 
+        "Monitoring Active"
+    )
     
-    col_a, col_b = st.columns([1, 2])
+    col_a, col_b = st.columns([1, 1.5])
+    
     with col_a:
-        st.subheader("🛠️ Create New Trigger")
+        st.markdown("### 🛠️ Create New Trigger")
         if st.session_state.current_property_id == "GLOBAL":
-            st.warning("Select a property to deploy a watchdog.")
+            st.info("💡 Please select a specific property environment to deploy a watchdog.")
         else:
-            with st.form("new_alert_form"):
-                a_name = st.text_input("Alert Name")
-                a_metric = st.selectbox("Metric", ["Revenue", "Guest Traffic", "Sentiment Score"])
-                a_op = st.selectbox("Condition", ["Drops Below", "Exceeds"])
-                a_val = st.number_input("Threshold", value=0.0)
-                if st.form_submit_button("🛰️ Deploy Watchdog"):
+            # Action Card for Trigger Creation
+            with st.form("new_alert_form_v52", border=True):
+                st.markdown("#### Sentinel Configuration")
+                a_name = st.text_input("Watchdog Alias", placeholder="e.g. Revenue Floor Alert")
+                a_metric = st.selectbox("Intelligence Metric", ["Revenue", "Guest Traffic", "Sentiment Score"])
+                
+                c1, c2 = st.columns(2)
+                with c1:
+                    a_op = st.selectbox("Condition", ["Drops Below", "Exceeds"])
+                with c2:
+                    a_val = st.number_input("Threshold", value=0.0, step=100.0)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.form_submit_button("🛰️ Deploy Watchdog", use_container_width=True):
                     payload = {
                         "property_id": st.session_state.current_property_id,
                         "alert_name": a_name,
@@ -1773,13 +1783,17 @@ elif page == "Strategic Alerts":
                         "comparison_operator": "<" if a_op == "Drops Below" else ">",
                         "user_email": st.session_state.user_email
                     }
-                    supabase.table("strategic_alerts").insert(payload).execute()
-                    st.success("Watchdog Live.")
-                    st.rerun()
+                    try:
+                        supabase.table("strategic_alerts").insert(payload).execute()
+                        st.success("Watchdog Synchronized and Live.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Deployment Error: {e}")
 
     with col_b:
-        st.subheader("📋 Active Watchdogs")
+        st.markdown("### 📋 Active Network Watchdogs")
         target_id = st.session_state.get('current_property_id')
+        
         try:
             if target_id == "GLOBAL":
                 alerts_res = supabase.table("strategic_alerts").select("*").execute()
@@ -1788,12 +1802,25 @@ elif page == "Strategic Alerts":
 
             if alerts_res and alerts_res.data:
                 for alert in alerts_res.data:
-                    with st.expander(f"🔔 {alert.get('alert_name')}"):
-                        st.write(f"**{alert.get('metric_target')}** {alert.get('comparison_operator')} **{alert.get('threshold_val')}**")
-                        if st.button("Disable", key=f"dis_{alert['id']}"):
-                            supabase.table("strategic_alerts").delete().eq("id", alert['id']).execute()
-                            st.rerun()
-        except Exception as e: st.error(f"Sync Error: {e}")
+                    # High-end container for each alert
+                    with st.container(border=True):
+                        c1, c2 = st.columns([3, 1])
+                        with c1:
+                            st.markdown(f"**🔔 {alert.get('alert_name')}**")
+                            st.caption(f"Target: {alert.get('metric_target')} | Condition: {alert.get('comparison_operator')} {alert.get('threshold_val')}")
+                        with c2:
+                            if st.button("Disable", key=f"dis_{alert['id']}", use_container_width=True):
+                                supabase.table("strategic_alerts").delete().eq("id", alert['id']).execute()
+                                st.rerun()
+            else:
+                st.markdown("""
+                    <div style="text-align:center; padding: 40px; color: #64748b; border: 2px dashed #e2e8f0; border-radius: 12px;">
+                        No active watchdogs found in this sector.
+                    </div>
+                """, unsafe_allow_html=True)
+                
+        except Exception as e: 
+            st.error(f"Monitoring Sync Error: {e}")
 
 # =================================================================
 # 18. FOOTER
