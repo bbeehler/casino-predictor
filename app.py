@@ -1934,6 +1934,7 @@ elif page == "Scenario Simulator":
                 lifetime_baseline = dow_history['actual_traffic'].mean() if not dow_history.empty else 1500
             else:
                 lifetime_baseline = 1500
+                sample_size = 0
 
             # 2. APPLY SEASONAL MULTIPLIERS (Hard Rock Business Logic)
             seasonal_map = {
