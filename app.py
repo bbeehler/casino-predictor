@@ -1675,8 +1675,29 @@ elif page == "Global Admin Console":
                 updated_perms[cap_id] = st.checkbox(cap_desc, key=f"cap_{cap_id}")
                 
             if st.form_submit_button("💾 Save Role Configuration"):
-                supabase.table("role_permissions").upsert({"role_name": target_role_config, "perms": updated_perms}).execute()
-                st.success(f"Permissions for {target_role_config} updated.")
+            try:
+                # payload construction
+                perm_payload = {
+                    "role_name": target_role_config, 
+                    "perms": updated_perms
+                }
+                
+                # The "on_conflict" parameter is the secret sauce here.
+                # It tells the DB to look at the 'role_name' column to decide 
+                # whether to UPDATE or INSERT.
+                supabase.table("role_permissions").upsert(
+                    perm_payload, 
+                    on_conflict="role_name"
+                ).execute()
+                
+                st.success(f"✅ Configuration for '{target_role_config}' synced to cloud vault.")
+                
+                # Clear cache so the new permissions are picked up immediately
+                st.cache_data.clear()
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"❌ Security Matrix Sync Error: {e}")
 
 # =================================================================
 # 17. PAGE 9: STRATEGIC ALERTS
