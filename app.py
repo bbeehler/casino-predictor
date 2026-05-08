@@ -197,31 +197,38 @@ def apply_high_end_styling():
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
         }
 
-        /* --- THE FIX: INPUT FIELD REFINEMENT (Removing Bubbles & Double Borders) --- */
+        /* --- THE FIX: INPUT & DROPDOWN VISIBILITY KIT --- */
+        
+        /* 1. Ensure Input/Select containers are always white with clear borders */
         div[data-baseweb="input"] > div, 
-        div[data-baseweb="select"] > div, 
-        textarea, 
-        input {
+        div[data-baseweb="select"] > div {
             background-color: #FFFFFF !important;
-            color: #1A1C1E !important;
-            border-radius: 8px !important;
             border: 1px solid #D0D5DD !important;
-            padding: 8px !important;
-            box-shadow: none !important; 
-            outline: none !important;    
+            border-radius: 8px !important;
         }
 
-        /* REMOVE STREAMLIT FOCUS BLUE BUBBLE GLOW */
+        /* 2. FORCE text color to be Dark Charcoal for all inputs and select states */
+        input, textarea, div[data-baseweb="select"] * {
+            color: #1A1C1E !important;
+            -webkit-text-fill-color: #1A1C1E !important;
+        }
+
+        /* 3. Dropdown Popover List Styling */
+        div[data-baseweb="popover"] ul {
+            background-color: #FFFFFF !important;
+        }
+        
+        div[data-baseweb="popover"] li {
+            color: #1A1C1E !important;
+            background-color: #FFFFFF !important;
+        }
+
+        /* 4. Focus State: Flat Professional Glow */
         div[data-baseweb="input"]:focus-within, 
         div[data-baseweb="select"]:focus-within {
             border: 1px solid #0047AB !important;
-            box-shadow: 0 0 0 2px rgba(0, 71, 171, 0.1) !important; 
-        }
-
-        /* FIX DROPDOWN (SELECT) FIELDS SPECIFICALLY */
-        div[role="combobox"] {
-            border: none !important; 
-            background: transparent !important;
+            box-shadow: 0 0 0 2px rgba(0, 71, 171, 0.1) !important;
+            outline: none !important;
         }
 
         /* BUTTON STYLING (Corporate Primary) */
