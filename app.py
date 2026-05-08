@@ -791,18 +791,17 @@ if page == "Executive Dashboard":
             except: pass
         
 # =================================================================
-# 10. PAGE 2: DAILY LEDGER AUDIT (SAAS MULTI-TENANT v9.0)
+# 10. PAGE 2: DAILY LEDGER AUDIT (v52.0 - High-End Operational Deck)
 # =================================================================
 elif page == "Daily Ledger Audit":
-    # 1. HEADER
-    st.markdown(f"""
-        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
-            <h2 style="color: #0047AB; margin: 0;">📈 Daily Ledger Audit: {st.session_state.current_property_name}</h2>
-            <p style="color: #444; margin: 0;">Enter daily results or see past performance for this property.</p>
-        </div>
-    """, unsafe_allow_html=True)
+    # 1. PREMIUM HEADER
+    render_styled_header(
+        f"Ledger Audit: {st.session_state.current_property_name}", 
+        "Operational Actuals Management & Data Integrity", 
+        "Data Active"
+    )
     
-    # --- 2. THE DATA ENGINE (Filtered by Property) ---
+    # --- 2. THE DATA ENGINE ---
     if not ledger_data:
         df_ledger = pd.DataFrame(columns=[
             'entry_date', 'actual_traffic', 'new_members', 'actual_coin_in', 
@@ -810,11 +809,9 @@ elif page == "Daily Ledger Audit":
             'rain_mm', 'snow_cm', 'property_id'
         ])
     else:
-        # DATA IS ALREADY FILTERED IN SECTION 6 (HYDRATION)
         df_ledger = pd.DataFrame(ledger_data)
         df_ledger['entry_date'] = pd.to_datetime(df_ledger['entry_date']).dt.date
         
-        # Ensure all numeric columns are handled properly
         marketing_cols = ['actual_traffic', 'new_members', 'actual_coin_in', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
         for col in marketing_cols:
             if col in df_ledger.columns:
@@ -823,16 +820,17 @@ elif page == "Daily Ledger Audit":
         df_ledger['active_promo'] = df_ledger['active_promo'].astype(str).replace(['nan', 'None', '0', '0.0'], '')
         df_ledger = df_ledger.sort_values('entry_date', ascending=False)
 
-    # --- 3. RAPID ENTRY FORM (Tagged with Property ID) ---
-    with st.expander("➕ Log New Daily Actuals", expanded=False):
-        with st.form("rapid_entry_form", clear_on_submit=True):
+    # --- 3. RAPID ENTRY ACTION CARD ---
+    with st.expander("➕ Register Daily Performance Nodes", expanded=False):
+        st.markdown('<div style="padding: 10px;">', unsafe_allow_html=True)
+        with st.form("rapid_entry_form", clear_on_submit=True, border=False):
             f1, f2, f3 = st.columns(3)
             with f1:
-                e_date = st.date_input("Date", value=datetime.date.today())
+                e_date = st.date_input("Audit Date", value=datetime.date.today())
                 e_traffic = st.number_input("Actual Traffic", min_value=0, step=1)
                 e_members = st.number_input("New Members", min_value=0, step=1)
             with f2:
-                e_promo = st.text_input("Active Promo Name", placeholder="e.g. Rock of Ages")
+                e_promo = st.text_input("Active Promotion", placeholder="e.g. Unity Bonus")
                 e_event = st.number_input("Event Attendance", min_value=0, step=1)
                 e_coin = st.number_input("Actual Coin-In ($)", min_value=0.0, step=1000.0)
             with f3:
@@ -840,7 +838,9 @@ elif page == "Daily Ledger Audit":
                 e_imps = st.number_input("Social Impressions", min_value=0, step=1)
                 e_rain = st.number_input("Rain (mm)", min_value=0.0, step=0.1)
             
-            submit_new = st.form_submit_button("🚀 Submit to Database", use_container_width=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+            submit_new = st.form_submit_button("🚀 Commit to Forensic Vault", use_container_width=True)
+            
             if submit_new:
                 new_row = {
                     "entry_date": str(e_date),
@@ -853,24 +853,27 @@ elif page == "Daily Ledger Audit":
                     "ad_impressions": int(e_imps),
                     "rain_mm": float(e_rain),
                     "snow_cm": 0.0,
-                    "property_id": st.session_state.current_property_id  # <--- SAAS TAG
+                    "property_id": st.session_state.current_property_id
                 }
                 try:
                     supabase.table("ledger").upsert(new_row).execute()
-                    st.success(f"✅ Successfully logged: {e_date} for {st.session_state.current_property_name}")
+                    st.success(f"✅ Successfully logged: {e_date}")
                     st.cache_data.clear()
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Database Error: {e}")
+                    st.error(f"Vault Error: {e}")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- 4. HISTORICAL VIEW SLIDER ---
-    st.write("### 📂 Performance Audit Range")
-    view_limit = st.slider("Select Audit Depth (Days):", 7, 100, 30, key="audit_slider_top")
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # --- 4. PERFORMANCE SCOREBOARD ---
+    c_lim, _ = st.columns([1, 2])
+    with c_lim:
+        view_limit = st.select_slider("Audit Depth (Days):", options=[7, 14, 30, 60, 90, 120], value=30)
+    
     df_audit_period = df_ledger.head(view_limit).copy()
     
-    # --- 5. DYNAMIC PERFORMANCE SCOREBOARD ---
-    st.write(f"### 🎯 Performance Scoreboard: Last {view_limit} Days")
-    
+    st.markdown(f"### 🎯 Performance Scoreboard: Last {view_limit} Days")
     if not df_audit_period.empty:
         total_period_traffic = df_audit_period['actual_traffic'].sum()
         total_period_signups = df_audit_period['new_members'].sum()
@@ -886,59 +889,46 @@ elif page == "Daily Ledger Audit":
 
     st.divider()
 
-    # --- 6. THE HISTORICAL EDITABLE LEDGER (Bulk Sync & Delete Fix) ---
-    st.write("### 📂 Bulk Audit & Corrections")
-    with st.form("bulk_ledger_sync"):
-        # STEP 1: Keep 'id' for the database, but drop 'property_id' for the UI
-        # We MUST keep the 'id' column in the dataframe or deletes will fail.
+    # --- 5. THE HISTORICAL EDITABLE LEDGER ---
+    st.markdown("### 📂 Bulk Audit & Corrections")
+    with st.form("bulk_ledger_sync", border=False):
+        # UI Prep: Hide ID for users but keep for sync logic
         cols_to_show = [c for c in df_audit_period.columns if c != 'property_id']
         display_df = df_audit_period[cols_to_show].copy()
         
-        # STEP 2: The Data Editor
-        edited_ledger = st.data_editor(
-            display_df, 
-            column_config={
-                "id": None,  # This HIDES the ID column from the user while keeping it in the data
-                "entry_date": st.column_config.DateColumn("Date", required=True),
-                "actual_traffic": st.column_config.NumberColumn("Actual Traffic", format="%d"),
-                "new_members": st.column_config.NumberColumn("New Members", format="%d"),
-                "actual_coin_in": st.column_config.NumberColumn("Coin-In", format="$%d"),
-                "active_promo": st.column_config.TextColumn("Promo Name"),
-                "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
-            },
-            hide_index=True,
-            use_container_width=True,
-            num_rows="dynamic", # Enables the trash icon/add row feature
-            key="property_ledger_v9_1"
-        )
+        with st.container(border=True):
+            edited_ledger = st.data_editor(
+                display_df, 
+                column_config={
+                    "id": None, 
+                    "entry_date": st.column_config.DateColumn("Date", required=True),
+                    "actual_traffic": st.column_config.NumberColumn("Guests", format="%d"),
+                    "new_members": st.column_config.NumberColumn("Members", format="%d"),
+                    "actual_coin_in": st.column_config.NumberColumn("Revenue", format="$%d"),
+                    "active_promo": st.column_config.TextColumn("Promo Name"),
+                },
+                hide_index=True,
+                use_container_width=True,
+                num_rows="dynamic",
+                key="ledger_editor_v52"
+            )
         
-        if st.form_submit_button("💾 Sync Table Updates", use_container_width=True):
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.form_submit_button("💾 Sync Table Updates to Cloud", use_container_width=True):
             try:
-                # STEP 3: Identify what changed (Updates vs. Deletions)
-                # Streamlit's data_editor returns the full state of the table
                 df_sync = pd.DataFrame(edited_ledger).copy()
-                
                 if not df_sync.empty:
                     df_sync['entry_date'] = df_sync['entry_date'].astype(str)
-                    # CRITICAL: Always re-tag with the current property_id
                     df_sync['property_id'] = st.session_state.current_property_id
                     
-                    # Convert to dictionary and upsert
                     sync_payload = df_sync.fillna(0).to_dict(orient='records')
-                    
-                    # Execute the Sync
                     supabase.table("ledger").upsert(sync_payload).execute()
                     
-                    # NOTE: If you deleted rows, we need to handle those specifically
-                    # if your table doesn't automatically detect the missing rows.
-                    # For now, this upsert will handle all modifications.
-
-                    st.success(f"✅ Bulk updates synced for {st.session_state.current_property_name}.")
+                    st.success("✅ Bulk updates synced successfully.")
                     st.cache_data.clear()
                     st.rerun()
                 else:
-                    st.warning("Table is empty. No data to sync.")
-                    
+                    st.warning("No data to sync.")
             except Exception as e:
                 st.error(f"Bulk Sync Error: {e}")
 
