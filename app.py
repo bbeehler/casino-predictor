@@ -1892,7 +1892,7 @@ elif page == "Strategic Alerts":
             st.error(f"Monitoring Sync Error: {e}")
 
 # =================================================================
-# 18. PAGE 10: SCENARIO SIMULATION (v52.2 - Predictive Engine)
+# 18. PAGE 10: SCENARIO SIMULATION (v52.3 - Seasonal Aware)
 # =================================================================
 elif page == "Scenario Simulator":
     render_styled_header(
@@ -1901,78 +1901,72 @@ elif page == "Scenario Simulator":
         "Predictive"
     )
 
-    # --- 1. INPUT CONFIGURATION ---
     with st.container(border=True):
         st.markdown("#### 🛠️ Configure Simulation Parameters")
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         
         with c1:
             sim_date = st.date_input("Target Date", value=datetime.date.today() + datetime.timedelta(days=14))
-            sim_event = st.number_input("Expected Event Attendance", value=0, step=500, help="Anticipated crowd for concerts or promotions.")
+            # NEW: Seasonality Toggle based on your business cycle
+            sim_season = st.selectbox("Business Season", ["Winter (Jan-Feb)", "Spring (Mar-Jun)", "Summer (Jul-Aug)", "Autumn (Sep-Nov)", "Peak (December)"])
         
         with c2:
-            sim_clicks = st.number_input("Planned Ad Clicks", value=1000, step=100, help="Expected traffic from Meta/Digital campaigns.")
-            sim_imps = st.number_input("Planned Impressions", value=50000, step=5000)
-            
+            sim_event = st.number_input("Event Attendance", value=0, step=500)
+            sim_clicks = st.number_input("Planned Ad Clicks", value=1000, step=100)
+        
         with c3:
-            sim_rain = st.slider("Predicted Rain (mm)", 0, 50, 0)
-            sim_snow = st.slider("Predicted Snow (cm)", 0, 30, 0)
+            sim_imps = st.number_input("Planned Impressions", value=50000, step=5000)
+            sim_rain = st.slider("Rain (mm)", 0, 50, 0)
+            
+        with c4:
+            sim_snow = st.slider("Snow (cm)", 0, 30, 0)
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        run_sim = st.button("🚀 Run Scenario Projection", use_container_width=True)
+        run_sim = st.button("🚀 Run Seasonal Scenario Projection", use_container_width=True)
 
-    # --- 2. CALCULATION ENGINE ---
     if run_sim:
         weights = st.session_state.coeffs
         try:
             dow = sim_date.strftime('%A')
             
-            # Baseline calculation from the 'df' hydrated in Section 9
+            # 1. ESTABLISH LIFETIME BASELINE
             if 'df' in locals() and not df.empty:
-                baseline = df[df['entry_date'].dt.day_name() == dow]['actual_traffic'].mean()
+                dow_history = df[df['entry_date'].dt.day_name() == dow].copy()
+                lifetime_baseline = dow_history['actual_traffic'].mean() if not dow_history.empty else 1500
             else:
-                baseline = 1500 # Hard fallback if no history exists
-            
-            # Application of Property DNA Weights
+                lifetime_baseline = 1500
+
+            # 2. APPLY SEASONAL MULTIPLIERS (Hard Rock Business Logic)
+            seasonal_map = {
+                "Winter (Jan-Feb)": 0.85,   # 15% Dip
+                "Spring (Mar-Jun)": 1.05,   # 5% Growth
+                "Summer (Jul-Aug)": 1.15,   # 15% Growth
+                "Autumn (Sep-Nov)": 1.20,   # 20% Steady Climb
+                "Peak (December)": 1.35     # 35% Peak
+            }
+            season_mult = seasonal_map.get(sim_season, 1.0)
+            seasonal_baseline = lifetime_baseline * season_mult
+
+            # 3. APPLY DNA MULTIPLIERS (Digital, Events, Weather)
             digital_lift = (sim_clicks * weights.get('Clicks', 0.05)) + (sim_imps * weights.get('Social_Imp', 0.0002))
             gravity_lift = sim_event * weights.get('Event_Gravity', 0.25)
             friction = (sim_rain * weights.get('Rain_mm', -12)) + (sim_snow * weights.get('Snow_cm', -45))
             
-            # Final Projection
-            projected_guests = max(0, baseline + digital_lift + gravity_lift + friction)
+            # 4. FINAL CALCULATION
+            projected_guests = max(0, seasonal_baseline + digital_lift + gravity_lift + friction)
             projected_rev = projected_guests * weights.get('Avg_Coin_In', 112.50)
-            lift_pct = ((digital_lift + gravity_lift) / projected_guests * 100) if projected_guests > 0 else 0
             
-            # --- 3. OUTPUT DASHBOARD ---
+            # --- OUTPUT ---
             st.divider()
-            res1, res2, res3 = st.columns(3)
-            res1.metric("Projected Traffic", f"{projected_guests:,.0f} Guests", delta=f"{baseline:,.0f} Baseline")
-            res2.metric("Projected Revenue", f"${projected_rev:,.0f}", help=f"Based on ${weights.get('Avg_Coin_In', 112.50)} Yield/Guest")
-            res3.metric("Marketing Efficiency", f"{lift_pct:.1f}% Lift")
+            res1, res2, res3, res4 = st.columns(4)
+            res1.metric("Lifetime Avg", f"{lifetime_baseline:,.0f}")
+            res2.metric("Seasonal Adjusted", f"{seasonal_baseline:,.0f}", delta=f"{(season_mult-1)*100:+.0f}%")
+            res3.metric("Final Projection", f"{projected_guests:,.0f} Guests")
+            res4.metric("Proj. Revenue", f"${projected_rev:,.0f}")
 
-            # --- 4. AI STRATEGIC ANALYSIS ---
-            with st.expander("🕵️ AI Strategic Recommendation", expanded=True):
-                with st.spinner("Consulting Property DNA..."):
-                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    model = genai.GenerativeModel('gemini-2.5-flash')
-                    
-                    sim_context = f"""
-                    Date: {sim_date} ({dow})
-                    Baseline: {baseline}
-                    Planned Clicks: {sim_clicks}
-                    Event Attendance: {sim_event}
-                    Weather Friction: Rain {sim_rain}mm, Snow {sim_snow}cm
-                    Projected Guests: {projected_guests}
-                    Projected Revenue: ${projected_rev}
-                    """
-                    
-                    ai_prompt = f"As a Casino Marketing Analyst for {st.session_state.current_property_name}, evaluate this future scenario and provide 3 brief strategic bullet points on how to optimize this specific date: {sim_context}"
-                    
-                    response = model.generate_content(ai_prompt)
-                    st.markdown(response.text)
+            st.info(f"**Forensic Note:** This simulation started with your lifetime **{dow}** average and applied a **{sim_season}** seasonal index. Marketing lift and weather friction were then calculated against the adjusted baseline.")
             
         except Exception as e:
-            st.error(f"Simulation Analysis Failure: {e}")
+            st.error(f"Simulation Error: {e}")
 
 # =================================================================
 # 18. FOOTER
