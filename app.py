@@ -292,9 +292,6 @@ def render_styled_header(title, subtitle, badge_text="Live"):
                     <div style="background: rgba(255, 204, 0, 0.15); color: #FFCC00; padding: 6px 16px; border-radius: 12px; font-size: 0.85rem; font-weight: 700; border: 1px solid rgba(255, 204, 0, 0.3); text-transform: uppercase; letter-spacing: 0.05em;">
                         ● {badge_text}
                     </div>
-                    <div style="margin-top: 8px; color: #64748b; font-size: 0.75rem; font-family: monospace;">
-                        SYSTEM_v52.0_STABLE
-                    </div>
                 </div>
             </div>
         </div>
