@@ -534,17 +534,13 @@ if df.empty:
         st.stop()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v51.5 - SaaS Hybrid & Restored Pulse)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v52.0 - SaaS Hybrid & Restored Pulse)
 # =================================================================
 if page == "Executive Dashboard":
+    
     # --- A. CONSOLIDATED GLOBAL VIEW (For Super Admins) ---
     if st.session_state.get('current_property_id') == "GLOBAL":
-        st.markdown(f"""
-            <div style="background-color: #0047AB; padding: 25px; border-radius: 15px; margin-bottom: 25px; color: white;">
-                <h1 style="margin: 0; color: white;">🌐 Global Network Intelligence</h1>
-                <p style="margin: 0; opacity: 0.9;">Aggregate Performance across all Portfolio Properties</p>
-            </div>
-        """, unsafe_allow_html=True)
+        render_styled_header("Global Network Intelligence", "Aggregate Performance across all Portfolio Properties", "Global")
 
         if df.empty:
             st.warning("No network data found across properties.")
@@ -552,25 +548,18 @@ if page == "Executive Dashboard":
 
         # 1. GLOBAL DATE RANGE SELECTION (With Error Suppression)
         df['entry_date'] = pd.to_datetime(df['entry_date'])
-        min_date = df['entry_date'].min().date()
-        max_date = df['entry_date'].max().date()
+        min_date, max_date = df['entry_date'].min().date(), df['entry_date'].max().date()
 
-        col_date, _ = st.columns([1, 2])
+        col_date, _ = st.columns([1.5, 2.5])
         with col_date:
-            global_range = st.date_input(
-                "Network Audit Window:", 
-                value=(min_date, max_date),
-                min_value=min_date,
-                max_value=max_date,
-                key="global_audit_range_selector"
-            )
+            global_range = st.date_input("Network Audit Window:", value=(min_date, max_date), 
+                                        min_value=min_date, max_value=max_date, key="global_audit_range_selector")
 
-        # --- THE FIX: PREVENT RED ERROR BOX ---
+        # THE FIX: PREVENT RED ERROR BOX
         if isinstance(global_range, tuple) and len(global_range) < 2:
             st.info("💡 Please select the **end date** in the calendar to load the network results.")
             st.stop() 
 
-        # Proceed only if we have a full start/end range
         if isinstance(global_range, tuple) and len(global_range) == 2:
             start_g, end_g = global_range
             mask = (df['entry_date'].dt.date >= start_g) & (df['entry_date'].dt.date <= end_g)
@@ -599,14 +588,11 @@ if page == "Executive Dashboard":
         st.write(f"### 🏆 Property Performance Leaderboard ({start_g} to {end_g})")
         
         leaderboard = df_filtered.groupby('Property').agg({
-            'actual_coin_in': 'sum',
-            'actual_traffic': 'sum',
-            'new_members': 'sum'
+            'actual_coin_in': 'sum', 'actual_traffic': 'sum', 'new_members': 'sum'
         }).reset_index()
         
         leaderboard['Yield_per_Guest'] = (leaderboard['actual_coin_in'] / leaderboard['actual_traffic'])
         leaderboard['Conv_Rate'] = (leaderboard['new_members'] / leaderboard['actual_traffic'] * 100)
-        
         leaderboard['Rank'] = leaderboard['actual_coin_in'].rank(ascending=False, method='min').astype(int)
         leaderboard = leaderboard.sort_values('Rank')
 
@@ -618,38 +604,28 @@ if page == "Executive Dashboard":
         lb_display['Conv_Rate'] = lb_display['Conv_Rate'].apply(lambda x: f"{x:.2f}%")
 
         cols = ['Rank', 'Property', 'actual_coin_in', 'actual_traffic', 'new_members', 'Yield_per_Guest', 'Conv_Rate']
-        st.table(lb_display[cols].rename(columns={
-            'actual_coin_in': 'Total Revenue',
-            'actual_traffic': 'Total Guests',
-            'new_members': 'New Members',
-            'Yield_per_Guest': 'Yield/Guest',
-            'Conv_Rate': 'Conv %'
-        }))
+        st.table(lb_display[cols].rename(columns={'actual_coin_in': 'Total Revenue', 'actual_traffic': 'Total Guests'}))
 
-        # 4. COMPARATIVE ANALYTICS (Using Filtered Data)
+        # 4. COMPARATIVE ANALYTICS
         c1, c2 = st.columns(2)
         with c1:
             st.write("### 💰 Revenue Distribution")
-            fig_rev = px.pie(df_filtered, values='actual_coin_in', names='Property', hole=0.4,
+            fig_rev = px.pie(df_filtered, values='actual_coin_in', names='Property', hole=0.5,
                              color_discrete_sequence=px.colors.sequential.Blues_r)
-            fig_rev.update_layout(margin=dict(l=20, r=20, t=20, b=20))
-            st.plotly_chart(fig_rev, use_container_width=True, key="global_rev_pie")
+            fig_rev.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=350)
+            st.plotly_chart(fig_rev, use_container_width=True)
 
         with c2:
             st.write("### 🧬 Network Guest Flow (Stacked)")
             fig_flow = px.bar(df_filtered, x="entry_date", y="actual_traffic", color="Property",
                              barmode="stack", color_discrete_sequence=px.colors.qualitative.Prism)
-            fig_flow.update_layout(template="plotly_white", margin=dict(l=10, r=10, t=10, b=10))
-            st.plotly_chart(fig_flow, use_container_width=True, key="global_flow_chart")
+            fig_flow.update_layout(template="plotly_white", margin=dict(l=10, r=10, t=10, b=10), height=350)
+            st.plotly_chart(fig_flow, use_container_width=True)
 
     # --- B. INDIVIDUAL PROPERTY VIEW (The Pulse) ---
     else:
-        st.markdown(f"""
-            <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
-                <h2 style="color: #0047AB; margin: 0;">📈 Executive Performance Pulse: {st.session_state.current_property_name}</h2>
-                <p style="color: #444; margin: 0;">Strategic Demand Projection & Marketing Impact for this property.</p>
-            </div>
-        """, unsafe_allow_html=True)
+        render_styled_header(f"{st.session_state.current_property_name} Pulse", 
+                             "Strategic Demand Projection & Marketing Impact", "Operational")
 
         today = datetime.date.today()
         current_weights = st.session_state.get('coeffs', {})
@@ -665,7 +641,7 @@ if page == "Executive Dashboard":
         master_baselines = df_raw.groupby('dow')['actual_traffic'].mean().to_dict()
 
         # 2. DATE SELECTION
-        col_date, _ = st.columns([1, 2])
+        col_date, _ = st.columns([1.5, 2.5])
         with col_date:
             pulse_range = st.date_input("Analysis Window:", value=(today, today + datetime.timedelta(days=7)), key="pulse_exec_unique")
 
@@ -724,6 +700,7 @@ if page == "Executive Dashboard":
             df_act_chart = df_final[df_final['entry_date'].dt.date < today]
             fig_pulse.add_trace(go.Scatter(x=df_act_chart['entry_date'], y=df_act_chart['actual_traffic'], name="Actual Guests", line=dict(color='#0047AB', width=4)))
             fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
+            fig_pulse.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10), template="plotly_white")
             st.plotly_chart(fig_pulse, use_container_width=True, key=f"pulse_chart_{st.session_state.current_property_id}")
 
             # 7. EXECUTIVE KPI GRID (With Benchmarking)
@@ -772,16 +749,12 @@ if page == "Executive Dashboard":
                 else:
                     sel_date = g_months[g_labels.index(sel_period)]
                     g_res = global_query.filter("timestamp", "gte", sel_date.strftime("%Y-%m-%d")).execute()
-                
                 if g_res.data:
                     overall_score = np.mean([d['sentiment_score'] for d in g_res.data])
             except: pass
 
-            st.metric(
-                label=f"Consolidated Property Pulse ({sel_period})", 
-                value=f"{overall_score:+.2f}",
-                delta="Positive Impact" if overall_score > 0.3 else "High Friction" if overall_score < -0.3 else "Neutral"
-            )
+            st.metric(label=f"Consolidated Property Pulse ({sel_period})", value=f"{overall_score:+.2f}",
+                delta="Positive Impact" if overall_score > 0.3 else "High Friction" if overall_score < -0.3 else "Neutral")
 
             # DYNAMIC ASSET GAUGES
             try:
@@ -803,19 +776,12 @@ if page == "Executive Dashboard":
                         fig = go.Figure(go.Indicator(
                             mode = "gauge+number", value = tag_score,
                             number = {'font': {'size': 20}, 'valueformat': ".2f"},
-                            gauge = {
-                                'axis': {'range': [-1, 1]},
-                                'bar': {'color': "#0047AB"},
-                                'steps': [
-                                    {'range': [-1, -0.3], 'color': "#FF4B4B"},
-                                    {'range': [-0.3, 0.3], 'color': "#F0F2F6"},
-                                    {'range': [0.3, 1], 'color': "#28A745"}
-                                ]
-                            }
-                        ))
+                            gauge = {'axis': {'range': [-1, 1]}, 'bar': {'color': "#0047AB"},
+                                'steps': [{'range': [-1, -0.3], 'color': "#FF4B4B"},
+                                          {'range': [-0.3, 0.3], 'color': "#F0F2F6"},
+                                          {'range': [0.3, 1], 'color': "#28A745"}]}))
                         fig.update_layout(height=150, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor='rgba(0,0,0,0)')
-                        chart_key = f"p1_gauge_{st.session_state.current_property_id}_{tag}_{i}"
-                        st.plotly_chart(fig, use_container_width=True, key=chart_key)
+                        st.plotly_chart(fig, use_container_width=True, key=f"p1_gauge_{st.session_state.current_property_id}_{tag}_{i}")
                         st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 14px;'>{tag}</p>", unsafe_allow_html=True)
             except: pass
         
