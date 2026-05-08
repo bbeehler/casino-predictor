@@ -507,10 +507,6 @@ with st.sidebar:
             nav_options.extend(["Attribution Analytics", "FloorCast AI Analyst"])
         if check_permission("view_reports"): nav_options.append("Master Audit Report")
         if check_permission("manage_alerts"): nav_options.append("Strategic Alerts")
-        
-        # Adding Simulation & Calibration to the Tuning block
-        if check_permission("calibrate_ai"):
-            nav_options.extend(["Scenario Simulator", "AI Calibration", "BL-ROAS Calculator"])
             
         if st.session_state.get('user_role') == "Super Admin":
             nav_options.append("Global Admin Console")
