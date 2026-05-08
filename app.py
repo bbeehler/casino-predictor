@@ -2026,7 +2026,7 @@ elif page == "Scenario Simulator":
             st.error(f"Simulation Error: {e}")
 
 # =================================================================
-# 19. PAGE 11: EXPERIMENT VAULT (v60.3 - Management Suite)
+# 19. PAGE 11: EXPERIMENT VAULT (v60.4 - Hardened Type Matching)
 # =================================================================
 elif page == "Experiment Vault":
     render_styled_header(
@@ -2039,7 +2039,6 @@ elif page == "Experiment Vault":
 
     # --- TAB 1: PERFORMANCE RESULTS ---
     with tab_results:
-        # Fetch registered experiments from Supabase
         try:
             reg_res = supabase.table("experiment_registry").select("*").eq("property_id", st.session_state.current_property_id).execute()
             
@@ -2048,20 +2047,24 @@ elif page == "Experiment Vault":
                 sel_exp_name = st.selectbox("Select Experiment to Audit:", list(exp_options.keys()))
                 active_exp = exp_options[sel_exp_name]
                 
-                # Auto-populate tags from registry
+                # Identify Tags from Registry
                 test_name = active_exp['test_name']
-                tag_a = active_exp['version_a_tag']
-                tag_b = active_exp['version_b_tag']
+                tag_a = str(active_exp['version_a_tag']).strip()
+                tag_b = str(active_exp['version_b_tag']).strip()
                 
                 st.info(f"🧬 Auditing: **{tag_a}** (Control) vs **{tag_b}** (Test)")
                 metric_target = st.selectbox("Success Metric", ["Traffic Lift", "Revenue (Coin-In)", "Yield per Guest"])
 
-                # --- ANALYTICS ENGINE ---
+                # --- HARDENED ANALYTICS ENGINE ---
                 if 'df' in locals() and not df.empty:
-                    # Safety check for column existence
+                    # 1. Initialize & Clean Column Type
                     if 'experiment_tag' not in df.columns:
                         df['experiment_tag'] = None
+                    
+                    # Force conversion to string and strip hidden whitespace/tabs
+                    df['experiment_tag'] = df['experiment_tag'].astype(str).str.strip()
 
+                    # 2. Filter using clean string matching
                     df_a = df[df['experiment_tag'] == tag_a]
                     df_b = df[df['experiment_tag'] == tag_b]
                     
@@ -2069,6 +2072,7 @@ elif page == "Experiment Vault":
                         st.divider()
                         rev_col = 'actual_coin_in'
                         
+                        # 3. Calculate Averages
                         if metric_target == "Traffic Lift":
                             avg_a, avg_b = df_a['actual_traffic'].mean(), df_b['actual_traffic'].mean()
                         elif metric_target == "Yield per Guest":
@@ -2080,10 +2084,10 @@ elif page == "Experiment Vault":
                         lift = ((avg_b - avg_a) / avg_a) * 100 if avg_a > 0 else 0
                         confidence = "High" if len(df_a) + len(df_b) > 10 else "Low (Small Sample)"
 
-                        # Display Results
+                        # Display Scoreboard
                         res1, res2, res3 = st.columns(3)
-                        res1.metric(f"Avg {tag_a}", f"{avg_a:,.1f}")
-                        res2.metric(f"Avg {tag_b}", f"{avg_b:,.1f}", delta=f"{lift:.1f}%")
+                        res1.metric(f"Avg {tag_a}", f"{avg_a:,.1f}", help=f"Based on {len(df_a)} days")
+                        res2.metric(f"Avg {tag_b}", f"{avg_b:,.1f}", delta=f"{lift:.1f}%", help=f"Based on {len(df_b)} days")
                         res3.metric("Confidence", confidence)
 
                         # AI Interpretation
@@ -2091,17 +2095,18 @@ elif page == "Experiment Vault":
                         with st.expander("🕵️ AI Experiment Audit", expanded=True):
                             with st.spinner("Analyzing performance variances..."):
                                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                                model = genai.GenerativeModel('gemini-2.5-flash')
+                                model = genai.GenerativeModel('gemini-1.5-flash')
                                 t_context = f"Test: {test_name} | A: {avg_a} | B: {avg_b} | Lift: {lift:.1f}%"
-                                prompt = f"As a Casino Data Scientist for {st.session_state.current_property_name}, analyze this A/B test: {t_context}"
+                                prompt = f"As a Casino Data Scientist for {st.session_state.current_property_name}, analyze this A/B test results: {t_context}"
                                 ai_report = model.generate_content(prompt)
                                 st.markdown(ai_report.text)
                     else:
-                        st.warning(f"🎰 Data Missing: Ensure ledger entries are tagged '{tag_a}' and '{tag_b}'.")
+                        st.warning(f"🎰 Data Missing: Found {len(df_a)} days for '{tag_a}' and {len(df_b)} days for '{tag_b}'.")
+                        st.info("Ensure the Experiment Tags in your Ledger match the registry exactly (Case Sensitive).")
                 else:
                     st.error("No ledger data available.")
             else:
-                st.info("No experiments registered. Switch to the 'Manage Registry' tab to create one.")
+                st.info("No experiments registered. Switch to 'Manage Registry' to create your first test.")
         except Exception as e:
             st.error(f"Registry Sync Error: {e}")
 
@@ -2117,15 +2122,15 @@ elif page == "Experiment Vault":
                 n_a = st.text_input("Control Tag (Version A)", value="Control")
                 n_b = st.text_input("Test Tag (Version B)", value="Test_V1")
             
-            n_obj = st.text_area("Strategic Objective", placeholder="What are we trying to prove?")
+            n_obj = st.text_area("Strategic Objective", placeholder="Describe the goal of this test...")
             
             if st.form_submit_button("🚀 Deploy to Registry"):
                 if n_name and n_a and n_b:
                     payload = {
                         "property_id": st.session_state.current_property_id,
                         "test_name": n_name,
-                        "version_a_tag": n_a,
-                        "version_b_tag": n_b,
+                        "version_a_tag": n_a.strip(),
+                        "version_b_tag": n_b.strip(),
                         "start_date": str(n_start),
                         "objective": n_obj
                     }
@@ -2133,11 +2138,10 @@ elif page == "Experiment Vault":
                     st.success(f"Experiment '{n_name}' successfully provisioned.")
                     st.rerun()
                 else:
-                    st.error("Please fill in all required fields.")
+                    st.error("Missing required fields.")
 
         st.divider()
         st.subheader("📂 Active Experiments")
-        # Fetch and display for deletion
         if reg_res.data:
             for exp in reg_res.data:
                 with st.expander(f"🔬 {exp['test_name']} ({exp['version_a_tag']} vs {exp['version_b_tag']})"):
@@ -2145,7 +2149,7 @@ elif page == "Experiment Vault":
                     st.caption(f"ID: {exp['id']} | Launched: {exp['start_date']}")
                     if st.button("🗑️ Terminate & Delete", key=f"del_{exp['id']}", use_container_width=True):
                         supabase.table("experiment_registry").delete().eq("id", exp['id']).execute()
-                        st.warning(f"Experiment '{exp['test_name']}' removed from registry.")
+                        st.warning(f"Experiment removed.")
                         st.rerun()
 
 # =================================================================
