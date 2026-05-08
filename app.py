@@ -22,31 +22,38 @@ def check_permission(capability):
     return perms.get(capability, False)
 
 def archive_sentiment_entry(text, asset_tag):
-    """AI-Analyzes and archives manual sentiment entries."""
+    """AI-Analyzes and archives manual sentiment entries with explicit message_id."""
     try:
-        # Quick AI Scoring before archival
+        # 1. AI Scoring Layer
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
-        score_prompt = f"Analyze the sentiment of this casino review. Return ONLY a single float between -1.0 (very negative) and 1.0 (very positive): {text}"
+        score_prompt = f"Analyze sentiment of this casino review. Return ONLY a single float between -1.0 and 1.0: {text}"
         ai_res = model.generate_content(score_prompt)
         
         try:
             sentiment_score = float(ai_res.text.strip())
         except:
-            sentiment_score = 0.0 # Fallback
+            sentiment_score = 0.0 # Fallback for non-numeric AI responses
 
+        # 2. Construct Payload with explicit message_id
         payload = {
+            "message_id": str(uuid.uuid4()),  # Explicitly sending the missing column data
             "property_id": st.session_state.current_property_id,
             "asset": asset_tag,
             "sentiment_score": sentiment_score,
-            "raw_text": text,
-            "timestamp": datetime.datetime.now().isoformat()
+            "review_text": text,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "user_email": st.session_state.user_email
         }
+        
+        # 3. Execute Insert
         supabase.table("sentiment_history").insert(payload).execute()
         return True
+        
     except Exception as e:
+        # This will now catch and display if it's a permission issue or a data type mismatch
         st.error(f"Archival Sync Error: {e}")
         return False
 
