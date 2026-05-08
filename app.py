@@ -402,9 +402,7 @@ if df.empty:
 # =================================================================
 # 9. PAGE 1: EXECUTIVE DASHBOARD (v51.5 - SaaS Hybrid & Restored Pulse)
 # =================================================================
-if page == "Executive Dashboard":
-    # --- A. CONSOLIDATED GLOBAL VIEW (For Super Admins) ---
-    if st.session_state.get('current_property_id') == "GLOBAL":
+if st.session_state.get('current_property_id') == "GLOBAL":
         st.markdown(f"""
             <div style="background-color: #0047AB; padding: 25px; border-radius: 15px; margin-bottom: 25px; color: white;">
                 <h1 style="margin: 0; color: white;">🌐 Global Network Intelligence</h1>
@@ -416,7 +414,7 @@ if page == "Executive Dashboard":
             st.warning("No network data found across properties.")
             st.stop()
 
-        # 1. GLOBAL DATE RANGE SELECTION
+        # 1. GLOBAL DATE RANGE SELECTION (With Error Suppression)
         df['entry_date'] = pd.to_datetime(df['entry_date'])
         min_date = df['entry_date'].min().date()
         max_date = df['entry_date'].max().date()
@@ -431,19 +429,27 @@ if page == "Executive Dashboard":
                 key="global_audit_range_selector"
             )
 
-        # Apply the filter mask
+        # --- THE FIX: PREVENT RED ERROR BOX ---
+        # If the user has only clicked one date, show an info message and stop execution
+        if isinstance(global_range, tuple) and len(global_range) < 2:
+            st.info("💡 Please select the **end date** in the calendar to load the network results.")
+            st.stop() 
+
+        # Proceed only if we have a full start/end range
         if isinstance(global_range, tuple) and len(global_range) == 2:
             start_g, end_g = global_range
             mask = (df['entry_date'].dt.date >= start_g) & (df['entry_date'].dt.date <= end_g)
             df_filtered = df.loc[mask].copy()
         else:
-            df_filtered = df.copy() # Fallback if range is partially selected
+            # Fallback for the initial page load
+            df_filtered = df.copy()
+            start_g, end_g = min_date, max_date
 
         if df_filtered.empty:
             st.info("No network data found for the selected date range.")
             st.stop()
 
-        # 2. NETWORK TOP-LINE METRICS (Using Filtered Data)
+        # 2. NETWORK TOP-LINE METRICS
         total_rev = df_filtered['actual_coin_in'].sum()
         total_traffic = df_filtered['actual_traffic'].sum()
         total_mems = df_filtered['new_members'].sum()
