@@ -21,6 +21,36 @@ def check_permission(capability):
     perms = st.session_state.get('user_permissions', {})
     return perms.get(capability, False)
 
+def archive_sentiment_entry(text, asset_tag):
+    """AI-Analyzes and archives manual sentiment entries."""
+    try:
+        # Quick AI Scoring before archival
+        import google.generativeai as genai
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        score_prompt = f"Analyze the sentiment of this casino review. Return ONLY a single float between -1.0 (very negative) and 1.0 (very positive): {text}"
+        ai_res = model.generate_content(score_prompt)
+        
+        try:
+            sentiment_score = float(ai_res.text.strip())
+        except:
+            sentiment_score = 0.0 # Fallback
+
+        payload = {
+            "property_id": st.session_state.current_property_id,
+            "asset": asset_tag,
+            "sentiment_score": sentiment_score,
+            "review_text": text,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "user_email": st.session_state.user_email
+        }
+        supabase.table("sentiment_history").insert(payload).execute()
+        return True
+    except Exception as e:
+        st.error(f"Archival Sync Error: {e}")
+        return False
+
 # =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
 # =================================================================
@@ -1333,7 +1363,7 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: AI STRATEGIC ANALYST (v19.0 - SaaS Deep-Sync)
+# 14. PAGE 6: AI STRATEGIC ANALYST (v19.1 - SaaS Deep-Sync)
 # =================================================================
 elif page == "FloorCast AI Analyst":
     st.markdown(f"""
@@ -1344,14 +1374,12 @@ elif page == "FloorCast AI Analyst":
     """, unsafe_allow_html=True)
     
     # --- 1. DEEP SYNC DATA AGGREGATION ---
-    # We pull from ledger_data (defined in Section 6/9) to ensure AI is updated
     ledger_csv = "No ledger data available."
     sent_csv = "No sentiment data available."
     roi_csv = "No ROI records available."
     promo_csv = "No promotion data available."
 
     with st.status(f"🔗 Synchronizing {st.session_state.current_property_name} Intelligence...", expanded=False) as status:
-        # Pull Ledger (The fix: using ledger_data from Section 6)
         if 'ledger_data' in locals() and ledger_data:
             try:
                 m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
@@ -1359,7 +1387,6 @@ elif page == "FloorCast AI Analyst":
                 status.write("📊 Daily Ledger Nodes Linked")
             except: pass
         
-        # Pull Sentiment (Filtered by current property)
         try:
             sent_res = supabase.table("sentiment_history").select("*")\
                 .eq("property_id", st.session_state.current_property_id)\
@@ -1369,7 +1396,6 @@ elif page == "FloorCast AI Analyst":
                 status.write("💬 Sentiment Records Synced")
         except: pass
 
-        # Pull ROI & Promos
         try:
             roi_res = supabase.table("monthly_roi").select("*").eq("property_id", st.session_state.current_property_id).execute()
             if roi_res.data: roi_csv = pd.DataFrame(roi_res.data).to_csv(index=False)
@@ -1381,7 +1407,7 @@ elif page == "FloorCast AI Analyst":
 
         status.update(label="✅ Strategic Intelligence Fully Hydrated", state="complete")
 
-    # --- 2. ENTRY MODULES (Sentiment & Word Docs) ---
+    # --- 2. ENTRY MODULES ---
     try:
         asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
         tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall Property"]
@@ -1397,9 +1423,9 @@ elif page == "FloorCast AI Analyst":
                 f_text = st.text_area("Review Content", placeholder="Paste Google/TripAdvisor review...")
                 if st.form_submit_button("🛡️ Archive & AI Score"):
                     if f_text:
-                        archive_sentiment_entry(f_text, manual_tag, 0.0)
-                        st.success("Entry Archived.")
-                        st.rerun()
+                        if archive_sentiment_entry(f_text, manual_tag):
+                            st.success("Review Scored & Archived.")
+                            st.rerun()
 
     with col_input2:
         from docx import Document
@@ -1408,8 +1434,11 @@ elif page == "FloorCast AI Analyst":
             bulk_tag = st.selectbox("Bulk Assign to:", tags)
             if uploaded_doc and st.button("🚀 Process Bulk"):
                 doc = Document(uploaded_doc)
-                # ... (Parsing logic remains same as provided in your prompt)
-                st.success("Bulk Parse Complete.")
+                full_text = []
+                for para in doc.paragraphs:
+                    if len(para.text) > 20:
+                        archive_sentiment_entry(para.text, bulk_tag)
+                st.success("Bulk Ingestion Complete.")
                 st.rerun()
 
     st.divider()
@@ -1418,12 +1447,10 @@ elif page == "FloorCast AI Analyst":
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display History
     for m in st.session_state.messages:
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-    # Handle Input
     prompt = st.chat_input(f"Consult with the {st.session_state.current_property_name} Analyst...")
     
     if prompt:
@@ -1437,31 +1464,15 @@ elif page == "FloorCast AI Analyst":
             model = genai.GenerativeModel('gemini-2.5-flash') 
             
             with st.chat_message("assistant"):
-                with st.spinner("🕵️ AI Analyst is correlating data points..."):
-                    # The Dossier now contains ONLY this property's information
+                with st.spinner("🕵️ Analyzing property dossier..."):
                     dossier = f"""
-                    PROPERTY CONTEXT: {st.session_state.current_property_name}
-                    CURRENT WEIGHTS: {st.session_state.coeffs}
-                    
-                    LEDGER DATA (Financials & Traffic):
-                    {ledger_csv}
-                    
-                    SENTIMENT DATA (Guest Feedback):
-                    {sent_csv}
-                    
-                    MARKETING ROI DATA:
-                    {roi_csv}
+                    PROPERTY: {st.session_state.current_property_name}
+                    LEDGER: {ledger_csv}
+                    SENTIMENT: {sent_csv}
+                    ROI: {roi_csv}
                     """
                     
-                    full_query = f"""
-                    You are a world-class casino marketing consultant. 
-                    Answer this question based on the provided dossier: {prompt}
-                    
-                    If data is missing, explain what the user needs to upload to get that insight.
-                    Dossier:
-                    {dossier}
-                    """
-                    
+                    full_query = f"Consultant Mode: Use this dossier to answer: {prompt}\n\nDOSSIER:\n{dossier}"
                     response = model.generate_content(full_query)
                     st.markdown(response.text)
             
