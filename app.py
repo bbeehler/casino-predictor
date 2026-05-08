@@ -1968,33 +1968,26 @@ elif page == "Scenario Simulator":
             st.markdown("<br>", unsafe_allow_html=True)
             with st.status("🕵️ AI Specialist generating strategic recommendations...", expanded=True) as status:
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                # Using 1.5-flash for the highest speed and stability
                 model = genai.GenerativeModel('gemini-2.5-flash')
                 
                 specialist_context = f"""
                 PROPERTY: {st.session_state.current_property_name}
                 DATE: {sim_date} ({dow})
                 SEASON: {sim_season}
-                
-                FORENSIC DATA:
-                - Lifetime Baseline: {lifetime_baseline:,.0f}
-                - Seasonal Baseline: {seasonal_baseline:,.0f}
-                - Marketing/Event Lift: {digital_lift + gravity_lift:,.0f} guests
-                - Weather Friction: {friction:,.0f} guests
-                - Total Projected: {projected_guests:,.0f} guests
-                - Expected Revenue: ${projected_rev:,.0f}
+                DATA: Baseline {seasonal_baseline:,.0f}, Lift {digital_lift + gravity_lift:,.0f}, Friction {friction:,.0f}
+                TOTAL PROJECTION: {projected_guests:,.0f} Guests | ${projected_rev:,.0f} Revenue
                 """
                 
                 specialist_prompt = f"""
-                You are a world-class Casino Marketing Specialist. Analyze the provided forensic data 
+                You are a world-class Casino Marketing Specialist. Analyze the provided data 
                 for {st.session_state.current_property_name} and provide a strategic executive memo.
                 
-                Focus on:
-                1. **Yield Maximization:** How to squeeze the most revenue out of this {projected_guests:,.0f} guest flow.
-                2. **Tactical Ad-Spending:** Should we increase or decrease the {sim_clicks} clicks based on the weather/seasonal outlook?
-                3. **Operational Optimization:** Advice for handling the {sim_event} event attendance or mitigating the {friction:,.0f} guest weather loss.
+                Structure with these exact headers:
+                ## Yield Maximization
+                ## Tactical Ad-Spending
+                ## Operational Optimization
                 
-                Keep the tone professional, energetic, and data-driven.
+                Keep the tone professional and data-driven. Do not use excessive markdown symbols.
                 
                 DATASET:
                 {specialist_context}
@@ -2003,21 +1996,21 @@ elif page == "Scenario Simulator":
                 ai_response = model.generate_content(specialist_prompt)
                 status.update(label="✅ Strategic Memo Generated", state="complete")
 
-            # Display the Specialist Memo
+            # --- DISPLAY THE MEMO (Cleaned HTML/Markdown Hybrid) ---
             st.markdown(f"""
-                <div style="background: #FFFFFF; padding: 30px; border-radius: 12px; border: 1px solid #E1E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0047AB; padding-bottom: 10px; margin-bottom: 20px;">
-                        <span style="font-weight: 800; color: #0047AB; font-size: 1.1rem;">INTERNAL STRATEGIC MEMO</span>
-                        <span style="color: #64748b; font-size: 0.8rem; font-family: monospace;">REF: SIM_FS_{sim_date.strftime('%Y%m%d')}</span>
-                    </div>
-                    <div style="color: #1e293b; line-height: 1.6;">
-                        {ai_response.text}
+                <div style="background: #FFFFFF; padding: 25px; border-radius: 12px; border: 1px solid #E1E8F0; border-top: 5px solid #0047AB;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                        <span style="font-weight: 800; color: #0047AB;">INTERNAL STRATEGIC MEMO</span>
+                        <span style="color: #94a3b8; font-family: monospace;">REF: SIM_FS_{sim_date.strftime('%Y%m%d')}</span>
                     </div>
                 </div>
             """, unsafe_allow_html=True)
             
-        except Exception as e:
-            st.error(f"Simulation Error: {e}")
+            # We display the AI text OUTSIDE the main div to let Streamlit 
+            # render the Markdown properly without breaking the HTML tags.
+            st.markdown(ai_response.text)
+            
+            st.markdown("---") # Visual closer
 
 # =================================================================
 # 18. FOOTER
