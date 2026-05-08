@@ -879,7 +879,7 @@ if page == "Executive Dashboard":
             except: pass
         
 # =================================================================
-# 10. PAGE 2: DAILY LEDGER AUDIT (v52.0 - High-End Operational Deck)
+# 10. PAGE 2: DAILY LEDGER AUDIT (v60.0 - Experiment Enabled)
 # =================================================================
 elif page == "Daily Ledger Audit":
     # 1. PREMIUM HEADER
@@ -894,7 +894,7 @@ elif page == "Daily Ledger Audit":
         df_ledger = pd.DataFrame(columns=[
             'entry_date', 'actual_traffic', 'new_members', 'actual_coin_in', 
             'active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 
-            'rain_mm', 'snow_cm', 'property_id'
+            'rain_mm', 'snow_cm', 'experiment_tag', 'property_id'
         ])
     else:
         df_ledger = pd.DataFrame(ledger_data)
@@ -905,7 +905,11 @@ elif page == "Daily Ledger Audit":
             if col in df_ledger.columns:
                 df_ledger[col] = pd.to_numeric(df_ledger[col], errors='coerce').fillna(0)
         
-        df_ledger['active_promo'] = df_ledger['active_promo'].astype(str).replace(['nan', 'None', '0', '0.0'], '')
+        # Clean up text columns
+        for col in ['active_promo', 'experiment_tag']:
+            if col in df_ledger.columns:
+                df_ledger[col] = df_ledger[col].astype(str).replace(['nan', 'None', '0', '0.0'], '')
+        
         df_ledger = df_ledger.sort_values('entry_date', ascending=False)
 
     # --- 3. RAPID ENTRY ACTION CARD ---
@@ -922,9 +926,10 @@ elif page == "Daily Ledger Audit":
                 e_event = st.number_input("Event Attendance", min_value=0, step=1)
                 e_coin = st.number_input("Actual Coin-In ($)", min_value=0.0, step=1000.0)
             with f3:
+                # INTEGRATED EXPERIMENT TAG
+                e_tag = st.text_input("Experiment Tag", placeholder="e.g. Control or Test_V1")
                 e_clicks = st.number_input("Ad Clicks", min_value=0, step=1)
                 e_imps = st.number_input("Social Impressions", min_value=0, step=1)
-                e_rain = st.number_input("Rain (mm)", min_value=0.0, step=0.1)
             
             st.markdown("<br>", unsafe_allow_html=True)
             submit_new = st.form_submit_button("🚀 Commit to Forensic Vault", use_container_width=True)
@@ -936,10 +941,11 @@ elif page == "Daily Ledger Audit":
                     "new_members": int(e_members),
                     "actual_coin_in": float(e_coin),
                     "active_promo": str(e_promo).strip() if e_promo else None,
+                    "experiment_tag": str(e_tag).strip() if e_tag else None,
                     "attendance": int(e_event),
                     "ad_clicks": int(e_clicks),
                     "ad_impressions": int(e_imps),
-                    "rain_mm": float(e_rain),
+                    "rain_mm": 0.0, # Placeholder for manual override
                     "snow_cm": 0.0,
                     "property_id": st.session_state.current_property_id
                 }
@@ -980,7 +986,6 @@ elif page == "Daily Ledger Audit":
     # --- 5. THE HISTORICAL EDITABLE LEDGER ---
     st.markdown("### 📂 Bulk Audit & Corrections")
     with st.form("bulk_ledger_sync", border=False):
-        # UI Prep: Hide ID for users but keep for sync logic
         cols_to_show = [c for c in df_audit_period.columns if c != 'property_id']
         display_df = df_audit_period[cols_to_show].copy()
         
@@ -994,11 +999,12 @@ elif page == "Daily Ledger Audit":
                     "new_members": st.column_config.NumberColumn("Members", format="%d"),
                     "actual_coin_in": st.column_config.NumberColumn("Revenue", format="$%d"),
                     "active_promo": st.column_config.TextColumn("Promo Name"),
+                    "experiment_tag": st.column_config.TextColumn("Experiment Tag"), # ADDED TO BULK EDITOR
                 },
                 hide_index=True,
                 use_container_width=True,
                 num_rows="dynamic",
-                key="ledger_editor_v52"
+                key="ledger_editor_v60"
             )
         
         st.markdown("<br>", unsafe_allow_html=True)
