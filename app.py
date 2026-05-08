@@ -2026,86 +2026,127 @@ elif page == "Scenario Simulator":
             st.error(f"Simulation Error: {e}")
 
 # =================================================================
-# 19. PAGE 11: EXPERIMENT VAULT (v60.2 - Safety Shield Aligned)
+# 19. PAGE 11: EXPERIMENT VAULT (v60.3 - Management Suite)
 # =================================================================
 elif page == "Experiment Vault":
     render_styled_header(
         "A/B Experimentation Vault",
-        "Statistically Validated Marketing Tests & ROI Attribution",
+        "Market Science & ROI Attribution",
         "Scientific"
     )
 
-    # --- 1. SETUP THE TEST ---
-    with st.container(border=True):
-        st.markdown("#### 🧪 Define Experiment Parameters")
-        c1, c2 = st.columns(2)
-        with c1:
-            test_name = st.text_input("Experiment Name", placeholder="e.g. FB Video vs. Static Image")
-            metric_target = st.selectbox("Success Metric", ["Traffic Lift", "Revenue (Coin-In)", "Yield per Guest"])
-        with c2:
-            tag_a = st.text_input("Tag for Version A", value="Control")
-            tag_b = st.text_input("Tag for Version B", value="Test_V1")
+    tab_results, tab_manage = st.tabs(["📊 Performance Results", "⚙️ Manage Registry"])
 
-    # --- 2. THE ANALYTICS ENGINE ---
-    if 'df' in locals() and not df.empty:
-        # THE SAFETY SHIELD: Must be indented inside the 'if df' block
-        if 'experiment_tag' not in df.columns:
-            st.info("🧬 Initializing Experimentation Layer...")
-            df['experiment_tag'] = None 
+    # --- TAB 1: PERFORMANCE RESULTS ---
+    with tab_results:
+        # Fetch registered experiments from Supabase
+        try:
+            reg_res = supabase.table("experiment_registry").select("*").eq("property_id", st.session_state.current_property_id).execute()
+            
+            if reg_res.data:
+                exp_options = {e['test_name']: e for e in reg_res.data}
+                sel_exp_name = st.selectbox("Select Experiment to Audit:", list(exp_options.keys()))
+                active_exp = exp_options[sel_exp_name]
+                
+                # Auto-populate tags from registry
+                test_name = active_exp['test_name']
+                tag_a = active_exp['version_a_tag']
+                tag_b = active_exp['version_b_tag']
+                
+                st.info(f"🧬 Auditing: **{tag_a}** (Control) vs **{tag_b}** (Test)")
+                metric_target = st.selectbox("Success Metric", ["Traffic Lift", "Revenue (Coin-In)", "Yield per Guest"])
 
-        # Filter ledger for tagged days
-        df_a = df[df['experiment_tag'] == tag_a]
-        df_b = df[df['experiment_tag'] == tag_b]
-        
-        if not df_a.empty and not df_b.empty:
-            st.divider()
-            
-            # Calculate Averages (Using .get to avoid KeyError if columns missing)
-            rev_col = 'actual_coin_in' # Unified name for revenue
-            
-            if metric_target == "Traffic Lift":
-                avg_a = df_a['actual_traffic'].mean()
-                avg_b = df_b['actual_traffic'].mean()
-            elif metric_target == "Yield per Guest":
-                avg_a = (df_a[rev_col] / df_a['actual_traffic']).mean()
-                avg_b = (df_b[rev_col] / df_b['actual_traffic']).mean()
+                # --- ANALYTICS ENGINE ---
+                if 'df' in locals() and not df.empty:
+                    # Safety check for column existence
+                    if 'experiment_tag' not in df.columns:
+                        df['experiment_tag'] = None
+
+                    df_a = df[df['experiment_tag'] == tag_a]
+                    df_b = df[df['experiment_tag'] == tag_b]
+                    
+                    if not df_a.empty and not df_b.empty:
+                        st.divider()
+                        rev_col = 'actual_coin_in'
+                        
+                        if metric_target == "Traffic Lift":
+                            avg_a, avg_b = df_a['actual_traffic'].mean(), df_b['actual_traffic'].mean()
+                        elif metric_target == "Yield per Guest":
+                            avg_a = (df_a[rev_col] / df_a['actual_traffic']).mean()
+                            avg_b = (df_b[rev_col] / df_b['actual_traffic']).mean()
+                        else:
+                            avg_a, avg_b = df_a[rev_col].mean(), df_b[rev_col].mean()
+                        
+                        lift = ((avg_b - avg_a) / avg_a) * 100 if avg_a > 0 else 0
+                        confidence = "High" if len(df_a) + len(df_b) > 10 else "Low (Small Sample)"
+
+                        # Display Results
+                        res1, res2, res3 = st.columns(3)
+                        res1.metric(f"Avg {tag_a}", f"{avg_a:,.1f}")
+                        res2.metric(f"Avg {tag_b}", f"{avg_b:,.1f}", delta=f"{lift:.1f}%")
+                        res3.metric("Confidence", confidence)
+
+                        # AI Interpretation
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        with st.expander("🕵️ AI Experiment Audit", expanded=True):
+                            with st.spinner("Analyzing performance variances..."):
+                                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                                model = genai.GenerativeModel('gemini-2.5-flash')
+                                t_context = f"Test: {test_name} | A: {avg_a} | B: {avg_b} | Lift: {lift:.1f}%"
+                                prompt = f"As a Casino Data Scientist for {st.session_state.current_property_name}, analyze this A/B test: {t_context}"
+                                ai_report = model.generate_content(prompt)
+                                st.markdown(ai_report.text)
+                    else:
+                        st.warning(f"🎰 Data Missing: Ensure ledger entries are tagged '{tag_a}' and '{tag_b}'.")
+                else:
+                    st.error("No ledger data available.")
             else:
-                avg_a = df_a[rev_col].mean()
-                avg_b = df_b[rev_col].mean()
+                st.info("No experiments registered. Switch to the 'Manage Registry' tab to create one.")
+        except Exception as e:
+            st.error(f"Registry Sync Error: {e}")
+
+    # --- TAB 2: MANAGE REGISTRY ---
+    with tab_manage:
+        st.subheader("🏗️ Provision New Experiment")
+        with st.form("new_experiment_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                n_name = st.text_input("Experiment Name", placeholder="e.g. Free Play vs F&B Offer")
+                n_start = st.date_input("Launch Date")
+            with c2:
+                n_a = st.text_input("Control Tag (Version A)", value="Control")
+                n_b = st.text_input("Test Tag (Version B)", value="Test_V1")
             
-            # The Delta
-            lift = ((avg_b - avg_a) / avg_a) * 100 if avg_a > 0 else 0
-            confidence = "High" if len(df_a) + len(df_b) > 10 else "Low (Small Sample)"
+            n_obj = st.text_area("Strategic Objective", placeholder="What are we trying to prove?")
+            
+            if st.form_submit_button("🚀 Deploy to Registry"):
+                if n_name and n_a and n_b:
+                    payload = {
+                        "property_id": st.session_state.current_property_id,
+                        "test_name": n_name,
+                        "version_a_tag": n_a,
+                        "version_b_tag": n_b,
+                        "start_date": str(n_start),
+                        "objective": n_obj
+                    }
+                    supabase.table("experiment_registry").insert(payload).execute()
+                    st.success(f"Experiment '{n_name}' successfully provisioned.")
+                    st.rerun()
+                else:
+                    st.error("Please fill in all required fields.")
 
-            # --- DISPLAY RESULTS ---
-            res1, res2, res3 = st.columns(3)
-            res1.metric(f"Avg {tag_a}", f"{avg_a:,.1f}")
-            res2.metric(f"Avg {tag_b}", f"{avg_b:,.1f}", delta=f"{lift:.1f}%")
-            res3.metric("Statistical Confidence", confidence)
-
-            # --- 3. THE FORENSIC AI INTERPRETATION ---
-            st.markdown("<br>", unsafe_allow_html=True)
-            with st.expander("🕵️ AI Experiment Audit", expanded=True):
-                with st.spinner("Analyzing performance variances..."):
-                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    
-                    test_context = f"""
-                    TEST: {test_name}
-                    VERSION A ({tag_a}): {len(df_a)} days, Avg {avg_a}
-                    VERSION B ({tag_b}): {len(df_b)} days, Avg {avg_b}
-                    LIFT: {lift:.1f}%
-                    """
-                    
-                    prompt = f"As a Casino Data Scientist for {st.session_state.current_property_name}, analyze this A/B test. Which version should be the new baseline? Context: {test_context}"
-                    
-                    ai_report = model.generate_content(prompt)
-                    st.markdown(ai_report.text)
-        else:
-            st.warning(f"🎰 Insufficient data. Ensure days in the Ledger are tagged with '{tag_a}' and '{tag_b}'.")
-            st.info("Go to 'Daily Ledger Audit' and assign these tags to specific dates to see the comparison.")
-    else:
-        st.error("No ledger data available to run experiments.")
+        st.divider()
+        st.subheader("📂 Active Experiments")
+        # Fetch and display for deletion
+        if reg_res.data:
+            for exp in reg_res.data:
+                with st.expander(f"🔬 {exp['test_name']} ({exp['version_a_tag']} vs {exp['version_b_tag']})"):
+                    st.write(f"**Objective:** {exp['objective']}")
+                    st.caption(f"ID: {exp['id']} | Launched: {exp['start_date']}")
+                    if st.button("🗑️ Terminate & Delete", key=f"del_{exp['id']}", use_container_width=True):
+                        supabase.table("experiment_registry").delete().eq("id", exp['id']).execute()
+                        st.warning(f"Experiment '{exp['test_name']}' removed from registry.")
+                        st.rerun()
 
 # =================================================================
 # 18. FOOTER
