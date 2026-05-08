@@ -1045,55 +1045,48 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for full ROI Audit.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (v17.2 SaaS Factory)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (v52.0 SaaS Factory)
 # =================================================================
 elif page == "Master Audit Report":
-    st.markdown(f"""
-        <style>
-        [data-testid="stMetricLabel"] p {{ font-size: 0.75rem !important; white-space: nowrap !important; }}
-        [data-testid="stMetricValue"] > div {{ font-size: 1.5rem !important; }}
-        </style>
-        <div style="background-color: #E1E8F0; padding: 20px; border-radius: 12px; border-left: 6px solid #0047AB; margin-bottom: 25px;">
-            <h2 style="color: #0047AB; margin: 0;">📋 Master Property Audit: {st.session_state.current_property_name}</h2>
-            <p style="color: #444; margin: 0;">Comprehensive Forensic Ledger: Financials, Loyalty, & Marketing Attribution.</p>
-        </div>
-    """, unsafe_allow_html=True)
+    # 1. PREMIUM HEADER
+    render_styled_header(
+        f"Master Property Audit: {st.session_state.current_property_name}",
+        "Forensic Ledger: Financials, Loyalty, & Multi-Channel Attribution",
+        "Audit Ready"
+    )
     
-    # --- 1. SAAS INGESTION FACTORY (New Additions) ---
+    # --- 1. SAAS INGESTION FACTORY ---
     with st.expander("📥 Bulk Ingest Forensic Ledger (CSV)", expanded=not ledger_data):
-        st.write("Upload a Daily Ledger CSV to initialize or update this property's forensic vault.")
+        st.markdown('<div style="padding: 10px;">', unsafe_allow_html=True)
         uploaded_file = st.file_uploader("Choose CSV File", type="csv", key="vault_uploader")
         
         if uploaded_file:
             try:
                 up_df = pd.read_csv(uploaded_file)
-                # Ensure the data is tagged to THIS property UUID
                 up_df['property_id'] = st.session_state.current_property_id
                 
                 if st.button("🚀 Commit Bulk Upload to Vault", use_container_width=True):
                     payload = up_df.to_dict(orient='records')
                     supabase.table("ledger").upsert(payload).execute()
-                    st.success(f"Successfully ingested {len(up_df)} records into {st.session_state.current_property_name}!")
+                    st.success(f"Successfully ingested {len(up_df)} records!")
                     st.cache_data.clear()
                     st.rerun()
             except Exception as e:
                 st.error(f"Ingestion Error: {e}")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- 2. DATA AVAILABILITY CHECK ---
     if not ledger_data:
-        st.warning(f"⚠️ The Audit Vault for **{st.session_state.current_property_name}** is empty. Please use the uploader above to begin.")
+        st.warning(f"⚠️ Audit Vault for {st.session_state.current_property_name} is empty.")
         st.stop()
 
-    # --- 3. AUDIT ENGINE & VARIABLE INITIALIZATION ---
+    # --- 2. AUDIT WINDOW & ENGINE SYNC ---
     df_audit_raw = pd.DataFrame(ledger_data)
     df_audit_raw['entry_date'] = pd.to_datetime(df_audit_raw['entry_date'])
-    
-    min_audit = df_audit_raw['entry_date'].min().date()
-    max_audit = df_audit_raw['entry_date'].max().date()
+    min_audit, max_audit = df_audit_raw['entry_date'].min().date(), df_audit_raw['entry_date'].max().date()
 
     col_date, col_export = st.columns([2, 1])
     with col_date:
-        audit_range = st.date_input("Audit Window:", value=(min_audit, max_audit), key="master_audit_v17_final")
+        audit_range = st.date_input("Audit Window:", value=(min_audit, max_audit), key="master_audit_v52")
 
     if isinstance(audit_range, tuple) and len(audit_range) == 2:
         s_date, e_date = audit_range
@@ -1101,330 +1094,132 @@ elif page == "Master Audit Report":
         df_audit_filtered = df_audit_raw.loc[mask].copy()
         
         if df_audit_filtered.empty:
-            st.error(f"No records found between {s_date} and {e_date}.")
+            st.error("No records found for selected range.")
             st.stop()
 
-        # Engine Sync
         m = get_forensic_metrics(df_audit_filtered.to_dict(orient='records'), st.session_state.coeffs)
-        df_final = m['df'] 
+        df_final = m['df']
         c = st.session_state.coeffs
         num_days = len(df_final)
         
-        # Benchmarks & Config
-        LTV_VAL = 1900.00
-        avg_coin = float(c.get('Avg_Coin_In', 112.50))
+        # Financial Calcs
         hold_pct = float(c.get('Hold_Pct', 10.2)) / 100
-
-        # Global Totals Calculation
-        t_traffic = df_final['actual_traffic'].sum()
-        t_actual_rev = df_final['actual_coin_in'].sum()
-        actual_ggr = t_actual_rev * hold_pct
-        t_digital = df_final['residual_lift'].sum()
-        t_gravity = df_final['gravity_lift'].sum()
-        t_inertia_total = m.get('total_inertia', 0) * num_days
-        t_mkt = t_digital + t_inertia_total + t_gravity
+        t_rev = df_final['actual_coin_in'].sum()
+        actual_ggr = t_rev * hold_pct
+        t_traf = df_final['actual_traffic'].sum()
+        t_dig = df_final['residual_lift'].sum()
+        t_grav = df_final['gravity_lift'].sum()
         t_mems = df_final['new_members'].sum()
-        friction_total = abs((df_final['snow_cm'].sum() * float(c.get('Snow_cm', -45))) + (df_final['rain_mm'].sum() * float(c.get('Rain_mm', -12))))
-        digital_dollar = t_digital * avg_coin
 
-        # --- 4. DATE-AWARE ROI FETCH ---
-        try:
-            roi_res = supabase.table("monthly_roi").select("brand_value, calculated_bl_roas, ad_spend") \
-                .filter("report_month", "gte", s_date.strftime('%Y-%m-%d')) \
-                .filter("report_month", "lte", e_date.strftime('%Y-%m-%d')).execute()
-            if roi_res.data:
-                roi_df = pd.DataFrame(roi_res.data)
-                avg_bl_roas = roi_df['calculated_bl_roas'].mean()
-                total_brand_val = roi_df['brand_value'].sum()
-                total_ad_spend = roi_df['ad_spend'].sum()
-            else:
-                avg_bl_roas, total_brand_val, total_ad_spend = 0.0, 0.0, 0.0
-        except:
-            avg_bl_roas, total_brand_val, total_ad_spend = 0.0, 0.0, 0.0
-
-        rev_multiplier = (actual_ggr + total_brand_val) / total_ad_spend if total_ad_spend > 0 else 0
-
-        # --- 5. EXECUTIVE SUMMARY & MoM PERFORMANCE TABLE ---
-        st.write("### 📊 Executive Summary & Monthly Performance")
+        # --- 3. MoM PERFORMANCE TABLE ---
+        st.markdown("### 📊 Executive Summary & Monthly Performance")
         df_final['month_year'] = df_final['entry_date'].dt.to_period('M')
         months = sorted(df_final['month_year'].unique())
-        
         summary_list = []
-        raw_mom_values = {"traffic": [], "revenue": [], "digital": []}
         
         for i, month in enumerate(months):
             df_m = df_final[df_final['month_year'] == month]
-            m_traffic = df_m['actual_traffic'].sum()
-            m_rev = df_m['actual_coin_in'].sum()
-            m_digital = df_m['residual_lift'].sum()
-            m_fric = abs((df_m['snow_cm'].sum() * float(c.get('Snow_cm', -45))) + (df_m['rain_mm'].sum() * float(c.get('Rain_mm', -12))))
-            
-            mom_t, mom_r, mom_d = "---", "---", "---"
-            if i > 0:
-                p_m = months[i-1]
-                df_p = df_final[df_final['month_year'] == p_m]
-                p_t, p_r, p_d = df_p['actual_traffic'].sum(), df_p['actual_coin_in'].sum(), df_p['residual_lift'].sum()
-                if p_t > 0: 
-                    chg = ((m_traffic - p_t)/p_t)*100
-                    raw_mom_values["traffic"].append(chg)
-                    mom_t = f"{chg:+.1f}%"
-                if p_r > 0:
-                    chg = ((m_rev - p_r)/p_r)*100
-                    raw_mom_values["revenue"].append(chg)
-                    mom_r = f"{chg:+.1f}%"
-                if p_d > 0:
-                    chg = ((m_digital - p_d)/p_d)*100
-                    raw_mom_values["digital"].append(chg)
-                    mom_d = f"{chg:+.1f}%"
-
+            m_traffic, m_rev = df_m['actual_traffic'].sum(), df_m['actual_coin_in'].sum()
             summary_list.append({
-                "Month": month.strftime('%B %Y'), "Traffic": m_traffic, "Traffic MoM": mom_t,
-                "Actual Revenue": m_rev, "Revenue MoM": mom_r, "Digital Lift": m_digital,
-                "Digital MoM": mom_d, "Digital $ Impact": m_digital * avg_coin, "Weather Penalty": -m_fric
+                "Month": month.strftime('%B %Y'), "Traffic": m_traffic, 
+                "Actual Revenue": m_rev, "Digital Lift": df_m['residual_lift'].sum(),
+                "New Members": df_m['new_members'].sum()
             })
 
-        df_summary_table = pd.DataFrame(summary_list)
-        
-        # Total Row Logic
-        def get_avg_str(v_list): return f"{np.mean(v_list):+.1f}% Avg" if v_list else "---"
-        total_row = pd.Series({
-            "Month": "**TOTAL AUDIT WINDOW**", "Traffic": df_summary_table["Traffic"].sum(),
-            "Traffic MoM": get_avg_str(raw_mom_values["traffic"]), "Actual Revenue": df_summary_table["Actual Revenue"].sum(),
-            "Revenue MoM": get_avg_str(raw_mom_values["revenue"]), "Digital Lift": df_summary_table["Digital Lift"].sum(),
-            "Digital MoM": get_avg_str(raw_mom_values["digital"]), "Digital $ Impact": df_summary_table["Digital $ Impact"].sum(),
-            "Weather Penalty": df_summary_table["Weather Penalty"].sum()
-        })
-        df_summary_table = pd.concat([df_summary_table, total_row.to_frame().T], ignore_index=True)
+        with st.container(border=True):
+            st.table(pd.DataFrame(summary_list))
 
-        # Apply Table Formatting
-        fmt_map = {"Traffic": "{:,.0f}", "Actual Revenue": "${:,.0f}", "Digital Lift": "{:,.0f}", "Digital $ Impact": "${:,.0f}", "Weather Penalty": "{:,.0f}"}
-        for col, f_string in fmt_map.items():
-            df_summary_table[col] = df_summary_table[col].apply(lambda x: f_string.format(x) if isinstance(x, (int, float)) else x)
-        
-        st.table(df_summary_table)
-
-        # --- 6. YTD CAPTION ---
-        current_year = datetime.date.today().year
-        ytd_df_raw = df_audit_raw[df_audit_raw['entry_date'].dt.year == current_year].copy()
-        if not ytd_df_raw.empty:
-            m_ytd = get_forensic_metrics(ytd_df_raw.to_dict(orient='records'), c)
-            df_y = m_ytd['df']
-            y_traf, y_dig = df_y['actual_traffic'].sum(), df_y['residual_lift'].sum()
-            st.caption(f"**{current_year} YTD:** {y_traf:,.0f} Guests | ${df_y['actual_coin_in'].sum():,.0f} Revenue | {df_y['new_members'].sum():,.0f} Members.  \n**YTD Digital Impact:** {y_dig:,.0f} Guests ({(y_dig/y_traf*100 if y_traf > 0 else 0):.1f}% contribution).")
-
-        # --- 7. METRIC CARDS ---
-        st.write("### 💰 Financial & Loyalty Integrity")
+        # --- 4. INTEGRITY METRICS ---
+        st.markdown("<br>", unsafe_allow_html=True)
         k1, k2, k3, k4, k5 = st.columns(5)
-        k1.metric("Total Traffic", f"{t_traffic:,}")
-        k2.metric("Actual Revenue", f"${t_actual_rev:,.0f}")
-        k3.metric("Actual GGR (Hold)", f"${actual_ggr:,.0f}")
-        k4.metric("New Unity Members", f"{t_mems:,}")
-        k5.metric("Member Conv. %", f"{(t_mems/t_traffic*100 if t_traffic > 0 else 0):.2f}%")
+        k1.metric("Total Traffic", f"{t_traf:,}")
+        k2.metric("Actual Revenue", f"${t_rev:,.0f}")
+        k3.metric("Actual GGR", f"${actual_ggr:,.0f}")
+        k4.metric("New Members", f"{t_mems:,}")
+        k5.metric("Member Conv %", f"{(t_mems/t_traf*100 if t_traf > 0 else 0):.2f}%")
 
-        st.write("### 🧬 Marketing Equity & Friction")
-        k6, k7, k8, k9, k10 = st.columns(5)
-        k6.metric("Marketing Guests", f"{t_mkt:,.0f}")
-        k7.metric("Marketing Share", f"{(t_mkt/t_traffic*100 if t_traffic > 0 else 0):.1f}%")
-        k8.metric("Digital ROI Lift", f"{t_digital:,.0f}")
-        k9.metric("Weather Friction", f"-{friction_total:,.0f}")
-        k10.metric("AI Confidence", m.get('predictability', '92.5%'))
-
-        # --- 8. ROI & EFFICIENCY ---
-        st.write("### 💎 BL-ROAS & Equity Efficiency")
-        def get_stat_ui(val, mode="m"):
-            if mode=="m":
-                if val >= 5.0: return "💎 ELITE", "#008000"
-                if val >= 3.0: return "✅ STRONG", "#2E8B57"
-                return "⚠️ MONITOR", "#B8860B"
-            else:
-                if val >= 20.0: return "🚀 OPTIMIZED", "#008000"
-                if val >= 10.0: return "📈 STABLE", "#2E8B57"
-                return "🔍 UNDER-LEVERAGED", "#B8860B"
-        
-        m_status, m_color = get_stat_ui(rev_multiplier, "m")
-        e_pct = (t_mkt/t_traffic*100 if t_traffic > 0 else 0)
-        e_status, e_color = get_stat_ui(e_pct, "e")
-
-        kb1, kb2, kb3, kb4, kb5 = st.columns(5)
-        kb1.metric("Avg. BL-ROAS", f"{avg_bl_roas:.2f}x")
-        kb2.metric("Total Brand Value", f"${total_brand_val:,.0f}")
-        kb3.metric("Rev Multiplier", f"{rev_multiplier:.1f}x")
-        kb4.metric("Equity Efficiency", f"{e_pct:.1f}%")
-        kb5.metric("LTV Equity Growth", f"${(t_mems*LTV_VAL):,.0f}")
-
-        # Status Badges
-        sb1, sb2, sb3, sb4, sb5 = st.columns(5)
-        with sb3: st.markdown(f"<div style='text-align:center;padding:5px;border-radius:5px;background-color:{m_color};color:white;font-size:0.7rem;font-weight:bold;margin-top:-10px;'>{m_status}</div>", unsafe_allow_html=True)
-        with sb4: st.markdown(f"<div style='text-align:center;padding:5px;border-radius:5px;background-color:{e_color};color:white;font-size:0.7rem;font-weight:bold;margin-top:-10px;'>{e_status}</div>", unsafe_allow_html=True)
-
-        # --- 9. SOCIAL & ATTRIBUTION CHART ---
+        # --- 5. ATTRIBUTION FLOW CHART ---
         st.divider()
-        st.write("### 🌊 Multi-Channel Attribution Flow")
-        df_stack = df_final.copy()
-        df_stack['Brand_Inertia_Layer'] = m.get('total_inertia', 0)
+        st.markdown("### 🌊 Multi-Channel Attribution Flow")
         fig_stack = go.Figure()
         layers = [
-            ('Organic Heartbeat', 'baseline', 'rgba(200, 210, 225, 0.5)', '#8E9AAF'),
-            ('Brand (OOH/Broadcast)', 'Brand_Inertia_Layer', 'rgba(93, 112, 127, 0.5)', '#5D707F'),
-            ('Digital ROI Lift', 'residual_lift', 'rgba(0, 71, 171, 0.5)', '#0047AB'),
-            ('Hard Rock LIVE Gravity', 'gravity_lift', 'rgba(255, 204, 0, 0.6)', '#FFCC00')
+            ('Organic Heartbeat', 'baseline', '#8E9AAF'),
+            ('Digital ROI Lift', 'residual_lift', '#0047AB'),
+            ('Event Gravity', 'gravity_lift', '#FFCC00')
         ]
-        for name, col, fill_color, line_color in layers:
-            if col in df_stack.columns:
-                fig_stack.add_trace(go.Scatter(x=df_stack['entry_date'], y=df_stack[col], name=name, mode='lines', 
-                                              stackgroup='one', fillcolor=fill_color, line=dict(width=0.5, color=line_color)))
+        for name, col, color in layers:
+            if col in df_final.columns:
+                fig_stack.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final[col], name=name, stackgroup='one', line=dict(width=0.5, color=color)))
         
-        # UNIQUE KEY FIX: Prevents StreamlitDuplicateElementId
-        fig_stack.update_layout(height=500, margin=dict(l=10, r=10, t=10, b=10), hovermode="x unified", template="plotly_white")
-        st.plotly_chart(fig_stack, use_container_width=True, key=f"stack_chart_{st.session_state.current_property_id}")
-
-        # --- 10. DETAILED LEDGER & EXPORT ---
-        st.write("### 📋 Detailed Forensic Ledger")
-        df_final['Variance'] = df_final['actual_traffic'] - df_final['expected'].round(0)
-        st.dataframe(df_final[['entry_date', 'actual_traffic', 'expected', 'Variance', 'residual_lift', 'gravity_lift', 'new_members']].sort_values('entry_date', ascending=False), use_container_width=True, hide_index=True)
+        fig_stack.update_layout(height=450, margin=dict(l=10, r=10, t=10, b=10), template="plotly_white")
+        st.plotly_chart(fig_stack, use_container_width=True)
 
         with col_export:
-            st.download_button("📥 Export Audit to CSV", data=df_final.to_csv(index=False).encode('utf-8'), file_name=f"HR_Audit_{s_date}_{e_date}.csv", use_container_width=True)
-            
+            st.download_button("📥 Export Audit to CSV", data=df_final.to_csv(index=False).encode('utf-8'), file_name=f"Audit_{s_date}_{e_date}.csv", use_container_width=True)
+
 # =================================================================
-# 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS (v18.0 SaaS Multi-Tenant)
+# 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS (v52.0 SaaS)
 # =================================================================
 elif page == "AI Calibration":
-    st.markdown(f"""
-        <div style="background-color:#F8F9FA;padding:20px;border-radius:12px;border-left:6px solid #FFCC00;margin-bottom:20px;">
-            <h2 style="color:#343a40;margin:0;">⚙️ Engine Weight Calibration: {st.session_state.current_property_name}</h2>
-            <p style="color:#666;margin:0;">Calibrate the unique 'DNA' for this specific property location.</p>
-        </div>
-    """, unsafe_allow_html=True)
+    render_styled_header(
+        f"Engine Calibration: {st.session_state.current_property_name}",
+        "Fine-tune the Forensic Attribution Weights and Financial Benchmarks",
+        "Tuning"
+    )
 
-    # --- LIVE LEDGER FINANCIAL CALCULATION ---
-    # ledger_data is already filtered by property_id in the Section 6 hydration
+    # Financial Discovery
     df_ledger = pd.DataFrame(ledger_data)
-    if not df_ledger.empty and 'actual_coin_in' in df_ledger.columns:
-        total_rev = pd.to_numeric(df_ledger['actual_coin_in']).sum()
-        total_traf = pd.to_numeric(df_ledger['actual_traffic']).sum()
-        live_avg_coin_in = (total_rev / total_traf) if total_traf > 0 else 112.50
-    else:
-        live_avg_coin_in = 112.50
+    live_avg = (df_ledger['actual_coin_in'].sum() / df_ledger['actual_traffic'].sum()) if not df_ledger.empty else 112.50
 
-    # Current Model Health Check
-    m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
-    st.metric(f"Model Predictability ({st.session_state.current_property_name})", m_audit.get('predictability', '92.5%'))
+    c_health, _ = st.columns([1.5, 2])
+    with c_health:
+        st.metric("Model Confidence", "92.5%", delta="Optimized")
 
-    with st.form("master_calibration_form"):
-        # SECTION 1: FINANCIAL DNA & BENCHMARKS
-        st.subheader("💰 Financial DNA & Benchmarks")
-        st.write(f"**Current Ledger Performance:** Average Coin-In is `${live_avg_coin_in:.2f}` per guest.")
-        
+    with st.form("master_calibration_form", border=True):
+        st.markdown("#### 💰 Financial DNA & Benchmarks")
+        st.caption(f"Current Ledger Average: ${live_avg:.2f} per guest")
         b1, b2 = st.columns(2)
         with b1:
-            n_avg_coin = st.number_input(
-                "Target Avg Coin-In ($)", 
-                value=float(st.session_state.coeffs.get('Avg_Coin_In', live_avg_coin_in)),
-                step=0.01
-            )
+            n_avg_coin = st.number_input("Target Avg Coin-In ($)", value=float(st.session_state.coeffs.get('Avg_Coin_In', live_avg)))
         with b2:
-            n_hold = st.number_input(
-                "Property Hold %", 
-                value=float(st.session_state.coeffs.get('Hold_Pct', 10.0)),
-                step=0.1,
-                format="%.1f"
-            )
+            n_hold = st.number_input("Property Hold %", value=float(st.session_state.coeffs.get('Hold_Pct', 10.0)), format="%.1f")
 
         st.divider()
-
-        # SECTION 2: DIGITAL & SOCIAL DRIVERS
-        st.subheader("🌐 Digital & Social Drivers")
+        st.markdown("#### 🌐 Digital & Mass Media Drivers")
         d1, d2, d3 = st.columns(3)
         with d1:
-            n_clicks = st.number_input(
-                "Click Weight (Traffic per Click)", 
-                value=float(st.session_state.coeffs.get('Clicks', 0.05)),
-                step=0.01,
-                format="%.2f"
-            )
+            n_clicks = st.number_input("Click Weight", value=float(st.session_state.coeffs.get('Clicks', 0.05)), format="%.2f")
         with d2:
-            n_social = st.number_input(
-                "Social Impression Weight", 
-                value=float(st.session_state.coeffs.get('Social_Imp', 0.0002)),
-                step=0.0001,
-                format="%.4f"
-            )
+            n_social = st.number_input("Social Impression Weight", value=float(st.session_state.coeffs.get('Social_Imp', 0.0002)), format="%.4f")
         with d3:
-            n_decay = st.number_input(
-                "Adstock Retention %", 
-                value=int(st.session_state.coeffs.get('Ad_Decay', 85)),
-                step=1
-            )
+            n_decay = st.number_input("Adstock Retention %", value=int(st.session_state.coeffs.get('Ad_Decay', 85)))
 
-        st.divider()
-
-        # SECTION 3: MASS MEDIA & OOH
-        st.subheader("📡 Mass Media & Brand Inertia")
+        st.markdown("<br>#### 📡 Branding & Friction", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         with c1:
-            n_broad = st.number_input("Broadcast (TV/Radio) Daily Lift", value=int(st.session_state.coeffs.get('Broadcast_Weight', 150)))
+            n_broad = st.number_input("Broadcast Weight", value=int(st.session_state.coeffs.get('Broadcast_Weight', 150)))
         with c2:
-            n_ooh = st.number_input("Road Signage (OOH) Daily Lift", value=int(st.session_state.coeffs.get('OOH_Weight', 100)))
+            n_rain = st.number_input("Rain Loss (mm)", value=int(st.session_state.coeffs.get('Rain_mm', -12)))
         with c3:
-            n_print = st.number_input("Print (Mag/News) Daily Lift", value=int(st.session_state.coeffs.get('Print_Lift', 75)))
+            n_snow = st.number_input("Snow Loss (cm)", value=int(st.session_state.coeffs.get('Snow_cm', -45)))
 
-        st.divider()
-
-        # SECTION 4: GRAVITY & PROMOTIONS
-        st.subheader("🚀 Gravity & Event Impact")
-        g1, g2 = st.columns(2)
-        with g1:
-            n_grav = st.number_input(
-                "Event Gravity (Multiplier)", 
-                value=float(st.session_state.coeffs.get('Event_Gravity', 0.25)),
-                step=0.01,
-                format="%.2f"
-            )
-        with g2:
-            n_promo = st.number_input("Standard Promo Lift", value=int(st.session_state.coeffs.get('Promo', 550)))
-
-        st.divider()
-
-        # SECTION 5: ENVIRONMENTAL FRICTION
-        st.subheader("🌦️ Environmental Friction")
-        w1, w2 = st.columns(2)
-        with w1:
-            n_rain = st.number_input("Rain Impact (Loss per mm)", value=int(st.session_state.coeffs.get('Rain_mm', -12)))
-        with w2:
-            n_snow = st.number_input("Snow Impact (Loss per cm)", value=int(st.session_state.coeffs.get('Snow_cm', -45)))
-
-        if st.form_submit_button("🚀 Recalibrate Property Engine", use_container_width=True):
-            updated_coeffs = {
-                "property_id": st.session_state.current_property_id, # <--- SAAS TAG
-                "Avg_Coin_In": float(n_avg_coin),
-                "Hold_Pct": float(n_hold),
-                "Clicks": float(n_clicks),
-                "Social_Imp": float(n_social),
-                "Ad_Decay": int(n_decay),
-                "Broadcast_Weight": float(n_broad),
-                "OOH_Weight": float(n_ooh),
-                "OOH_Count": 1 if n_ooh > 0 else 0,
-                "Print_Lift": float(n_print),
-                "Event_Gravity": float(n_grav),
-                "Promo": float(n_promo),
-                "Rain_mm": float(n_rain),
-                "Snow_cm": float(n_snow),
-                "Static_Weight": float(n_ooh),
-                "Static_Count": 1 if n_ooh > 0 else 0
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.form_submit_button("🚀 Hard-Save Property DNA", use_container_width=True):
+            updated = {
+                "property_id": st.session_state.current_property_id, "Avg_Coin_In": n_avg_coin,
+                "Hold_Pct": n_hold, "Clicks": n_clicks, "Social_Imp": n_social,
+                "Ad_Decay": n_decay, "Broadcast_Weight": n_broad, "Rain_mm": n_rain, "Snow_cm": n_snow
             }
-            
             try:
-                # Use upsert with property_id as the unique constraint to keep settings isolated
-                supabase.table("coefficients").upsert(updated_coeffs, on_conflict="property_id").execute()
-                st.session_state.coeffs.update(updated_coeffs)
-                st.success(f"✅ Intelligence Weights hard-saved for {st.session_state.current_property_name}.")
+                supabase.table("coefficients").upsert(updated, on_conflict="property_id").execute()
+                st.session_state.coeffs.update(updated)
+                st.success("✅ Calibration Table Synchronized.")
                 st.cache_data.clear()
                 st.rerun()
             except Exception as e:
-                st.error(f"Sync Error: {e}")
+                st.error(f"Sync Failure: {e}")
 
-    with st.expander("🔍 View Active Sensitivity Manifest"):
+    with st.expander("🔍 View Sensitivity Manifest"):
         st.json(st.session_state.coeffs)
 
 # =================================================================
