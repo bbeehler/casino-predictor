@@ -496,7 +496,7 @@ with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
     st.caption("NAVIGATION")
     
-    # 2. NAVIGATION
+    # 2. NAVIGATION (Updated for Experiment Vault)
     if st.session_state.current_property_id == "GLOBAL":
         page = "Executive Dashboard"
         st.info("Global View Active")
@@ -507,17 +507,22 @@ with st.sidebar:
             nav_options.extend(["Attribution Analytics", "FloorCast AI Analyst"])
         if check_permission("view_reports"): nav_options.append("Master Audit Report")
         
-        # THE CHANGE: Check for simulation permissions specifically
+        # ADDED THIS: Check for simulation permissions
         if check_permission("run_simulations"): 
             nav_options.append("Scenario Simulator")
+            
+        # ADDED THIS: Check for experiment permissions
+        if check_permission("run_experiments"): 
+            nav_options.append("Experiment Vault")
             
         if check_permission("manage_alerts"): nav_options.append("Strategic Alerts")
         if check_permission("calibrate_ai"):
             nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
+        
         if st.session_state.get('user_role') == "Super Admin":
             nav_options.append("Global Admin Console")
 
-        # High-end nav selection (Now correctly aligned)
+        # High-end nav selection
         page = st.radio("Navigation", nav_options, label_visibility="collapsed")
 
     # 3. FOOTER CONTEXT
@@ -1774,7 +1779,8 @@ elif page == "Global Admin Console":
             "view_reports": "Access Master Audit Reports",
             "run_simulations": "Access Predictive Scenario Simulator",
             "manage_alerts": "Create/Delete Strategic Watchdogs",
-            "calibrate_ai": "Change AI Coefficients & ROAS"
+            "calibrate_ai": "Change AI Coefficients & ROAS",
+            "run_experiments": "Access A/B Experimentation Vault"
         }
         
         # 4. The Configuration Form
@@ -1899,12 +1905,12 @@ elif page == "Strategic Alerts":
             st.error(f"Monitoring Sync Error: {e}")
 
 # =================================================================
-# 18. PAGE 10: SCENARIO SIMULATION (v52.5 - Final Alignment)
+# 18. PAGE 10: SCENARIO SIMULATION (v60.0 - Experiment Integrated)
 # =================================================================
 elif page == "Scenario Simulator":
     render_styled_header(
         "Predictive Scenario Simulator",
-        "Simulate Future Marketing Impact & Environmental Variables",
+        "Market-Aware Demand Projection & A/B Test Integration",
         "Predictive"
     )
 
@@ -1926,6 +1932,15 @@ elif page == "Scenario Simulator":
             
         with c4:
             sim_snow = st.slider("Snow (cm)", 0, 30, 0)
+
+        # --- STEP 4 TIE-IN: THE EXPERIMENT OVERLAY ---
+        st.divider()
+        exp_col1, exp_col2 = st.columns([2, 1])
+        with exp_col1:
+            # This allows you to apply a "Winning" lift found in your Experiment Vault
+            applied_test = st.text_input("Apply Experiment Lift (Tag Name)", placeholder="e.g. Test_V1")
+        with exp_col2:
+            test_lift_pct = st.number_input("Proven Lift %", value=0.0, step=0.5, help="Enter the % lift found in your Experiment Vault for this tag.")
 
         run_sim = st.button("🚀 Run Seasonal Scenario Projection", use_container_width=True)
 
@@ -1954,8 +1969,14 @@ elif page == "Scenario Simulator":
             gravity_lift = sim_event * weights.get('Event_Gravity', 0.25)
             friction = (sim_rain * weights.get('Rain_mm', -12)) + (sim_snow * weights.get('Snow_cm', -45))
             
+            # --- STEP 4 CALCULATION: APPLY EXPERIMENT LIFT ---
+            test_impact = 0
+            if test_lift_pct != 0:
+                # Apply the proven lift to the seasonal baseline
+                test_impact = seasonal_baseline * (test_lift_pct / 100)
+
             # 4. FINAL CALCULATION
-            projected_guests = max(0, seasonal_baseline + digital_lift + gravity_lift + friction)
+            projected_guests = max(0, seasonal_baseline + digital_lift + gravity_lift + friction + test_impact)
             projected_rev = projected_guests * weights.get('Avg_Coin_In', 112.50)
             
             # --- OUTPUT ---
@@ -1963,7 +1984,7 @@ elif page == "Scenario Simulator":
             res1, res2, res3, res4 = st.columns(4)
             res1.metric(f"Lifetime {dow}", f"{lifetime_baseline:,.0f}")
             res2.metric("Seasonal Base", f"{seasonal_baseline:,.0f}", delta=f"{(season_mult-1)*100:+.0f}%")
-            res3.metric("AI Projection", f"{projected_guests:,.0f}")
+            res3.metric("AI Projection", f"{projected_guests:,.0f}", delta=f"{test_impact:+.0f} from Test" if test_impact != 0 else None)
             res4.metric("Proj. Revenue", f"${projected_rev:,.0f}")
 
             # --- AI SPECIALIST MEMO ---
@@ -1972,7 +1993,18 @@ elif page == "Scenario Simulator":
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                 model = genai.GenerativeModel('gemini-2.5-flash')
                 
-                specialist_prompt = f"As a Casino Marketing Specialist for {st.session_state.current_property_name}, provide a memo for {sim_date} ({dow}) in the {sim_season} season. Projected guests: {projected_guests:,.0f}. Expected revenue: ${projected_rev:,.0f}. Mention weather impact of {friction:,.0f} guests."
+                specialist_prompt = f"""
+                As a Casino Marketing Specialist for {st.session_state.current_property_name}, analyze this scenario:
+                Date: {sim_date} ({dow}) | Season: {sim_season}
+                
+                FORENSIC DATA:
+                - Projected guests: {projected_guests:,.0f}
+                - Weather friction: {friction:,.0f}
+                - Applied Experiment: {applied_test if applied_test else 'None'} ({test_lift_pct}% lift)
+                
+                Provide a professional memo focusing on how to maximize this {test_lift_pct}% incremental lift 
+                and protect the baseline from the weather impact.
+                """
                 
                 ai_response = model.generate_content(specialist_prompt)
                 status.update(label="✅ Strategic Memo Generated", state="complete")
@@ -1986,6 +2018,74 @@ elif page == "Scenario Simulator":
 
         except Exception as e:
             st.error(f"Simulation Error: {e}")
+
+# =================================================================
+# 19. PAGE 11: EXPERIMENT VAULT (v60.1 - A/B Testing Engine)
+# =================================================================
+elif page == "Experiment Vault":
+    render_styled_header(
+        "A/B Experimentation Vault",
+        "Statistically Validated Marketing Tests & ROI Attribution",
+        "Scientific"
+    )
+
+    # --- 1. SETUP THE TEST ---
+    with st.container(border=True):
+        st.markdown("#### 🧪 Define Experiment Parameters")
+        c1, c2 = st.columns(2)
+        with c1:
+            test_name = st.text_input("Experiment Name", placeholder="e.g. FB Video vs. Static Image")
+            metric_target = st.selectbox("Success Metric", ["Traffic Lift", "Revenue (Coin-In)", "Yield per Guest"])
+        with c2:
+            tag_a = st.text_input("Tag for Version A", value="Control")
+            tag_b = st.text_input("Tag for Version B", value="Test_V1")
+
+    # --- 2. THE ANALYTICS ENGINE ---
+    if 'df' in locals() and not df.empty:
+        # Filter ledger for tagged days
+        df_a = df[df['experiment_tag'] == tag_a]
+        df_b = df[df['experiment_tag'] == tag_b]
+        
+        if not df_a.empty and not df_b.empty:
+            st.divider()
+            
+            # Calculate Averages
+            avg_a = df_a['actual_traffic'].mean() if metric_target == "Traffic Lift" else df_a['actual_revenue'].mean()
+            avg_b = df_b['actual_traffic'].mean() if metric_target == "Traffic Lift" else df_b['actual_revenue'].mean()
+            
+            # The Delta
+            lift = ((avg_b - avg_a) / avg_a) * 100
+            confidence = "High" if len(df_a) + len(df_b) > 10 else "Low (Small Sample)"
+
+            # --- DISPLAY RESULTS ---
+            res1, res2, res3 = st.columns(3)
+            res1.metric(f"Avg {tag_a}", f"{avg_a:,.1f}")
+            res2.metric(f"Avg {tag_b}", f"{avg_b:,.1f}", delta=f"{lift:.1f}%")
+            res3.metric("Statistical Confidence", confidence)
+
+            # --- 3. THE FORENSIC AI INTERPRETATION ---
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.expander("🕵️ AI Experiment Audit", expanded=True):
+                with st.spinner("Analyzing performance variances..."):
+                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    
+                    test_context = f"""
+                    TEST: {test_name}
+                    VERSION A ({tag_a}): {len(df_a)} days, Avg {avg_a}
+                    VERSION B ({tag_b}): {len(df_b)} days, Avg {avg_b}
+                    LIFT: {lift:.1f}%
+                    """
+                    
+                    prompt = f"As a Casino Data Scientist, analyze this A/B test for {st.session_state.current_property_name}. Which version should be the new baseline and why? Consider that Version B showed a {lift:.1f}% change."
+                    
+                    ai_report = model.generate_content(prompt)
+                    st.markdown(ai_report.text)
+        else:
+            st.warning(f"🎰 Insufficient data. Ensure days in the Ledger are tagged with '{tag_a}' and '{tag_b}'.")
+            st.info("To start a test: Go to 'Daily Ledger Audit' and enter your experiment tags in the 'Notes/Tags' field for specific days.")
+    else:
+        st.error("No ledger data available to run experiments.")
 
 # =================================================================
 # 18. FOOTER
