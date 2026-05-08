@@ -1892,7 +1892,7 @@ elif page == "Strategic Alerts":
             st.error(f"Monitoring Sync Error: {e}")
 
 # =================================================================
-# 18. PAGE 10: SCENARIO SIMULATION (v52.4 - Specialist Edition)
+# 18. PAGE 10: SCENARIO SIMULATION (v52.5 - Final Alignment)
 # =================================================================
 elif page == "Scenario Simulator":
     render_styled_header(
@@ -1927,22 +1927,17 @@ elif page == "Scenario Simulator":
         try:
             dow = sim_date.strftime('%A')
             
-            # 1. ESTABLISH LIFETIME BASELINE (Cleaning out 0-traffic days)
+            # 1. ESTABLISH LIFETIME BASELINE
             if 'df' in locals() and not df.empty:
                 dow_history = df[(df['entry_date'].dt.day_name() == dow) & (df['actual_traffic'] > 0)].copy()
                 lifetime_baseline = dow_history['actual_traffic'].mean() if not dow_history.empty else 1500
-                sample_size = len(dow_history)
             else:
                 lifetime_baseline = 1500
-                sample_size = 0
 
             # 2. APPLY SEASONAL MULTIPLIERS
             seasonal_map = {
-                "Winter (Jan-Feb)": 0.85,
-                "Spring (Mar-Jun)": 1.05,
-                "Summer (Jul-Aug)": 1.15,
-                "Autumn (Sep-Nov)": 1.20,
-                "Peak (December)": 1.35
+                "Winter (Jan-Feb)": 0.85, "Spring (Mar-Jun)": 1.05,
+                "Summer (Jul-Aug)": 1.15, "Autumn (Sep-Nov)": 1.20, "Peak (December)": 1.35
             }
             season_mult = seasonal_map.get(sim_season, 1.0)
             seasonal_baseline = lifetime_baseline * season_mult
@@ -1956,61 +1951,34 @@ elif page == "Scenario Simulator":
             projected_guests = max(0, seasonal_baseline + digital_lift + gravity_lift + friction)
             projected_rev = projected_guests * weights.get('Avg_Coin_In', 112.50)
             
-            # --- OUTPUT SCOREBOARD ---
+            # --- OUTPUT ---
             st.divider()
             res1, res2, res3, res4 = st.columns(4)
             res1.metric(f"Lifetime {dow}", f"{lifetime_baseline:,.0f}")
             res2.metric("Seasonal Base", f"{seasonal_baseline:,.0f}", delta=f"{(season_mult-1)*100:+.0f}%")
-            res3.metric("AI Projection", f"{projected_guests:,.0f} Guests")
+            res3.metric("AI Projection", f"{projected_guests:,.0f}")
             res4.metric("Proj. Revenue", f"${projected_rev:,.0f}")
 
-            # --- 5. EXECUTIVE SPECIALIST CONSULTATION ---
+            # --- AI SPECIALIST MEMO ---
             st.markdown("<br>", unsafe_allow_html=True)
             with st.status("🕵️ AI Specialist generating strategic recommendations...", expanded=True) as status:
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                 model = genai.GenerativeModel('gemini-2.5-flash')
                 
-                specialist_context = f"""
-                PROPERTY: {st.session_state.current_property_name}
-                DATE: {sim_date} ({dow})
-                SEASON: {sim_season}
-                DATA: Baseline {seasonal_baseline:,.0f}, Lift {digital_lift + gravity_lift:,.0f}, Friction {friction:,.0f}
-                TOTAL PROJECTION: {projected_guests:,.0f} Guests | ${projected_rev:,.0f} Revenue
-                """
-                
-                specialist_prompt = f"""
-                You are a world-class Casino Marketing Specialist. Analyze the provided data 
-                for {st.session_state.current_property_name} and provide a strategic executive memo.
-                
-                Structure with these exact headers:
-                ## Yield Maximization
-                ## Tactical Ad-Spending
-                ## Operational Optimization
-                
-                Keep the tone professional and data-driven. Do not use excessive markdown symbols.
-                
-                DATASET:
-                {specialist_context}
-                """
+                specialist_prompt = f"As a Casino Marketing Specialist for {st.session_state.current_property_name}, provide a memo for {sim_date} ({dow}) in the {sim_season} season. Projected guests: {projected_guests:,.0f}. Expected revenue: ${projected_rev:,.0f}. Mention weather impact of {friction:,.0f} guests."
                 
                 ai_response = model.generate_content(specialist_prompt)
                 status.update(label="✅ Strategic Memo Generated", state="complete")
 
-            # --- DISPLAY THE MEMO (Cleaned HTML/Markdown Hybrid) ---
             st.markdown(f"""
                 <div style="background: #FFFFFF; padding: 25px; border-radius: 12px; border: 1px solid #E1E8F0; border-top: 5px solid #0047AB;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-                        <span style="font-weight: 800; color: #0047AB;">INTERNAL STRATEGIC MEMO</span>
-                        <span style="color: #94a3b8; font-family: monospace;">REF: SIM_FS_{sim_date.strftime('%Y%m%d')}</span>
-                    </div>
+                    <span style="font-weight: 800; color: #0047AB;">INTERNAL STRATEGIC MEMO</span>
                 </div>
             """, unsafe_allow_html=True)
-            
-            # We display the AI text OUTSIDE the main div to let Streamlit 
-            # render the Markdown properly without breaking the HTML tags.
             st.markdown(ai_response.text)
-            
-            st.markdown("---") # Visual closer
+
+        except Exception as e:
+            st.error(f"Simulation Error: {e}")
 
 # =================================================================
 # 18. FOOTER
