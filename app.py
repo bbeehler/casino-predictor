@@ -151,6 +151,43 @@ def apply_high_end_styling():
             color: #1A1C1E;
         }
 
+        /* --- THE BLACK SIDEBAR REFINEMENT --- */
+        [data-testid="stSidebar"] {
+            background-color: #000000 !important;
+            border-right: 1px solid #222222;
+        }
+
+        /* Force Sidebar Text, Labels, and Radio Button text to White */
+        [data-testid="stSidebar"] *, 
+        [data-testid="stSidebar"] .stMarkdown p,
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] .st-at {
+            color: #FFFFFF !important;
+        }
+
+        /* Specifically target Sidebar Captions (Grey for visual hierarchy) */
+        [data-testid="stSidebar"] .stCaption {
+            color: #A1A1A1 !important;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+
+        /* Sidebar Divider Color */
+        [data-testid="stSidebar"] hr {
+            border-color: #333333 !important;
+        }
+
+        /* Sidebar Button Visibility (Logout etc) */
+        [data-testid="stSidebar"] .stButton>button {
+            background-color: #1A1A1A !important;
+            color: #FFFFFF !important;
+            border: 1px solid #333333 !important;
+        }
+        [data-testid="stSidebar"] .stButton>button:hover {
+            border-color: #FFCC00 !important;
+            color: #FFCC00 !important;
+        }
+
         /* RESPONSIVE PADDING & VIEWPORT OPTIMIZATION */
         .main .block-container {
             padding-top: 2rem;
@@ -160,15 +197,12 @@ def apply_high_end_styling():
             max-width: 1400px;
         }
 
-        /* MOBILE OVERRIDES (Screens smaller than 768px) */
+        /* MOBILE OVERRIDES */
         @media (max-width: 768px) {
             .main .block-container {
                 padding-left: 1rem;
                 padding-right: 1rem;
                 padding-top: 1rem;
-            }
-            [data-testid="stMetricValue"] {
-                font-size: 1.8rem !important;
             }
         }
 
@@ -189,17 +223,10 @@ def apply_high_end_styling():
             border: 1px solid #E1E8F0;
             padding: 20px !important;
             border-radius: 12px !important;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-            transition: transform 0.2s ease-in-out;
-        }
-        [data-testid="stMetric"]:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
         }
 
-        /* --- THE FIX: INPUT & DROPDOWN VISIBILITY KIT --- */
-        
-        /* 1. Ensure Input/Select containers are always white with clear borders */
+        /* --- INPUT & DROPDOWN VISIBILITY KIT --- */
         div[data-baseweb="input"] > div, 
         div[data-baseweb="select"] > div {
             background-color: #FFFFFF !important;
@@ -207,13 +234,12 @@ def apply_high_end_styling():
             border-radius: 8px !important;
         }
 
-        /* 2. FORCE text color to be Dark Charcoal for all inputs and select states */
         input, textarea, div[data-baseweb="select"] * {
             color: #1A1C1E !important;
             -webkit-text-fill-color: #1A1C1E !important;
         }
 
-        /* 3. Dropdown Popover List Styling */
+        /* Dropdown Popover List Styling */
         div[data-baseweb="popover"] ul {
             background-color: #FFFFFF !important;
         }
@@ -223,7 +249,7 @@ def apply_high_end_styling():
             background-color: #FFFFFF !important;
         }
 
-        /* 4. Focus State: Flat Professional Glow */
+        /* Focus State: Flat Professional Glow */
         div[data-baseweb="input"]:focus-within, 
         div[data-baseweb="select"]:focus-within {
             border: 1px solid #0047AB !important;
@@ -231,7 +257,7 @@ def apply_high_end_styling():
             outline: none !important;
         }
 
-        /* BUTTON STYLING (Corporate Primary) */
+        /* MAIN ACTION BUTTONS */
         .stButton>button {
             border-radius: 8px !important;
             font-weight: 600 !important;
