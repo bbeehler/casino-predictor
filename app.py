@@ -1601,185 +1601,106 @@ elif page == "Global Admin Console":
     # --- TAB 2: USER ACCESS & ROLES (v23.2 Management Suite) ---
     with tabs[1]:
         st.subheader("👥 System User Directory")
-        
-        # 1. SEARCH & FILTER
         search_q = st.text_input("🔍 Search by Email:", placeholder="Enter email to filter users...")
-        
-        # 2. FETCH & DISPLAY
-        # We use a join to get the Property Name directly from the properties table
         access_res = supabase.table("user_property_access").select("*, properties(property_name)").execute()
         
         if access_res.data:
             df_access = pd.DataFrame(access_res.data)
-            # Handle cases where properties might be null
             df_access['Property Name'] = df_access['properties'].apply(lambda x: x['property_name'] if x else "N/A")
-            
-            # Apply search filter
             if search_q:
                 df_access = df_access[df_access['user_email'].str.contains(search_q, case=False)]
 
-            # 3. INTERACTIVE MANAGEMENT LIST
             for i, row in df_access.iterrows():
                 with st.expander(f"👤 {row['user_email']} | {row['Property Name']} ({row['user_role']})"):
                     c1, c2, c3 = st.columns([2, 2, 1])
-                    
                     with c1:
-                        # Ensure the current role is in the list to avoid index errors
                         role_list = ["Viewer", "Manager", "Admin", "Super Admin"]
                         current_role = row['user_role'] if row['user_role'] in role_list else "Viewer"
-                        
-                        new_role = st.selectbox(
-                            "Change Authorization:", 
-                            role_list,
-                            index=role_list.index(current_role),
-                            key=f"edit_role_{row['id']}"
-                        )
-                    
+                        new_role = st.selectbox("Authorization:", role_list, index=role_list.index(current_role), key=f"edit_role_{row['id']}")
                     with c2:
                         st.write(f"**Linked Property:** {row['Property Name']}")
-                        st.caption(f"Access Record ID: {row['id']}")
-                    
                     with c3:
                         if st.button("Update", key=f"save_{row['id']}", use_container_width=True):
                             supabase.table("user_property_access").update({"user_role": new_role}).eq("id", row['id']).execute()
-                            st.success("Permissions Synced.")
+                            st.success("Synced.")
                             st.rerun()
-                        
-                        if st.button("Revoke", key=f"del_{row['id']}", type="secondary", use_container_width=True):
-                            supabase.table("user_property_access").delete().eq("id", row['id']).execute()
-                            st.warning("Access Revoked.")
-                            st.rerun()
-        else:
-            st.info("No user access records found.")
 
         st.divider()
         st.subheader("➕ Assign User to Additional Property")
-        
         with st.form("assign_multi_prop"):
-            target_email = st.text_input("User Email (Primary Key)")
-            
-            # Fetch fresh property list for the dropdown
+            target_email = st.text_input("User Email")
             all_p_res = supabase.table("properties").select("id, property_name").execute()
             p_opts = {p['property_name']: p['id'] for p in all_p_res.data} if all_p_res.data else {}
-            
-            target_prop_name = st.selectbox("Select Property to Link", list(p_opts.keys()))
+            target_prop_name = st.selectbox("Select Property", list(p_opts.keys()))
             target_role = st.selectbox("Assign Role", ["Viewer", "Manager", "Admin", "Super Admin"])
             
             if st.form_submit_button("Link User to Property"):
                 if target_email and target_prop_name:
                     clean_email = target_email.lower().strip()
                     target_uuid = p_opts.get(target_prop_name)
-                    
-                    # 1. PRE-CHECK FOR DUPLICATES (Prevents 409 API Errors)
-                    check = supabase.table("user_property_access")\
-                        .select("*")\
-                        .eq("user_email", clean_email)\
-                        .eq("property_id", target_uuid)\
-                        .execute()
-                    
-                    if check.data:
-                        st.error(f"User {clean_email} already has an active link to {target_prop_name}.")
-                    else:
-                        # 2. ATTEMPT INSERT
-                        link_payload = {
-                            "user_email": clean_email,
-                            "property_id": target_uuid,
-                            "user_role": target_role
-                        }
-                        
-                        try:
-                            supabase.table("user_property_access").insert(link_payload).execute()
-                            st.success(f"Successfully linked {clean_email} to {target_prop_name}")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Database Error: {e}")
-                else:
-                    st.error("Please provide both an email and a property selection.")
+                    link_payload = {"user_email": clean_email, "property_id": target_uuid, "user_role": target_role}
+                    try:
+                        supabase.table("user_property_access").insert(link_payload).execute()
+                        st.success(f"Linked {clean_email}")
+                        st.rerun()
+                    except Exception as e: st.error(f"Error: {e}")
 
-    # --- TAB 3: SYSTEM HEALTH (v22.1 Fix) ---
+    # --- TAB 3: SYSTEM HEALTH & PERMISSIONS (Consolidated) ---
     with tabs[2]:
-        st.write("### Database Orchestration Stats")
-        
+        st.write("### 📊 Database Orchestration Stats")
         try:
-            # FIX: In the post-2.0 Supabase CLI, the count is accessed via the .count attribute 
-            # of the response object, but we don't wrap it in len()
             prop_res = supabase.table("properties").select("*", count="exact").execute()
-            prop_count = prop_res.count if prop_res.count is not None else 0
-            
             user_res = supabase.table("user_property_access").select("*", count="exact").execute()
-            user_count = user_res.count if user_res.count is not None else 0
-            
             h1, h2 = st.columns(2)
-            h1.metric("Active Tenants", prop_count)
-            h2.metric("Managed Users", user_count)
+            h1.metric("Active Tenants", prop_res.count or 0)
+            h2.metric("Managed Users", user_res.count or 0)
+        except Exception as e: st.error(f"Stats Error: {e}")
             
-            st.divider()
-            st.caption(f"System Status: Connected to Supabase Vault | Property ID: {st.session_state.current_property_id}")
-            
-        except Exception as e:
-            st.error(f"Diagnostic Error: {e}")
-
-# --- TAB 4: Role Permissions Manager ---
-with tabs[2]:
-    st.subheader("🛡️ Global Role Authorization Matrix")
-    
-    # 1. Select the Role to Edit
-    target_role = st.selectbox("Select Role to Configure:", ["Viewer", "Manager", "Admin"])
-    
-    # 2. Define Capabilities
-    capabilities = {
-        "view_analytics": "Access Attribution & Executive Dashboards",
-        "edit_ledger": "Add/Edit Daily Ledger Entries",
-        "manage_alerts": "Create and Delete Strategic Watchdogs",
-        "calibrate_ai": "Access and Change AI Coefficients",
-        "export_reports": "Download Master Audit CSVs"
-    }
-    
-    # 3. Create Toggle Form
-    with st.form(f"perm_matrix_{target_role}"):
-        st.write(f"Adjusting capabilities for **{target_role}**")
-        updated_perms = {}
+        st.divider()
+        st.subheader("🛡️ Global Role Authorization Matrix")
+        target_role_config = st.selectbox("Select Role to Configure:", ["Viewer", "Manager", "Admin", "Super Admin"])
         
-        for cap_id, cap_desc in capabilities.items():
-            # In a real app, you'd fetch the current state from Supabase first
-            updated_perms[cap_id] = st.checkbox(cap_desc, key=f"cap_{cap_id}")
-            
-        if st.form_submit_button("💾 Save Role Configuration"):
-            # Update the 'permissions' table in Supabase
-            supabase.table("role_permissions").upsert({
-                "role_name": target_role,
-                "perms": updated_perms # Store as a JSONB object
-            }).execute()
-            st.success(f"Global permissions for {target_role} updated.")
+        capabilities = {
+            "view_analytics": "Access Attribution & Executive Dashboards",
+            "view_ledger": "Access Daily Ledger Audit",
+            "view_reports": "Access Master Audit Reports",
+            "manage_alerts": "Create/Delete Strategic Watchdogs",
+            "calibrate_ai": "Change AI Coefficients & ROAS"
+        }
+        
+        with st.form(f"perm_matrix_{target_role_config}"):
+            st.write(f"Adjusting capabilities for **{target_role_config}**")
+            updated_perms = {}
+            for cap_id, cap_desc in capabilities.items():
+                updated_perms[cap_id] = st.checkbox(cap_desc, key=f"cap_{cap_id}")
+                
+            if st.form_submit_button("💾 Save Role Configuration"):
+                supabase.table("role_permissions").upsert({"role_name": target_role_config, "perms": updated_perms}).execute()
+                st.success(f"Permissions for {target_role_config} updated.")
 
 # =================================================================
-# 17. PAGE 9: STRATEGIC ALERTS & REPORTING (v1.1 SaaS Ironclad)
+# 17. PAGE 9: STRATEGIC ALERTS
 # =================================================================
 elif page == "Strategic Alerts":
-    st.markdown(f"""
+    st.markdown("""
         <div style="background-color: #1A1A1B; padding: 20px; border-radius: 12px; border-left: 6px solid #FF4B4B; margin-bottom: 25px;">
             <h2 style="color: #FF4B4B; margin: 0;">🚨 Strategic Alert Engine</h2>
-            <p style="color: #DDD; margin: 0;">Set automated triggers for performance anomalies and brand friction.</p>
         </div>
     """, unsafe_allow_html=True)
-
+    
     col_a, col_b = st.columns([1, 2])
-
     with col_a:
         st.subheader("🛠️ Create New Trigger")
-        
-        # SAFETY CHECK: Only allow trigger creation if a specific property is selected
         if st.session_state.current_property_id == "GLOBAL":
-            st.warning("⚠️ Deployment Disabled: Please select a specific property from the sidebar to deploy a new Watchdog.")
+            st.warning("Select a property to deploy a watchdog.")
         else:
             with st.form("new_alert_form"):
-                a_name = st.text_input("Alert Name", placeholder="e.g. Low Yield Warning")
-                a_metric = st.selectbox("Metric to Watch", ["Revenue", "Guest Traffic", "Sentiment Score", "Conv %"])
+                a_name = st.text_input("Alert Name")
+                a_metric = st.selectbox("Metric", ["Revenue", "Guest Traffic", "Sentiment Score"])
                 a_op = st.selectbox("Condition", ["Drops Below", "Exceeds"])
-                a_val = st.number_input("Threshold Value", value=0.0)
-                
+                a_val = st.number_input("Threshold", value=0.0)
                 if st.form_submit_button("🛰️ Deploy Watchdog"):
-                    alert_payload = {
+                    payload = {
                         "property_id": st.session_state.current_property_id,
                         "alert_name": a_name,
                         "metric_target": a_metric,
@@ -1787,71 +1708,30 @@ elif page == "Strategic Alerts":
                         "comparison_operator": "<" if a_op == "Drops Below" else ">",
                         "user_email": st.session_state.user_email
                     }
-                    supabase.table("strategic_alerts").insert(alert_payload).execute()
-                    st.success(f"Watchdog '{a_name}' is now live.")
+                    supabase.table("strategic_alerts").insert(payload).execute()
+                    st.success("Watchdog Live.")
                     st.rerun()
 
     with col_b:
-        st.subheader("📋 Active Property Watchdogs")
-        
-        # 1. Capture and sanitize the ID
+        st.subheader("📋 Active Watchdogs")
         target_id = st.session_state.get('current_property_id')
-        
-        # 2. Execute query with strict formatting
         try:
             if target_id == "GLOBAL":
                 alerts_res = supabase.table("strategic_alerts").select("*").execute()
-                st.caption("Displaying all Network-wide alerts.")
-            elif target_id and len(str(target_id)) > 10:
-                # Force ID to string to prevent Postgrest type-check errors
-                alerts_res = supabase.table("strategic_alerts").select("*")\
-                    .eq("property_id", str(target_id)).execute()
             else:
-                alerts_res = None
-                st.warning("⚠️ Property Context is re-initializing. Please wait.")
+                alerts_res = supabase.table("strategic_alerts").select("*").eq("property_id", str(target_id)).execute()
 
-            # 3. Render Data Safely
             if alerts_res and alerts_res.data:
                 for alert in alerts_res.data:
-                    display_name = alert.get('alert_name', 'Unnamed Alert')
-                    with st.expander(f"🔔 {display_name}"):
-                        st.write(f"Condition: **{alert.get('metric_target')}** {alert.get('comparison_operator')} **{alert.get('threshold_val')}**")
+                    with st.expander(f"🔔 {alert.get('alert_name')}"):
+                        st.write(f"**{alert.get('metric_target')}** {alert.get('comparison_operator')} **{alert.get('threshold_val')}**")
                         if st.button("Disable", key=f"dis_{alert['id']}"):
                             supabase.table("strategic_alerts").delete().eq("id", alert['id']).execute()
                             st.rerun()
-            elif alerts_res:
-                st.info("No active alerts found for this property.")
-                
-        except Exception as e:
-            st.error(f"Database Sync Error: {e}")
-
-    st.divider()
-
-    # --- THE AI BRIEF GENERATOR ---
-    st.subheader("📄 One-Click Executive Briefing")
-    if st.button("🪄 Generate 24-Hour Strategic Brief"):
-        with st.spinner("AI is analyzing recent ledger and sentiment trends..."):
-            # Ensure 'df' exists from Section 9
-            if not df.empty:
-                recent_data = df.head(7).to_string()
-                prompt = f"Based on this data, write a 3-paragraph executive brief for the General Manager of {st.session_state.current_property_name}. Focus on revenue risks and guest sentiment anomalies: {recent_data}"
-                
-                # Import handled inside to prevent bloat if unused
-                import google.generativeai as genai
-                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel('gemini-2.0-flash') # Updated to current stable
-                brief = model.generate_content(prompt)
-                
-                st.markdown(f"""
-                    <div style="background-color: #F0F2F6; padding: 20px; border-radius: 10px; border: 1px solid #CCC; color: #111;">
-                        {brief.text}
-                    </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.error("No data available to generate brief.")
+        except Exception as e: st.error(f"Sync Error: {e}")
 
 # =================================================================
-# 16. FOOTER
+# 18. FOOTER
 # =================================================================
 st.sidebar.divider()
 st.sidebar.caption("© 2026 FloorCast Technologies | Strategic AI Unit")
