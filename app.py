@@ -2020,7 +2020,7 @@ elif page == "Scenario Simulator":
             st.error(f"Simulation Error: {e}")
 
 # =================================================================
-# 19. PAGE 11: EXPERIMENT VAULT (v60.1 - A/B Testing Engine)
+# 19. PAGE 11: EXPERIMENT VAULT (v60.2 - Safety Shield Aligned)
 # =================================================================
 elif page == "Experiment Vault":
     render_styled_header(
@@ -2042,26 +2042,33 @@ elif page == "Experiment Vault":
 
     # --- 2. THE ANALYTICS ENGINE ---
     if 'df' in locals() and not df.empty:
-    
-    # THE SAFETY SHIELD: Ensure the column exists in the dataframe
-    if 'experiment_tag' not in df.columns:
-        st.info("🧬 Initializing Experimentation Layer...")
-        # Create a temporary empty column so the app doesn't crash
-        df['experiment_tag'] = None 
+        # THE SAFETY SHIELD: Must be indented inside the 'if df' block
+        if 'experiment_tag' not in df.columns:
+            st.info("🧬 Initializing Experimentation Layer...")
+            df['experiment_tag'] = None 
 
-    # Now filter ledger for tagged days
-    df_a = df[df['experiment_tag'] == tag_a]
-    df_b = df[df['experiment_tag'] == tag_b]
-    
-    if not df_a.empty and not df_b.empty:
+        # Filter ledger for tagged days
+        df_a = df[df['experiment_tag'] == tag_a]
+        df_b = df[df['experiment_tag'] == tag_b]
+        
+        if not df_a.empty and not df_b.empty:
             st.divider()
             
-            # Calculate Averages
-            avg_a = df_a['actual_traffic'].mean() if metric_target == "Traffic Lift" else df_a['actual_revenue'].mean()
-            avg_b = df_b['actual_traffic'].mean() if metric_target == "Traffic Lift" else df_b['actual_revenue'].mean()
+            # Calculate Averages (Using .get to avoid KeyError if columns missing)
+            rev_col = 'actual_coin_in' # Unified name for revenue
+            
+            if metric_target == "Traffic Lift":
+                avg_a = df_a['actual_traffic'].mean()
+                avg_b = df_b['actual_traffic'].mean()
+            elif metric_target == "Yield per Guest":
+                avg_a = (df_a[rev_col] / df_a['actual_traffic']).mean()
+                avg_b = (df_b[rev_col] / df_b['actual_traffic']).mean()
+            else:
+                avg_a = df_a[rev_col].mean()
+                avg_b = df_b[rev_col].mean()
             
             # The Delta
-            lift = ((avg_b - avg_a) / avg_a) * 100
+            lift = ((avg_b - avg_a) / avg_a) * 100 if avg_a > 0 else 0
             confidence = "High" if len(df_a) + len(df_b) > 10 else "Low (Small Sample)"
 
             # --- DISPLAY RESULTS ---
@@ -2084,13 +2091,13 @@ elif page == "Experiment Vault":
                     LIFT: {lift:.1f}%
                     """
                     
-                    prompt = f"As a Casino Data Scientist, analyze this A/B test for {st.session_state.current_property_name}. Which version should be the new baseline and why? Consider that Version B showed a {lift:.1f}% change."
+                    prompt = f"As a Casino Data Scientist for {st.session_state.current_property_name}, analyze this A/B test. Which version should be the new baseline? Context: {test_context}"
                     
                     ai_report = model.generate_content(prompt)
                     st.markdown(ai_report.text)
         else:
             st.warning(f"🎰 Insufficient data. Ensure days in the Ledger are tagged with '{tag_a}' and '{tag_b}'.")
-            st.info("To start a test: Go to 'Daily Ledger Audit' and enter your experiment tags in the 'Notes/Tags' field for specific days.")
+            st.info("Go to 'Daily Ledger Audit' and assign these tags to specific dates to see the comparison.")
     else:
         st.error("No ledger data available to run experiments.")
 
