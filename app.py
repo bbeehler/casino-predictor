@@ -402,7 +402,9 @@ if df.empty:
 # =================================================================
 # 9. PAGE 1: EXECUTIVE DASHBOARD (v51.5 - SaaS Hybrid & Restored Pulse)
 # =================================================================
-if st.session_state.get('current_property_id') == "GLOBAL":
+if page == "Executive Dashboard":
+    # --- A. CONSOLIDATED GLOBAL VIEW (For Super Admins) ---
+    if st.session_state.get('current_property_id') == "GLOBAL":
         st.markdown(f"""
             <div style="background-color: #0047AB; padding: 25px; border-radius: 15px; margin-bottom: 25px; color: white;">
                 <h1 style="margin: 0; color: white;">🌐 Global Network Intelligence</h1>
@@ -430,7 +432,6 @@ if st.session_state.get('current_property_id') == "GLOBAL":
             )
 
         # --- THE FIX: PREVENT RED ERROR BOX ---
-        # If the user has only clicked one date, show an info message and stop execution
         if isinstance(global_range, tuple) and len(global_range) < 2:
             st.info("💡 Please select the **end date** in the calendar to load the network results.")
             st.stop() 
@@ -441,7 +442,6 @@ if st.session_state.get('current_property_id') == "GLOBAL":
             mask = (df['entry_date'].dt.date >= start_g) & (df['entry_date'].dt.date <= end_g)
             df_filtered = df.loc[mask].copy()
         else:
-            # Fallback for the initial page load
             df_filtered = df.copy()
             start_g, end_g = min_date, max_date
 
@@ -620,7 +620,7 @@ if st.session_state.get('current_property_id') == "GLOBAL":
                 k4.metric("Ledger Revenue", f"${ledger_rev:,.0f}")
                 k5.metric("AI Accuracy", f"{m.get('predictability', '92.5%')}")
 
-            # 8. RESTORED: EXECUTIVE BRAND SENTIMENT PULSE
+            # 8. EXECUTIVE BRAND SENTIMENT PULSE
             st.divider()
             st.write("### 🏛️ Executive Brand Sentiment Pulse")
             
@@ -649,7 +649,7 @@ if st.session_state.get('current_property_id') == "GLOBAL":
                 delta="Positive Impact" if overall_score > 0.3 else "High Friction" if overall_score < -0.3 else "Neutral"
             )
 
-            # RESTORED: DYNAMIC ASSET GAUGES
+            # DYNAMIC ASSET GAUGES
             try:
                 asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
                 tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall Property"]
