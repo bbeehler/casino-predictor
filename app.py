@@ -41,9 +41,8 @@ def archive_sentiment_entry(text, asset_tag):
             "property_id": st.session_state.current_property_id,
             "asset": asset_tag,
             "sentiment_score": sentiment_score,
-            "review_text": text,
-            "timestamp": datetime.datetime.now().isoformat(),
-            "user_email": st.session_state.user_email
+            "raw_text": text,
+            "timestamp": datetime.datetime.now().isoformat()
         }
         supabase.table("sentiment_history").insert(payload).execute()
         return True
