@@ -313,82 +313,84 @@ if 'weather_data' not in st.session_state:
     st.session_state.weather_data = asyncio.run(fetch_weather())
 
 # =================================================================
-# 7. FORENSIC LOGIN GATEKEEPER (v24.6 - Permission Hydrated)
+# 7. FORENSIC LOGIN GATEKEEPER (High-End Portal Edition)
 # =================================================================
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("<h1 style='text-align:center;'>Executive Access Required</h1>", unsafe_allow_html=True)
-    with st.form("login_form"):
-        e_mail = st.text_input("Email").strip().lower()
-        p_word = st.text_input("Password", type="password")
+    # High-end centered login layout
+    _, col_login, _ = st.columns([1, 1.5, 1])
+    
+    with col_login:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.image("https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png", width=200)
+        st.markdown("""
+            <div style="margin-top: 20px; margin-bottom: 30px;">
+                <h1 style="font-size: 2rem; margin-bottom: 0;">Executive Portal</h1>
+                <p style="color: #667085;">FloorCast Strategic Intelligence Unit</p>
+            </div>
+        """, unsafe_allow_html=True)
         
-        if st.form_submit_button("Unlock Engine"):
-            try:
-                res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
-                
-                if res.user:
-                    # 1. Fetch User Identity & Property Access
-                    access_res = supabase.table("user_property_access").select("*, properties(property_name)").eq("user_email", e_mail).execute()
+        with st.form("login_form", border=True):
+            e_mail = st.text_input("Corporate Email").strip().lower()
+            p_word = st.text_input("Password", type="password")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.form_submit_button("Authenticate & Unlock Engine", use_container_width=True):
+                try:
+                    res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
                     
-                    if access_res.data:
-                        u_data = access_res.data[0]
-                        user_role = u_data['user_role'] # Temporary variable for the next step
+                    if res.user:
+                        access_res = supabase.table("user_property_access").select("*, properties(property_name)").eq("user_email", e_mail).execute()
                         
-                        # 2. DYNAMIC PERMISSIONS FETCH (The Step 3 Logic)
-                        perm_res = supabase.table("role_permissions").select("perms").eq("role_name", user_role).execute()
-                        
-                        # 3. HYDRATE SESSION STATE
-                        st.session_state.authenticated = True
-                        st.session_state.user_email = e_mail
-                        st.session_state.user_role = user_role
-                        st.session_state.current_property_id = u_data['property_id']
-                        st.session_state.current_property_name = u_data['properties']['property_name'] if u_data.get('properties') else "Unknown"
-                        
-                        # Save the specific capabilities dictionary (e.g., {"view_ledger": True})
-                        if perm_res.data:
-                            st.session_state.user_permissions = perm_res.data[0]['perms']
+                        if access_res.data:
+                            u_data = access_res.data[0]
+                            user_role = u_data['user_role']
+                            perm_res = supabase.table("role_permissions").select("perms").eq("role_name", user_role).execute()
+                            
+                            st.session_state.authenticated = True
+                            st.session_state.user_email = e_mail
+                            st.session_state.user_role = user_role
+                            st.session_state.current_property_id = u_data['property_id']
+                            st.session_state.current_property_name = u_data['properties']['property_name'] if u_data.get('properties') else "Unknown"
+                            
+                            if perm_res.data:
+                                st.session_state.user_permissions = perm_res.data[0]['perms']
+                            else:
+                                st.session_state.user_permissions = {"view_analytics": True}
+                            
+                            st.success("Authentication Successful.")
+                            st.rerun()
                         else:
-                            # Fallback if no specific matrix is set for this role yet
-                            st.session_state.user_permissions = {"view_analytics": True}
-                        
-                        st.success(f"Access Granted: {user_role} Verified.")
-                        st.rerun()
+                            st.error("Account Error: No property mapping found.")
                     else:
-                        st.error("Access Denied: No Property Mapping found for this email.")
-                else:
-                    st.error("Invalid Credentials.")
-            except Exception as e:
-                st.error(f"Auth System Error: {e}")
-                
+                        st.error("Invalid Credentials.")
+                except Exception as e:
+                    st.error(f"System Error: {e}")
     st.stop()
 
 # =================================================================
-# 8. EXECUTIVE NAVIGATION (v25.0 - Multi-Role & Property Aware)
+# 8. EXECUTIVE NAVIGATION (SaaS Sidebar Architecture)
 # =================================================================
-
-# Initialize page default
 page = "Executive Dashboard"
 
-# --- 1. GLOBAL PERMISSION SCAN ---
-# Check if the user is a Super Admin ANYWHERE in the network
-user_links_res = supabase.table("user_property_access")\
-    .select("user_role")\
-    .eq("user_email", st.session_state.get('user_email'))\
-    .execute()
-
+# Global Role Scan
+user_links_res = supabase.table("user_property_access").select("user_role").eq("user_email", st.session_state.get('user_email')).execute()
 all_my_roles = [r['user_role'] for r in user_links_res.data] if user_links_res.data else []
 is_global_admin = any(role in ["Super Admin", "Manager", "Admin"] for role in all_my_roles)
 
 with st.sidebar:
-    # Branding Header
-    st.image("https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png?h=171&iar=0&w=224&rev=914ac0eae6734be995b93d76ad2b1e8f", width=150)
-    st.title(f"{st.session_state.current_property_name}")
-    st.divider()
-
-    # 2. SCOPE SWITCHER (Available if you are a Super Admin on ANY property)
+    # Sidebar Logo with subtle shadow
+    st.markdown("""
+        <div style="padding: 10px 0px 30px 0px;">
+            <img src="https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png" width="160">
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # 1. SCOPE SWITCHER
     if is_global_admin:
+        st.caption("NETWORK SCOPE")
         try:
             all_props = supabase.table("properties").select("id, property_name").execute()
             prop_map = {p['property_name']: p['id'] for p in all_props.data}
@@ -397,72 +399,63 @@ with st.sidebar:
             curr_label = "📊 CONSOLIDATED VIEW" if st.session_state.current_property_id == "GLOBAL" else st.session_state.current_property_name
             s_idx = options.index(curr_label) if curr_label in options else 0
             
-            selected_view = st.selectbox("🎯 Intelligence Scope:", options, index=s_idx)
+            selected_view = st.selectbox("Switch Environment:", options, index=s_idx, label_visibility="collapsed")
             
             if selected_view == "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != "GLOBAL":
                 st.session_state.current_property_id = "GLOBAL"
                 st.session_state.current_property_name = "All Properties"
-                st.session_state.user_role = "Super Admin" # Global view defaults to top role
+                st.session_state.user_role = "Super Admin"
                 st.rerun()
             elif selected_view != "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != prop_map.get(selected_view):
-                # Before switching, find the user's specific role for the NEW property
                 new_id = prop_map[selected_view]
-                role_check = supabase.table("user_property_access")\
-                    .select("user_role")\
-                    .eq("user_email", st.session_state.user_email)\
-                    .eq("property_id", new_id)\
-                    .execute()
+                role_check = supabase.table("user_property_access").select("user_role").eq("user_email", st.session_state.user_email).eq("property_id", new_id).execute()
                 
-                # Update session states for the new property context
                 st.session_state.current_property_id = new_id
                 st.session_state.current_property_name = selected_view
                 st.session_state.user_role = role_check.data[0]['user_role'] if role_check.data else "Viewer"
-                
-                # Re-fetch permissions for the new role
                 perm_res = supabase.table("role_permissions").select("perms").eq("role_name", st.session_state.user_role).execute()
                 st.session_state.user_permissions = perm_res.data[0]['perms'] if perm_res.data else {}
-                
                 st.rerun()
         except Exception as e:
-            st.error(f"Switcher Sync Failure: {e}")
+            st.error(f"Switcher Error: {e}")
 
-    # 3. DYNAMIC NAVIGATION (Capability-Based)
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.caption("OPERATIONAL DECKS")
+    
+    # 2. NAVIGATION
     if st.session_state.current_property_id == "GLOBAL":
         page = "Executive Dashboard"
-        st.info("🌐 Network-wide view active. Select a property to access operational decks.")
+        st.info("Global View Active")
     else:
-        # Core pages
         nav_options = ["Executive Dashboard"]
-        
-        # Capability Checks (Permissions are now property-specific)
-        if check_permission("view_ledger"):
-            nav_options.append("Daily Ledger Audit")
+        if check_permission("view_ledger"): nav_options.append("Daily Ledger Audit")
         if check_permission("view_analytics"):
-            nav_options.append("Attribution Analytics")
-            nav_options.append("FloorCast AI Analyst")
-        if check_permission("view_reports"):
-            nav_options.append("Master Audit Report")
-        if check_permission("manage_alerts"):
-            nav_options.append("Strategic Alerts")
+            nav_options.extend(["Attribution Analytics", "FloorCast AI Analyst"])
+        if check_permission("view_reports"): nav_options.append("Master Audit Report")
+        if check_permission("manage_alerts"): nav_options.append("Strategic Alerts")
         if check_permission("calibrate_ai"):
-            nav_options.append("AI Calibration")
-            nav_options.append("BL-ROAS Calculator")
-
-        # Global Admin Console - only if role is Super Admin for THIS property
+            nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
         if st.session_state.get('user_role') == "Super Admin":
             nav_options.append("Global Admin Console")
 
-        page = st.radio("Intelligence Decks:", nav_options, index=0)
+        # High-end nav selection
+        page = st.radio("Navigation", nav_options, label_visibility="collapsed")
 
+    # 3. FOOTER CONTEXT
+    st.markdown("<div style='position: fixed; bottom: 20px; width: 260px;'>", unsafe_allow_html=True)
     st.divider()
+    st.caption(f"ID: {st.session_state.get('user_email')}")
+    st.markdown(f"""
+        <div style="background: #1e1e1e; padding: 10px; border-radius: 8px; border: 1px solid #333;">
+            <p style="margin:0; font-size: 0.75rem; color: #888;">CURRENT ROLE</p>
+            <p style="margin:0; font-size: 0.9rem; font-weight: 600; color: #FFCC00;">{st.session_state.get('user_role', 'Viewer')}</p>
+        </div>
+    """, unsafe_allow_html=True)
     
-    # 4. USER CONTEXT
-    st.caption(f"Logged in as: {st.session_state.get('user_email', 'User')}")
-    st.caption(f"Current Role: {st.session_state.get('user_role', 'Viewer')}")
-
-    if st.button("🚪 Logout", use_container_width=True):
+    if st.button("🚪 Terminate Session", use_container_width=True):
         st.session_state.clear()
         st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # =================================================================
 # 9. THE DATA VAULT (v24.0 - CACHED & THREAD-SAFE)
