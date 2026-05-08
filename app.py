@@ -197,13 +197,31 @@ def apply_high_end_styling():
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
         }
 
-        /* INPUT FIELD REFINEMENT */
-        div[data-baseweb="input"] > div, input, textarea, select {
+        /* --- THE FIX: INPUT FIELD REFINEMENT (Removing Bubbles & Double Borders) --- */
+        div[data-baseweb="input"] > div, 
+        div[data-baseweb="select"] > div, 
+        textarea, 
+        input {
             background-color: #FFFFFF !important;
             color: #1A1C1E !important;
-            border-radius: 10px !important;
+            border-radius: 8px !important;
             border: 1px solid #D0D5DD !important;
             padding: 8px !important;
+            box-shadow: none !important; 
+            outline: none !important;    
+        }
+
+        /* REMOVE STREAMLIT FOCUS BLUE BUBBLE GLOW */
+        div[data-baseweb="input"]:focus-within, 
+        div[data-baseweb="select"]:focus-within {
+            border: 1px solid #0047AB !important;
+            box-shadow: 0 0 0 2px rgba(0, 71, 171, 0.1) !important; 
+        }
+
+        /* FIX DROPDOWN (SELECT) FIELDS SPECIFICALLY */
+        div[role="combobox"] {
+            border: none !important; 
+            background: transparent !important;
         }
 
         /* BUTTON STYLING (Corporate Primary) */
