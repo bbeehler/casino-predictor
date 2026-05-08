@@ -27,7 +27,7 @@ def archive_sentiment_entry(text, asset_tag):
         # Quick AI Scoring before archival
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         score_prompt = f"Analyze the sentiment of this casino review. Return ONLY a single float between -1.0 (very negative) and 1.0 (very positive): {text}"
         ai_res = model.generate_content(score_prompt)
