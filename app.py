@@ -65,8 +65,7 @@ def archive_sentiment_entry(text, asset_tag):
             "sentiment_category": sentiment_category,
             "intensity_level": intensity_level, # New Addition
             "raw_text": text,
-            "timestamp": datetime.datetime.now().isoformat(),
-            "user_email": st.session_state.user_email
+            "timestamp": datetime.datetime.now().isoformat()
         }
         
         # 3. Execute Insert
