@@ -501,15 +501,19 @@ with st.sidebar:
         page = "Executive Dashboard"
         st.info("Global View Active")
     else:
-        nav_options = ["Executive Dashboard"]
-        if check_permission("view_ledger"): nav_options.append("Daily Ledger Audit")
-        if check_permission("view_analytics"):
-            nav_options.extend(["Attribution Analytics", "FloorCast AI Analyst"])
-        if check_permission("calibrate_ai"): nav_options.extend(["Scenario Simulator", "AI Calibration", "BL-ROAS Calculator"])
-        if check_permission("view_reports"): nav_options.append("Master Audit Report")
-        if check_permission("manage_alerts"): nav_options.append("Strategic Alerts")
-        if check_permission("calibrate_ai"): nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
-        if st.session_state.get('user_role') == "Super Admin": nav_options.append("Global Admin Console")
+            nav_options = ["Executive Dashboard"]
+            if check_permission("view_ledger"): nav_options.append("Daily Ledger Audit")
+            if check_permission("view_analytics"):
+                nav_options.extend(["Attribution Analytics", "FloorCast AI Analyst"])
+            if check_permission("view_reports"): nav_options.append("Master Audit Report")
+            
+            # THE CHANGE: Check for simulation permissions specifically
+            if check_permission("run_simulations"): 
+                nav_options.append("Scenario Simulator")
+                
+            if check_permission("manage_alerts"): nav_options.append("Strategic Alerts")
+            if check_permission("calibrate_ai"):
+                nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
 
         # High-end nav selection
         page = st.radio("Navigation", nav_options, label_visibility="collapsed")
@@ -1766,6 +1770,7 @@ elif page == "Global Admin Console":
             "view_analytics": "Access Attribution & Executive Dashboards",
             "view_ledger": "Access Daily Ledger Audit",
             "view_reports": "Access Master Audit Reports",
+            "run_simulations": "Access Predictive Scenario Simulator",
             "manage_alerts": "Create/Delete Strategic Watchdogs",
             "calibrate_ai": "Change AI Coefficients & ROAS"
         }
