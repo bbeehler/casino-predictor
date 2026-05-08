@@ -505,12 +505,11 @@ with st.sidebar:
         if check_permission("view_ledger"): nav_options.append("Daily Ledger Audit")
         if check_permission("view_analytics"):
             nav_options.extend(["Attribution Analytics", "FloorCast AI Analyst"])
+        if check_permission("calibrate_ai"): nav_options.extend(["Scenario Simulator", "AI Calibration", "BL-ROAS Calculator"])
         if check_permission("view_reports"): nav_options.append("Master Audit Report")
         if check_permission("manage_alerts"): nav_options.append("Strategic Alerts")
-        if check_permission("calibrate_ai"):
-            nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
-        if st.session_state.get('user_role') == "Super Admin":
-            nav_options.append("Global Admin Console")
+        if check_permission("calibrate_ai"): nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
+        if st.session_state.get('user_role') == "Super Admin": nav_options.append("Global Admin Console")
 
         # High-end nav selection
         page = st.radio("Navigation", nav_options, label_visibility="collapsed")
@@ -597,14 +596,21 @@ def get_hydrated_data(property_id, _supabase_client):
         return pd.DataFrame(), []
 
 # --- EXECUTION ---
+# This defines 'df' and 'ledger_data' globally so all pages can see them.
 df, ledger_data = get_hydrated_data(st.session_state.current_property_id, supabase)
 
-# --- 10. REFINED SAFETY GATE ---
+# =================================================================
+# 10. REFINED SAFETY GATE (v52.1 - Predictive Aware)
+# =================================================================
 # If df is empty but ledger_data exists, it means the Forensic Engine failed to process the rows.
 if df.empty:
-    if page not in ["Global Admin Console", "Master Audit Report"]:
+    # EXEMPTIONS: Do not stop the app if the user is trying to add data or simulate scenarios
+    exempt_pages = ["Global Admin Console", "Master Audit Report", "Scenario Simulator", "Daily Ledger Audit"]
+    
+    if page not in exempt_pages:
         if not ledger_data:
-            st.warning(f"🎰 No ledger data found for {st.session_state.current_property_name}. Please check the Master Audit Report.")
+            st.warning(f"🎰 Forensic Vault for {st.session_state.current_property_name} is currently empty.")
+            st.info("Please use the **Daily Ledger Audit** or **Master Audit** to ingest performance nodes.")
         else:
             st.error("🧪 Forensic Engine failed to process rows. Check AI Calibration settings.")
         st.stop()
@@ -1884,6 +1890,89 @@ elif page == "Strategic Alerts":
                 
         except Exception as e: 
             st.error(f"Monitoring Sync Error: {e}")
+
+# =================================================================
+# 18. PAGE 10: SCENARIO SIMULATION (v52.2 - Predictive Engine)
+# =================================================================
+elif page == "Scenario Simulator":
+    render_styled_header(
+        "Predictive Scenario Simulator",
+        "Simulate Future Marketing Impact & Environmental Variables",
+        "Predictive"
+    )
+
+    # --- 1. INPUT CONFIGURATION ---
+    with st.container(border=True):
+        st.markdown("#### 🛠️ Configure Simulation Parameters")
+        c1, c2, c3 = st.columns(3)
+        
+        with c1:
+            sim_date = st.date_input("Target Date", value=datetime.date.today() + datetime.timedelta(days=14))
+            sim_event = st.number_input("Expected Event Attendance", value=0, step=500, help="Anticipated crowd for concerts or promotions.")
+        
+        with c2:
+            sim_clicks = st.number_input("Planned Ad Clicks", value=1000, step=100, help="Expected traffic from Meta/Digital campaigns.")
+            sim_imps = st.number_input("Planned Impressions", value=50000, step=5000)
+            
+        with c3:
+            sim_rain = st.slider("Predicted Rain (mm)", 0, 50, 0)
+            sim_snow = st.slider("Predicted Snow (cm)", 0, 30, 0)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        run_sim = st.button("🚀 Run Scenario Projection", use_container_width=True)
+
+    # --- 2. CALCULATION ENGINE ---
+    if run_sim:
+        weights = st.session_state.coeffs
+        try:
+            dow = sim_date.strftime('%A')
+            
+            # Baseline calculation from the 'df' hydrated in Section 9
+            if 'df' in locals() and not df.empty:
+                baseline = df[df['entry_date'].dt.day_name() == dow]['actual_traffic'].mean()
+            else:
+                baseline = 1500 # Hard fallback if no history exists
+            
+            # Application of Property DNA Weights
+            digital_lift = (sim_clicks * weights.get('Clicks', 0.05)) + (sim_imps * weights.get('Social_Imp', 0.0002))
+            gravity_lift = sim_event * weights.get('Event_Gravity', 0.25)
+            friction = (sim_rain * weights.get('Rain_mm', -12)) + (sim_snow * weights.get('Snow_cm', -45))
+            
+            # Final Projection
+            projected_guests = max(0, baseline + digital_lift + gravity_lift + friction)
+            projected_rev = projected_guests * weights.get('Avg_Coin_In', 112.50)
+            lift_pct = ((digital_lift + gravity_lift) / projected_guests * 100) if projected_guests > 0 else 0
+            
+            # --- 3. OUTPUT DASHBOARD ---
+            st.divider()
+            res1, res2, res3 = st.columns(3)
+            res1.metric("Projected Traffic", f"{projected_guests:,.0f} Guests", delta=f"{baseline:,.0f} Baseline")
+            res2.metric("Projected Revenue", f"${projected_rev:,.0f}", help=f"Based on ${weights.get('Avg_Coin_In', 112.50)} Yield/Guest")
+            res3.metric("Marketing Efficiency", f"{lift_pct:.1f}% Lift")
+
+            # --- 4. AI STRATEGIC ANALYSIS ---
+            with st.expander("🕵️ AI Strategic Recommendation", expanded=True):
+                with st.spinner("Consulting Property DNA..."):
+                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    
+                    sim_context = f"""
+                    Date: {sim_date} ({dow})
+                    Baseline: {baseline}
+                    Planned Clicks: {sim_clicks}
+                    Event Attendance: {sim_event}
+                    Weather Friction: Rain {sim_rain}mm, Snow {sim_snow}cm
+                    Projected Guests: {projected_guests}
+                    Projected Revenue: ${projected_rev}
+                    """
+                    
+                    ai_prompt = f"As a Casino Marketing Analyst for {st.session_state.current_property_name}, evaluate this future scenario and provide 3 brief strategic bullet points on how to optimize this specific date: {sim_context}"
+                    
+                    response = model.generate_content(ai_prompt)
+                    st.markdown(response.text)
+            
+        except Exception as e:
+            st.error(f"Simulation Analysis Failure: {e}")
 
 # =================================================================
 # 18. FOOTER
