@@ -1848,13 +1848,13 @@ elif page == "Global Admin Console":
                     st.error(f"❌ Security Matrix Sync Error: {e}")
 
 # =================================================================
-# 17. PAGE 9: STRATEGIC ALERTS (v60.1 - Role-Based Routing)
+# 17. PAGE 9: STRATEGIC ALERTS (v60.2 - Multi-Role Response Engine)
 # =================================================================
 elif page == "Strategic Alerts":
     # 1. PREMIUM HEADER
     render_styled_header(
         "Strategic Watchdogs", 
-        "Autonomous Performance Monitoring & Role-Based Response Engine", 
+        "Autonomous Performance Monitoring & Multi-Role Response Engine", 
         "Monitoring Active"
     )
     
@@ -1868,11 +1868,16 @@ elif page == "Strategic Alerts":
             # Action Card for Trigger Creation
             with st.form("new_alert_form_v60", border=True):
                 st.markdown("#### Sentinel Configuration")
-                a_name = st.text_input("Watchdog Alias", placeholder="e.g. Revenue Floor Alert")
+                a_name = st.text_input("Watchdog Alias", placeholder="e.g. Critical Revenue Floor")
                 
-                # ROLE SELECTION: Define which group gets the alert
-                available_roles = ["Admin", "Manager", "Analyst", "Executive", "Floor Supervisor"]
-                target_role = st.selectbox("Recipient Role", available_roles, help="Which role group should receive this alert?")
+                # MULTI-ROLE SELECTION: Users can now tag multiple groups
+                available_roles = ["Super Admin", "Admin", "Manager", "Viewer", "Executive"]
+                target_roles = st.multiselect(
+                    "Recipient Roles", 
+                    available_roles, 
+                    default=["Admin"],
+                    help="All users assigned to these roles will be notified."
+                )
                 
                 a_metric = st.selectbox("Intelligence Metric", ["Revenue", "Guest Traffic", "Sentiment Score"])
                 
@@ -1884,34 +1889,39 @@ elif page == "Strategic Alerts":
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.form_submit_button("🛰️ Deploy Watchdog", use_container_width=True):
-                    # PAYLOAD UPDATED WITH target_role
-                    payload = {
-                        "property_id": st.session_state.current_property_id,
-                        "alert_name": a_name,
-                        "metric_target": a_metric,
-                        "threshold_val": float(a_val),
-                        "comparison_operator": "<" if a_op == "Drops Below" else ">",
-                        "user_email": st.session_state.user_email, # Original Creator
-                        "target_role": target_role,               # Routed Role
-                        "is_active": True
-                    }
-                    try:
-                        supabase.table("strategic_alerts").insert(payload).execute()
-                        st.success(f"Watchdog deployed to {target_role} network.")
-                        st.cache_data.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Deployment Error: {e}")
+                    if not target_roles:
+                        st.error("Please select at least one recipient role group.")
+                    else:
+                        # PAYLOAD UPDATED FOR ARRAY COLUMN (text[])
+                        payload = {
+                            "property_id": st.session_state.current_property_id,
+                            "alert_name": a_name,
+                            "metric_target": a_metric,
+                            "threshold_val": float(a_val),
+                            "comparison_operator": "<" if a_op == "Drops Below" else ">",
+                            "user_email": st.session_state.user_email,
+                            "target_role": target_roles, # Sends as Python list
+                            "is_active": True
+                        }
+                        try:
+                            supabase.table("strategic_alerts").insert(payload).execute()
+                            st.success(f"Watchdog deployed to {len(target_roles)} groups.")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Deployment Error: {e}")
 
     with col_b:
         st.markdown("### 📋 Active Network Watchdogs")
         target_id = st.session_state.get('current_property_id')
         
         try:
-            if target_id == "GLOBAL":
-                alerts_res = supabase.table("strategic_alerts").select("*").execute()
-            else:
-                alerts_res = supabase.table("strategic_alerts").select("*").eq("property_id", str(target_id)).execute()
+            # Flexible Query logic
+            query = supabase.table("strategic_alerts").select("*")
+            if target_id != "GLOBAL":
+                query = query.eq("property_id", str(target_id))
+            
+            alerts_res = query.execute()
 
             if alerts_res and alerts_res.data:
                 for alert in alerts_res.data:
@@ -1919,12 +1929,19 @@ elif page == "Strategic Alerts":
                         c1, c2 = st.columns([3, 1])
                         with c1:
                             st.markdown(f"**🔔 {alert.get('alert_name')}**")
+                            
+                            # RENDER ROLES AS BADGES
+                            roles = alert.get('target_role', [])
+                            if isinstance(roles, list):
+                                role_badges = " ".join([f"`{r}`" for r in roles])
+                            else:
+                                # Fallback for old single-string data
+                                role_badges = f"`{roles}`"
+                                
+                            st.markdown(f"**Routing to:** {role_badges}")
+                            
                             op_display = "Below" if alert.get('comparison_operator') == "<" else "Above"
                             st.caption(f"Target: {alert.get('metric_target')} | Condition: {op_display} {alert.get('threshold_val')}")
-                            
-                            # Displaying the target role for management clarity
-                            routed_role = alert.get('target_role', 'Admin')
-                            st.markdown(f"**Routing to:** `:blue[{routed_role}]` group")
                             st.caption(f"Creator: {alert.get('user_email')}")
                         with c2:
                             if st.button("Disable", key=f"dis_{alert['id']}", use_container_width=True):
