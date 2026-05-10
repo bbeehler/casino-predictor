@@ -2026,7 +2026,7 @@ elif page == "Scenario Simulator":
             st.error(f"Simulation Error: {e}")
 
 # =================================================================
-# 19. PAGE 11: EXPERIMENT VAULT (v60.4 - Hardened Type Matching)
+# 19. PAGE 11: EXPERIMENT VAULT (v60.5 - Marketing Battle Suite)
 # =================================================================
 elif page == "Experiment Vault":
     render_styled_header(
@@ -2047,7 +2047,6 @@ elif page == "Experiment Vault":
                 sel_exp_name = st.selectbox("Select Experiment to Audit:", list(exp_options.keys()))
                 active_exp = exp_options[sel_exp_name]
                 
-                # Identify Tags from Registry
                 test_name = active_exp['test_name']
                 tag_a = str(active_exp['version_a_tag']).strip()
                 tag_b = str(active_exp['version_b_tag']).strip()
@@ -2055,16 +2054,9 @@ elif page == "Experiment Vault":
                 st.info(f"🧬 Auditing: **{tag_a}** (Control) vs **{tag_b}** (Test)")
                 metric_target = st.selectbox("Success Metric", ["Traffic Lift", "Revenue (Coin-In)", "Yield per Guest"])
 
-                # --- HARDENED ANALYTICS ENGINE ---
+                # --- ANALYTICS ENGINE ---
                 if 'df' in locals() and not df.empty:
-                    # 1. Initialize & Clean Column Type
-                    if 'experiment_tag' not in df.columns:
-                        df['experiment_tag'] = None
-                    
-                    # Force conversion to string and strip hidden whitespace/tabs
                     df['experiment_tag'] = df['experiment_tag'].astype(str).str.strip()
-
-                    # 2. Filter using clean string matching
                     df_a = df[df['experiment_tag'] == tag_a]
                     df_b = df[df['experiment_tag'] == tag_b]
                     
@@ -2072,67 +2064,66 @@ elif page == "Experiment Vault":
                         st.divider()
                         rev_col = 'actual_coin_in'
                         
-                        # 3. Calculate Averages
-                        if metric_target == "Traffic Lift":
-                            avg_a, avg_b = df_a['actual_traffic'].mean(), df_b['actual_traffic'].mean()
-                        elif metric_target == "Yield per Guest":
-                            avg_a = (df_a[rev_col] / df_a['actual_traffic']).mean()
-                            avg_b = (df_b[rev_col] / df_b['actual_traffic']).mean()
-                        else:
-                            avg_a, avg_b = df_a[rev_col].mean(), df_b[rev_col].mean()
+                        # Calculate Base Averages
+                        avg_a = df_a['actual_traffic'].mean() if metric_target == "Traffic Lift" else df_a[rev_col].mean()
+                        avg_b = df_b['actual_traffic'].mean() if metric_target == "Traffic Lift" else df_b[rev_col].mean()
                         
+                        # --- REAL MARKETING METRICS ---
                         lift = ((avg_b - avg_a) / avg_a) * 100 if avg_a > 0 else 0
-                        confidence = "High" if len(df_a) + len(df_b) > 10 else "Low (Small Sample)"
-
-                        # --- ADVANCED METRIC CALCULATIONS ---
-                        lift = ((avg_b - avg_a) / avg_a) * 100 if avg_a > 0 else 0
+                        incremental_guests = (df_b['actual_traffic'].mean() - df_a['actual_traffic'].mean()) * len(df_b)
                         
-                        # 1. Incremental Gain (Total volume added by Version B)
-                        incremental_volume = (avg_b - avg_a) * len(df_b)
-                        
-                        # 2. Volatility Analysis (Standard Deviation)
-                        std_a = df_a['actual_traffic'].std() if metric_target == "Traffic Lift" else df_a[rev_col].std()
-                        std_b = df_b['actual_traffic'].std() if metric_target == "Traffic Lift" else df_b[rev_col].std()
-                        
-                        # 3. Yield Shift
+                        # Guest Value (Yield)
                         yield_a = df_a[rev_col].sum() / df_a['actual_traffic'].sum() if df_a['actual_traffic'].sum() > 0 else 0
                         yield_b = df_b[rev_col].sum() / df_b['actual_traffic'].sum() if df_b['actual_traffic'].sum() > 0 else 0
-                        yield_lift = ((yield_b - yield_a) / yield_a) * 100 if yield_a > 0 else 0
+                        yield_delta = ((yield_b - yield_a) / yield_a) * 100 if yield_a > 0 else 0
+                        
+                        # Estimated Financial Impact
+                        total_revenue_lift = incremental_guests * yield_b
 
-                        # --- ROW 1: PRIMARY LIFT ---
-                        st.markdown("### 📈 Core Performance Delta")
+                        # --- EXECUTIVE SCOREBOARD ---
+                        st.markdown(f"### 🏁 Campaign Battle: {tag_a} vs {tag_b}")
+                        
+                        # ROW 1: THE BIG THREE
                         m1, m2, m3 = st.columns(3)
-                        m1.metric(f"Avg {tag_a}", f"{avg_a:,.1f}", help="Baseline Average")
-                        m2.metric(f"Avg {tag_b}", f"{avg_b:,.1f}", delta=f"{lift:.1f}%", help="Test Version Average")
-                        m3.metric("Incremental Impact", f"+{incremental_volume:,.0f}", delta_color="normal", help="Total additional units generated by Version B vs Baseline")
+                        
+                        with m1:
+                            st.metric("Total Volume Lift", f"+{incremental_guests:,.0f} Guests", 
+                                      delta=f"{lift:.1f}% vs Baseline", 
+                                      help="Total additional foot traffic generated during the test period.")
+                        
+                        with m2:
+                            st.metric("Guest Value Shift", f"${yield_b:,.2f}", 
+                                      delta=f"{yield_delta:.1f}% Yield", 
+                                      help="Is the quality of guest spending more or less than the baseline?")
+                        
+                        with m3:
+                            st.metric("Estimated Rev Impact", f"${total_revenue_lift:,.0f}", 
+                                      delta="Incremental", 
+                                      help="The estimated additional revenue specifically attributed to the campaign lift.")
 
-                        # --- ROW 2: FINANCIAL & STABILITY ---
-                        st.markdown("### ⚖️ Reliability & Yield")
-                        m4, m5, m6 = st.columns(3)
-                        
-                        # Yield Metric
-                        m4.metric("Yield per Guest", f"${yield_b:,.2f}", delta=f"{yield_lift:.1f}%", help="Is the test driving higher-value players?")
-                        
-                        # Volatility Metric (Lower is usually better/more predictable)
-                        vol_color = "inverse" if std_b > std_a else "normal"
-                        m5.metric("Stability (Std Dev)", f"{std_b:,.1f}", delta=f"{((std_b-std_a)/std_a)*100:+.1f}%", delta_color=vol_color, help="Lower volatility means the result is more consistent.")
-                        
-                        # Sample Size Weight
-                        m6.metric("Data Maturity", f"{len(df_a) + len(df_b)} Days", help="Total days of data analyzed.")
+                        st.divider()
 
-                        # AI Interpretation
+                        # ROW 2: DECISION SUPPORT
+                        c1, c2, c3 = st.columns(3)
+                        is_winner = tag_b if avg_b > avg_a else tag_a
+                        is_reliable = "✅ Highly Reliable" if len(df_b) >= 7 else "⚠️ Trending (Needs 7+ days)"
+                        
+                        c1.markdown(f"**Top Performing Version**<br><span style='color:#FFCC00; font-size:1.2rem; font-weight:bold;'>🏆 {is_winner}</span>", unsafe_allow_html=True)
+                        c2.markdown(f"**Data Reliability**<br>{is_reliable}", unsafe_allow_html=True)
+                        c3.markdown(f"**Test Duration**<br>{len(df_b)} Active Days", unsafe_allow_html=True)
+
+                        # AI Specialist Interpretation
                         st.markdown("<br>", unsafe_allow_html=True)
-                        with st.expander("🕵️ AI Experiment Audit", expanded=True):
+                        with st.expander("🕵️ Specialist's Verdict", expanded=True):
                             with st.spinner("Analyzing performance variances..."):
                                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                                 model = genai.GenerativeModel('gemini-2.5-flash')
-                                t_context = f"Test: {test_name} | A: {avg_a} | B: {avg_b} | Lift: {lift:.1f}%"
-                                prompt = f"As a Casino Data Scientist for {st.session_state.current_property_name}, analyze this A/B test results: {t_context}"
+                                t_context = f"Test: {test_name} | Lift: {lift:.1f}% | Yield Shift: {yield_delta:.1f}% | Revenue Impact: ${total_revenue_lift:,.0f}"
+                                prompt = f"You are a Senior Casino Marketing Director. Based on these results for {st.session_state.current_property_name}, give a 2-sentence verdict on whether to kill this campaign or roll it out as the new baseline: {t_context}"
                                 ai_report = model.generate_content(prompt)
                                 st.markdown(ai_report.text)
                     else:
                         st.warning(f"🎰 Data Missing: Found {len(df_a)} days for '{tag_a}' and {len(df_b)} days for '{tag_b}'.")
-                        st.info("Ensure the Experiment Tags in your Ledger match the registry exactly (Case Sensitive).")
                 else:
                     st.error("No ledger data available.")
             else:
@@ -2146,7 +2137,7 @@ elif page == "Experiment Vault":
         with st.form("new_experiment_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
             with c1:
-                n_name = st.text_input("Experiment Name", placeholder="e.g. Free Play vs F&B Offer")
+                n_name = st.text_input("Experiment Name", placeholder="e.g. March Cars Promo")
                 n_start = st.date_input("Launch Date")
             with c2:
                 n_a = st.text_input("Control Tag (Version A)", value="Control")
@@ -2157,12 +2148,9 @@ elif page == "Experiment Vault":
             if st.form_submit_button("🚀 Deploy to Registry"):
                 if n_name and n_a and n_b:
                     payload = {
-                        "property_id": st.session_state.current_property_id,
-                        "test_name": n_name,
-                        "version_a_tag": n_a.strip(),
-                        "version_b_tag": n_b.strip(),
-                        "start_date": str(n_start),
-                        "objective": n_obj
+                        "property_id": st.session_state.current_property_id, "test_name": n_name,
+                        "version_a_tag": n_a.strip(), "version_b_tag": n_b.strip(),
+                        "start_date": str(n_start), "objective": n_obj
                     }
                     supabase.table("experiment_registry").insert(payload).execute()
                     st.success(f"Experiment '{n_name}' successfully provisioned.")
@@ -2176,7 +2164,6 @@ elif page == "Experiment Vault":
             for exp in reg_res.data:
                 with st.expander(f"🔬 {exp['test_name']} ({exp['version_a_tag']} vs {exp['version_b_tag']})"):
                     st.write(f"**Objective:** {exp['objective']}")
-                    st.caption(f"ID: {exp['id']} | Launched: {exp['start_date']}")
                     if st.button("🗑️ Terminate & Delete", key=f"del_{exp['id']}", use_container_width=True):
                         supabase.table("experiment_registry").delete().eq("id", exp['id']).execute()
                         st.warning(f"Experiment removed.")
