@@ -1832,7 +1832,7 @@ elif page == "Global Admin Console":
                     st.error(f"❌ Security Matrix Sync Error: {e}")
 
 # =================================================================
-# 17. PAGE 9: STRATEGIC ALERTS (v52.0 - High-End Monitoring)
+# 17. PAGE 9: STRATEGIC ALERTS (v52.1 - Schema Aligned)
 # =================================================================
 elif page == "Strategic Alerts":
     # 1. PREMIUM HEADER
@@ -1863,17 +1863,21 @@ elif page == "Strategic Alerts":
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.form_submit_button("🛰️ Deploy Watchdog", use_container_width=True):
+                    # PAYLOAD ALIGNED TO YOUR SCHEMA:
                     payload = {
                         "property_id": st.session_state.current_property_id,
                         "alert_name": a_name,
                         "metric_target": a_metric,
-                        "threshold_val": a_val,
+                        "threshold_val": float(a_val),
                         "comparison_operator": "<" if a_op == "Drops Below" else ">",
-                        "user_email": st.session_state.user_email
+                        "user_email": st.session_state.user_email,
+                        "is_active": True
                     }
                     try:
+                        # Ensure RLS is disabled or a policy exists for 'insert'
                         supabase.table("strategic_alerts").insert(payload).execute()
                         st.success("Watchdog Synchronized and Live.")
+                        st.cache_data.clear()
                         st.rerun()
                     except Exception as e:
                         st.error(f"Deployment Error: {e}")
@@ -1895,10 +1899,14 @@ elif page == "Strategic Alerts":
                         c1, c2 = st.columns([3, 1])
                         with c1:
                             st.markdown(f"**🔔 {alert.get('alert_name')}**")
-                            st.caption(f"Target: {alert.get('metric_target')} | Condition: {alert.get('comparison_operator')} {alert.get('threshold_val')}")
+                            # Map the specific schema fields for display
+                            op_display = "Below" if alert.get('comparison_operator') == "<" else "Above"
+                            st.caption(f"Target: {alert.get('metric_target')} | Condition: {op_display} {alert.get('threshold_val')}")
+                            st.caption(f"Recipient: {alert.get('user_email')}")
                         with c2:
                             if st.button("Disable", key=f"dis_{alert['id']}", use_container_width=True):
                                 supabase.table("strategic_alerts").delete().eq("id", alert['id']).execute()
+                                st.cache_data.clear()
                                 st.rerun()
             else:
                 st.markdown("""
