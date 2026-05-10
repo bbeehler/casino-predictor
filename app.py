@@ -1848,13 +1848,13 @@ elif page == "Global Admin Console":
                     st.error(f"❌ Security Matrix Sync Error: {e}")
 
 # =================================================================
-# 17. PAGE 9: STRATEGIC ALERTS (v52.1 - Schema Aligned)
+# 17. PAGE 9: STRATEGIC ALERTS (v60.1 - Role-Based Routing)
 # =================================================================
 elif page == "Strategic Alerts":
     # 1. PREMIUM HEADER
     render_styled_header(
         "Strategic Watchdogs", 
-        "Autonomous Performance Monitoring & Threshold Response Engine", 
+        "Autonomous Performance Monitoring & Role-Based Response Engine", 
         "Monitoring Active"
     )
     
@@ -1866,9 +1866,14 @@ elif page == "Strategic Alerts":
             st.info("💡 Please select a specific property environment to deploy a watchdog.")
         else:
             # Action Card for Trigger Creation
-            with st.form("new_alert_form_v52", border=True):
+            with st.form("new_alert_form_v60", border=True):
                 st.markdown("#### Sentinel Configuration")
                 a_name = st.text_input("Watchdog Alias", placeholder="e.g. Revenue Floor Alert")
+                
+                # ROLE SELECTION: Define which group gets the alert
+                available_roles = ["Admin", "Manager", "Analyst", "Executive", "Floor Supervisor"]
+                target_role = st.selectbox("Recipient Role", available_roles, help="Which role group should receive this alert?")
+                
                 a_metric = st.selectbox("Intelligence Metric", ["Revenue", "Guest Traffic", "Sentiment Score"])
                 
                 c1, c2 = st.columns(2)
@@ -1879,20 +1884,20 @@ elif page == "Strategic Alerts":
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.form_submit_button("🛰️ Deploy Watchdog", use_container_width=True):
-                    # PAYLOAD ALIGNED TO YOUR SCHEMA:
+                    # PAYLOAD UPDATED WITH target_role
                     payload = {
                         "property_id": st.session_state.current_property_id,
                         "alert_name": a_name,
                         "metric_target": a_metric,
                         "threshold_val": float(a_val),
                         "comparison_operator": "<" if a_op == "Drops Below" else ">",
-                        "user_email": st.session_state.user_email,
+                        "user_email": st.session_state.user_email, # Original Creator
+                        "target_role": target_role,               # Routed Role
                         "is_active": True
                     }
                     try:
-                        # Ensure RLS is disabled or a policy exists for 'insert'
                         supabase.table("strategic_alerts").insert(payload).execute()
-                        st.success("Watchdog Synchronized and Live.")
+                        st.success(f"Watchdog deployed to {target_role} network.")
                         st.cache_data.clear()
                         st.rerun()
                     except Exception as e:
@@ -1910,15 +1915,17 @@ elif page == "Strategic Alerts":
 
             if alerts_res and alerts_res.data:
                 for alert in alerts_res.data:
-                    # High-end container for each alert
                     with st.container(border=True):
                         c1, c2 = st.columns([3, 1])
                         with c1:
                             st.markdown(f"**🔔 {alert.get('alert_name')}**")
-                            # Map the specific schema fields for display
                             op_display = "Below" if alert.get('comparison_operator') == "<" else "Above"
                             st.caption(f"Target: {alert.get('metric_target')} | Condition: {op_display} {alert.get('threshold_val')}")
-                            st.caption(f"Recipient: {alert.get('user_email')}")
+                            
+                            # Displaying the target role for management clarity
+                            routed_role = alert.get('target_role', 'Admin')
+                            st.markdown(f"**Routing to:** `:blue[{routed_role}]` group")
+                            st.caption(f"Creator: {alert.get('user_email')}")
                         with c2:
                             if st.button("Disable", key=f"dis_{alert['id']}", use_container_width=True):
                                 supabase.table("strategic_alerts").delete().eq("id", alert['id']).execute()
