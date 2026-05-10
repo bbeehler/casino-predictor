@@ -2026,7 +2026,7 @@ elif page == "Scenario Simulator":
             st.error(f"Simulation Error: {e}")
 
 # =================================================================
-# 19. PAGE 11: EXPERIMENT VAULT (v60.5 - Marketing Battle Suite)
+# 19. PAGE 11: EXPERIMENT VAULT (v60.6 - Unified Command Edition)
 # =================================================================
 elif page == "Experiment Vault":
     render_styled_header(
@@ -2043,19 +2043,20 @@ elif page == "Experiment Vault":
             reg_res = supabase.table("experiment_registry").select("*").eq("property_id", st.session_state.current_property_id).execute()
             
             if reg_res.data:
+                # 1. Selection Logic
                 exp_options = {e['test_name']: e for e in reg_res.data}
-                sel_exp_name = st.selectbox("Select Experiment to Audit:", list(exp_options.keys()))
+                sel_exp_name = st.selectbox("Select Active Experiment:", list(exp_options.keys()))
                 active_exp = exp_options[sel_exp_name]
                 
                 test_name = active_exp['test_name']
                 tag_a = str(active_exp['version_a_tag']).strip()
                 tag_b = str(active_exp['version_b_tag']).strip()
                 
-                st.info(f"🧬 Auditing: **{tag_a}** (Control) vs **{tag_b}** (Test)")
-                metric_target = st.selectbox("Success Metric", ["Traffic Lift", "Revenue (Coin-In)", "Yield per Guest"])
+                st.markdown(f"#### 🔎 Unified Audit: {tag_a} vs {tag_b}")
 
-                # --- ANALYTICS ENGINE ---
+                # --- 2. THE UNIFIED ANALYTICS ENGINE ---
                 if 'df' in locals() and not df.empty:
+                    # Clean and align tags
                     df['experiment_tag'] = df['experiment_tag'].astype(str).str.strip()
                     df_a = df[df['experiment_tag'] == tag_a]
                     df_b = df[df['experiment_tag'] == tag_b]
@@ -2064,72 +2065,82 @@ elif page == "Experiment Vault":
                         st.divider()
                         rev_col = 'actual_coin_in'
                         
-                        # Calculate Base Averages
-                        avg_a = df_a['actual_traffic'].mean() if metric_target == "Traffic Lift" else df_a[rev_col].mean()
-                        avg_b = df_b['actual_traffic'].mean() if metric_target == "Traffic Lift" else df_b[rev_col].mean()
+                        # PILLAR 1: VOLUME (Traffic)
+                        vol_a, vol_b = df_a['actual_traffic'].mean(), df_b['actual_traffic'].mean()
+                        vol_lift = ((vol_b - vol_a) / vol_a) * 100 if vol_a > 0 else 0
+                        incremental_guests = (vol_b - vol_a) * len(df_b)
                         
-                        # --- REAL MARKETING METRICS ---
-                        lift = ((avg_b - avg_a) / avg_a) * 100 if avg_a > 0 else 0
-                        incremental_guests = (df_b['actual_traffic'].mean() - df_a['actual_traffic'].mean()) * len(df_b)
-                        
-                        # Guest Value (Yield)
+                        # PILLAR 2: VALUE (Yield per Guest)
                         yield_a = df_a[rev_col].sum() / df_a['actual_traffic'].sum() if df_a['actual_traffic'].sum() > 0 else 0
                         yield_b = df_b[rev_col].sum() / df_b['actual_traffic'].sum() if df_b['actual_traffic'].sum() > 0 else 0
                         yield_delta = ((yield_b - yield_a) / yield_a) * 100 if yield_a > 0 else 0
                         
-                        # Estimated Financial Impact
+                        # PILLAR 3: REVENUE (Financial Impact)
                         total_revenue_lift = incremental_guests * yield_b
 
                         # --- EXECUTIVE SCOREBOARD ---
-                        st.markdown(f"### 🏁 Campaign Battle: {tag_a} vs {tag_b}")
-                        
-                        # ROW 1: THE BIG THREE
                         m1, m2, m3 = st.columns(3)
                         
                         with m1:
                             st.metric("Total Volume Lift", f"+{incremental_guests:,.0f} Guests", 
-                                      delta=f"{lift:.1f}% vs Baseline", 
-                                      help="Total additional foot traffic generated during the test period.")
+                                      delta=f"{vol_lift:.1f}% vs Baseline")
                         
                         with m2:
                             st.metric("Guest Value Shift", f"${yield_b:,.2f}", 
-                                      delta=f"{yield_delta:.1f}% Yield", 
-                                      help="Is the quality of guest spending more or less than the baseline?")
+                                      delta=f"{yield_delta:.1f}% Yield")
                         
                         with m3:
                             st.metric("Estimated Rev Impact", f"${total_revenue_lift:,.0f}", 
-                                      delta="Incremental", 
-                                      help="The estimated additional revenue specifically attributed to the campaign lift.")
+                                      delta="Incremental")
 
                         st.divider()
 
                         # ROW 2: DECISION SUPPORT
                         c1, c2, c3 = st.columns(3)
-                        is_winner = tag_b if avg_b > avg_a else tag_a
+                        
+                        # Winner logic based on Total Performance (Volume * Yield)
+                        is_winner = tag_b if (vol_b * yield_b) > (vol_a * yield_a) else tag_a
                         is_reliable = "✅ Highly Reliable" if len(df_b) >= 7 else "⚠️ Trending (Needs 7+ days)"
                         
                         c1.markdown(f"**Top Performing Version**<br><span style='color:#FFCC00; font-size:1.2rem; font-weight:bold;'>🏆 {is_winner}</span>", unsafe_allow_html=True)
                         c2.markdown(f"**Data Reliability**<br>{is_reliable}", unsafe_allow_html=True)
-                        c3.markdown(f"**Test Duration**<br>{len(df_b)} Active Days", unsafe_allow_html=True)
+                        c3.markdown(f"**Test Sample Size**<br>{len(df_b)} Active Days", unsafe_allow_html=True)
 
-                        # AI Specialist Interpretation
+                        # --- 3. AUTO-FOCUS AI SPECIALIST ---
                         st.markdown("<br>", unsafe_allow_html=True)
-                        with st.expander("🕵️ Specialist's Verdict", expanded=True):
-                            with st.spinner("Analyzing performance variances..."):
+                        with st.expander("🕵️ Specialist's Integrated Verdict", expanded=True):
+                            with st.spinner("Analyzing cross-metric correlations..."):
                                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                                 model = genai.GenerativeModel('gemini-2.5-flash')
-                                t_context = f"Test: {test_name} | Lift: {lift:.1f}% | Yield Shift: {yield_delta:.1f}% | Revenue Impact: ${total_revenue_lift:,.0f}"
-                                prompt = f"You are a Senior Casino Marketing Director. Based on these results for {st.session_state.current_property_name}, give a 2-sentence verdict on whether to kill this campaign or roll it out as the new baseline: {t_context}"
+                                
+                                # Feed full context to the AI for holistic analysis
+                                t_context = {
+                                    "Volume_Change": f"{vol_lift:.1f}%",
+                                    "Yield_Change": f"{yield_delta:.1f}%",
+                                    "Revenue_Impact": f"${total_revenue_lift:,.0f}",
+                                    "Incremental_Guests": f"{incremental_guests:,.0f}"
+                                }
+                                
+                                prompt = f"""
+                                You are a Senior Casino Marketing Director. Audit this A/B test for {st.session_state.current_property_name}.
+                                Data Summary: {t_context}
+                                
+                                Provide a concise, energetic verdict:
+                                1. Evaluate the trade-off: Did we sacrifice Guest Quality (Yield) to get Volume (Traffic)?
+                                2. Business Case: Is the incremental revenue high enough to make this the new baseline?
+                                3. Strategic Action: One clear next step for the marketing team.
+                                """
+                                
                                 ai_report = model.generate_content(prompt)
                                 st.markdown(ai_report.text)
                     else:
-                        st.warning(f"🎰 Data Missing: Found {len(df_a)} days for '{tag_a}' and {len(df_b)} days for '{tag_b}'.")
+                        st.warning(f"🎰 Data Missing: Ensure ledger entries are tagged '{tag_a}' and '{tag_b}'.")
                 else:
                     st.error("No ledger data available.")
             else:
                 st.info("No experiments registered. Switch to 'Manage Registry' to create your first test.")
         except Exception as e:
-            st.error(f"Registry Sync Error: {e}")
+            st.error(f"Registry Error: {e}")
 
     # --- TAB 2: MANAGE REGISTRY ---
     with tab_manage:
@@ -2143,7 +2154,7 @@ elif page == "Experiment Vault":
                 n_a = st.text_input("Control Tag (Version A)", value="Control")
                 n_b = st.text_input("Test Tag (Version B)", value="Test_V1")
             
-            n_obj = st.text_area("Strategic Objective", placeholder="Describe the goal of this test...")
+            n_obj = st.text_area("Strategic Objective")
             
             if st.form_submit_button("🚀 Deploy to Registry"):
                 if n_name and n_a and n_b:
@@ -2153,20 +2164,19 @@ elif page == "Experiment Vault":
                         "start_date": str(n_start), "objective": n_obj
                     }
                     supabase.table("experiment_registry").insert(payload).execute()
-                    st.success(f"Experiment '{n_name}' successfully provisioned.")
+                    st.success(f"Experiment '{n_name}' live in registry.")
                     st.rerun()
                 else:
-                    st.error("Missing required fields.")
+                    st.error("Fill in all fields to deploy.")
 
         st.divider()
-        st.subheader("📂 Active Experiments")
+        st.subheader("📂 Active Registry")
         if reg_res.data:
             for exp in reg_res.data:
                 with st.expander(f"🔬 {exp['test_name']} ({exp['version_a_tag']} vs {exp['version_b_tag']})"):
                     st.write(f"**Objective:** {exp['objective']}")
-                    if st.button("🗑️ Terminate & Delete", key=f"del_{exp['id']}", use_container_width=True):
+                    if st.button("🗑️ Delete Experiment", key=f"del_{exp['id']}", use_container_width=True):
                         supabase.table("experiment_registry").delete().eq("id", exp['id']).execute()
-                        st.warning(f"Experiment removed.")
                         st.rerun()
 
 # =================================================================
