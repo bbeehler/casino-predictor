@@ -242,7 +242,7 @@ def apply_high_end_styling():
             -webkit-text-fill-color: #1A1C1E !important;
         }
 
-        /* --- THE FIX: INPUT & FLOORCAST AI VISIBILITY KIT --- */
+        /* --- INPUT & FLOORCAST AI VISIBILITY KIT --- */
         
         /* Force Chat Input Container and Text Areas to be white with dark text */
         .stChatInputContainer, .stTextArea textarea, .stChatInput input {
@@ -298,6 +298,22 @@ def apply_high_end_styling():
         header[data-testid="stHeader"] {
             background-color: transparent !important;
         }
+
+        /* Targets the Label (e.g., 'Total Volume Lift') */
+    [data-testid="stMetricLabel"] {
+        font-size: 0.8rem !important;
+        font-weight: 600 !important;
+    }
+
+    /* Targets the Value (e.g., '1,200') */
+    [data-testid="stMetricValue"] {
+        font-size: 1.5rem !important;
+    }
+
+    /* Targets the Delta (e.g., '+5.2%') */
+    [data-testid="stMetricDelta"] {
+        font-size: 0.7rem !important;
+    }
         </style>
     """, unsafe_allow_html=True)
 
