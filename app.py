@@ -1487,7 +1487,7 @@ elif page == "Sentiment Scoring":
     with c1:
         search_query = st.text_input("Search Content", placeholder="Keyword search (e.g. 'parking', 'steak')")
     with c2:
-        filter_asset = st.selectbox("Asset Tag", ["All Assets"] + tags)
+        filter_asset = st.selectbox("Asset", ["All Assets"] + tags)
     with c3:
         # Assuming scores are 0-1 (e.g. 0.85)
         min_score = st.slider("Min AI Score", 0.0, 1.0, 0.0, step=0.1)
