@@ -568,7 +568,7 @@ with st.sidebar:
         nav_options = ["Executive Dashboard"]
         if check_permission("view_ledger"): nav_options.append("Daily Ledger Audit")
         if check_permission("view_analytics"):
-            nav_options.extend(["Attribution Analytics", "FloorCast AI Analyst"])
+            nav_options.extend(["Attribution Analytics", "Sentiment Scoring"])
         if check_permission("view_reports"): nav_options.append("Master Audit Report")
         if check_permission("run_simulations"): nav_options.append("Scenario Simulator")
         if check_permission("run_experiments"): nav_options.append("Experiment Vault")
@@ -1428,59 +1428,27 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: AI STRATEGIC ANALYST (v60.0 - Role-Shielded)
+# 14. PAGE 6: SENTIMENT INTELLIGENCE (v60.5 - Research & Ingestion)
 # =================================================================
-elif page == "FloorCast AI Analyst":
+elif page == "Sentiment Intelligence":
     render_styled_header(
-        f"AI Strategic Analyst: {st.session_state.current_property_name}",
-        "Unified Intelligence: Correlating Ledger, Sentiment, ROI Audits, & Events",
-        "AI Online"
+        f"Sentiment Intelligence: {st.session_state.current_property_name}",
+        "Vault Research: Analyzing Guest Sentiment & AI Scoring",
+        "Vault Active"
     )
     
-    # --- 1. DEEP SYNC DATA AGGREGATION (Visible to All) ---
-    ledger_csv = "No ledger data available."
-    sent_csv = "No sentiment data available."
-    roi_csv = "No ROI records available."
-
-    with st.status(f"🔗 Synchronizing {st.session_state.current_property_name} Intelligence...", expanded=False) as status:
-        # Pull Ledger
-        if 'ledger_data' in locals() and ledger_data:
-            try:
-                m_audit = get_forensic_metrics(ledger_data, st.session_state.coeffs)
-                ledger_csv = m_audit['df'].to_csv(index=False)
-                status.write("📊 Daily Ledger Nodes Linked")
-            except: pass
-        
-        # Pull Sentiment
-        try:
-            sent_res = supabase.table("sentiment_history").select("*")\
-                .eq("property_id", st.session_state.current_property_id)\
-                .order("timestamp", desc=True).limit(50).execute()
-            if sent_res.data: 
-                sent_csv = pd.DataFrame(sent_res.data).to_csv(index=False)
-                status.write("💬 Sentiment Records Synced")
-        except: pass
-
-        # Pull ROI
-        try:
-            roi_res = supabase.table("monthly_roi").select("*").eq("property_id", st.session_state.current_property_id).execute()
-            if roi_res.data: roi_csv = pd.DataFrame(roi_res.data).to_csv(index=False)
-            status.write("📈 ROI Matrices Mapped")
-        except: pass
-
-        status.update(label="✅ Strategic Intelligence Fully Hydrated", state="complete")
+    # --- 1. DATA HYDRATION ---
+    try:
+        asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
+        tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall Property"]
+    except:
+        tags = ["Overall Property"]
 
     # --- 2. ENTRY MODULES (Role Restricted) ---
     authorized_roles = ["Super Admin", "Admin", "Manager"]
     user_role = st.session_state.get('user_role', 'Viewer')
 
     if user_role in authorized_roles:
-        try:
-            asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
-            tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall Property"]
-        except:
-            tags = ["Overall Property"]
-
         col_input1, col_input2 = st.columns(2)
 
         with col_input1:
@@ -1508,44 +1476,61 @@ elif page == "FloorCast AI Analyst":
                     st.rerun()
         st.divider()
     else:
-        # Subtle indicator for those without write-access
         st.caption("🔒 Data Ingestion tools restricted to Management roles.")
 
-    # --- 3. THE CHAT INTERFACE (Visible to All) ---
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    chat_container = st.container(height=500, border=False)
+    # --- 3. SENTIMENT VAULT RESEARCH (New Research Tool) ---
+    st.markdown("### 🔍 Sentiment Vault Research")
+    st.caption("Filter and read historical reviews archived in the property ledger.")
     
-    with chat_container:
-        for m in st.session_state.messages:
-            with st.chat_message(m["role"]):
-                st.markdown(m["content"])
+    # Research Filters
+    c1, c2, c3 = st.columns([1.5, 1, 1])
+    with c1:
+        search_query = st.text_input("Search Content", placeholder="Keyword search (e.g. 'parking', 'steak')")
+    with c2:
+        filter_asset = st.selectbox("Asset Tag", ["All Assets"] + tags)
+    with c3:
+        # Assuming scores are 0-1 (e.g. 0.85)
+        min_score = st.slider("Min AI Score", 0.0, 1.0, 0.0, step=0.1)
 
-    prompt = st.chat_input(f"Consult with the {st.session_state.current_property_name} Analyst...")
-    
-    if prompt:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with chat_container:
-            with st.chat_message("user"):
-                st.markdown(prompt)
+    # Fetch Data
+    try:
+        query = supabase.table("sentiment_history").select("*").eq("property_id", st.session_state.current_property_id)
+        if filter_asset != "All Assets":
+            query = query.eq("asset_tag", filter_asset)
+        
+        vault_res = query.order("timestamp", desc=True).limit(100).execute()
 
-            try:
-                import google.generativeai as genai
-                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel('gemini-2.5-flash') 
-                
-                with st.chat_message("assistant"):
-                    with st.spinner("🕵️ AI Analyst is correlating data points..."):
-                        dossier = f"CONTEXT: {st.session_state.current_property_name}\nLEDGER: {ledger_csv}\nSENTIMENT: {sent_csv}\nROI: {roi_csv}"
-                        full_query = f"Consultant Mode. User Question: {prompt}\n\nDATA:\n{dossier}"
-                        response = model.generate_content(full_query)
-                        st.markdown(response.text)
-                
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
-                
-            except Exception as e:
-                st.error(f"Consultation Error: {e}")
+        if vault_res.data:
+            df_vault = pd.DataFrame(vault_res.data)
+            
+            # Apply Search Filter Locally
+            if search_query:
+                df_vault = df_vault[df_vault['review_text'].str.contains(search_query, case=False)]
+            
+            # Apply Score Filter
+            df_vault = df_vault[df_vault['sentiment_score'] >= min_score]
+
+            if not df_vault.empty:
+                for _, row in df_vault.iterrows():
+                    with st.container(border=True):
+                        v_col1, v_col2 = st.columns([4, 1])
+                        with v_col1:
+                            st.markdown(f"**Asset:** `{row['asset_tag']}`")
+                            st.write(row['review_text'])
+                            st.caption(f"Captured: {row['timestamp'][:16]}")
+                        with v_col2:
+                            score = row['sentiment_score']
+                            # Dynamic color coding for the score badge
+                            score_color = "green" if score >= 0.7 else "orange" if score >= 0.4 else "red"
+                            st.metric("AI Score", f"{score:.2f}")
+                            st.markdown(f"<div style='height:8px; width:100%; background:{score_color}; border-radius:4px;'></div>", unsafe_allow_html=True)
+            else:
+                st.info("No reviews found matching the search criteria.")
+        else:
+            st.info("The Sentiment Vault for this property is currently empty.")
+            
+    except Exception as e:
+        st.error(f"Vault Retrieval Error: {e}")
 
 # =================================================================
 # 15. PAGE 7: BL-ROAS COMMAND CENTER (v52.0 - High-End ROI Audit)
