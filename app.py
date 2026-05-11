@@ -88,96 +88,59 @@ import streamlit as st
 # GLOBAL AI ENGINES (v61.5 - Stability & Forensic Audit)
 # =================================================================
 
-def generate_ai_prediction(target_date, property_name):
-    """
-    Acts as the shared intelligence service. 
-    Uses 1.5-flash for high-volume stability during backfills.
-    """
-    try:
-        import google.generativeai as genai
-        import re
-        
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        # Stable production model to prevent rate-limit zeros
-        model = genai.GenerativeModel('gemini-2.5-flash') 
-        
-        day_of_week = pd.to_datetime(target_date).day_name()
-        
-        prompt = f"""
-        Predict total guest traffic (integer) for {property_name} 
-        on {target_date} ({day_of_week}). 
-        Context: Hard Rock Casino operation in Ottawa.
-        Return ONLY the raw integer.
-        """
-        
-        response = model.generate_content(prompt)
-        # Regex extraction to handle any unexpected text in the response
-        numbers = re.findall(r'\d+', response.text)
-        
-        return float(numbers[0]) if numbers else 0.0
-    except Exception as e:
-        # Sidecar error logging for visibility
-        st.sidebar.error(f"Gemini API Error ({target_date}): {e}")
-        return 0.0
-
 def run_forensic_backfill():
-    """
-    Brute force backfill to ensure historical nodes are populated.
-    """
+    """Loud Debugger: Prints every internal step to the UI to find the silent failure."""
     try:
-        # 1. Pull Fresh Ledger
+        # 1. Fetch data
         res = supabase.table("ledger").select("*").eq("property_id", st.session_state.current_property_id).execute()
         
         if not res.data:
-            st.error("No ledger data found.")
+            st.error("CRITICAL: Supabase returned 0 rows for this property.")
             return
 
         targets = res.data
-        total = len(targets)
+        st.info(f"Checking {len(targets)} nodes. Look below for live updates:")
         
-        st.write(f"🔍 Forensic Hydration: Processing {total} nodes...")
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        for i, row in enumerate(targets):
-            # Case-insensitive key mapping
-            row_id = row.get('id') or row.get('ID') or row.get('Id')
+        for row in targets:
+            # Case-insensitive ID and Date
+            row_id = row.get('id') or row.get('ID')
             date_val = row.get('entry_date') or row.get('Entry_Date')
             
-            if not row_id:
-                continue
+            with st.container(border=True):
+                st.write(f"**Processing ID:** `{row_id}` | **Date:** `{date_val}`")
+                
+                # --- STEP A: TEST THE AI ---
+                import google.generativeai as genai
+                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                model = genai.GenerativeModel('gemini-2.5-flash')
+                
+                ai_response = model.generate_content(f"Predict casino traffic for {date_val}. Return ONLY a number.")
+                raw_text = ai_response.text.strip()
+                st.write(f"🤖 AI Raw Response: `{raw_text}`")
+                
+                # Clean the number
+                numbers = re.findall(r'\d+', raw_text)
+                ai_val = float(numbers[0]) if numbers else 0.0
+                st.write(f"🔢 Parsed Value: `{ai_val}`")
+                
+                # --- STEP B: TEST THE DATABASE ---
+                if ai_val > 0:
+                    update_res = supabase.table("ledger").update({"predicted_traffic": ai_val}).eq("id", row_id).execute()
+                    
+                    if update_res.data:
+                        st.success(f"✅ DB Update Verified for ID {row_id}")
+                    else:
+                        st.error(f"❌ DB Rejected Update for ID {row_id}. (Check RLS or Column Name)")
+                else:
+                    st.warning("⚠️ AI returned 0. Skipping DB update.")
+                
+                time.sleep(1) # Slow down so we can read it
 
-            status_text.text(f"Auditing Node: {date_val} (ID: {row_id})")
-            
-            # Generate AI Forecast
-            ai_val = generate_ai_prediction(date_val, st.session_state.current_property_name)
-            
-            # 2. Update Supabase
-            # Explicit float cast for float8 database compatibility
-            update_res = supabase.table("ledger").update({"predicted_traffic": float(ai_val)}).eq("id", row_id).execute()
-            
-            # Real-time feedback in the sidebar
-            if not update_res.data:
-                st.sidebar.error(f"❌ Failed to Update ID {row_id}")
-            else:
-                st.sidebar.success(f"✅ Success ID {row_id}: AI Forecasted {ai_val}")
-
-            import time
-            time.sleep(0.5) # API Quota Safety
-            progress_bar.progress((i + 1) / total)
-
-        status_text.success("🏁 Forensic Backfill Complete.")
+        st.success("Debug Loop Finished.")
         st.cache_data.clear()
-        
-        # Clear local session storage to force a fresh data pull
-        if 'ledger_data' in st.session_state:
-            del st.session_state['ledger_data']
-            
-        st.button("🔄 Click to Refresh Audit Dashboard")
-        st.balloons()
 
     except Exception as e:
-        st.error(f"Backfill Critical Error: {e}")
+        st.exception(e) # This will show the full technical traceback
 
 # =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
