@@ -1489,74 +1489,88 @@ elif page == "Sentiment Scoring":
     else:
         st.caption("🔒 Data Ingestion tools restricted to Management roles.")
 
-    # --- 3. SENTIMENT VAULT RESEARCH ---
-    st.markdown("### 🔍 Sentiment Vault Research")
+    # --- 3. SENTIMENT VAULT RESEARCH (v62.5 - Friction Hunter Enabled) ---
+st.markdown("### 🔍 Sentiment Vault Research")
+
+# Expanded Research Filters
+f1, f2, f3, f4 = st.columns([1.2, 1, 1.2, 1.2])
+
+with f1:
+    search_query = st.text_input("Search Content", placeholder="Keyword search...")
+with f2:
+    filter_asset = st.selectbox("Asset Filter", ["All Assets"] + tags)
+with f3:
+    # Date Range Audit Window
+    today = datetime.date.today()
+    last_30 = today - datetime.timedelta(days=30)
+    date_range = st.date_input("Audit Window", value=(last_30, today))
+with f4:
+    # UPDATED: Range Slider to isolate specific sentiment bands (e.g., negative-only)
+    score_range = st.slider(
+        "AI Sentiment Range", 
+        0.0, 1.0, 
+        (0.0, 0.4), # Defaulting to the 'Danger Zone' to find negative comments
+        step=0.1,
+        help="0.0-0.3: Negative/Critical | 0.4-0.6: Neutral | 0.7-1.0: Positive"
+    )
+
+# Fetch Data from 'sentiment_history'
+try:
+    # Base Query
+    query = supabase.table("sentiment_history").select("*").eq("property_id", st.session_state.current_property_id)
     
-    # Expanded Research Filters
-    f1, f2, f3, f4 = st.columns([1.2, 1, 1.2, 0.8])
+    # 1. Apply Asset Filter
+    if filter_asset != "All Assets":
+        query = query.eq("asset", filter_asset)
     
-    with f1:
-        search_query = st.text_input("Search Content", placeholder="Keyword search...")
-    with f2:
-        filter_asset = st.selectbox("Asset Filter", ["All Assets"] + tags)
-    with f3:
-        # Date Range Audit Window
-        today = datetime.date.today()
-        last_30 = today - datetime.timedelta(days=30)
-        date_range = st.date_input("Audit Window", value=(last_30, today))
-    with f4:
-        min_score = st.slider("Min AI Score", 0.0, 1.0, 0.0, step=0.1)
+    # 2. Apply Date Range Filter (SQL gte/lte)
+    if isinstance(date_range, tuple) and len(date_range) == 2:
+        start_date, end_date = date_range
+        query = query.gte("timestamp", start_date.isoformat())
+        query = query.lte("timestamp", f"{end_date.isoformat()}T23:59:59")
+    
+    vault_res = query.order("timestamp", desc=True).limit(100).execute()
 
-    # Fetch Data from 'sentiment_history'
-    try:
-        # Base Query
-        query = supabase.table("sentiment_history").select("*").eq("property_id", st.session_state.current_property_id)
+    if vault_res.data:
+        df_vault = pd.DataFrame(vault_res.data)
         
-        # 1. Apply Asset Filter
-        if filter_asset != "All Assets":
-            query = query.eq("asset", filter_asset)
+        # 3. Local Search Filter (raw_text)
+        if search_query and 'raw_text' in df_vault.columns:
+            df_vault = df_vault[df_vault['raw_text'].str.contains(search_query, case=False)]
         
-        # 2. Apply Date Range Filter (SQL gte/lte)
-        if isinstance(date_range, tuple) and len(date_range) == 2:
-            start_date, end_date = date_range
-            query = query.gte("timestamp", start_date.isoformat())
-            query = query.lte("timestamp", f"{end_date.isoformat()}T23:59:59")
-        
-        vault_res = query.order("timestamp", desc=True).limit(100).execute()
+        # 4. UPDATED: Local Range Filter (sentiment_score)
+        if 'sentiment_score' in df_vault.columns:
+            # Filter rows within the selected range [min, max]
+            df_vault = df_vault[
+                (df_vault['sentiment_score'] >= score_range[0]) & 
+                (df_vault['sentiment_score'] <= score_range[1])
+            ]
 
-        if vault_res.data:
-            df_vault = pd.DataFrame(vault_res.data)
-            
-            # 3. Local Search Filter (raw_text)
-            if search_query and 'raw_text' in df_vault.columns:
-                df_vault = df_vault[df_vault['raw_text'].str.contains(search_query, case=False)]
-            
-            # 4. Local Score Filter (sentiment_score)
-            if 'sentiment_score' in df_vault.columns:
-                df_vault = df_vault[df_vault['sentiment_score'] >= min_score]
-
-            if not df_vault.empty:
-                for _, row in df_vault.iterrows():
-                    with st.container(border=True):
-                        v_col1, v_col2 = st.columns([4, 1])
-                        with v_col1:
-                            st.markdown(f"**Asset:** `{row.get('asset', 'General')}`")
-                            st.write(row.get('raw_text', 'No content available.'))
-                            # Clean timestamp display
-                            ts_display = str(row.get('timestamp', 'N/A'))[:10]
-                            st.caption(f"Category: {row.get('sentiment_category', 'N/A')} | Date: {ts_display}")
-                        with v_col2:
-                            score = row.get('sentiment_score', 0.5)
-                            score_color = "green" if score >= 0.7 else "orange" if score >= 0.4 else "red"
-                            st.metric("AI Score", f"{score:.2f}")
-                            st.markdown(f"<div style='height:8px; width:100%; background:{score_color}; border-radius:4px;'></div>", unsafe_allow_html=True)
-            else:
-                st.info("No records match your specific filters.")
+        if not df_vault.empty:
+            for _, row in df_vault.iterrows():
+                with st.container(border=True):
+                    v_col1, v_col2 = st.columns([4, 1])
+                    with v_col1:
+                        st.markdown(f"**Asset:** `{row.get('asset', 'General')}`")
+                        st.write(row.get('raw_text', 'No content available.'))
+                        
+                        # Clean timestamp display
+                        ts_display = str(row.get('timestamp', 'N/A'))[:10]
+                        st.caption(f"Category: {row.get('sentiment_category', 'N/A')} | Date: {ts_display}")
+                    
+                    with v_col2:
+                        score = row.get('sentiment_score', 0.5)
+                        # Forensic color coding
+                        score_color = "#E63946" if score < 0.4 else "#F4A261" if score < 0.7 else "#2A9D8F"
+                        st.metric("AI Score", f"{score:.2f}")
+                        st.markdown(f"<div style='height:8px; width:100%; background:{score_color}; border-radius:4px;'></div>", unsafe_allow_html=True)
         else:
-            st.info("No sentiment data found for the selected time period.")
-            
-    except Exception as e:
-        st.error(f"Vault Retrieval Error: {e}")
+            st.info("No records match your specific sentiment or search filters.")
+    else:
+        st.info("No sentiment data found for the selected time period.")
+        
+except Exception as e:
+    st.error(f"Vault Retrieval Error: {e}")
 
 # =================================================================
 # 15. PAGE 7: BL-ROAS COMMAND CENTER (v52.0 - High-End ROI Audit)
