@@ -1437,12 +1437,12 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: SENTIMENT SCORING (v63.2 - Deep Scale Precision)
+# 14. PAGE 6: SENTIMENT SCORING (v64.0 - Categorical Filtering)
 # =================================================================
 elif page == "Sentiment Scoring":
     render_styled_header(
         f"Sentiment Scoring: {st.session_state.current_property_name}",
-        "Vault Research: Analyzing Guest Sentiment & AI Scoring",
+        "Vault Research: Categorical Analysis of Guest Sentiment",
         "Vault Active"
     )
     
@@ -1485,7 +1485,7 @@ elif page == "Sentiment Scoring":
                     st.rerun()
         st.divider()
 
-    # --- 3. SENTIMENT VAULT RESEARCH ---
+    # --- 3. SENTIMENT VAULT RESEARCH (Categorical Filter) ---
     st.markdown("### 🔍 Sentiment Vault Research")
 
     f1, f2, f3, f4 = st.columns([1.2, 1, 1.2, 1.2])
@@ -1499,20 +1499,20 @@ elif page == "Sentiment Scoring":
         last_30 = today - datetime.timedelta(days=30)
         date_range = st.date_input("Audit Window", value=(last_30, today))
     with f4:
-        # Balanced Slider from -1.0 to 1.0
-        score_range = st.slider(
-            "AI Sentiment Range", 
-            -1.0, 1.0, 
-            (-1.0, 0.0), # Defaulting to the negative spectrum
-            step=0.05,   # Increased precision to 0.05 to catch -0.95 specifically
-            help="-1.0: Critical | 0.0: Neutral | 1.0: Exceptional"
-        )
+        # NEW: Categorical Filter instead of a numeric range
+        # Matches your AI's 'sentiment_category' output
+        categories = ["All Categories", "Exceptional", "Positive", "Neutral", "Negative", "Critical"]
+        filter_cat = st.selectbox("Sentiment Category", categories, index=0)
 
     # Fetch Data
     try:
         query = supabase.table("sentiment_history").select("*").eq("property_id", st.session_state.current_property_id)
         if filter_asset != "All Assets":
             query = query.eq("asset", filter_asset)
+        
+        # Apply Category Filter at the Database Level for better performance
+        if filter_cat != "All Categories":
+            query = query.eq("sentiment_category", filter_cat)
         
         if isinstance(date_range, tuple) and len(date_range) == 2:
             start_date, end_date = date_range
@@ -1523,28 +1523,13 @@ elif page == "Sentiment Scoring":
         if vault_res.data:
             df_vault = pd.DataFrame(vault_res.data)
             
-            # --- THE RE-MAPPING & FILTER FIX ---
-            if 'sentiment_score' in df_vault.columns:
-                # Force numeric conversion in case of string-types from Supabase
-                df_vault['sentiment_score'] = pd.to_numeric(df_vault['sentiment_score'], errors='coerce').fillna(0.5)
-                
-                # 1. Map to Display Scale (-1 to 1)
-                df_vault['display_score'] = (df_vault['sentiment_score'] * 2) - 1
-                
-                # 2. Apply Text Search (Before Score Filter)
-                if search_query:
-                    df_vault = df_vault[df_vault['raw_text'].str.contains(search_query, case=False)]
-                
-                # 3. Apply the Balanced Scale Filter
-                # Using a small epsilon (1e-5) for floating point precision safety
-                df_vault = df_vault[
-                    (df_vault['display_score'] >= score_range[0] - 1e-5) & 
-                    (df_vault['display_score'] <= score_range[1] + 1e-5)
-                ]
+            # Local Search Filter (Optional Keyword Search)
+            if search_query and not df_vault.empty:
+                df_vault = df_vault[df_vault['raw_text'].str.contains(search_query, case=False)]
 
             if not df_vault.empty:
-                # OPTIONAL DEBUG: Uncomment to see exactly what is being caught
-                # st.write(f"Displaying {len(df_vault)} records. Min score in view: {df_vault['display_score'].min():.4f}")
+                # Map internal scores to display (-1 to 1) for the metrics, even if we filter by category
+                df_vault['display_score'] = (pd.to_numeric(df_vault['sentiment_score']) * 2) - 1
 
                 for _, row in df_vault.iterrows():
                     with st.container(border=True):
@@ -1552,16 +1537,19 @@ elif page == "Sentiment Scoring":
                         with v_col1:
                             st.markdown(f"**Asset:** `{row.get('asset', 'General')}`")
                             st.write(row.get('raw_text', 'No content available.'))
-                            st.caption(f"Category: {row.get('sentiment_category', 'N/A')} | Date: {str(row.get('timestamp'))[:10]}")
+                            
+                            cat_label = row.get('sentiment_category', 'N/A')
+                            ts_display = str(row.get('timestamp'))[:10]
+                            st.caption(f"Category: **{cat_label}** | Date: {ts_display}")
                         
                         with v_col2:
                             d_score = row.get('display_score', 0.0)
-                            # Forensic color coding for balanced scale
-                            score_color = "#E63946" if d_score < -0.3 else "#F4A261" if d_score <= 0.3 else "#2A9D8F"
-                            st.metric("AI Sentiment", f"{d_score:.2f}")
+                            # Forensic color coding based on category
+                            score_color = "#E63946" if cat_label in ["Critical", "Negative"] else "#F4A261" if cat_label == "Neutral" else "#2A9D8F"
+                            st.metric("AI Score", f"{d_score:.2f}")
                             st.markdown(f"<div style='height:8px; width:100%; background:{score_color}; border-radius:4px;'></div>", unsafe_allow_html=True)
             else:
-                st.info("No records match this sentiment range.")
+                st.info("No records found in this category.")
         else:
             st.info("No sentiment data found.")
             
