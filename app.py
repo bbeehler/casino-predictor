@@ -1428,7 +1428,7 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: SENTIMENT SCORING (v60.7 - Schema Aligned)
+# 14. PAGE 6: SENTIMENT SCORING (v60.8 - Date Filter Integrated)
 # =================================================================
 elif page == "Sentiment Scoring":
     render_styled_header(
@@ -1458,7 +1458,6 @@ elif page == "Sentiment Scoring":
                     f_text = st.text_area("Review Content", placeholder="Paste Google/TripAdvisor review...", height=150)
                     if st.form_submit_button("🛡️ Archive & AI Score", use_container_width=True):
                         if f_text:
-                            # archive_sentiment_entry must be updated to use 'asset' and 'raw_text'
                             if archive_sentiment_entry(f_text, manual_tag):
                                 st.success("Entry Scored & Vaulted.")
                                 st.cache_data.clear()
@@ -1484,35 +1483,46 @@ elif page == "Sentiment Scoring":
     # --- 3. SENTIMENT VAULT RESEARCH ---
     st.markdown("### 🔍 Sentiment Vault Research")
     
-    # Research Filters
-    c1, c2, c3 = st.columns([1.5, 1, 1])
-    with c1:
-        search_query = st.text_input("Search Content", placeholder="Keyword search (e.g. 'service')")
-    with c2:
-        # filter_asset dropdown uses 'tags' from property_assets
+    # Expanded Research Filters
+    f1, f2, f3, f4 = st.columns([1.2, 1, 1.2, 0.8])
+    
+    with f1:
+        search_query = st.text_input("Search Content", placeholder="Keyword search...")
+    with f2:
         filter_asset = st.selectbox("Asset Filter", ["All Assets"] + tags)
-    with c3:
+    with f3:
+        # Date Range Audit Window
+        today = datetime.date.today()
+        last_30 = today - datetime.timedelta(days=30)
+        date_range = st.date_input("Audit Window", value=(last_30, today))
+    with f4:
         min_score = st.slider("Min AI Score", 0.0, 1.0, 0.0, step=0.1)
 
     # Fetch Data from 'sentiment_history'
     try:
-        # Start Query based on Schema
+        # Base Query
         query = supabase.table("sentiment_history").select("*").eq("property_id", st.session_state.current_property_id)
         
-        # Apply Asset Filter (Matches 'asset' column in SQL)
+        # 1. Apply Asset Filter
         if filter_asset != "All Assets":
             query = query.eq("asset", filter_asset)
+        
+        # 2. Apply Date Range Filter (SQL gte/lte)
+        if isinstance(date_range, tuple) and len(date_range) == 2:
+            start_date, end_date = date_range
+            query = query.gte("timestamp", start_date.isoformat())
+            query = query.lte("timestamp", f"{end_date.isoformat()}T23:59:59")
         
         vault_res = query.order("timestamp", desc=True).limit(100).execute()
 
         if vault_res.data:
             df_vault = pd.DataFrame(vault_res.data)
             
-            # Local Search (Matches 'raw_text' column in SQL)
+            # 3. Local Search Filter (raw_text)
             if search_query and 'raw_text' in df_vault.columns:
                 df_vault = df_vault[df_vault['raw_text'].str.contains(search_query, case=False)]
             
-            # Score Filter (Matches 'sentiment_score' column in SQL)
+            # 4. Local Score Filter (sentiment_score)
             if 'sentiment_score' in df_vault.columns:
                 df_vault = df_vault[df_vault['sentiment_score'] >= min_score]
 
@@ -1523,16 +1533,18 @@ elif page == "Sentiment Scoring":
                         with v_col1:
                             st.markdown(f"**Asset:** `{row.get('asset', 'General')}`")
                             st.write(row.get('raw_text', 'No content available.'))
-                            st.caption(f"Category: {row.get('sentiment_category', 'N/A')} | Captured: {str(row.get('timestamp', 'N/A'))[:16]}")
+                            # Clean timestamp display
+                            ts_display = str(row.get('timestamp', 'N/A'))[:10]
+                            st.caption(f"Category: {row.get('sentiment_category', 'N/A')} | Date: {ts_display}")
                         with v_col2:
                             score = row.get('sentiment_score', 0.5)
                             score_color = "green" if score >= 0.7 else "orange" if score >= 0.4 else "red"
                             st.metric("AI Score", f"{score:.2f}")
                             st.markdown(f"<div style='height:8px; width:100%; background:{score_color}; border-radius:4px;'></div>", unsafe_allow_html=True)
             else:
-                st.info("No records match your search criteria.")
+                st.info("No records match your specific filters.")
         else:
-            st.info("The Sentiment Vault for this property is currently empty.")
+            st.info("No sentiment data found for the selected time period.")
             
     except Exception as e:
         st.error(f"Vault Retrieval Error: {e}")
