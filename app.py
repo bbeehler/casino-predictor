@@ -1428,7 +1428,7 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: SENTIMENT INTELLIGENCE (v60.5 - Research & Ingestion)
+# 14. PAGE 6: SENTIMENT SCORING (v60.6 - Research & Ingestion)
 # =================================================================
 elif page == "Sentiment Scoring":
     render_styled_header(
@@ -1440,6 +1440,7 @@ elif page == "Sentiment Scoring":
     # --- 1. DATA HYDRATION ---
     try:
         asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
+        # Tags used for both the uploader and the research filter
         tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall Property"]
     except:
         tags = ["Overall Property"]
@@ -1458,8 +1459,10 @@ elif page == "Sentiment Scoring":
                     f_text = st.text_area("Review Content", placeholder="Paste Google/TripAdvisor review...", height=150)
                     if st.form_submit_button("🛡️ Archive & AI Score", use_container_width=True):
                         if f_text:
+                            # IMPORTANT: Ensure archive_sentiment_entry uses the same column name
                             if archive_sentiment_entry(f_text, manual_tag):
                                 st.success("Entry Scored & Vaulted.")
+                                st.cache_data.clear()
                                 st.rerun()
 
         with col_input2:
@@ -1473,12 +1476,13 @@ elif page == "Sentiment Scoring":
                         if len(para.text) > 20:
                             archive_sentiment_entry(para.text, bulk_tag)
                     st.success("Bulk Ingestion Complete.")
+                    st.cache_data.clear()
                     st.rerun()
         st.divider()
     else:
         st.caption("🔒 Data Ingestion tools restricted to Management roles.")
 
-    # --- 3. SENTIMENT VAULT RESEARCH (New Research Tool) ---
+    # --- 3. SENTIMENT VAULT RESEARCH ---
     st.markdown("### 🔍 Sentiment Vault Research")
     st.caption("Filter and read historical reviews archived in the property ledger.")
     
@@ -1487,40 +1491,44 @@ elif page == "Sentiment Scoring":
     with c1:
         search_query = st.text_input("Search Content", placeholder="Keyword search (e.g. 'parking', 'steak')")
     with c2:
-        filter_asset = st.selectbox("Asset", ["All Assets"] + tags)
+        filter_asset = st.selectbox("Asset Filter", ["All Assets"] + tags)
     with c3:
-        # Assuming scores are 0-1 (e.g. 0.85)
         min_score = st.slider("Min AI Score", 0.0, 1.0, 0.0, step=0.1)
 
     # Fetch Data
     try:
+        # 1. Start Query
         query = supabase.table("sentiment_history").select("*").eq("property_id", st.session_state.current_property_id)
+        
+        # 2. Filter by Asset (Aligned to asset_name column)
         if filter_asset != "All Assets":
-            query = query.eq("asset_tag", filter_asset)
+            query = query.eq("asset_name", filter_asset)
         
         vault_res = query.order("timestamp", desc=True).limit(100).execute()
 
         if vault_res.data:
             df_vault = pd.DataFrame(vault_res.data)
             
-            # Apply Search Filter Locally
-            if search_query:
+            # Apply Search Filter locally if column exists
+            if search_query and 'review_text' in df_vault.columns:
                 df_vault = df_vault[df_vault['review_text'].str.contains(search_query, case=False)]
             
-            # Apply Score Filter
-            df_vault = df_vault[df_vault['sentiment_score'] >= min_score]
+            # Apply Score Filter locally if column exists
+            if 'sentiment_score' in df_vault.columns:
+                df_vault = df_vault[df_vault['sentiment_score'] >= min_score]
 
             if not df_vault.empty:
                 for _, row in df_vault.iterrows():
                     with st.container(border=True):
                         v_col1, v_col2 = st.columns([4, 1])
                         with v_col1:
-                            st.markdown(f"**Asset:** `{row['asset_tag']}`")
-                            st.write(row['review_text'])
-                            st.caption(f"Captured: {row['timestamp'][:16]}")
+                            # Safety check: Use .get() to prevent KeyErrors
+                            display_tag = row.get('asset_name', 'General')
+                            st.markdown(f"**Asset:** `{display_tag}`")
+                            st.write(row.get('review_text', 'No content available.'))
+                            st.caption(f"Captured: {str(row.get('timestamp', 'N/A'))[:16]}")
                         with v_col2:
-                            score = row['sentiment_score']
-                            # Dynamic color coding for the score badge
+                            score = row.get('sentiment_score', 0.5)
                             score_color = "green" if score >= 0.7 else "orange" if score >= 0.4 else "red"
                             st.metric("AI Score", f"{score:.2f}")
                             st.markdown(f"<div style='height:8px; width:100%; background:{score_color}; border-radius:4px;'></div>", unsafe_allow_html=True)
