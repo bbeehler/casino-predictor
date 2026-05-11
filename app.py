@@ -1173,13 +1173,13 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for full ROI Audit.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (v52.0 SaaS Factory)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (v60.2 - Social Integrated)
 # =================================================================
 elif page == "Master Audit Report":
     # 1. PREMIUM HEADER
     render_styled_header(
         f"Master Property Audit: {st.session_state.current_property_name}",
-        "Forensic Ledger: Financials, Loyalty, & Multi-Channel Attribution",
+        "Forensic Ledger: Financials, Loyalty, & Social Attribution",
         "Audit Ready"
     )
     
@@ -1214,7 +1214,7 @@ elif page == "Master Audit Report":
 
     col_date, col_export = st.columns([2, 1])
     with col_date:
-        audit_range = st.date_input("Audit Window:", value=(min_audit, max_audit), key="master_audit_v52")
+        audit_range = st.date_input("Audit Window:", value=(min_audit, max_audit), key="master_audit_v60")
 
     if isinstance(audit_range, tuple) and len(audit_range) == 2:
         s_date, e_date = audit_range
@@ -1228,45 +1228,29 @@ elif page == "Master Audit Report":
         m = get_forensic_metrics(df_audit_filtered.to_dict(orient='records'), st.session_state.coeffs)
         df_final = m['df']
         c = st.session_state.coeffs
-        num_days = len(df_final)
         
-        # Financial Calcs
+        # Financial & Social Calcs
         hold_pct = float(c.get('Hold_Pct', 10.2)) / 100
         t_rev = df_final['actual_coin_in'].sum()
         actual_ggr = t_rev * hold_pct
         t_traf = df_final['actual_traffic'].sum()
-        t_dig = df_final['residual_lift'].sum()
-        t_grav = df_final['gravity_lift'].sum()
         t_mems = df_final['new_members'].sum()
-
-        # --- 3. MoM PERFORMANCE TABLE ---
-        st.markdown("### 📊 Executive Summary & Monthly Performance")
-        df_final['month_year'] = df_final['entry_date'].dt.to_period('M')
-        months = sorted(df_final['month_year'].unique())
-        summary_list = []
         
-        for i, month in enumerate(months):
-            df_m = df_final[df_final['month_year'] == month]
-            m_traffic, m_rev = df_m['actual_traffic'].sum(), df_m['actual_coin_in'].sum()
-            summary_list.append({
-                "Month": month.strftime('%B %Y'), "Traffic": m_traffic, 
-                "Actual Revenue": m_rev, "Digital Lift": df_m['residual_lift'].sum(),
-                "New Members": df_m['new_members'].sum()
-            })
+        # Priority Social Metrics
+        t_clicks = df_final['ad_clicks'].sum() if 'ad_clicks' in df_final.columns else 0
+        t_imps = df_final['ad_impressions'].sum() if 'ad_impressions' in df_final.columns else 0
+        engagement_rate = (t_clicks / t_imps * 100) if t_imps > 0 else 0
 
-        with st.container(border=True):
-            st.table(pd.DataFrame(summary_list))
-
-        # --- 4. INTEGRITY METRICS ---
-        st.markdown("<br>", unsafe_allow_html=True)
+        # --- 3. EXECUTIVE SCOREBOARD ---
+        st.markdown("### 📊 Executive Summary")
         k1, k2, k3, k4, k5 = st.columns(5)
         k1.metric("Total Traffic", f"{t_traf:,}")
         k2.metric("Actual Revenue", f"${t_rev:,.0f}")
-        k3.metric("Actual GGR", f"${actual_ggr:,.0f}")
+        k3.metric("Social Engagements", f"{t_clicks:,.0f}", help="Total Social Clicks/Engagements")
         k4.metric("New Members", f"{t_mems:,}")
-        k5.metric("Member Conv %", f"{(t_mems/t_traf*100 if t_traf > 0 else 0):.2f}%")
+        k5.metric("Engagement Rate", f"{engagement_rate:.2f}%")
 
-        # --- 5. ATTRIBUTION FLOW CHART ---
+        # --- 4. ATTRIBUTION FLOW CHART ---
         st.divider()
         st.markdown("### 🌊 Multi-Channel Attribution Flow")
         fig_stack = go.Figure()
@@ -1277,13 +1261,64 @@ elif page == "Master Audit Report":
         ]
         for name, col, color in layers:
             if col in df_final.columns:
-                fig_stack.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final[col], name=name, stackgroup='one', line=dict(width=0.5, color=color)))
+                fig_stack.add_trace(go.Scatter(
+                    x=df_final['entry_date'], y=df_final[col], 
+                    name=name, stackgroup='one', 
+                    line=dict(width=0.5, color=color),
+                    fill='tonexty'
+                ))
         
-        fig_stack.update_layout(height=450, margin=dict(l=10, r=10, t=10, b=10), template="plotly_white")
+        fig_stack.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10), template="plotly_white")
         st.plotly_chart(fig_stack, use_container_width=True)
 
+        # --- 5. SOCIAL-TO-FLOOR VELOCITY AUDIT ---
+        st.markdown("### 📲 Social Velocity & Conversion Audit")
+        
+        v1, v2 = st.columns([2, 1])
+        with v1:
+            # Dual Axis: Impressions (Reach) vs Clicks (Intent)
+            fig_social = go.Figure()
+            fig_social.add_trace(go.Bar(
+                x=df_final['entry_date'], y=df_final['ad_impressions'], 
+                name="Reach (Impressions)", marker_color='#E2E8F0', opacity=0.5
+            ))
+            fig_social.add_trace(go.Scatter(
+                x=df_final['entry_date'], y=df_final['ad_clicks'], 
+                name="Intent (Engagements)", line=dict(color='#0047AB', width=3),
+                yaxis="y2"
+            ))
+            fig_social.update_layout(
+                height=350, template="plotly_white",
+                yaxis=dict(title="Reach"),
+                yaxis2=dict(title="Engagement", overlaying="y", side="right"),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(l=10, r=10, t=30, b=10)
+            )
+            st.plotly_chart(fig_social, use_container_width=True)
+            
+        with v2:
+            with st.container(border=True):
+                st.markdown("#### 🏁 Efficiency Metrics")
+                
+                # Conversion Velocity logic
+                daily_eng = t_clicks / len(df_final) if len(df_final) > 0 else 0
+                st.metric("Avg Daily Engagements", f"{daily_eng:.1f}")
+                
+                # Social to Guest Ratio
+                soc_bridge = (t_clicks / t_traf) if t_traf > 0 else 0
+                st.metric("Social-to-Floor Bridge", f"{soc_bridge:.2f}x")
+                st.caption("Ratio of digital intent vs physical footfall.")
+                
+                st.divider()
+                st.info("💡 Audit Note: Verify that 'Intent' spikes align with 'Digital ROI Lift' in the flow chart above.")
+
         with col_export:
-            st.download_button("📥 Export Audit to CSV", data=df_final.to_csv(index=False).encode('utf-8'), file_name=f"Audit_{s_date}_{e_date}.csv", use_container_width=True)
+            st.download_button(
+                "📥 Export Integrated Audit", 
+                data=df_final.to_csv(index=False).encode('utf-8'), 
+                file_name=f"Master_Audit_{s_date}.csv", 
+                use_container_width=True
+            )
 
 # =================================================================
 # 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS (v52.0 SaaS)
