@@ -99,6 +99,37 @@ def generate_ai_prediction(target_date, property_name):
     except:
         return 0
 
+# --- ADD TO YOUR GLOBAL UTILITIES (TOP OF SCRIPT) ---
+def run_forensic_backfill():
+    """
+    Finds all ledger entries with 0 or NULL predicted_traffic and 
+    populates them using the AI Inference engine.
+    """
+    # Fetch rows that need hydration
+    target_res = supabase.table("ledger").select("id, entry_date")\
+        .or_("predicted_traffic.eq.0,predicted_traffic.is.null")\
+        .eq("property_id", st.session_state.current_property_id).execute()
+    
+    if not target_res.data:
+        st.toast("✅ All nodes are already hydrated.")
+        return
+
+    total = len(target_res.data)
+    progress_bar = st.sidebar.progress(0) # Put progress in sidebar to stay out of way
+    
+    for i, row in enumerate(target_res.data):
+        # 1. Generate prediction for that historical date
+        ai_guess = generate_ai_prediction(row['entry_date'], st.session_state.current_property_name)
+        
+        # 2. Update the row
+        supabase.table("ledger").update({"predicted_traffic": ai_guess}).eq("id", row['id']).execute()
+        
+        # 3. Update Progress
+        progress_bar.progress((i + 1) / total)
+    
+    st.success(f"Forensic Backfill Complete: {total} records hydrated.")
+    st.cache_data.clear()
+
 # =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
 # =================================================================
@@ -1106,6 +1137,14 @@ elif page == "Daily Ledger Audit":
                 st.rerun()
             except Exception as e:
                 st.error(f"Sync Error: {e}")
+
+# --- ADD TEMPORARILY TO SECTION 10 ---
+st.divider()
+st.markdown("### 🛠️ Data Integrity Tools")
+if st.button("🔄 Run One-Time AI Backfill", use_container_width=True, help="Populates missing predictions for historical data."):
+    run_forensic_backfill()
+    st.rerun()
+st.divider()
 
 # =================================================================
 # 11. PAGE 3: ATTRIBUTION ANALYTICS (v52.0 - High-End Suite)
