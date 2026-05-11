@@ -1,3 +1,4 @@
+import time
 import streamlit as st
 import pandas as pd
 import datetime
@@ -82,92 +83,79 @@ def archive_sentiment_entry(text, asset_tag):
 # =================================================================
 
 def generate_ai_prediction(target_date, property_name):
-    """
-    Generates a contextual traffic prediction using Gemini.
-    """
     try:
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        # Using 1.5-flash for speed and reliability in backfills
         model = genai.GenerativeModel('gemini-2.5-flash')
         
         day_of_week = pd.to_datetime(target_date).day_name()
         
-        prompt = f"""
-        Predict total guest traffic (integer) for {property_name} 
-        on {target_date} ({day_of_week}). 
-        Context: Hard Rock Casino operation in Ottawa.
-        Return ONLY the raw integer.
-        """
+        prompt = f"Predict casino traffic (integer) for {property_name} on {target_date} ({day_of_week}). Return ONLY the number."
         
         response = model.generate_content(prompt)
-        prediction_clean = ''.join(filter(str.isdigit, response.text))
+        # We use regex to find the first number in the response
+        import re
+        numbers = re.findall(r'\d+', response.text)
         
-        return int(prediction_clean) if prediction_clean else 0
+        if numbers:
+            return int(numbers[0])
+        return 0
     except Exception as e:
-        st.error(f"AI Generation Error for {target_date}: {e}")
+        st.sidebar.error(f"AI Call Failed: {e}")
         return 0
 
 def run_forensic_backfill():
-    """
-    Refactored to catch 'string zeros' and provide real-time debug info.
-    """
     try:
-        # 1. Fetch all records for the current property
-        res = supabase.table("ledger").select("id, entry_date, predicted_traffic")\
-            .eq("property_id", st.session_state.current_property_id).execute()
+        # 1. Pull the data fresh from Supabase
+        res = supabase.table("ledger").select("*").eq("property_id", st.session_state.current_property_id).execute()
         
         if not res.data:
-            st.toast("No historical nodes found.")
+            st.error("Database connection failed or table is empty.")
             return
 
-        # 2. Aggressive Target Identification (Catches strings, nulls, and zeros)
+        # 2. Filter for missing values (Aggressive)
         targets = []
         for row in res.data:
             val = row.get('predicted_traffic')
-            # Check if value is essentially "empty" or 0 in any format
-            if val in [0, 0.0, "0", "0.0", None, "None", "nan", ""]:
+            # Check for literally any form of 'empty'
+            if val is None or str(val).strip() in ["0", "0.0", "None", "nan", ""]:
                 targets.append(row)
-        
+
         if not targets:
-            st.success("✅ All nodes are already hydrated.")
+            st.success("All records already have valid predictions.")
             return
 
-        # 3. Execution UI
-        total = len(targets)
+        st.warning(f"Found {len(targets)} records to fix. Starting Engine...")
+        
         progress_bar = st.progress(0)
-        status_msg = st.empty()
-        debug_area = st.expander("🛠️ Real-Time Backfill Debugger", expanded=True)
         
         for i, row in enumerate(targets):
-            status_msg.text(f"Hydrating Node {i+1}/{total}: {row['entry_date']}")
+            # Generate the number
+            ai_val = generate_ai_prediction(row['entry_date'], st.session_state.current_property_name)
             
-            # Generate prediction
-            ai_guess = generate_ai_prediction(row['entry_date'], st.session_state.current_property_name)
+            # 3. THE CRITICAL UPDATE
+            # We explicitly cast ai_val to float to match your float8 column
+            update_data = {"predicted_traffic": float(ai_val)}
             
-            # Show debug info to verify the AI isn't returning 0
-            with debug_area:
-                st.write(f"Date: {row['entry_date']} | AI Guess: **{ai_guess}**")
+            db_response = supabase.table("ledger").update(update_data).eq("id", row['id']).execute()
             
-            # 4. Force update to Supabase
-            supabase.table("ledger").update({"predicted_traffic": ai_guess})\
-                .eq("id", row['id']).execute()
+            # Verification: Check if Supabase actually accepted it
+            if not db_response.data:
+                st.error(f"DB Update failed for ID {row['id']}")
             
-            progress_bar.progress((i + 1) / total)
-        
-        # 5. Finalize and Clear Cache
-        status_msg.empty()
-        st.success(f"Forensic Backfill Complete: {total} records hydrated.")
-        
-        # This is critical to ensure the charts update!
+            # Rate limiting safety
+            time.sleep(0.5) 
+            progress_bar.progress((i + 1) / len(targets))
+
+        st.success("✅ Backfill Complete.")
         st.cache_data.clear()
+        # Force the session state to dump old data
         if 'ledger_data' in st.session_state:
-            del st.session_state['ledger_data']
-            
-        st.balloons()
-        
+            st.session_state.ledger_data = None
+        st.rerun()
+
     except Exception as e:
-        st.error(f"Backfill Engine Error: {e}")
+        st.error(f"Critical System Error: {e}")
 
 # =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
