@@ -1437,7 +1437,7 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: SENTIMENT SCORING (v64.0 - Categorical Filtering)
+# 14. PAGE 6: SENTIMENT SCORING (v64.5 - Smart Scale Fix)
 # =================================================================
 elif page == "Sentiment Scoring":
     render_styled_header(
@@ -1484,6 +1484,8 @@ elif page == "Sentiment Scoring":
                     st.cache_data.clear()
                     st.rerun()
         st.divider()
+    else:
+        st.caption("🔒 Data Ingestion tools restricted to Management roles.")
 
     # --- 3. SENTIMENT VAULT RESEARCH (Categorical Filter) ---
     st.markdown("### 🔍 Sentiment Vault Research")
@@ -1499,8 +1501,6 @@ elif page == "Sentiment Scoring":
         last_30 = today - datetime.timedelta(days=30)
         date_range = st.date_input("Audit Window", value=(last_30, today))
     with f4:
-        # NEW: Categorical Filter instead of a numeric range
-        # Matches your AI's 'sentiment_category' output
         categories = ["All Categories", "Exceptional", "Positive", "Neutral", "Negative", "Critical"]
         filter_cat = st.selectbox("Sentiment Category", categories, index=0)
 
@@ -1510,7 +1510,6 @@ elif page == "Sentiment Scoring":
         if filter_asset != "All Assets":
             query = query.eq("asset", filter_asset)
         
-        # Apply Category Filter at the Database Level for better performance
         if filter_cat != "All Categories":
             query = query.eq("sentiment_category", filter_cat)
         
@@ -1523,13 +1522,19 @@ elif page == "Sentiment Scoring":
         if vault_res.data:
             df_vault = pd.DataFrame(vault_res.data)
             
-            # Local Search Filter (Optional Keyword Search)
             if search_query and not df_vault.empty:
                 df_vault = df_vault[df_vault['raw_text'].str.contains(search_query, case=False)]
 
             if not df_vault.empty:
-                # Map internal scores to display (-1 to 1) for the metrics, even if we filter by category
-                df_vault['display_score'] = (pd.to_numeric(df_vault['sentiment_score']) * 2) - 1
+                # --- THE CONDITIONAL SCALER FIX ---
+                # 1. Force numeric conversion
+                df_vault['sentiment_score'] = pd.to_numeric(df_vault['sentiment_score'], errors='coerce').fillna(0.5)
+                
+                # 2. Apply Smart Mapping
+                # Only maps if value is between 0 and 1. Preserves existing negatives like -0.95.
+                df_vault['display_score'] = df_vault['sentiment_score'].apply(
+                    lambda x: (x * 2) - 1 if 0 <= x <= 1 else x
+                )
 
                 for _, row in df_vault.iterrows():
                     with st.container(border=True):
@@ -1544,8 +1549,8 @@ elif page == "Sentiment Scoring":
                         
                         with v_col2:
                             d_score = row.get('display_score', 0.0)
-                            # Forensic color coding based on category
-                            score_color = "#E63946" if cat_label in ["Critical", "Negative"] else "#F4A261" if cat_label == "Neutral" else "#2A9D8F"
+                            # Forensic color coding
+                            score_color = "#E63946" if cat_label in ["Critical", "Negative"] or d_score < -0.3 else "#F4A261" if cat_label == "Neutral" else "#2A9D8F"
                             st.metric("AI Score", f"{d_score:.2f}")
                             st.markdown(f"<div style='height:8px; width:100%; background:{score_color}; border-radius:4px;'></div>", unsafe_allow_html=True)
             else:
