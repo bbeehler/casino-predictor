@@ -78,20 +78,19 @@ def archive_sentiment_entry(text, asset_tag):
         return False
 
 # =================================================================
-# GLOBAL AI ENGINES
+# GLOBAL AI ENGINES (v61.0 - Aggressive Backfill & Debug)
 # =================================================================
 
 def generate_ai_prediction(target_date, property_name):
     """
     Generates a contextual traffic prediction using Gemini.
-    Acts as the shared intelligence service for the Ledger and Simulator.
     """
     try:
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        # Using 1.5-flash for speed and reliability in backfills
         model = genai.GenerativeModel('gemini-2.5-flash')
         
-        # Calculate day of week for added AI context
         day_of_week = pd.to_datetime(target_date).day_name()
         
         prompt = f"""
@@ -102,18 +101,16 @@ def generate_ai_prediction(target_date, property_name):
         """
         
         response = model.generate_content(prompt)
-        # Strip everything except digits to ensure a clean integer conversion
         prediction_clean = ''.join(filter(str.isdigit, response.text))
         
         return int(prediction_clean) if prediction_clean else 0
     except Exception as e:
-        print(f"AI Engine Error: {e}")
+        st.error(f"AI Generation Error for {target_date}: {e}")
         return 0
 
 def run_forensic_backfill():
     """
-    Finds historical ledger entries missing predictions and hydrates them.
-    Refactored to avoid complex Postgrest filtering errors.
+    Refactored to catch 'string zeros' and provide real-time debug info.
     """
     try:
         # 1. Fetch all records for the current property
@@ -121,41 +118,52 @@ def run_forensic_backfill():
             .eq("property_id", st.session_state.current_property_id).execute()
         
         if not res.data:
-            st.toast("No historical nodes found for this property.")
+            st.toast("No historical nodes found.")
             return
 
-        # 2. Identify nodes where predicted_traffic is 0, None, or NaN
-        targets = [
-            row for row in res.data 
-            if not row.get('predicted_traffic') or row.get('predicted_traffic') == 0
-        ]
+        # 2. Aggressive Target Identification (Catches strings, nulls, and zeros)
+        targets = []
+        for row in res.data:
+            val = row.get('predicted_traffic')
+            # Check if value is essentially "empty" or 0 in any format
+            if val in [0, 0.0, "0", "0.0", None, "None", "nan", ""]:
+                targets.append(row)
         
         if not targets:
-            st.success("✅ All nodes are already hydrated with AI intelligence.")
+            st.success("✅ All nodes are already hydrated.")
             return
 
         # 3. Execution UI
         total = len(targets)
         progress_bar = st.progress(0)
         status_msg = st.empty()
+        debug_area = st.expander("🛠️ Real-Time Backfill Debugger", expanded=True)
         
         for i, row in enumerate(targets):
             status_msg.text(f"Hydrating Node {i+1}/{total}: {row['entry_date']}")
             
-            # Generate the historical "forecast"
+            # Generate prediction
             ai_guess = generate_ai_prediction(row['entry_date'], st.session_state.current_property_name)
             
-            # Update the specific node
+            # Show debug info to verify the AI isn't returning 0
+            with debug_area:
+                st.write(f"Date: {row['entry_date']} | AI Guess: **{ai_guess}**")
+            
+            # 4. Force update to Supabase
             supabase.table("ledger").update({"predicted_traffic": ai_guess})\
                 .eq("id", row['id']).execute()
             
-            # Update progress
             progress_bar.progress((i + 1) / total)
         
-        # 4. Finalize
+        # 5. Finalize and Clear Cache
         status_msg.empty()
         st.success(f"Forensic Backfill Complete: {total} records hydrated.")
+        
+        # This is critical to ensure the charts update!
         st.cache_data.clear()
+        if 'ledger_data' in st.session_state:
+            del st.session_state['ledger_data']
+            
         st.balloons()
         
     except Exception as e:
