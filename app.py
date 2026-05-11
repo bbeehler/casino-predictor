@@ -1437,7 +1437,7 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: SENTIMENT SCORING (v63.0 - Balanced Scale)
+# 14. PAGE 6: SENTIMENT SCORING (v63.2 - Deep Scale Precision)
 # =================================================================
 elif page == "Sentiment Scoring":
     render_styled_header(
@@ -1485,7 +1485,7 @@ elif page == "Sentiment Scoring":
                     st.rerun()
         st.divider()
 
-    # --- 3. SENTIMENT VAULT RESEARCH (-1.0 to 1.0 SCALE) ---
+    # --- 3. SENTIMENT VAULT RESEARCH ---
     st.markdown("### 🔍 Sentiment Vault Research")
 
     f1, f2, f3, f4 = st.columns([1.2, 1, 1.2, 1.2])
@@ -1503,9 +1503,9 @@ elif page == "Sentiment Scoring":
         score_range = st.slider(
             "AI Sentiment Range", 
             -1.0, 1.0, 
-            (-1.0, 0.0), # Defaulting to the "Negative/Neutral" half
-            step=0.1,
-            help="-1.0: Negative | 0.0: Neutral | 1.0: Positive"
+            (-1.0, 0.0), # Defaulting to the negative spectrum
+            step=0.05,   # Increased precision to 0.05 to catch -0.95 specifically
+            help="-1.0: Critical | 0.0: Neutral | 1.0: Exceptional"
         )
 
     # Fetch Data
@@ -1523,18 +1523,29 @@ elif page == "Sentiment Scoring":
         if vault_res.data:
             df_vault = pd.DataFrame(vault_res.data)
             
-            # --- THE RE-MAPPING LOGIC ---
-            # Converts internal 0-1 score to a -1 to 1 display scale
+            # --- THE RE-MAPPING & FILTER FIX ---
             if 'sentiment_score' in df_vault.columns:
+                # Force numeric conversion in case of string-types from Supabase
+                df_vault['sentiment_score'] = pd.to_numeric(df_vault['sentiment_score'], errors='coerce').fillna(0.5)
+                
+                # 1. Map to Display Scale (-1 to 1)
                 df_vault['display_score'] = (df_vault['sentiment_score'] * 2) - 1
                 
-                # Filter by the new balanced scale
+                # 2. Apply Text Search (Before Score Filter)
+                if search_query:
+                    df_vault = df_vault[df_vault['raw_text'].str.contains(search_query, case=False)]
+                
+                # 3. Apply the Balanced Scale Filter
+                # Using a small epsilon (1e-5) for floating point precision safety
                 df_vault = df_vault[
-                    (df_vault['display_score'] >= score_range[0]) & 
-                    (df_vault['display_score'] <= score_range[1])
+                    (df_vault['display_score'] >= score_range[0] - 1e-5) & 
+                    (df_vault['display_score'] <= score_range[1] + 1e-5)
                 ]
 
             if not df_vault.empty:
+                # OPTIONAL DEBUG: Uncomment to see exactly what is being caught
+                # st.write(f"Displaying {len(df_vault)} records. Min score in view: {df_vault['display_score'].min():.4f}")
+
                 for _, row in df_vault.iterrows():
                     with st.container(border=True):
                         v_col1, v_col2 = st.columns([4, 1])
@@ -1545,9 +1556,9 @@ elif page == "Sentiment Scoring":
                         
                         with v_col2:
                             d_score = row.get('display_score', 0.0)
-                            # Dynamic forensic coloring for the -1 to 1 scale
-                            score_color = "#E63946" if d_score < -0.2 else "#F4A261" if d_score <= 0.2 else "#2A9D8F"
-                            st.metric("AI Sentiment", f"{d_score:.2f}", delta_color="normal")
+                            # Forensic color coding for balanced scale
+                            score_color = "#E63946" if d_score < -0.3 else "#F4A261" if d_score <= 0.3 else "#2A9D8F"
+                            st.metric("AI Sentiment", f"{d_score:.2f}")
                             st.markdown(f"<div style='height:8px; width:100%; background:{score_color}; border-radius:4px;'></div>", unsafe_allow_html=True)
             else:
                 st.info("No records match this sentiment range.")
