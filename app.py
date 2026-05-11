@@ -78,6 +78,28 @@ def archive_sentiment_entry(text, asset_tag):
         return False
 
 # =================================================================
+# GLOBAL AI ENGINES
+# =================================================================
+
+def generate_ai_prediction(target_date, property_name):
+    """
+    Place the function here. It acts as a shared 'service' 
+    for the rest of the application.
+    """
+    try:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        day_of_week = pd.to_datetime(target_date).day_name()
+        prompt = f"Predict guest traffic for {property_name} on {target_date} ({day_of_week}). Return ONLY an integer."
+        
+        response = model.generate_content(prompt)
+        prediction_clean = ''.join(filter(str.isdigit, response.text))
+        return int(prediction_clean) if prediction_clean else 0
+    except:
+        return 0
+
+# =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
 # =================================================================
 try:
@@ -938,43 +960,59 @@ if page == "Executive Dashboard":
             except: pass
         
 # =================================================================
-# 10. PAGE 2: DAILY LEDGER AUDIT (v60.0 - Experiment Enabled)
+# 10. PAGE 2: DAILY LEDGER AUDIT (v60.5 - AI Inference Enabled)
 # =================================================================
 elif page == "Daily Ledger Audit":
-    # 1. PREMIUM HEADER
     render_styled_header(
         f"Ledger Audit: {st.session_state.current_property_name}", 
-        "Operational Actuals Management & Data Integrity", 
+        "Operational Actuals Management & Real-Time AI Inference Audit", 
         "Data Active"
     )
-    
+
+    # --- 1. AI PREDICTION ENGINE (INTERNAL UTILITY) ---
+    def generate_ai_prediction(target_date, property_name):
+        """Generates a contextual traffic prediction using Gemini."""
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            
+            # Contextual Prompting for Ottawa-specific logic
+            prompt = f"""
+            Task: Predict casino traffic (guest count).
+            Property: {property_name}
+            Target Date: {target_date}
+            Context: Standard day at a Hard Rock Hotel & Casino.
+            Constraint: Return ONLY the raw integer. No text.
+            """
+            response = model.generate_content(prompt)
+            # Extract digits only to ensure type safety
+            prediction_clean = ''.join(filter(str.isdigit, response.text))
+            return int(prediction_clean) if prediction_clean else 0
+        except:
+            return 0 # Fallback safety
+
     # --- 2. THE DATA ENGINE ---
     if not ledger_data:
         df_ledger = pd.DataFrame(columns=[
-            'entry_date', 'actual_traffic', 'new_members', 'actual_coin_in', 
-            'active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 
-            'rain_mm', 'snow_cm', 'experiment_tag', 'property_id'
+            'entry_date', 'actual_traffic', 'predicted_traffic', 'new_members', 
+            'actual_coin_in', 'active_promo', 'attendance', 'ad_clicks', 
+            'ad_impressions', 'rain_mm', 'snow_cm', 'experiment_tag', 'property_id'
         ])
     else:
         df_ledger = pd.DataFrame(ledger_data)
         df_ledger['entry_date'] = pd.to_datetime(df_ledger['entry_date']).dt.date
         
-        marketing_cols = ['actual_traffic', 'new_members', 'actual_coin_in', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
-        for col in marketing_cols:
+        num_cols = ['actual_traffic', 'predicted_traffic', 'new_members', 'actual_coin_in', 'attendance', 'ad_clicks', 'ad_impressions']
+        for col in num_cols:
             if col in df_ledger.columns:
                 df_ledger[col] = pd.to_numeric(df_ledger[col], errors='coerce').fillna(0)
         
-        # Clean up text columns
-        for col in ['active_promo', 'experiment_tag']:
-            if col in df_ledger.columns:
-                df_ledger[col] = df_ledger[col].astype(str).replace(['nan', 'None', '0', '0.0'], '')
-        
         df_ledger = df_ledger.sort_values('entry_date', ascending=False)
 
-    # --- 3. RAPID ENTRY ACTION CARD ---
+    # --- 3. RAPID ENTRY ACTION CARD (WITH REAL-TIME INFERENCE) ---
     with st.expander("➕ Register Daily Performance Nodes", expanded=False):
-        st.markdown('<div style="padding: 10px;">', unsafe_allow_html=True)
-        with st.form("rapid_entry_form", clear_on_submit=True, border=False):
+        with st.form("rapid_entry_form_v60", clear_on_submit=True, border=False):
             f1, f2, f3 = st.columns(3)
             with f1:
                 e_date = st.date_input("Audit Date", value=datetime.date.today())
@@ -985,105 +1023,89 @@ elif page == "Daily Ledger Audit":
                 e_event = st.number_input("Event Attendance", min_value=0, step=1)
                 e_coin = st.number_input("Actual Coin-In ($)", min_value=0.0, step=1000.0)
             with f3:
-                # INTEGRATED EXPERIMENT TAG
-                e_tag = st.text_input("Experiment Tag", placeholder="e.g. Control or Test_V1")
+                e_tag = st.text_input("Experiment Tag", placeholder="e.g. Control")
                 e_clicks = st.number_input("Ad Clicks", min_value=0, step=1)
                 e_imps = st.number_input("Social Impressions", min_value=0, step=1)
             
             st.markdown("<br>", unsafe_allow_html=True)
-            submit_new = st.form_submit_button("🚀 Commit to Forensic Vault", use_container_width=True)
-            
-            if submit_new:
-                new_row = {
-                    "entry_date": str(e_date),
-                    "actual_traffic": int(e_traffic),
-                    "new_members": int(e_members),
-                    "actual_coin_in": float(e_coin),
-                    "active_promo": str(e_promo).strip() if e_promo else None,
-                    "experiment_tag": str(e_tag).strip() if e_tag else None,
-                    "attendance": int(e_event),
-                    "ad_clicks": int(e_clicks),
-                    "ad_impressions": int(e_imps),
-                    "rain_mm": 0.0, # Placeholder for manual override
-                    "snow_cm": 0.0,
-                    "property_id": st.session_state.current_property_id
-                }
-                try:
-                    supabase.table("ledger").upsert(new_row).execute()
-                    st.success(f"✅ Successfully logged: {e_date}")
-                    st.cache_data.clear()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Vault Error: {e}")
-        st.markdown('</div>', unsafe_allow_html=True)
+            if st.form_submit_button("🚀 Commit to Forensic Vault", use_container_width=True):
+                with st.spinner("🤖 AI Analyst is generating context-aware prediction..."):
+                    # TRIGGER THE PREDICTION
+                    ai_pred = generate_ai_prediction(e_date, st.session_state.current_property_name)
+                    
+                    payload = {
+                        "property_id": st.session_state.current_property_id,
+                        "entry_date": str(e_date),
+                        "actual_traffic": int(e_traffic),
+                        "predicted_traffic": ai_pred, # RECORDING THE AI'S "GUESS"
+                        "new_members": int(e_members),
+                        "actual_coin_in": float(e_coin),
+                        "active_promo": str(e_promo).strip() if e_promo else None,
+                        "experiment_tag": str(e_tag).strip() if e_tag else None,
+                        "attendance": int(e_event),
+                        "ad_clicks": int(e_clicks),
+                        "ad_impressions": int(e_imps),
+                        "property_id": st.session_state.current_property_id
+                    }
+                    try:
+                        supabase.table("ledger").upsert(payload).execute()
+                        st.success(f"✅ Logged. AI Predicted {ai_pred:,} vs Actual {e_traffic:,}")
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Vault Error: {e}")
 
+    # --- 4. PERFORMANCE SCOREBOARD (WITH VARIANCE) ---
     st.markdown("<br>", unsafe_allow_html=True)
-
-    # --- 4. PERFORMANCE SCOREBOARD ---
     c_lim, _ = st.columns([1, 2])
     with c_lim:
-        view_limit = st.select_slider("Audit Depth (Days):", options=[7, 14, 30, 60, 90, 120], value=30)
+        view_limit = st.select_slider("Audit Depth (Days):", options=[7, 14, 30, 60], value=14)
     
     df_audit_period = df_ledger.head(view_limit).copy()
     
-    st.markdown(f"### 🎯 Performance Scoreboard: Last {view_limit} Days")
     if not df_audit_period.empty:
-        total_period_traffic = df_audit_period['actual_traffic'].sum()
-        total_period_signups = df_audit_period['new_members'].sum()
-        total_potential = (total_period_traffic * 1100.31) + (total_period_signups * 1900.00)
-        avg_traffic = total_period_traffic / len(df_audit_period)
+        total_actual = df_audit_period['actual_traffic'].sum()
+        total_pred = df_audit_period['predicted_traffic'].sum()
+        # Calculate AI Accuracy Variance
+        variance = total_actual - total_pred
+        var_pct = (variance / total_pred * 100) if total_pred > 0 else 0
         
         m1, m2, m3 = st.columns(3)
-        m1.metric("Total Period Traffic", f"{total_period_traffic:,.0f}", delta=f"{avg_traffic:,.0f} avg/day")
-        m2.metric("Total New Members", f"{total_period_signups:,.0f}", delta=f"{total_period_signups / len(df_audit_period):,.1f} avg/day")
-        m3.metric("Audited Potential", f"${total_potential:,.2f}")
-    else:
-        st.info("No data available for the selected range.")
-
+        m1.metric("Actual Traffic", f"{total_actual:,.0f}")
+        m2.metric("AI Predicted", f"{total_pred:,.0f}")
+        m3.metric("AI Variance", f"{variance:+,}", delta=f"{var_pct:.1f}%")
+        
     st.divider()
 
     # --- 5. THE HISTORICAL EDITABLE LEDGER ---
     st.markdown("### 📂 Bulk Audit & Corrections")
     with st.form("bulk_ledger_sync", border=False):
-        cols_to_show = [c for c in df_audit_period.columns if c != 'property_id']
-        display_df = df_audit_period[cols_to_show].copy()
-        
+        display_df = df_audit_period.drop(columns=['property_id'], errors='ignore').copy()
         with st.container(border=True):
             edited_ledger = st.data_editor(
                 display_df, 
                 column_config={
-                    "id": None, 
                     "entry_date": st.column_config.DateColumn("Date", required=True),
-                    "actual_traffic": st.column_config.NumberColumn("Guests", format="%d"),
-                    "new_members": st.column_config.NumberColumn("Members", format="%d"),
+                    "actual_traffic": st.column_config.NumberColumn("Actual Guests", format="%d"),
+                    "predicted_traffic": st.column_config.NumberColumn("AI Forecast", format="%d", disabled=True),
                     "actual_coin_in": st.column_config.NumberColumn("Revenue", format="$%d"),
-                    "active_promo": st.column_config.TextColumn("Promo Name"),
-                    "experiment_tag": st.column_config.TextColumn("Experiment Tag"), # ADDED TO BULK EDITOR
                 },
                 hide_index=True,
                 use_container_width=True,
-                num_rows="dynamic",
                 key="ledger_editor_v60"
             )
         
-        st.markdown("<br>", unsafe_allow_html=True)
         if st.form_submit_button("💾 Sync Table Updates to Cloud", use_container_width=True):
             try:
-                df_sync = pd.DataFrame(edited_ledger).copy()
-                if not df_sync.empty:
-                    df_sync['entry_date'] = df_sync['entry_date'].astype(str)
-                    df_sync['property_id'] = st.session_state.current_property_id
-                    
-                    sync_payload = df_sync.fillna(0).to_dict(orient='records')
-                    supabase.table("ledger").upsert(sync_payload).execute()
-                    
-                    st.success("✅ Bulk updates synced successfully.")
-                    st.cache_data.clear()
-                    st.rerun()
-                else:
-                    st.warning("No data to sync.")
+                df_sync = pd.DataFrame(edited_ledger)
+                df_sync['entry_date'] = df_sync['entry_date'].astype(str)
+                df_sync['property_id'] = st.session_state.current_property_id
+                sync_payload = df_sync.fillna(0).to_dict(orient='records')
+                supabase.table("ledger").upsert(sync_payload).execute()
+                st.success("✅ Cloud Sync Complete.")
+                st.rerun()
             except Exception as e:
-                st.error(f"Bulk Sync Error: {e}")
+                st.error(f"Sync Error: {e}")
 
 # =================================================================
 # 11. PAGE 3: ATTRIBUTION ANALYTICS (v52.0 - High-End Suite)
@@ -1216,13 +1238,13 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for full ROI Audit.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (v60.3 - Social Intent Engine)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (v60.5 - AI Variance & Social)
 # =================================================================
 elif page == "Master Audit Report":
     # 1. PREMIUM HEADER
     render_styled_header(
         f"Master Property Audit: {st.session_state.current_property_name}",
-        "Forensic Ledger: Financials, Loyalty, & Social Intent Attribution",
+        "Forensic Ledger: Financials, Multi-Channel Attribution, & AI Accuracy",
         "Audit Ready"
     )
     
@@ -1270,29 +1292,29 @@ elif page == "Master Audit Report":
 
         m = get_forensic_metrics(df_audit_filtered.to_dict(orient='records'), st.session_state.coeffs)
         df_final = m['df']
-        c = st.session_state.coeffs
         
-        # Financial & Social Calcs
-        hold_pct = float(c.get('Hold_Pct', 10.2)) / 100
+        # --- 3. CALCULATIONS ---
         t_rev = df_final['actual_coin_in'].sum()
         t_traf = df_final['actual_traffic'].sum()
         t_mems = df_final['new_members'].sum()
-        
-        # Social Intent Metrics (Explicitly separating Clicks/Engagements from Reach)
         t_clicks = df_final['ad_clicks'].sum() if 'ad_clicks' in df_final.columns else 0
         t_imps = df_final['ad_impressions'].sum() if 'ad_impressions' in df_final.columns else 0
-        engagement_rate = (t_clicks / t_imps * 100) if t_imps > 0 else 0
+        
+        # AI Variance Logic
+        t_pred = df_final['predicted_traffic'].sum() if 'predicted_traffic' in df_final.columns else 0
+        accuracy = (1 - (abs(t_traf - t_pred) / t_traf)) * 100 if t_traf > 0 else 0
 
-        # --- 3. EXECUTIVE SCOREBOARD ---
+        # --- 4. EXECUTIVE SCOREBOARD ---
         st.markdown("### 📊 Executive Summary")
-        k1, k2, k3, k4, k5 = st.columns(5)
+        k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.metric("Total Traffic", f"{t_traf:,}")
         k2.metric("Actual Revenue", f"${t_rev:,.0f}")
-        k3.metric("Ad Clicks (Intent)", f"{t_clicks:,.0f}", help="Total trackable clicks/engagements from social campaigns.")
+        k3.metric("Ad Clicks (Intent)", f"{t_clicks:,.0f}")
         k4.metric("New Members", f"{t_mems:,}")
-        k5.metric("Engagement Rate", f"{engagement_rate:.2f}%", help="Click-Through Rate (CTR) relative to impressions.")
+        k5.metric("Social Reach", f"{t_imps:,.0f}")
+        k6.metric("AI Forecast Accuracy", f"{accuracy:.1f}%", help="Closeness of AI predictions to floor actuals.")
 
-        # --- 4. ATTRIBUTION FLOW CHART ---
+        # --- 5. ATTRIBUTION FLOW CHART ---
         st.divider()
         st.markdown("### 🌊 Multi-Channel Attribution Flow")
         fig_stack = go.Figure()
@@ -1309,58 +1331,61 @@ elif page == "Master Audit Report":
                     line=dict(width=0.5, color=color),
                     fill='tonexty'
                 ))
-        
         fig_stack.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10), template="plotly_white")
         st.plotly_chart(fig_stack, use_container_width=True)
 
-        # --- 5. SOCIAL VELOCITY & INTENT AUDIT ---
+        # --- 6. AI VARIANCE AUDIT (THE "REPORT CARD") ---
+        st.markdown("### 🎯 Prediction vs. Reality: AI Variance Audit")
+        v_col, i_col = st.columns([2, 1])
+        
+        with v_col:
+            fig_var = go.Figure()
+            fig_var.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['actual_traffic'], 
+                                         name="Actual Guests", line=dict(color='#0047AB', width=3)))
+            fig_var.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['predicted_traffic'], 
+                                         name="AI Forecast", line=dict(color='#FFCC00', width=2, dash='dot')))
+            fig_var.update_layout(height=350, template="plotly_white", margin=dict(l=10, r=10, t=10, b=10),
+                                  hovermode="x unified", legend=dict(orientation="h", y=1.1))
+            st.plotly_chart(fig_var, use_container_width=True)
+            
+        with i_col:
+            with st.container(border=True):
+                st.markdown("#### 🏁 Model Reliability")
+                avg_error = abs(t_traf - t_pred) / len(df_final) if len(df_final) > 0 else 0
+                st.metric("Avg Daily Variance", f"{avg_error:,.0f} guests")
+                
+                # Dynamic Status
+                if accuracy > 90:
+                    st.success("High Confidence: AI is tracking floor behavior with elite precision.")
+                elif accuracy > 75:
+                    st.warning("Moderate Drift: Consider recalibrating weights in the Calibration page.")
+                else:
+                    st.error("High Variance: Significant data outliers detected. Manual audit required.")
+                
+                st.info("💡 High variance often occurs during unmapped community events or extreme weather shifts.")
+
+        # --- 7. SOCIAL VELOCITY & EXPORT ---
+        st.divider()
         st.markdown("### 📲 Social Velocity & Conversion Audit")
         
-        v1, v2 = st.columns([2, 1])
-        with v1:
-            # Dual Axis: Reach (Impressions) vs. Intent (Clicks)
+        s1, s2 = st.columns([2, 1])
+        with s1:
             fig_social = go.Figure()
-            fig_social.add_trace(go.Bar(
-                x=df_final['entry_date'], y=df_final['ad_impressions'], 
-                name="Reach (Impressions)", marker_color='#E2E8F0', opacity=0.75
-            ))
-            fig_social.add_trace(go.Scatter(
-                x=df_final['entry_date'], y=df_final['ad_clicks'], 
-                name="Intent (Clicks)", line=dict(color='#0047AB', width=3),
-                yaxis="y2"
-            ))
-            fig_social.update_layout(
-                height=350, template="plotly_white",
-                yaxis=dict(title="Reach Volume"),
-                yaxis2=dict(title="Intent (Clicks)", overlaying="y", side="right"),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                margin=dict(l=10, r=10, t=30, b=10)
-            )
+            fig_social.add_trace(go.Bar(x=df_final['entry_date'], y=df_final['ad_impressions'], 
+                                        name="Reach", marker_color='#E2E8F0', opacity=0.75))
+            fig_social.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['ad_clicks'], 
+                                            name="Intent", line=dict(color='#0047AB', width=3), yaxis="y2"))
+            fig_social.update_layout(height=350, template="plotly_white", yaxis2=dict(overlaying="y", side="right"),
+                                     margin=dict(l=10, r=10, t=30, b=10), legend=dict(orientation="h", y=1.1))
             st.plotly_chart(fig_social, use_container_width=True)
-            
-        with v2:
+        
+        with s2:
+            st.download_button("📥 Export Integrated Audit", 
+                               data=df_final.to_csv(index=False).encode('utf-8'), 
+                               file_name=f"Master_Audit_{s_date}.csv", use_container_width=True)
             with st.container(border=True):
-                st.markdown("#### 🏁 Efficiency Metrics")
-                
-                # Daily Intent Velocity
-                daily_clicks = t_clicks / len(df_final) if len(df_final) > 0 else 0
-                st.metric("Avg Daily Intent", f"{daily_clicks:.1f} Clicks")
-                
-                # Social-to-Floor Bridge
-                soc_bridge = (t_clicks / t_traf) if t_traf > 0 else 0
-                st.metric("Social-to-Floor Bridge", f"{soc_bridge:.2f}x")
-                st.caption("Ratio of digital clicks per physical guest visit.")
-                
-                st.divider()
-                st.info("💡 Audit Note: High correlation between 'Intent' spikes and 'Digital ROI Lift' validates campaign effectiveness.")
-
-        with col_export:
-            st.download_button(
-                "📥 Export Integrated Audit", 
-                data=df_final.to_csv(index=False).encode('utf-8'), 
-                file_name=f"Master_Audit_{s_date}.csv", 
-                use_container_width=True
-            )
+                st.metric("Social-to-Floor Bridge", f"{(t_clicks/t_traf if t_traf > 0 else 0):.2f}x")
+                st.caption("Ratio of digital intent vs physical footfall.")
 
 # =================================================================
 # 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS (v52.0 SaaS)
