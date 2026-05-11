@@ -83,52 +83,83 @@ def archive_sentiment_entry(text, asset_tag):
 
 def generate_ai_prediction(target_date, property_name):
     """
-    Place the function here. It acts as a shared 'service' 
-    for the rest of the application.
+    Generates a contextual traffic prediction using Gemini.
+    Acts as the shared intelligence service for the Ledger and Simulator.
     """
     try:
+        import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         model = genai.GenerativeModel('gemini-2.5-flash')
         
+        # Calculate day of week for added AI context
         day_of_week = pd.to_datetime(target_date).day_name()
-        prompt = f"Predict guest traffic for {property_name} on {target_date} ({day_of_week}). Return ONLY an integer."
+        
+        prompt = f"""
+        Predict total guest traffic (integer) for {property_name} 
+        on {target_date} ({day_of_week}). 
+        Context: Hard Rock Casino operation in Ottawa.
+        Return ONLY the raw integer.
+        """
         
         response = model.generate_content(prompt)
+        # Strip everything except digits to ensure a clean integer conversion
         prediction_clean = ''.join(filter(str.isdigit, response.text))
+        
         return int(prediction_clean) if prediction_clean else 0
-    except:
+    except Exception as e:
+        print(f"AI Engine Error: {e}")
         return 0
 
-# --- ADD TO YOUR GLOBAL UTILITIES (TOP OF SCRIPT) ---
 def run_forensic_backfill():
     """
-    Finds all ledger entries with 0 or NULL predicted_traffic and 
-    populates them using the AI Inference engine.
+    Finds historical ledger entries missing predictions and hydrates them.
+    Refactored to avoid complex Postgrest filtering errors.
     """
-    # Fetch rows that need hydration
-    target_res = supabase.table("ledger").select("id, entry_date")\
-        .or_("predicted_traffic.eq.0,predicted_traffic.is.null")\
-        .eq("property_id", st.session_state.current_property_id).execute()
-    
-    if not target_res.data:
-        st.toast("✅ All nodes are already hydrated.")
-        return
+    try:
+        # 1. Fetch all records for the current property
+        res = supabase.table("ledger").select("id, entry_date, predicted_traffic")\
+            .eq("property_id", st.session_state.current_property_id).execute()
+        
+        if not res.data:
+            st.toast("No historical nodes found for this property.")
+            return
 
-    total = len(target_res.data)
-    progress_bar = st.sidebar.progress(0) # Put progress in sidebar to stay out of way
-    
-    for i, row in enumerate(target_res.data):
-        # 1. Generate prediction for that historical date
-        ai_guess = generate_ai_prediction(row['entry_date'], st.session_state.current_property_name)
+        # 2. Identify nodes where predicted_traffic is 0, None, or NaN
+        targets = [
+            row for row in res.data 
+            if not row.get('predicted_traffic') or row.get('predicted_traffic') == 0
+        ]
         
-        # 2. Update the row
-        supabase.table("ledger").update({"predicted_traffic": ai_guess}).eq("id", row['id']).execute()
+        if not targets:
+            st.success("✅ All nodes are already hydrated with AI intelligence.")
+            return
+
+        # 3. Execution UI
+        total = len(targets)
+        progress_bar = st.progress(0)
+        status_msg = st.empty()
         
-        # 3. Update Progress
-        progress_bar.progress((i + 1) / total)
-    
-    st.success(f"Forensic Backfill Complete: {total} records hydrated.")
-    st.cache_data.clear()
+        for i, row in enumerate(targets):
+            status_msg.text(f"Hydrating Node {i+1}/{total}: {row['entry_date']}")
+            
+            # Generate the historical "forecast"
+            ai_guess = generate_ai_prediction(row['entry_date'], st.session_state.current_property_name)
+            
+            # Update the specific node
+            supabase.table("ledger").update({"predicted_traffic": ai_guess})\
+                .eq("id", row['id']).execute()
+            
+            # Update progress
+            progress_bar.progress((i + 1) / total)
+        
+        # 4. Finalize
+        status_msg.empty()
+        st.success(f"Forensic Backfill Complete: {total} records hydrated.")
+        st.cache_data.clear()
+        st.balloons()
+        
+    except Exception as e:
+        st.error(f"Backfill Engine Error: {e}")
 
 # =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
