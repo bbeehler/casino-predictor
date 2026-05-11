@@ -991,7 +991,7 @@ if page == "Executive Dashboard":
             except: pass
         
 # =================================================================
-# 10. PAGE 2: DAILY LEDGER AUDIT (v60.5 - AI Inference Enabled)
+# 10. PAGE 2: DAILY LEDGER AUDIT (v60.9 - Forensic Backfill Ready)
 # =================================================================
 elif page == "Daily Ledger Audit":
     render_styled_header(
@@ -1000,30 +1000,7 @@ elif page == "Daily Ledger Audit":
         "Data Active"
     )
 
-    # --- 1. AI PREDICTION ENGINE (INTERNAL UTILITY) ---
-    def generate_ai_prediction(target_date, property_name):
-        """Generates a contextual traffic prediction using Gemini."""
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model = genai.GenerativeModel('gemini-2.5-flash')
-            
-            # Contextual Prompting for Ottawa-specific logic
-            prompt = f"""
-            Task: Predict casino traffic (guest count).
-            Property: {property_name}
-            Target Date: {target_date}
-            Context: Standard day at a Hard Rock Hotel & Casino.
-            Constraint: Return ONLY the raw integer. No text.
-            """
-            response = model.generate_content(prompt)
-            # Extract digits only to ensure type safety
-            prediction_clean = ''.join(filter(str.isdigit, response.text))
-            return int(prediction_clean) if prediction_clean else 0
-        except:
-            return 0 # Fallback safety
-
-    # --- 2. THE DATA ENGINE ---
+    # --- 1. THE DATA ENGINE ---
     if not ledger_data:
         df_ledger = pd.DataFrame(columns=[
             'entry_date', 'actual_traffic', 'predicted_traffic', 'new_members', 
@@ -1041,7 +1018,15 @@ elif page == "Daily Ledger Audit":
         
         df_ledger = df_ledger.sort_values('entry_date', ascending=False)
 
-    # --- 3. RAPID ENTRY ACTION CARD (WITH REAL-TIME INFERENCE) ---
+    # --- 2. DATA INTEGRITY TOOLS (Temporary Backfill Trigger) ---
+    with st.expander("🛠️ Administrative Data Tools", expanded=False):
+        st.info("Use the Backfill tool to populate 'AI Forecast' values for historical entries that are currently empty.")
+        if st.button("🔄 Execute One-Time AI Backfill", use_container_width=True):
+            # This calls the function you placed in your Global Utilities
+            run_forensic_backfill() 
+            st.rerun()
+
+    # --- 3. RAPID ENTRY ACTION CARD ---
     with st.expander("➕ Register Daily Performance Nodes", expanded=False):
         with st.form("rapid_entry_form_v60", clear_on_submit=True, border=False):
             f1, f2, f3 = st.columns(3)
@@ -1061,26 +1046,25 @@ elif page == "Daily Ledger Audit":
             st.markdown("<br>", unsafe_allow_html=True)
             if st.form_submit_button("🚀 Commit to Forensic Vault", use_container_width=True):
                 with st.spinner("🤖 AI Analyst is generating context-aware prediction..."):
-                    # TRIGGER THE PREDICTION
+                    # Call the Global Prediction Engine
                     ai_pred = generate_ai_prediction(e_date, st.session_state.current_property_name)
                     
                     payload = {
                         "property_id": st.session_state.current_property_id,
                         "entry_date": str(e_date),
                         "actual_traffic": int(e_traffic),
-                        "predicted_traffic": ai_pred, # RECORDING THE AI'S "GUESS"
+                        "predicted_traffic": ai_pred,
                         "new_members": int(e_members),
                         "actual_coin_in": float(e_coin),
                         "active_promo": str(e_promo).strip() if e_promo else None,
                         "experiment_tag": str(e_tag).strip() if e_tag else None,
                         "attendance": int(e_event),
                         "ad_clicks": int(e_clicks),
-                        "ad_impressions": int(e_imps),
-                        "property_id": st.session_state.current_property_id
+                        "ad_impressions": int(e_imps)
                     }
                     try:
                         supabase.table("ledger").upsert(payload).execute()
-                        st.success(f"✅ Logged. AI Predicted {ai_pred:,} vs Actual {e_traffic:,}")
+                        st.success(f"✅ Success. AI Predicted {ai_pred:,} vs Actual {e_traffic:,}")
                         st.cache_data.clear()
                         st.rerun()
                     except Exception as e:
@@ -1097,7 +1081,6 @@ elif page == "Daily Ledger Audit":
     if not df_audit_period.empty:
         total_actual = df_audit_period['actual_traffic'].sum()
         total_pred = df_audit_period['predicted_traffic'].sum()
-        # Calculate AI Accuracy Variance
         variance = total_actual - total_pred
         var_pct = (variance / total_pred * 100) if total_pred > 0 else 0
         
@@ -1134,17 +1117,10 @@ elif page == "Daily Ledger Audit":
                 sync_payload = df_sync.fillna(0).to_dict(orient='records')
                 supabase.table("ledger").upsert(sync_payload).execute()
                 st.success("✅ Cloud Sync Complete.")
+                st.cache_data.clear()
                 st.rerun()
             except Exception as e:
                 st.error(f"Sync Error: {e}")
-
-# --- ADD TEMPORARILY TO SECTION 10 ---
-st.divider()
-st.markdown("### 🛠️ Data Integrity Tools")
-if st.button("🔄 Run One-Time AI Backfill", use_container_width=True, help="Populates missing predictions for historical data."):
-    run_forensic_backfill()
-    st.rerun()
-st.divider()
 
 # =================================================================
 # 11. PAGE 3: ATTRIBUTION ANALYTICS (v52.0 - High-End Suite)
