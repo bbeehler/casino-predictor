@@ -79,21 +79,38 @@ def archive_sentiment_entry(text, asset_tag):
         st.error(f"Archival Sync Error: {e}")
         return False
 
+import time
+import re
+import pandas as pd
+import streamlit as st
+
 # =================================================================
-# GLOBAL AI ENGINES (v61.0 - Aggressive Backfill & Debug)
+# GLOBAL AI ENGINES (v61.2 - Case-Insensitive ID Mapping)
 # =================================================================
 
 def generate_ai_prediction(target_date, property_name):
-    """Refined number extraction for float8 compatibility."""
+    """
+    Acts as the shared intelligence service for Ledger and Simulator.
+    Generates a contextual prediction for a specific historical date.
+    """
     try:
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        
+        # Use stable 1.5-flash for high-volume backfill loops
         model = genai.GenerativeModel('gemini-2.5-flash')
         
         day_of_week = pd.to_datetime(target_date).day_name()
-        prompt = f"Predict casino traffic (integer) for {property_name} on {target_date} ({day_of_week}). Return ONLY the number."
+        
+        prompt = f"""
+        Predict total guest traffic (integer) for {property_name} 
+        on {target_date} ({day_of_week}). 
+        Context: Hard Rock Casino operation in Ottawa.
+        Return ONLY the raw integer.
+        """
         
         response = model.generate_content(prompt)
+        # Regex to ensure we grab only the numeric value for float8 compatibility
         numbers = re.findall(r'\d+', response.text)
         
         return float(numbers[0]) if numbers else 0.0
@@ -101,27 +118,30 @@ def generate_ai_prediction(target_date, property_name):
         return 0.0
 
 def run_forensic_backfill():
-    """Stabilized loop with error handling and manual cache clearing."""
+    """
+    Hydrates historical ledger nodes missing predictions.
+    Includes case-insensitive key detection for Supabase primary keys.
+    """
     try:
-        # 1. Pull Fresh Ledger
+        # 1. Pull Fresh Ledger Data
         res = supabase.table("ledger").select("*").eq("property_id", st.session_state.current_property_id).execute()
         
         if not res.data:
-            st.error("No data found to backfill.")
+            st.error("No ledger nodes found for this property.")
             return
 
-        # 2. Identify missing nodes (Aggressive check)
+        # 2. Identify missing nodes (Aggressive Null/Zero Check)
         targets = [
             row for row in res.data 
             if row.get('predicted_traffic') is None or str(row.get('predicted_traffic')).strip() in ["0", "0.0", "nan"]
         ]
 
         if not targets:
-            st.info("✅ Ledger is already fully hydrated.")
+            st.info("✅ All historical nodes are already hydrated.")
             return
 
         # 3. Execution UI
-        st.write(f"🔍 Found {len(targets)} records requiring AI Inference...")
+        st.write(f"🔍 Found {len(targets)} nodes requiring AI Inference...")
         progress_bar = st.progress(0)
         status_text = st.empty()
         
@@ -129,35 +149,43 @@ def run_forensic_backfill():
         
         for i, row in enumerate(targets):
             try:
-                status_text.text(f"Processing: {row['entry_date']}...")
+                # CASE-INSENSITIVE ID RESOLVER
+                # Prevents 'id' vs 'ID' mismatch from skipping rows
+                row_id = row.get('id') or row.get('ID') or row.get('Id')
                 
-                # Get Prediction
-                ai_val = generate_ai_prediction(row['entry_date'], st.session_state.current_property_name)
+                if row_id is None:
+                    st.sidebar.error(f"Skipping row {i}: No 'id' key found. Available: {list(row.keys())}")
+                    continue
+
+                status_text.text(f"Processing: {row.get('entry_date', 'Unknown')} (Node ID: {row_id})...")
                 
-                # Update Supabase
-                supabase.table("ledger").update({"predicted_traffic": ai_val}).eq("id", row['id']).execute()
+                # Generate AI Forecast
+                ai_val = generate_ai_prediction(row.get('entry_date'), st.session_state.current_property_name)
+                
+                # Update Supabase (Explicitly casting to float for float8 columns)
+                supabase.table("ledger").update({"predicted_traffic": float(ai_val)}).eq("id", row_id).execute()
                 
                 success_count += 1
-                time.sleep(0.4) # Prevent API rate-limiting
+                time.sleep(0.4) # API Quota Safety
                 progress_bar.progress((i + 1) / len(targets))
                 
             except Exception as loop_error:
-                st.sidebar.warning(f"Skipped {row['entry_date']}: {loop_error}")
+                st.sidebar.warning(f"Failed at Node {row.get('id', i)}: {loop_error}")
                 continue
 
-        # 4. Finalization (No st.rerun here to prevent flashing)
+        # 4. Finalization & Cache Purge
         status_text.success(f"✅ Successfully hydrated {success_count} records.")
         st.cache_data.clear()
         
-        # Manually wipe session state to force a fresh pull on next interaction
+        # Wipe session state to force a fresh data pull from Supabase
         if 'ledger_data' in st.session_state:
             del st.session_state['ledger_data']
             
-        st.button("🔄 Click to Refresh Ledger View")
+        st.button("🔄 Click to Refresh Audit View")
         st.balloons()
 
     except Exception as e:
-        st.error(f"Critical System Error: {e}")
+        st.error(f"Critical Backfill Engine Error: {e}")
 
 # =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
