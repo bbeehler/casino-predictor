@@ -461,7 +461,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # =================================================================
-# 8. EXECUTIVE NAVIGATION (SaaS Sidebar Architecture)
+# 8. EXECUTIVE NAVIGATION (SaaS Sidebar Architecture v60.5)
 # =================================================================
 page = "Executive Dashboard"
 
@@ -471,7 +471,7 @@ all_my_roles = [r['user_role'] for r in user_links_res.data] if user_links_res.d
 is_global_admin = any(role in ["Super Admin", "Manager", "Admin"] for role in all_my_roles)
 
 with st.sidebar:
-    # Sidebar Logo with subtle shadow
+    # Sidebar Logo
     st.markdown("""
         <div style="padding: 10px 0px 30px 0px;">
             <img src="https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png" width="160">
@@ -512,7 +512,7 @@ with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
     st.caption("NAVIGATION")
     
-    # 2. NAVIGATION (Updated for Experiment Vault)
+    # 2. NAVIGATION
     if st.session_state.current_property_id == "GLOBAL":
         page = "Executive Dashboard"
         st.info("Global View Active")
@@ -522,35 +522,57 @@ with st.sidebar:
         if check_permission("view_analytics"):
             nav_options.extend(["Attribution Analytics", "FloorCast AI Analyst"])
         if check_permission("view_reports"): nav_options.append("Master Audit Report")
-        
-        # ADDED THIS: Check for simulation permissions
-        if check_permission("run_simulations"): 
-            nav_options.append("Scenario Simulator")
-            
-        # ADDED THIS: Check for experiment permissions
-        if check_permission("run_experiments"): 
-            nav_options.append("Experiment Vault")
-            
+        if check_permission("run_simulations"): nav_options.append("Scenario Simulator")
+        if check_permission("run_experiments"): nav_options.append("Experiment Vault")
         if check_permission("manage_alerts"): nav_options.append("Strategic Alerts")
         if check_permission("calibrate_ai"):
             nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
-        
         if st.session_state.get('user_role') == "Super Admin":
             nav_options.append("Global Admin Console")
 
-        # High-end nav selection
         page = st.radio("Navigation", nav_options, label_visibility="collapsed")
 
-    # 3. FOOTER CONTEXT
-    # Note: Using a container for better fixed positioning alignment in Streamlit
-    st.markdown("<div style='position: fixed; bottom: 20px; width: 260px;'>", unsafe_allow_html=True)
+    # --- 3. NEW: AI ANALYST SIDECAR (CONTEXT AWARE) ---
     st.divider()
-    st.caption(f"ID: {st.session_state.get('user_email')}")
+    with st.expander("🕵️ Sidecar Analyst", expanded=False):
+        st.caption(f"Context: {page}")
+        
+        # Initialize Sidecar Chat
+        if "sidecar_msgs" not in st.session_state:
+            st.session_state.sidecar_msgs = []
+        
+        # Display small chat history
+        for msg in st.session_state.sidecar_msgs[-3:]:
+            st.markdown(f"**{msg['role'].capitalize()}**: {msg['content']}")
+            
+        side_input = st.text_input("Ask about this page...", key="global_ai_input")
+        
+        if side_input:
+            st.session_state.sidecar_msgs.append({"role": "user", "content": side_input})
+            
+            # Build the hidden dossier based on the active page
+            dossier = f"USER ROLE: {st.session_state.user_role} | PAGE: {page} | PROPERTY: {st.session_state.current_property_name}"
+            
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                model = genai.GenerativeModel('gemini-2.5-flash')
+                
+                response = model.generate_content(f"Analyze this request in context of {dossier}. Question: {side_input}")
+                st.session_state.sidecar_msgs.append({"role": "assistant", "content": response.text})
+                st.rerun()
+            except Exception as e:
+                st.error("AI Offline")
+
+    # 4. FOOTER CONTEXT
+    st.markdown("<div style='padding-top: 20px;'>", unsafe_allow_html=True)
+    st.divider()
+    st.caption(f"User: {st.session_state.get('user_email')}")
     
     st.markdown(f"""
-        <div style="background: #1e1e1e; padding: 10px; border-radius: 8px; border: 1px solid #333; margin-bottom: 15px;">
-            <p style="margin:0; font-size: 0.75rem; color: #888;">CURRENT ROLE</p>
-            <p style="margin:0; font-size: 0.9rem; font-weight: 600; color: #FFCC00;">{st.session_state.get('user_role', 'Viewer')}</p>
+        <div style="background: #1e1e1e; padding: 10px; border-radius: 8px; border: 1px solid #333; margin-bottom: 10px;">
+            <p style="margin:0; font-size: 0.7rem; color: #888;">CURRENT ROLE</p>
+            <p style="margin:0; font-size: 0.85rem; font-weight: 600; color: #FFCC00;">{st.session_state.get('user_role', 'Viewer')}</p>
         </div>
     """, unsafe_allow_html=True)
     
