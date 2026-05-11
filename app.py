@@ -1430,9 +1430,9 @@ elif page == "AI Calibration":
 # =================================================================
 # 14. PAGE 6: SENTIMENT INTELLIGENCE (v60.5 - Research & Ingestion)
 # =================================================================
-elif page == "Sentiment Intelligence":
+elif page == "Sentiment Scoring":
     render_styled_header(
-        f"Sentiment Intelligence: {st.session_state.current_property_name}",
+        f"Sentiment Scoring: {st.session_state.current_property_name}",
         "Vault Research: Analyzing Guest Sentiment & AI Scoring",
         "Vault Active"
     )
