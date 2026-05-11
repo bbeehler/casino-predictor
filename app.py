@@ -107,53 +107,6 @@ def generate_ai_prediction(target_date, property_name):
         st.sidebar.error(f"AI Call Failed for {target_date}: {e}")
         return 0.0
 
-def run_forensic_backfill():
-    """
-    Hydrates predictions using 'entry_date' as the Primary Key.
-    """
-    try:
-        # 1. Fetch data
-        res = supabase.table("ledger").select("*").eq("property_id", st.session_state.current_property_id).execute()
-        
-        if not res.data:
-            st.error("No ledger data found.")
-            return
-
-        targets = res.data
-        st.write(f"🔍 Forensic Hydration: {len(targets)} nodes found via entry_date PK.")
-        progress_bar = st.progress(0)
-        
-        for i, row in enumerate(targets):
-            # Target the date column exactly as named in your DB
-            date_val = row.get('entry_date') or row.get('Entry_Date')
-            
-            if not date_val:
-                continue
-
-            # Generate the prediction
-            ai_val = generate_ai_prediction(date_val, st.session_state.current_property_name)
-            
-            # 2. UPDATE VIA ENTRY_DATE
-            # We use the date_val string to identify the unique row
-            supabase.table("ledger").update({"predicted_traffic": float(ai_val)})\
-                .eq("entry_date", str(date_val)).execute()
-            
-            import time
-            time.sleep(0.4) # API Quota Safety
-            progress_bar.progress((i + 1) / len(targets))
-
-        st.success("🏁 Backfill Complete. Historical nodes are now hydrated.")
-        st.cache_data.clear()
-        
-        if 'ledger_data' in st.session_state:
-            del st.session_state['ledger_data']
-            
-        st.button("🔄 Refresh Data View")
-        st.balloons()
-
-    except Exception as e:
-        st.error(f"Backfill Critical Error: {e}")
-
 # =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
 # =================================================================
@@ -1041,14 +994,6 @@ elif page == "Daily Ledger Audit":
                 df_ledger[col] = pd.to_numeric(df_ledger[col], errors='coerce').fillna(0)
         
         df_ledger = df_ledger.sort_values('entry_date', ascending=False)
-
-    # --- 2. DATA INTEGRITY TOOLS (Temporary Backfill Trigger) ---
-    with st.expander("🛠️ Administrative Data Tools", expanded=False):
-        st.info("Use the Backfill tool to populate 'AI Forecast' values for historical entries that are currently empty.")
-        if st.button("🔄 Execute One-Time AI Backfill", use_container_width=True):
-            # This calls the function you placed in your Global Utilities
-            run_forensic_backfill() 
-            st.rerun()
 
     # --- 3. RAPID ENTRY ACTION CARD ---
     with st.expander("➕ Register Daily Performance Nodes", expanded=False):
