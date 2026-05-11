@@ -1501,7 +1501,7 @@ elif page == "Sentiment Scoring":
         last_30 = today - datetime.timedelta(days=30)
         date_range = st.date_input("Audit Window", value=(last_30, today))
     with f4:
-        categories = ["All Categories", "Exceptional", "Positive", "Neutral", "Negative", "Critical"]
+        categories = ["All Categories", "Positive", "Neutral", "Negative"]
         filter_cat = st.selectbox("Sentiment Category", categories, index=0)
 
     # Fetch Data
