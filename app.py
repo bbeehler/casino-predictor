@@ -1385,7 +1385,7 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: AI STRATEGIC ANALYST (v52.0 - High-End AI Terminal)
+# 14. PAGE 6: AI STRATEGIC ANALYST (v60.0 - Role-Shielded)
 # =================================================================
 elif page == "FloorCast AI Analyst":
     render_styled_header(
@@ -1394,11 +1394,10 @@ elif page == "FloorCast AI Analyst":
         "AI Online"
     )
     
-    # --- 1. DEEP SYNC DATA AGGREGATION ---
+    # --- 1. DEEP SYNC DATA AGGREGATION (Visible to All) ---
     ledger_csv = "No ledger data available."
     sent_csv = "No sentiment data available."
     roi_csv = "No ROI records available."
-    promo_csv = "No promotion data available."
 
     with st.status(f"🔗 Synchronizing {st.session_state.current_property_name} Intelligence...", expanded=False) as status:
         # Pull Ledger
@@ -1419,60 +1418,60 @@ elif page == "FloorCast AI Analyst":
                 status.write("💬 Sentiment Records Synced")
         except: pass
 
-        # Pull ROI & Promos
+        # Pull ROI
         try:
             roi_res = supabase.table("monthly_roi").select("*").eq("property_id", st.session_state.current_property_id).execute()
             if roi_res.data: roi_csv = pd.DataFrame(roi_res.data).to_csv(index=False)
-            
-            promo_res = supabase.table("promotions").select("*").eq("property_id", st.session_state.current_property_id).execute()
-            if promo_res.data: promo_csv = pd.DataFrame(promo_res.data).to_csv(index=False)
-            status.write("📈 ROI & Promo Matrices Mapped")
+            status.write("📈 ROI Matrices Mapped")
         except: pass
 
         status.update(label="✅ Strategic Intelligence Fully Hydrated", state="complete")
 
-    # --- 2. ENTRY MODULES (Responsive Grid) ---
-    try:
-        asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
-        tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall Property"]
-    except:
-        tags = ["Overall Property"]
+    # --- 2. ENTRY MODULES (Role Restricted) ---
+    authorized_roles = ["Super Admin", "Admin", "Manager"]
+    user_role = st.session_state.get('user_role', 'Viewer')
 
-    col_input1, col_input2 = st.columns(2)
+    if user_role in authorized_roles:
+        try:
+            asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
+            tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall Property"]
+        except:
+            tags = ["Overall Property"]
 
-    with col_input1:
-        with st.expander("📝 Manual Sentiment Archival", expanded=True):
-            with st.form("manual_sentiment_form", clear_on_submit=True, border=False):
-                manual_tag = st.selectbox("Assign to Asset:", tags)
-                f_text = st.text_area("Review Content", placeholder="Paste Google/TripAdvisor review...", height=150)
-                st.markdown("<br>", unsafe_allow_html=True)
-                if st.form_submit_button("🛡️ Archive & AI Score", use_container_width=True):
-                    if f_text:
-                        if archive_sentiment_entry(f_text, manual_tag):
-                            st.success("Entry Scored & Vaulted.")
-                            st.rerun()
+        col_input1, col_input2 = st.columns(2)
 
-    with col_input2:
-        from docx import Document
-        with st.expander("📄 Intelligence Bulk Loader", expanded=True):
-            uploaded_doc = st.file_uploader("Upload .docx Intelligence Source", type="docx")
-            bulk_tag = st.selectbox("Bulk Assign to Asset:", tags)
-            st.markdown("<br>", unsafe_allow_html=True)
-            if uploaded_doc and st.button("🚀 Execute Bulk Parse", use_container_width=True):
-                doc = Document(uploaded_doc)
-                for para in doc.paragraphs:
-                    if len(para.text) > 20:
-                        archive_sentiment_entry(para.text, bulk_tag)
-                st.success("Bulk Ingestion Complete.")
-                st.rerun()
+        with col_input1:
+            with st.expander("📝 Manual Sentiment Archival", expanded=True):
+                with st.form("manual_sentiment_form", clear_on_submit=True, border=False):
+                    manual_tag = st.selectbox("Assign to Asset:", tags)
+                    f_text = st.text_area("Review Content", placeholder="Paste Google/TripAdvisor review...", height=150)
+                    if st.form_submit_button("🛡️ Archive & AI Score", use_container_width=True):
+                        if f_text:
+                            if archive_sentiment_entry(f_text, manual_tag):
+                                st.success("Entry Scored & Vaulted.")
+                                st.rerun()
 
-    st.divider()
+        with col_input2:
+            from docx import Document
+            with st.expander("📄 Intelligence Bulk Loader", expanded=True):
+                uploaded_doc = st.file_uploader("Upload .docx Intelligence Source", type="docx")
+                bulk_tag = st.selectbox("Bulk Assign to Asset:", tags)
+                if uploaded_doc and st.button("🚀 Execute Bulk Parse", use_container_width=True):
+                    doc = Document(uploaded_doc)
+                    for para in doc.paragraphs:
+                        if len(para.text) > 20:
+                            archive_sentiment_entry(para.text, bulk_tag)
+                    st.success("Bulk Ingestion Complete.")
+                    st.rerun()
+        st.divider()
+    else:
+        # Subtle indicator for those without write-access
+        st.caption("🔒 Data Ingestion tools restricted to Management roles.")
 
-    # --- 3. THE CHAT INTERFACE (Premium AI UI) ---
+    # --- 3. THE CHAT INTERFACE (Visible to All) ---
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Scrollable chat area with height limit
     chat_container = st.container(height=500, border=False)
     
     with chat_container:
@@ -1480,7 +1479,6 @@ elif page == "FloorCast AI Analyst":
             with st.chat_message(m["role"]):
                 st.markdown(m["content"])
 
-    # Handle Input
     prompt = st.chat_input(f"Consult with the {st.session_state.current_property_name} Analyst...")
     
     if prompt:
@@ -1496,14 +1494,8 @@ elif page == "FloorCast AI Analyst":
                 
                 with st.chat_message("assistant"):
                     with st.spinner("🕵️ AI Analyst is correlating data points..."):
-                        dossier = f"""
-                        PROPERTY CONTEXT: {st.session_state.current_property_name}
-                        LEDGER DATA: {ledger_csv}
-                        SENTIMENT DATA: {sent_csv}
-                        ROI DATA: {roi_csv}
-                        """
-                        
-                        full_query = f"Consultant Mode: Answer based on this dossier: {prompt}\n\nDOSSIER:\n{dossier}"
+                        dossier = f"CONTEXT: {st.session_state.current_property_name}\nLEDGER: {ledger_csv}\nSENTIMENT: {sent_csv}\nROI: {roi_csv}"
+                        full_query = f"Consultant Mode. User Question: {prompt}\n\nDATA:\n{dossier}"
                         response = model.generate_content(full_query)
                         st.markdown(response.text)
                 
