@@ -85,20 +85,21 @@ import pandas as pd
 import streamlit as st
 
 # =================================================================
-# GLOBAL AI ENGINES (v61.2 - Case-Insensitive ID Mapping)
+# GLOBAL AI ENGINES (v61.5 - Stability & Forensic Audit)
 # =================================================================
 
 def generate_ai_prediction(target_date, property_name):
     """
-    Acts as the shared intelligence service for Ledger and Simulator.
-    Generates a contextual prediction for a specific historical date.
+    Acts as the shared intelligence service. 
+    Uses 1.5-flash for high-volume stability during backfills.
     """
     try:
         import google.generativeai as genai
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        import re
         
-        # Use stable 1.5-flash for high-volume backfill loops
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        # Stable production model to prevent rate-limit zeros
+        model = genai.GenerativeModel('gemini-2.5-flash') 
         
         day_of_week = pd.to_datetime(target_date).day_name()
         
@@ -110,82 +111,73 @@ def generate_ai_prediction(target_date, property_name):
         """
         
         response = model.generate_content(prompt)
-        # Regex to ensure we grab only the numeric value for float8 compatibility
+        # Regex extraction to handle any unexpected text in the response
         numbers = re.findall(r'\d+', response.text)
         
         return float(numbers[0]) if numbers else 0.0
     except Exception as e:
+        # Sidecar error logging for visibility
+        st.sidebar.error(f"Gemini API Error ({target_date}): {e}")
         return 0.0
 
 def run_forensic_backfill():
     """
-    Hydrates historical ledger nodes missing predictions.
-    Includes case-insensitive key detection for Supabase primary keys.
+    Brute force backfill to ensure historical nodes are populated.
     """
     try:
-        # 1. Pull Fresh Ledger Data
+        # 1. Pull Fresh Ledger
         res = supabase.table("ledger").select("*").eq("property_id", st.session_state.current_property_id).execute()
         
         if not res.data:
-            st.error("No ledger nodes found for this property.")
+            st.error("No ledger data found.")
             return
 
-        # 2. Identify missing nodes (Aggressive Null/Zero Check)
-        targets = [
-            row for row in res.data 
-            if row.get('predicted_traffic') is None or str(row.get('predicted_traffic')).strip() in ["0", "0.0", "nan"]
-        ]
-
-        if not targets:
-            st.info("✅ All historical nodes are already hydrated.")
-            return
-
-        # 3. Execution UI
-        st.write(f"🔍 Found {len(targets)} nodes requiring AI Inference...")
+        targets = res.data
+        total = len(targets)
+        
+        st.write(f"🔍 Forensic Hydration: Processing {total} nodes...")
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        success_count = 0
-        
         for i, row in enumerate(targets):
-            try:
-                # CASE-INSENSITIVE ID RESOLVER
-                # Prevents 'id' vs 'ID' mismatch from skipping rows
-                row_id = row.get('id') or row.get('ID') or row.get('Id')
-                
-                if row_id is None:
-                    st.sidebar.error(f"Skipping row {i}: No 'id' key found. Available: {list(row.keys())}")
-                    continue
-
-                status_text.text(f"Processing: {row.get('entry_date', 'Unknown')} (Node ID: {row_id})...")
-                
-                # Generate AI Forecast
-                ai_val = generate_ai_prediction(row.get('entry_date'), st.session_state.current_property_name)
-                
-                # Update Supabase (Explicitly casting to float for float8 columns)
-                supabase.table("ledger").update({"predicted_traffic": float(ai_val)}).eq("id", row_id).execute()
-                
-                success_count += 1
-                time.sleep(0.4) # API Quota Safety
-                progress_bar.progress((i + 1) / len(targets))
-                
-            except Exception as loop_error:
-                st.sidebar.warning(f"Failed at Node {row.get('id', i)}: {loop_error}")
+            # Case-insensitive key mapping
+            row_id = row.get('id') or row.get('ID') or row.get('Id')
+            date_val = row.get('entry_date') or row.get('Entry_Date')
+            
+            if not row_id:
                 continue
 
-        # 4. Finalization & Cache Purge
-        status_text.success(f"✅ Successfully hydrated {success_count} records.")
+            status_text.text(f"Auditing Node: {date_val} (ID: {row_id})")
+            
+            # Generate AI Forecast
+            ai_val = generate_ai_prediction(date_val, st.session_state.current_property_name)
+            
+            # 2. Update Supabase
+            # Explicit float cast for float8 database compatibility
+            update_res = supabase.table("ledger").update({"predicted_traffic": float(ai_val)}).eq("id", row_id).execute()
+            
+            # Real-time feedback in the sidebar
+            if not update_res.data:
+                st.sidebar.error(f"❌ Failed to Update ID {row_id}")
+            else:
+                st.sidebar.success(f"✅ Success ID {row_id}: AI Forecasted {ai_val}")
+
+            import time
+            time.sleep(0.5) # API Quota Safety
+            progress_bar.progress((i + 1) / total)
+
+        status_text.success("🏁 Forensic Backfill Complete.")
         st.cache_data.clear()
         
-        # Wipe session state to force a fresh data pull from Supabase
+        # Clear local session storage to force a fresh data pull
         if 'ledger_data' in st.session_state:
             del st.session_state['ledger_data']
             
-        st.button("🔄 Click to Refresh Audit View")
+        st.button("🔄 Click to Refresh Audit Dashboard")
         st.balloons()
 
     except Exception as e:
-        st.error(f"Critical Backfill Engine Error: {e}")
+        st.error(f"Backfill Critical Error: {e}")
 
 # =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
