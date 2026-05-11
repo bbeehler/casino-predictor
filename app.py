@@ -1,5 +1,6 @@
 import time
 import re
+import traceback
 import streamlit as st
 import pandas as pd
 import datetime
@@ -89,58 +90,81 @@ import streamlit as st
 # =================================================================
 
 def run_forensic_backfill():
-    """Loud Debugger: Prints every internal step to the UI to find the silent failure."""
+    """
+    DEEP FORENSIC DEBUGGER: 
+    Freezes the application on error to prevent the 'flashing' effect.
+    """
     try:
+        st.write("📡 Attempting to fetch ledger nodes from Supabase...")
+        
         # 1. Fetch data
         res = supabase.table("ledger").select("*").eq("property_id", st.session_state.current_property_id).execute()
         
         if not res.data:
-            st.error("CRITICAL: Supabase returned 0 rows for this property.")
-            return
+            st.error("CRITICAL: Supabase returned 0 rows. Check property_id or connection.")
+            st.stop()
 
         targets = res.data
-        st.info(f"Checking {len(targets)} nodes. Look below for live updates:")
+        st.info(f"🔍 Found {len(targets)} nodes. Beginning AI hydration loop...")
         
-        for row in targets:
-            # Case-insensitive ID and Date
-            row_id = row.get('id') or row.get('ID')
+        # We use a placeholder to show persistent status
+        status_box = st.empty()
+        
+        for i, row in enumerate(targets):
+            # Case-insensitive ID and Date mapping
+            row_id = row.get('id') or row.get('ID') or row.get('Id')
             date_val = row.get('entry_date') or row.get('Entry_Date')
             
             with st.container(border=True):
-                st.write(f"**Processing ID:** `{row_id}` | **Date:** `{date_val}`")
+                st.write(f"**Step 1: Analyzing Node** | ID: `{row_id}` | Date: `{date_val}`")
                 
-                # --- STEP A: TEST THE AI ---
-                import google.generativeai as genai
-                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel('gemini-2.5-flash')
-                
-                ai_response = model.generate_content(f"Predict casino traffic for {date_val}. Return ONLY a number.")
-                raw_text = ai_response.text.strip()
-                st.write(f"🤖 AI Raw Response: `{raw_text}`")
-                
-                # Clean the number
-                numbers = re.findall(r'\d+', raw_text)
-                ai_val = float(numbers[0]) if numbers else 0.0
-                st.write(f"🔢 Parsed Value: `{ai_val}`")
-                
-                # --- STEP B: TEST THE DATABASE ---
-                if ai_val > 0:
-                    update_res = supabase.table("ledger").update({"predicted_traffic": ai_val}).eq("id", row_id).execute()
+                try:
+                    # --- AI INFERENCE ---
+                    import google.generativeai as genai
+                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                    # Using 1.5-flash for stable backfill quota
+                    model = genai.GenerativeModel('gemini-2.5-flash')
                     
-                    if update_res.data:
-                        st.success(f"✅ DB Update Verified for ID {row_id}")
+                    st.write("🤖 Requesting AI Prediction...")
+                    ai_response = model.generate_content(f"Predict casino traffic for {date_val}. Return ONLY a number.")
+                    
+                    raw_text = ai_response.text.strip()
+                    st.write(f"RAW AI OUTPUT: `{raw_text}`")
+                    
+                    # Clean the number
+                    numbers = re.findall(r'\d+', raw_text)
+                    ai_val = float(numbers[0]) if numbers else 0.0
+                    st.write(f"PARSED VALUE: **{ai_val}**")
+                    
+                    # --- DATABASE UPDATE ---
+                    if ai_val > 0:
+                        st.write("⬆️ Pushing to Supabase...")
+                        update_res = supabase.table("ledger").update({"predicted_traffic": ai_val}).eq("id", row_id).execute()
+                        
+                        if update_res.data:
+                            st.success(f"✅ Success: Node {row_id} hydrated.")
+                        else:
+                            st.error(f"❌ DB REJECTION: Node {row_id} was not updated.")
+                            st.write("Check if column 'predicted_traffic' exists and is lowercase.")
+                            st.stop() # BRAKE: Stop here so you can see the error
                     else:
-                        st.error(f"❌ DB Rejected Update for ID {row_id}. (Check RLS or Column Name)")
-                else:
-                    st.warning("⚠️ AI returned 0. Skipping DB update.")
+                        st.warning("⚠️ AI returned 0. Skipping update.")
                 
-                time.sleep(1) # Slow down so we can read it
+                except Exception as loop_error:
+                    st.error(f"💥 LOOP CRASH at Node {i}")
+                    st.code(traceback.format_exc()) # Prints the full technical log
+                    st.stop() # BRAKE: Stop the app so the error doesn't disappear
+                
+                time.sleep(0.5) 
 
-        st.success("Debug Loop Finished.")
+        st.success("🏁 All nodes processed successfully.")
         st.cache_data.clear()
+        st.balloons()
 
     except Exception as e:
-        st.exception(e) # This will show the full technical traceback
+        st.error("🛑 CRITICAL ENGINE FAILURE")
+        st.code(traceback.format_exc())
+        st.stop() # BRAKE: Final emergency stop
 
 # =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
