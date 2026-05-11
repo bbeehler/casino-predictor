@@ -1173,13 +1173,13 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for full ROI Audit.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (v60.2 - Social Integrated)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (v60.3 - Social Intent Engine)
 # =================================================================
 elif page == "Master Audit Report":
     # 1. PREMIUM HEADER
     render_styled_header(
         f"Master Property Audit: {st.session_state.current_property_name}",
-        "Forensic Ledger: Financials, Loyalty, & Social Attribution",
+        "Forensic Ledger: Financials, Loyalty, & Social Intent Attribution",
         "Audit Ready"
     )
     
@@ -1232,11 +1232,10 @@ elif page == "Master Audit Report":
         # Financial & Social Calcs
         hold_pct = float(c.get('Hold_Pct', 10.2)) / 100
         t_rev = df_final['actual_coin_in'].sum()
-        actual_ggr = t_rev * hold_pct
         t_traf = df_final['actual_traffic'].sum()
         t_mems = df_final['new_members'].sum()
         
-        # Priority Social Metrics
+        # Social Intent Metrics (Explicitly separating Clicks/Engagements from Reach)
         t_clicks = df_final['ad_clicks'].sum() if 'ad_clicks' in df_final.columns else 0
         t_imps = df_final['ad_impressions'].sum() if 'ad_impressions' in df_final.columns else 0
         engagement_rate = (t_clicks / t_imps * 100) if t_imps > 0 else 0
@@ -1246,9 +1245,9 @@ elif page == "Master Audit Report":
         k1, k2, k3, k4, k5 = st.columns(5)
         k1.metric("Total Traffic", f"{t_traf:,}")
         k2.metric("Actual Revenue", f"${t_rev:,.0f}")
-        k3.metric("Social Engagements", f"{t_clicks:,.0f}", help="Total Social Clicks/Engagements")
+        k3.metric("Ad Clicks (Intent)", f"{t_clicks:,.0f}", help="Total trackable clicks/engagements from social campaigns.")
         k4.metric("New Members", f"{t_mems:,}")
-        k5.metric("Engagement Rate", f"{engagement_rate:.2f}%")
+        k5.metric("Engagement Rate", f"{engagement_rate:.2f}%", help="Click-Through Rate (CTR) relative to impressions.")
 
         # --- 4. ATTRIBUTION FLOW CHART ---
         st.divider()
@@ -1271,12 +1270,12 @@ elif page == "Master Audit Report":
         fig_stack.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10), template="plotly_white")
         st.plotly_chart(fig_stack, use_container_width=True)
 
-        # --- 5. SOCIAL-TO-FLOOR VELOCITY AUDIT ---
+        # --- 5. SOCIAL VELOCITY & INTENT AUDIT ---
         st.markdown("### 📲 Social Velocity & Conversion Audit")
         
         v1, v2 = st.columns([2, 1])
         with v1:
-            # Dual Axis: Impressions (Reach) vs Clicks (Intent)
+            # Dual Axis: Reach (Impressions) vs. Intent (Clicks)
             fig_social = go.Figure()
             fig_social.add_trace(go.Bar(
                 x=df_final['entry_date'], y=df_final['ad_impressions'], 
@@ -1284,13 +1283,13 @@ elif page == "Master Audit Report":
             ))
             fig_social.add_trace(go.Scatter(
                 x=df_final['entry_date'], y=df_final['ad_clicks'], 
-                name="Intent (Engagements)", line=dict(color='#0047AB', width=3),
+                name="Intent (Clicks)", line=dict(color='#0047AB', width=3),
                 yaxis="y2"
             ))
             fig_social.update_layout(
                 height=350, template="plotly_white",
-                yaxis=dict(title="Reach"),
-                yaxis2=dict(title="Engagement", overlaying="y", side="right"),
+                yaxis=dict(title="Reach Volume"),
+                yaxis2=dict(title="Intent (Clicks)", overlaying="y", side="right"),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 margin=dict(l=10, r=10, t=30, b=10)
             )
@@ -1300,17 +1299,17 @@ elif page == "Master Audit Report":
             with st.container(border=True):
                 st.markdown("#### 🏁 Efficiency Metrics")
                 
-                # Conversion Velocity logic
-                daily_eng = t_clicks / len(df_final) if len(df_final) > 0 else 0
-                st.metric("Avg Daily Engagements", f"{daily_eng:.1f}")
+                # Daily Intent Velocity
+                daily_clicks = t_clicks / len(df_final) if len(df_final) > 0 else 0
+                st.metric("Avg Daily Intent", f"{daily_clicks:.1f} Clicks")
                 
-                # Social to Guest Ratio
+                # Social-to-Floor Bridge
                 soc_bridge = (t_clicks / t_traf) if t_traf > 0 else 0
                 st.metric("Social-to-Floor Bridge", f"{soc_bridge:.2f}x")
-                st.caption("Ratio of digital intent vs physical footfall.")
+                st.caption("Ratio of digital clicks per physical guest visit.")
                 
                 st.divider()
-                st.info("💡 Audit Note: Verify that 'Intent' spikes align with 'Digital ROI Lift' in the flow chart above.")
+                st.info("💡 Audit Note: High correlation between 'Intent' spikes and 'Digital ROI Lift' validates campaign effectiveness.")
 
         with col_export:
             st.download_button(
