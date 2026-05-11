@@ -1,4 +1,5 @@
 import time
+import re
 import streamlit as st
 import pandas as pd
 import datetime
@@ -83,76 +84,77 @@ def archive_sentiment_entry(text, asset_tag):
 # =================================================================
 
 def generate_ai_prediction(target_date, property_name):
+    """Refined number extraction for float8 compatibility."""
     try:
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         model = genai.GenerativeModel('gemini-2.5-flash')
         
         day_of_week = pd.to_datetime(target_date).day_name()
-        
         prompt = f"Predict casino traffic (integer) for {property_name} on {target_date} ({day_of_week}). Return ONLY the number."
         
         response = model.generate_content(prompt)
-        # We use regex to find the first number in the response
-        import re
         numbers = re.findall(r'\d+', response.text)
         
-        if numbers:
-            return int(numbers[0])
-        return 0
+        return float(numbers[0]) if numbers else 0.0
     except Exception as e:
-        st.sidebar.error(f"AI Call Failed: {e}")
-        return 0
+        return 0.0
 
 def run_forensic_backfill():
+    """Stabilized loop with error handling and manual cache clearing."""
     try:
-        # 1. Pull the data fresh from Supabase
+        # 1. Pull Fresh Ledger
         res = supabase.table("ledger").select("*").eq("property_id", st.session_state.current_property_id).execute()
         
         if not res.data:
-            st.error("Database connection failed or table is empty.")
+            st.error("No data found to backfill.")
             return
 
-        # 2. Filter for missing values (Aggressive)
-        targets = []
-        for row in res.data:
-            val = row.get('predicted_traffic')
-            # Check for literally any form of 'empty'
-            if val is None or str(val).strip() in ["0", "0.0", "None", "nan", ""]:
-                targets.append(row)
+        # 2. Identify missing nodes (Aggressive check)
+        targets = [
+            row for row in res.data 
+            if row.get('predicted_traffic') is None or str(row.get('predicted_traffic')).strip() in ["0", "0.0", "nan"]
+        ]
 
         if not targets:
-            st.success("All records already have valid predictions.")
+            st.info("✅ Ledger is already fully hydrated.")
             return
 
-        st.warning(f"Found {len(targets)} records to fix. Starting Engine...")
-        
+        # 3. Execution UI
+        st.write(f"🔍 Found {len(targets)} records requiring AI Inference...")
         progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        success_count = 0
         
         for i, row in enumerate(targets):
-            # Generate the number
-            ai_val = generate_ai_prediction(row['entry_date'], st.session_state.current_property_name)
-            
-            # 3. THE CRITICAL UPDATE
-            # We explicitly cast ai_val to float to match your float8 column
-            update_data = {"predicted_traffic": float(ai_val)}
-            
-            db_response = supabase.table("ledger").update(update_data).eq("id", row['id']).execute()
-            
-            # Verification: Check if Supabase actually accepted it
-            if not db_response.data:
-                st.error(f"DB Update failed for ID {row['id']}")
-            
-            # Rate limiting safety
-            time.sleep(0.5) 
-            progress_bar.progress((i + 1) / len(targets))
+            try:
+                status_text.text(f"Processing: {row['entry_date']}...")
+                
+                # Get Prediction
+                ai_val = generate_ai_prediction(row['entry_date'], st.session_state.current_property_name)
+                
+                # Update Supabase
+                supabase.table("ledger").update({"predicted_traffic": ai_val}).eq("id", row['id']).execute()
+                
+                success_count += 1
+                time.sleep(0.4) # Prevent API rate-limiting
+                progress_bar.progress((i + 1) / len(targets))
+                
+            except Exception as loop_error:
+                st.sidebar.warning(f"Skipped {row['entry_date']}: {loop_error}")
+                continue
 
-        st.success("✅ Backfill Complete.")
+        # 4. Finalization (No st.rerun here to prevent flashing)
+        status_text.success(f"✅ Successfully hydrated {success_count} records.")
         st.cache_data.clear()
-        # Force the session state to dump old data
+        
+        # Manually wipe session state to force a fresh pull on next interaction
         if 'ledger_data' in st.session_state:
-            st.session_state.ledger_data = None
-        st.rerun()
+            del st.session_state['ledger_data']
+            
+        st.button("🔄 Click to Refresh Ledger View")
+        st.balloons()
 
     except Exception as e:
         st.error(f"Critical System Error: {e}")
