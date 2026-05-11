@@ -1279,7 +1279,7 @@ elif page == "Master Audit Report":
             fig_social = go.Figure()
             fig_social.add_trace(go.Bar(
                 x=df_final['entry_date'], y=df_final['ad_impressions'], 
-                name="Reach (Impressions)", marker_color='#E2E8F0', opacity=0.5
+                name="Reach (Impressions)", marker_color='#E2E8F0', opacity=0.75
             ))
             fig_social.add_trace(go.Scatter(
                 x=df_final['entry_date'], y=df_final['ad_clicks'], 
