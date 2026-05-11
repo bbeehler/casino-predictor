@@ -460,6 +460,54 @@ if not st.session_state.authenticated:
                     st.error(f"System Error: {e}")
     st.stop()
 
+@st.dialog("Strategic Intelligence Hub", width="large")
+def show_ai_analyst_hub():
+    # 1. State Management for Persistent Chat within the session
+    if "modal_msgs" not in st.session_state:
+        st.session_state.modal_msgs = []
+    
+    # 2. Header & Controls
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        st.markdown(f"**Analyzing:** {st.session_state.current_property_name}")
+        st.caption(f"Current Page Context: {st.session_state.get('current_page', 'Dashboard')}")
+    with c2:
+        # The 'Clear' and 'Continue' functionality
+        if st.button("🗑️ Clear History", use_container_width=True):
+            st.session_state.modal_msgs = []
+            st.rerun()
+
+    st.divider()
+
+    # 3. Scrollable Chat History
+    chat_box = st.container(height=450)
+    for m in st.session_state.modal_msgs:
+        with chat_box.chat_message(m["role"]):
+            st.markdown(m["content"])
+
+    # 4. AI Processing Logic
+    if prompt := st.chat_input("Query property intelligence..."):
+        st.session_state.modal_msgs.append({"role": "user", "content": prompt})
+        with chat_box.chat_message("user"):
+            st.markdown(prompt)
+
+        # Context Dossier for the AI
+        dossier = f"ROLE: {st.session_state.user_role} | PAGE: {st.session_state.get('current_page')}"
+
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            
+            with chat_box.chat_message("assistant"):
+                with st.spinner("Analyzing data nodes..."):
+                    full_query = f"Analyst Mode. Context: {dossier}. Question: {prompt}"
+                    response = model.generate_content(full_query)
+                    st.markdown(response.text)
+                    st.session_state.modal_msgs.append({"role": "assistant", "content": response.text})
+        except Exception as e:
+            st.error("Intelligence Hub Offline.")
+    
 # =================================================================
 # 8. EXECUTIVE NAVIGATION (SaaS Sidebar Architecture v60.5)
 # =================================================================
@@ -532,37 +580,10 @@ with st.sidebar:
 
         page = st.radio("Navigation", nav_options, label_visibility="collapsed")
 
-    # --- 3. NEW: AI ANALYST SIDECAR (CONTEXT AWARE) ---
+    # --- 3. THE INTELLIGENCE HUB (Modal Launch) ---
     st.divider()
-    with st.expander("🕵️ Sidecar Analyst", expanded=False):
-        st.caption(f"Context: {page}")
-        
-        # Initialize Sidecar Chat
-        if "sidecar_msgs" not in st.session_state:
-            st.session_state.sidecar_msgs = []
-        
-        # Display small chat history
-        for msg in st.session_state.sidecar_msgs[-3:]:
-            st.markdown(f"**{msg['role'].capitalize()}**: {msg['content']}")
-            
-        side_input = st.text_input("Ask about this page...", key="global_ai_input")
-        
-        if side_input:
-            st.session_state.sidecar_msgs.append({"role": "user", "content": side_input})
-            
-            # Build the hidden dossier based on the active page
-            dossier = f"USER ROLE: {st.session_state.user_role} | PAGE: {page} | PROPERTY: {st.session_state.current_property_name}"
-            
-            try:
-                import google.generativeai as genai
-                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel('gemini-2.5-flash')
-                
-                response = model.generate_content(f"Analyze this request in context of {dossier}. Question: {side_input}")
-                st.session_state.sidecar_msgs.append({"role": "assistant", "content": response.text})
-                st.rerun()
-            except Exception as e:
-                st.error("AI Offline")
+    if st.button("🕵️ Open Strategic AI Hub", use_container_width=True):
+        show_ai_analyst_hub()
 
     # 4. FOOTER CONTEXT
     st.markdown("<div style='padding-top: 20px;'>", unsafe_allow_html=True)
