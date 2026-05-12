@@ -86,74 +86,95 @@ import pandas as pd
 import streamlit as st
 
 # =================================================================
-# GLOBAL AI ENGINES (v75.0 - Forced Database Alignment)
+# GLOBAL AI ENGINES (v78.0 - Schema-Grounded Executive Analyst)
 # =================================================================
 
 def get_forensic_omniscience():
     """
-    Pulls data and forces a 'Property-Only' mindset.
-    Rename columns in the data mapping to prevent session/web confusion.
+    Directly serializes the Ledger, Sentiment, and ROI tables using 
+    provided SQL schemas to ensure high-precision executive reporting.
     """
     try:
         pid = st.session_state.get('current_property_id')
-        pname = st.session_state.get('current_property_name', 'Hard Rock Ottawa')
         
-        # 1. Fetch Ledger (Renaming columns for AI clarity)
+        # 1. PULL DATA FROM THE THREE CORE TABLES
+        # Limit nodes to ensure we don't exceed the AI's context window (Flash 1.5 is large, but keep it tight)
         ledger_res = supabase.table("ledger").select("*").eq("property_id", pid).order("entry_date", desc=True).limit(45).execute()
-        if ledger_res.data:
-            df_l = pd.DataFrame(ledger_res.data)
-            # FORCE RENAME: This stops 'Traffic' from being confused with 'Web Sessions'
-            df_l = df_l.rename(columns={
-                'actual_traffic': 'PHYSICAL_GUESTS_IN_BUILDING',
-                'actual_coin_in': 'GAMING_REVENUE_DOLLARS',
-                'new_members': 'UNITY_CARD_SIGNUPS'
-            })
-            ledger_context = df_l.to_string()
-        else:
-            ledger_context = "No ledger records."
+        sent_res = supabase.table("sentiment_history").select("*").eq("property_id", pid).order("timestamp", desc=True).limit(30).execute()
+        roi_res = supabase.table("monthly_roi").select("*").eq("property_id", pid).order("report_month", desc=True).limit(6).execute()
 
-        # 2. Fetch Sentiment
-        sent_res = supabase.table("sentiment_history").select("*").eq("property_id", pid).order("timestamp", desc=True).limit(50).execute()
-        sent_context = pd.DataFrame(sent_res.data).to_string() if sent_res.data else "No sentiment records."
-
-        # 3. The "Kill-Switch" Instructions
-        context_string = f"""
-        YOU ARE THE HARD ROCK OTTAWA ON-SITE ANALYST. 
-        YOU DO NOT HAVE AN INTERNET CONNECTION. 
-        YOU ONLY HAVE THE TWO TABLES BELOW.
-
-        RULES OF THE HOUSE:
-        - 'Traffic' refers ONLY to the column 'PHYSICAL_GUESTS_IN_BUILDING'. 
-        - DO NOT mention 'unique sessions', 'clicks', 'web analytics', or 'URLs'.
-        - If a user asks for 'Traffic', look at the door counts in 'PHYSICAL_GUESTS_IN_BUILDING'.
-        - If the data is not in the tables below, say 'Data missing from the Forensic Vault.'
-
-        --- TABLE 1: BUILDING PERFORMANCE (LEDGER) ---
-        {ledger_context}
-
-        --- TABLE 2: GUEST FEEDBACK (SENTIMENT) ---
-        {sent_context}
+        # 2. DEFINE THE SCHEMA MAP (The AI's Internal Documentation)
+        schema_map = """
+        ACTUAL DATABASE SCHEMA DEFINITIONS:
+        
+        Table: 'public.ledger' (Daily Granular Performance)
+        - entry_date (PK): The business date.
+        - actual_traffic: PHYSICAL GUEST door counts (Use this for 'Traffic' questions).
+        - actual_coin_in: Total gaming volume/revenue.
+        - active_promo: Marketing campaign name.
+        - new_members: Unity card signups.
+        - Event_Gravity: Impact score of on-site events.
+        
+        Table: 'public.sentiment_history' (Guest Feedback)
+        - asset: The specific area (CHOP, Slots, Council Oak, etc.).
+        - sentiment_score: -1.0 (Critical) to 1.0 (Exceptional).
+        - sentiment_category: The categorical label.
+        - raw_text: The literal guest comment.
+        
+        Table: 'public.monthly_roi' (High-Level Marketing Impact)
+        - report_month: The month being analyzed.
+        - utm_sessions: Digital web traffic (DO NOT confuse with 'actual_traffic').
+        - ad_spend: Total paid media cost.
+        - calculated_bl_roas: Bottom-line Return on Ad Spend.
         """
-        return context_string
+
+        # 3. SERIALIZE DATA
+        ledger_data = pd.DataFrame(ledger_res.data).to_string(index=False) if ledger_res.data else "Empty"
+        sent_data = pd.DataFrame(sent_res.data).to_string(index=False) if sent_res.data else "Empty"
+        roi_data = pd.DataFrame(roi_res.data).to_string(index=False) if roi_res.data else "Empty"
+
+        # 4. CONSTRUCT CONTEXT
+        context = f"""
+        YOU ARE THE OMNISCIENT ANALYST FOR HARD ROCK OTTAWA.
+        YOU ARE REPORTING DIRECTLY TO THE EXECUTIVE LEADERSHIP TEAM.
+
+        {schema_map}
+
+        --- LIVE DATA: LEDGER ---
+        {ledger_data}
+
+        --- LIVE DATA: SENTIMENT HISTORY ---
+        {sent_data}
+
+        --- LIVE DATA: MONTHLY ROI ---
+        {roi_data}
+
+        EXECUTIVE DIRECTIVES:
+        1. If asked about "Traffic", you MUST look at 'actual_traffic' in the ledger.
+        2. If asked about "Web Sessions" or "Digital", look at 'utm_sessions' in monthly_roi.
+        3. Never hallucinate. If a date or metric is missing, report it as 'Not Vaulted'.
+        4. Cross-reference tables. (e.g., Did a specific 'active_promo' lead to higher 'new_members'?).
+        """
+        return context
     except Exception as e:
-        return f"Database Link Error: {e}"
+        return f"Database Connectivity Error: {e}"
 
 def ask_omniscient_ai(user_query):
-    """Execution engine for property queries."""
+    """Execution function for the Executive Analyst."""
     try:
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        # We use 1.5-Flash for speed and large context handling
         model = genai.GenerativeModel('gemini-2.5-flash')
         
-        full_context = get_forensic_omniscience()
+        vault_context = get_forensic_omniscience()
         
-        # Final Guardrail: The prefix ensures the AI stays in character
-        final_prompt = f"{full_context}\n\nUSER QUESTION: {user_query}\n\nDATABASE-ONLY RESPONSE:"
+        prompt = f"{vault_context}\n\nEXECUTIVE INQUIRY: {user_query}\n\nFORENSIC ANALYSIS:"
+        response = model.generate_content(prompt)
         
-        response = model.generate_content(final_prompt)
         return response.text
     except Exception as e:
-        return f"Forensic Engine Offline: {e}"
+        return f"Analyst is currently unavailable: {e}"
 
 # =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
