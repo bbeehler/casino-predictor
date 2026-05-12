@@ -608,12 +608,19 @@ def show_ai_analyst_hub():
             st.error("Intelligence Hub Offline.")
     
 # =================================================================
-# 8. EXECUTIVE NAVIGATION & AI HUB (v79.0 - Integrated Modal)
+# 8. EXECUTIVE NAVIGATION & AI HUB (v81.0 - Navigation Reset)
 # =================================================================
 
 # --- A. INITIALIZE HUB STATE ---
 if 'show_ai_hub' not in st.session_state:
     st.session_state.show_ai_hub = False
+
+# --- THE AUTO-CLOSE CALLBACK ---
+# This kills the modal state whenever the user navigates
+def reset_hub_on_nav():
+    st.session_state.show_ai_hub = False
+    if "last_ai_response" in st.session_state:
+        del st.session_state.last_ai_response
 
 # --- B. PERMISSIONS & ROLE SCAN ---
 user_links_res = supabase.table("user_property_access").select("user_role").eq("user_email", st.session_state.get('user_email')).execute()
@@ -640,7 +647,14 @@ with st.sidebar:
             curr_label = "📊 CONSOLIDATED VIEW" if st.session_state.current_property_id == "GLOBAL" else st.session_state.current_property_name
             s_idx = options.index(curr_label) if curr_label in options else 0
             
-            selected_view = st.selectbox("Switch Environment:", options, index=s_idx, label_visibility="collapsed")
+            # Added reset_hub_on_nav to on_change
+            selected_view = st.selectbox(
+                "Switch Environment:", 
+                options, 
+                index=s_idx, 
+                label_visibility="collapsed",
+                on_change=reset_hub_on_nav
+            )
             
             if selected_view == "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != "GLOBAL":
                 st.session_state.current_property_id = "GLOBAL"
@@ -681,7 +695,8 @@ with st.sidebar:
         if st.session_state.get('user_role') == "Super Admin":
             nav_options.append("Global Admin Console")
 
-        page = st.radio("Navigation", nav_options, label_visibility="collapsed")
+        # Fixed: Added reset_hub_on_nav to ensure modal closes when clicking a new page
+        page = st.radio("Navigation", nav_options, label_visibility="collapsed", on_change=reset_hub_on_nav)
 
     # --- 3. THE INTELLIGENCE HUB TRIGGER ---
     st.divider()
@@ -707,21 +722,19 @@ with st.sidebar:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # --- D. THE GLOBAL MODAL HANDLER ---
-# Sitting at the top level so it can trigger over any page
 if st.session_state.show_ai_hub:
     @st.dialog("Strategic AI Analyst Hub", width="large")
     def ai_hub_modal():
         st.markdown("### 🤖 FloorCast AI")
         st.caption("Reporting Level: Executive | Database Source: Ledger, Sentiment, ROI")
         
-        user_query = st.text_input("Ask FloorCast AI a question:", placeholder="e.g., How did 'Rock of Ages' impact Unity signups vs our baseline?")
+        user_query = st.text_input("Ask FloorCast AI a question:", placeholder="e.g., How did 'Rock of Ages' impact Unity signups?")
         
         c1, c2 = st.columns([1, 4])
         with c1:
             if st.button("Answer My Question", use_container_width=True):
                 if user_query:
                     with st.spinner("Executing Analysis..."):
-                        # This calls the schema-grounded engine (v78.0)
                         answer = ask_omniscient_ai(user_query)
                         st.session_state.last_ai_response = answer
                 else:
