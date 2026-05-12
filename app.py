@@ -716,10 +716,17 @@ if df.empty:
         st.stop()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v52.0 - SaaS Hybrid & Restored Pulse)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v65.0 - Current Month Default)
 # =================================================================
 if page == "Executive Dashboard":
     
+    # --- 0. DYNAMIC MONTH BOUNDARIES ---
+    today = datetime.date.today()
+    first_of_month = today.replace(day=1)
+    # Calculate the last day of the current month
+    next_month = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+    last_of_month = next_month - datetime.timedelta(days=1)
+
     # --- A. CONSOLIDATED GLOBAL VIEW (For Super Admins) ---
     if st.session_state.get('current_property_id') == "GLOBAL":
         render_styled_header("Global Network Intelligence", "Aggregate Performance across all Portfolio Properties", "Global")
@@ -728,16 +735,22 @@ if page == "Executive Dashboard":
             st.warning("No network data found across properties.")
             st.stop()
 
-        # 1. GLOBAL DATE RANGE SELECTION (With Error Suppression)
+        # 1. GLOBAL DATE RANGE SELECTION
         df['entry_date'] = pd.to_datetime(df['entry_date'])
         min_date, max_date = df['entry_date'].min().date(), df['entry_date'].max().date()
 
         col_date, _ = st.columns([1.5, 2.5])
         with col_date:
-            global_range = st.date_input("Network Audit Window:", value=(min_date, max_date), 
-                                        min_value=min_date, max_value=max_date, key="global_audit_range_selector")
+            # FIX: Default value set to Current Month
+            global_range = st.date_input(
+                "Network Audit Window:", 
+                value=(first_of_month, last_of_month), 
+                min_value=min_date, 
+                max_value=max_date, 
+                key="global_audit_range_selector"
+            )
 
-        # THE FIX: PREVENT RED ERROR BOX
+        # PREVENT RED ERROR BOX
         if isinstance(global_range, tuple) and len(global_range) < 2:
             st.info("💡 Please select the **end date** in the calendar to load the network results.")
             st.stop() 
@@ -766,7 +779,7 @@ if page == "Executive Dashboard":
 
         st.divider()
 
-        # 3. PROPERTY PERFORMANCE LEADERBOARD (Ranked & Formatted)
+        # 3. PROPERTY PERFORMANCE LEADERBOARD
         st.write(f"### 🏆 Property Performance Leaderboard ({start_g} to {end_g})")
         
         leaderboard = df_filtered.groupby('Property').agg({
@@ -809,7 +822,6 @@ if page == "Executive Dashboard":
         render_styled_header(f"{st.session_state.current_property_name} Pulse", 
                              "Strategic Demand Projection & Marketing Impact", "Operational")
 
-        today = datetime.date.today()
         current_weights = st.session_state.get('coeffs', {})
 
         if df.empty:
@@ -825,7 +837,12 @@ if page == "Executive Dashboard":
         # 2. DATE SELECTION
         col_date, _ = st.columns([1.5, 2.5])
         with col_date:
-            pulse_range = st.date_input("Analysis Window:", value=(today, today + datetime.timedelta(days=7)), key="pulse_exec_unique")
+            # FIX: Default value set to Current Month
+            pulse_range = st.date_input(
+                "Analysis Window:", 
+                value=(first_of_month, last_of_month), 
+                key="pulse_exec_unique"
+            )
 
         if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
             start_p, end_p = pulse_range
@@ -885,7 +902,7 @@ if page == "Executive Dashboard":
             fig_pulse.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10), template="plotly_white")
             st.plotly_chart(fig_pulse, use_container_width=True, key=f"pulse_chart_{st.session_state.current_property_id}")
 
-            # 7. EXECUTIVE KPI GRID (With Benchmarking)
+            # 7. EXECUTIVE KPI GRID
             st.write(f"### 🏛️ {st.session_state.current_property_name} Vital Signs vs. Network Avg")
             k1, k2, k3, k4, k5 = st.columns(5)
             LTV_VAL, AVG_SPEND = 1900.00, 1100.31
