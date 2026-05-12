@@ -2407,13 +2407,12 @@ elif page == "Experiment Vault":
                         st.rerun()
 
 # =================================================================
-# 14. PAGE 6: PR SCORECARD & EARNED MEDIA (v1.1 - Fix: NameError)
+# 14. PAGE 6: PR SCORECARD & EARNED MEDIA (v1.2 - Reset & Sync)
 # =================================================================
 elif page == "PR Scorecard":
     import datetime
     from dateutil.relativedelta import relativedelta
     
-    # Define 'today' locally to prevent NameError
     today_pr = datetime.date.today()
 
     render_styled_header(
@@ -2426,9 +2425,9 @@ elif page == "PR Scorecard":
     pr_res = supabase.table("pr_scorecard").select("*").eq("property_id", st.session_state.current_property_id).order("report_month", desc=True).execute()
     df_pr = pd.DataFrame(pr_res.data) if pr_res.data else pd.DataFrame()
 
-    # 2. DATA ENTRY MODAL
+    # 2. DATA ENTRY MODAL (Fields clear on Rerun)
     with st.expander("📝 Log Monthly PR Metrics", expanded=False):
-        with st.form("pr_entry_form"):
+        with st.form("pr_entry_form", clear_on_submit=True):
             f1, f2, f3 = st.columns(3)
             with f1: m_date = st.date_input("Report Month", value=today_pr.replace(day=1))
             with f2: m_imp = st.number_input("Earned Impressions", min_value=0, step=1000)
@@ -2448,47 +2447,50 @@ elif page == "PR Scorecard":
                 }
                 supabase.table("pr_scorecard").upsert(entry, on_conflict="property_id, report_month").execute()
                 st.success(f"PR Metrics for {m_date.strftime('%B %Y')} Vaulted.")
+                # st.rerun clears the form and updates the metrics below
                 st.rerun()
 
     if df_pr.empty:
         st.info("The PR Scorecard vault is currently empty. Log your first month to see analytics.")
         st.stop()
 
-    # 3. DATE RANGE SELECTOR
-    st.divider()
+    # 3. DATA PREP & CALCULATIONS
     df_pr['report_month'] = pd.to_datetime(df_pr['report_month'])
-    
-    # 4. KPI BENCHMARKING ENGINE
-    # Current Month (Top row)
     curr = df_pr.iloc[0]
-    
-    # MoM Logic: Compare to row 1 (if exists)
     prev = df_pr.iloc[1] if len(df_pr) > 1 else curr
-    
-    # 3-Month Avg Logic
     avg_3m_df = df_pr.head(3)
+    
+    # Benchmarks
     avg_3m_imp = avg_3m_df['earned_impressions'].mean()
     avg_3m_ment = avg_3m_df['earned_mentions'].mean()
 
-    # 5. METRIC CARDS
-    k1, k2, k3 = st.columns(3)
+    # 4. METRIC CARDS: MOM PERFORMANCE
+    st.markdown("### 📊 Performance against MoM Baseline")
+    k1, k2 = st.columns(2)
     
-    # Impressions vs MoM
-    imp_delta = ((curr['earned_impressions'] - prev['earned_impressions']) / prev['earned_impressions'] * 100) if prev['earned_impressions'] > 0 else 0
-    k1.metric("Earned Impressions", f"{curr['earned_impressions']:,}", delta=f"{imp_delta:+.1f}% MoM")
+    # MoM Impressions %
+    imp_mom_pct = ((curr['earned_impressions'] - prev['earned_impressions']) / prev['earned_impressions'] * 100) if prev['earned_impressions'] > 0 else 0
+    k1.metric("Earned Media Impressions", f"{curr['earned_impressions']:,}", delta=f"{imp_mom_pct:+.1f}% MoM")
 
-    # Mentions vs 3-Month Avg
-    ment_delta = curr['earned_mentions'] - avg_3m_ment
-    k2.metric("Media Mentions", f"{curr['earned_mentions']}", delta=f"{ment_delta:+.1f} vs 3M Avg")
+    # MoM Mentions %
+    ment_mom_pct = ((curr['earned_mentions'] - prev['earned_mentions']) / prev['earned_mentions'] * 100) if prev['earned_mentions'] > 0 else 0
+    k2.metric("Earned Media Mentions", f"{curr['earned_mentions']}", delta=f"{ment_mom_pct:+.1f}% MoM")
 
-    # Month-over-Month Growth in Mentions
-    ment_mom_delta = int(curr['earned_mentions'] - prev['earned_mentions'])
-    k3.metric("MoM Mention Shift", f"{curr['earned_mentions']}", delta=f"{ment_mom_delta:+} Placements")
+    # 5. METRIC CARDS: 3-MONTH AVERAGE PERFORMANCE
+    st.markdown("### 🏛️ Performance against 3-Month Average")
+    k3, k4 = st.columns(2)
+
+    # 3M Avg Impressions %
+    imp_3m_pct = ((curr['earned_impressions'] - avg_3m_imp) / avg_3m_imp * 100) if avg_3m_imp > 0 else 0
+    k3.metric("Earned Media Impressions", f"{curr['earned_impressions']:,}", delta=f"{imp_3m_pct:+.1f}% vs 3M Avg")
+
+    # 3M Avg Mentions %
+    ment_3m_pct = ((curr['earned_mentions'] - avg_3m_ment) / avg_3m_ment * 100) if avg_3m_ment > 0 else 0
+    k4.metric("Earned Media Mentions", f"{curr['earned_mentions']}", delta=f"{ment_3m_pct:+.1f}% vs 3M Avg")
 
     # 6. VISUAL PERFORMANCE TREND
     st.write("### 📈 Earned Media Traction Trend")
     fig_pr = go.Figure()
-    # Sort for the chart to be chronological (Left to Right)
     df_chart = df_pr.sort_values('report_month')
     
     fig_pr.add_trace(go.Scatter(
