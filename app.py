@@ -86,52 +86,57 @@ import pandas as pd
 import streamlit as st
 
 # =================================================================
-# GLOBAL AI ENGINES (v78.0 - Schema-Grounded Executive Analyst)
+# GLOBAL AI ENGINES (v85.0 - PR & Earned Media Integrated)
 # =================================================================
 
 def get_forensic_omniscience():
     """
-    Directly serializes the Ledger, Sentiment, and ROI tables using 
-    provided SQL schemas to ensure high-precision executive reporting.
+    Directly serializes Ledger, Sentiment, ROI, and PR tables to 
+    provide the AI with a 360-degree executive view.
     """
     try:
         pid = st.session_state.get('current_property_id')
         
-        # 1. PULL DATA FROM THE THREE CORE TABLES
-        # Limit nodes to ensure we don't exceed the AI's context window (Flash 1.5 is large, but keep it tight)
+        # 1. PULL DATA FROM THE FOUR CORE TABLES
         ledger_res = supabase.table("ledger").select("*").eq("property_id", pid).order("entry_date", desc=True).limit(45).execute()
         sent_res = supabase.table("sentiment_history").select("*").eq("property_id", pid).order("timestamp", desc=True).limit(30).execute()
         roi_res = supabase.table("monthly_roi").select("*").eq("property_id", pid).order("report_month", desc=True).limit(6).execute()
+        # New PR Scorecard Pull
+        pr_res = supabase.table("pr_scorecard").select("*").eq("property_id", pid).order("report_month", desc=True).limit(12).execute()
 
-        # 2. DEFINE THE SCHEMA MAP (The AI's Internal Documentation)
+        # 2. DEFINE THE SCHEMA MAP (The AI's Logic Legend)
         schema_map = """
         ACTUAL DATABASE SCHEMA DEFINITIONS:
         
-        Table: 'public.ledger' (Daily Granular Performance)
+        Table: 'public.ledger' (Daily Floor Performance)
         - entry_date (PK): The business date.
-        - actual_traffic: PHYSICAL GUEST door counts (Use this for 'Traffic' questions).
-        - actual_coin_in: Total gaming volume/revenue.
-        - active_promo: Marketing campaign name.
+        - actual_traffic: PHYSICAL GUEST door counts (The 'Ground Truth' for traffic).
+        - actual_coin_in: Total gaming revenue.
+        - active_promo: Name of the marketing campaign running.
         - new_members: Unity card signups.
-        - Event_Gravity: Impact score of on-site events.
         
-        Table: 'public.sentiment_history' (Guest Feedback)
-        - asset: The specific area (CHOP, Slots, Council Oak, etc.).
+        Table: 'public.pr_scorecard' (Earned Media Impact)
+        - report_month: The month of PR activity.
+        - earned_impressions: Total reach/viewership from unpaid media.
+        - earned_mentions: Number of times the property was featured in news/press.
+        - mediums: Outlets involved (e.g., CTV, Ottawa Citizen).
+        - executive_summary: Narrative wins for that month.
+
+        Table: 'public.sentiment_history' (Guest Vibe)
+        - asset: Location (CHOP, Slots, etc.).
         - sentiment_score: -1.0 (Critical) to 1.0 (Exceptional).
-        - sentiment_category: The categorical label.
-        - raw_text: The literal guest comment.
+        - raw_text: Literal guest feedback.
         
-        Table: 'public.monthly_roi' (High-Level Marketing Impact)
-        - report_month: The month being analyzed.
-        - utm_sessions: Digital web traffic (DO NOT confuse with 'actual_traffic').
-        - ad_spend: Total paid media cost.
-        - calculated_bl_roas: Bottom-line Return on Ad Spend.
+        Table: 'public.monthly_roi' (Digital Marketing)
+        - utm_sessions: Digital web traffic (DO NOT confuse with physical traffic).
+        - ad_spend: Paid media cost.
         """
 
         # 3. SERIALIZE DATA
-        ledger_data = pd.DataFrame(ledger_res.data).to_string(index=False) if ledger_res.data else "Empty"
-        sent_data = pd.DataFrame(sent_res.data).to_string(index=False) if sent_res.data else "Empty"
-        roi_data = pd.DataFrame(roi_res.data).to_string(index=False) if roi_res.data else "Empty"
+        ledger_data = pd.DataFrame(ledger_res.data).to_string(index=False) if ledger_res.data else "No Ledger Data."
+        sent_data = pd.DataFrame(sent_res.data).to_string(index=False) if sent_res.data else "No Sentiment Data."
+        roi_data = pd.DataFrame(roi_res.data).to_string(index=False) if roi_res.data else "No ROI Data."
+        pr_data = pd.DataFrame(pr_res.data).to_string(index=False) if pr_res.data else "No PR Data."
 
         # 4. CONSTRUCT CONTEXT
         context = f"""
@@ -140,20 +145,23 @@ def get_forensic_omniscience():
 
         {schema_map}
 
-        --- LIVE DATA: LEDGER ---
+        --- LIVE DATA: LEDGER (DAILY ACTUALS) ---
         {ledger_data}
 
-        --- LIVE DATA: SENTIMENT HISTORY ---
+        --- LIVE DATA: PR SCORECARD (EARNED MEDIA) ---
+        {pr_data}
+
+        --- LIVE DATA: SENTIMENT HISTORY (GUEST VOICE) ---
         {sent_data}
 
-        --- LIVE DATA: MONTHLY ROI ---
+        --- LIVE DATA: MONTHLY ROI (PAID MEDIA) ---
         {roi_data}
 
         EXECUTIVE DIRECTIVES:
-        1. If asked about "Traffic", you MUST look at 'actual_traffic' in the ledger.
-        2. If asked about "Web Sessions" or "Digital", look at 'utm_sessions' in monthly_roi.
-        3. Never hallucinate. If a date or metric is missing, report it as 'Not Vaulted'.
-        4. Cross-reference tables. (e.g., Did a specific 'active_promo' lead to higher 'new_members'?).
+        1. When asked about 'PR' or 'Earned Media', analyze impressions vs. mentions.
+        2. Cross-reference PR wins with Ledger traffic. (e.g., 'Did a high-impression PR month correlate with a traffic spike?').
+        3. 'Traffic' is strictly 'actual_traffic' in the ledger.
+        4. If a user asks for a 'PR Summary', read the 'executive_summary' from the PR table.
         """
         return context
     except Exception as e:
@@ -164,7 +172,6 @@ def ask_omniscient_ai(user_query):
     try:
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        # We use 1.5-Flash for speed and large context handling
         model = genai.GenerativeModel('gemini-2.5-flash')
         
         vault_context = get_forensic_omniscience()
