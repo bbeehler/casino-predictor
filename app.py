@@ -683,16 +683,22 @@ with st.sidebar:
         st.info("Global View Active")
     else:
         nav_options = ["Executive Dashboard"]
-        if check_permission("view_ledger"): nav_options.append("Daily Ledger Audit", "PR Scorecard")
-        if check_permission("view_analytics"): nav_options.extend(["Attribution Analytics", "Sentiment Scoring"])
+        
+        # FIXED LOGIC HERE
+        if check_permission("view_ledger"): 
+            nav_options.extend(["Daily Ledger Audit", "PR Scorecard"])
+            
+        if check_permission("view_analytics"):
+            nav_options.extend(["Attribution Analytics", "Sentiment Scoring"])
         if check_permission("view_reports"): nav_options.append("Master Audit Report")
         if check_permission("run_simulations"): nav_options.append("Scenario Simulator")
         if check_permission("run_experiments"): nav_options.append("Experiment Vault")
         if check_permission("manage_alerts"): nav_options.append("Strategic Alerts")
-        if check_permission("calibrate_ai"): nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
-        if st.session_state.get('user_role') == "Super Admin": nav_options.append("Global Admin Console")
+        if check_permission("calibrate_ai"):
+            nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
+        if st.session_state.get('user_role') == "Super Admin":
+            nav_options.append("Global Admin Console")
 
-        # Fixed: Added reset_hub_on_nav to ensure modal closes when clicking a new page
         page = st.radio("Navigation", nav_options, label_visibility="collapsed", on_change=reset_hub_on_nav)
 
     # --- 3. THE INTELLIGENCE HUB TRIGGER ---
