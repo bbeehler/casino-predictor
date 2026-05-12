@@ -608,7 +608,7 @@ def show_ai_analyst_hub():
             st.error("Intelligence Hub Offline.")
     
 # =================================================================
-# 8. EXECUTIVE NAVIGATION & AI HUB (v81.0 - Navigation Reset)
+# 8. EXECUTIVE NAVIGATION & AI HUB (v84.0 - Indentation Fix)
 # =================================================================
 
 # --- A. INITIALIZE HUB STATE ---
@@ -616,7 +616,6 @@ if 'show_ai_hub' not in st.session_state:
     st.session_state.show_ai_hub = False
 
 # --- THE AUTO-CLOSE CALLBACK ---
-# This kills the modal state whenever the user navigates
 def reset_hub_on_nav():
     st.session_state.show_ai_hub = False
     if "last_ai_response" in st.session_state:
@@ -647,7 +646,6 @@ with st.sidebar:
             curr_label = "📊 CONSOLIDATED VIEW" if st.session_state.current_property_id == "GLOBAL" else st.session_state.current_property_name
             s_idx = options.index(curr_label) if curr_label in options else 0
             
-            # Added reset_hub_on_nav to on_change
             selected_view = st.selectbox(
                 "Switch Environment:", 
                 options, 
@@ -677,58 +675,46 @@ with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
     st.caption("NAVIGATION")
     
-    # 2. PAGE NAVIGATION
-if st.session_state.current_property_id == "GLOBAL":
-    page = "Executive Dashboard"
-    st.info("Global View Active")
-else:
-    # Always include the primary dashboard
-    nav_options = ["Executive Dashboard"]
-    
-    # --- PERMISSION-BASED ROUTING ---
-    
-    # Ledger Access
-    if check_permission("view_ledger"): 
-        nav_options.append("Daily Ledger Audit")
+    # 2. PAGE NAVIGATION (Now correctly nested inside 'with st.sidebar')
+    if st.session_state.current_property_id == "GLOBAL":
+        page = "Executive Dashboard"
+        st.info("Global View Active")
+    else:
+        nav_options = ["Executive Dashboard"]
         
-    # NEW: PR Scorecard (Mapped to specific PR permission)
-    if check_permission("view_pr_scorecard"): 
-        nav_options.append("PR Scorecard")
-        
-    # Analytics & Sentiment
-    if check_permission("view_analytics"):
-        nav_options.extend(["Attribution Analytics", "Sentiment Scoring"])
-        
-    # Audits & Reporting
-    if check_permission("view_reports"): 
-        nav_options.append("Master Audit Report")
-        
-    # Strategy & Simulation
-    if check_permission("run_simulations"): 
-        nav_options.append("Scenario Simulator")
-        
-    if check_permission("run_experiments"): 
-        nav_options.append("Experiment Vault")
-        
-    # Intelligence & Alerts
-    if check_permission("manage_alerts"): 
-        nav_options.append("Strategic Alerts")
-        
-    # Engine Calibration
-    if check_permission("calibrate_ai"):
-        nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
-        
-    # Global System Management
-    if st.session_state.get('user_role') == "Super Admin":
-        nav_options.append("Global Admin Console")
+        if check_permission("view_ledger"): 
+            nav_options.append("Daily Ledger Audit")
+            
+        if check_permission("view_pr_scorecard"): 
+            nav_options.append("PR Scorecard")
+            
+        if check_permission("view_analytics"):
+            nav_options.extend(["Attribution Analytics", "Sentiment Scoring"])
+            
+        if check_permission("view_reports"): 
+            nav_options.append("Master Audit Report")
+            
+        if check_permission("run_simulations"): 
+            nav_options.append("Scenario Simulator")
+            
+        if check_permission("run_experiments"): 
+            nav_options.append("Experiment Vault")
+            
+        if check_permission("manage_alerts"): 
+            nav_options.append("Strategic Alerts")
+            
+        if check_permission("calibrate_ai"):
+            nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
+            
+        if st.session_state.get('user_role') == "Super Admin":
+            nav_options.append("Global Admin Console")
 
-    # Render the navigation radio with the auto-close reset for the AI Hub
-    page = st.radio(
-        "Navigation", 
-        nav_options, 
-        label_visibility="collapsed", 
-        on_change=reset_hub_on_nav
-    )
+        page = st.radio(
+            "Navigation", 
+            nav_options, 
+            label_visibility="collapsed", 
+            on_change=reset_hub_on_nav
+        )
 
     # --- 3. THE INTELLIGENCE HUB TRIGGER ---
     st.divider()
@@ -754,6 +740,7 @@ else:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # --- D. THE GLOBAL MODAL HANDLER ---
+# Note: Modals/Dialogs should stay outside the sidebar block
 if st.session_state.show_ai_hub:
     @st.dialog("Strategic AI Analyst Hub", width="large")
     def ai_hub_modal():
@@ -777,7 +764,6 @@ if st.session_state.show_ai_hub:
                 st.session_state.show_ai_hub = False
                 st.rerun()
 
-        # Display Response
         if "last_ai_response" in st.session_state:
             st.markdown("---")
             st.markdown(st.session_state.last_ai_response)
