@@ -683,17 +683,14 @@ with st.sidebar:
         st.info("Global View Active")
     else:
         nav_options = ["Executive Dashboard"]
-        if check_permission("view_ledger"): nav_options.append("Daily Ledger Audit")
-        if check_permission("view_analytics"):
-            nav_options.extend(["Attribution Analytics", "Sentiment Scoring"])
+        if check_permission("view_ledger"): nav_options.append("Daily Ledger Audit", "PR Scorecard")
+        if check_permission("view_analytics"): nav_options.extend(["Attribution Analytics", "Sentiment Scoring"])
         if check_permission("view_reports"): nav_options.append("Master Audit Report")
         if check_permission("run_simulations"): nav_options.append("Scenario Simulator")
         if check_permission("run_experiments"): nav_options.append("Experiment Vault")
         if check_permission("manage_alerts"): nav_options.append("Strategic Alerts")
-        if check_permission("calibrate_ai"):
-            nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
-        if st.session_state.get('user_role') == "Super Admin":
-            nav_options.append("Global Admin Console")
+        if check_permission("calibrate_ai"): nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
+        if st.session_state.get('user_role') == "Super Admin": nav_options.append("Global Admin Console")
 
         # Fixed: Added reset_hub_on_nav to ensure modal closes when clicking a new page
         page = st.radio("Navigation", nav_options, label_visibility="collapsed", on_change=reset_hub_on_nav)
@@ -828,7 +825,7 @@ df, ledger_data = get_hydrated_data(st.session_state.current_property_id, supaba
 # If df is empty but ledger_data exists, it means the Forensic Engine failed to process the rows.
 if df.empty:
     # EXEMPTIONS: Do not stop the app if the user is trying to add data or simulate scenarios
-    exempt_pages = ["Global Admin Console", "Master Audit Report", "Scenario Simulator", "Daily Ledger Audit"]
+    exempt_pages = ["Global Admin Console", "Master Audit Report", "Scenario Simulator", "Daily Ledger Audit", "PR Scorecard"]
     
     if page not in exempt_pages:
         if not ledger_data:
@@ -2402,6 +2399,112 @@ elif page == "Experiment Vault":
                     if st.button("🗑️ Delete Experiment", key=f"del_{exp['id']}", use_container_width=True):
                         supabase.table("experiment_registry").delete().eq("id", exp['id']).execute()
                         st.rerun()
+
+# =================================================================
+# 20. PAGE 12: PR SCORECARD & EARNED MEDIA (v1.0)
+# =================================================================
+elif page == "PR Scorecard":
+    render_styled_header(
+        f"PR Scorecard: {st.session_state.current_property_name}",
+        "Tracking Earned Media Impact and Brand Authority",
+        "Public Relations"
+    )
+
+    # 1. DATA RETRIEVAL
+    pr_res = supabase.table("pr_scorecard").select("*").eq("property_id", st.session_state.current_property_id).order("report_month", desc=True).execute()
+    df_pr = pd.DataFrame(pr_res.data) if pr_res.data else pd.DataFrame()
+
+    # 2. DATA ENTRY MODAL
+    with st.expander("📝 Log Monthly PR Metrics", expanded=False):
+        with st.form("pr_entry_form"):
+            f1, f2, f3 = st.columns(3)
+            with f1: m_date = st.date_input("Report Month", value=today.replace(day=1))
+            with f2: m_imp = st.number_input("Earned Impressions", min_value=0, step=1000)
+            with f3: m_ment = st.number_input("Earned Mentions", min_value=0, step=1)
+            
+            m_mediums = st.text_input("Primary Mediums (e.g., CTV News, Ottawa Citizen, Radio)")
+            m_comment = st.text_area("Executive Commentary (Key Wins/Narrative)")
+            
+            if st.form_submit_button("Vault PR Entry", use_container_width=True):
+                entry = {
+                    "property_id": st.session_state.current_property_id,
+                    "report_month": m_date.strftime("%Y-%m-%d"),
+                    "earned_impressions": m_imp,
+                    "earned_mentions": m_ment,
+                    "mediums": m_mediums,
+                    "executive_summary": m_comment
+                }
+                supabase.table("pr_scorecard").upsert(entry, on_conflict="property_id, report_month").execute()
+                st.success(f"PR Metrics for {m_date.strftime('%B %Y')} Vaulted.")
+                st.rerun()
+
+    if df_pr.empty:
+        st.info("The PR Scorecard vault is currently empty. Log your first month to see analytics.")
+        st.stop()
+
+    # 3. DATE RANGE SELECTOR FOR METRICS
+    st.divider()
+    df_pr['report_month'] = pd.to_datetime(df_pr['report_month'])
+    
+    col_range, _ = st.columns([2, 2])
+    with col_range:
+        selected_months = st.multiselect(
+            "Select Months for Comparison:", 
+            options=df_pr['report_month'].dt.strftime('%B %Y').tolist(),
+            default=df_pr['report_month'].dt.strftime('%B %Y').tolist()[:1]
+        )
+
+    # 4. KPI BENCHMARKING ENGINE
+    # We use the most recent month as the "Current" for delta calculations
+    latest_idx = 0
+    curr = df_pr.iloc[latest_idx]
+    
+    # MoM Logic
+    prev = df_pr.iloc[latest_idx + 1] if len(df_pr) > 1 else curr
+    # 3-Month Avg Logic
+    avg_3m = df_pr.iloc[latest_idx:latest_idx+3] if len(df_pr) >= 3 else df_pr
+
+    k1, k2, k3 = st.columns(3)
+    
+    # Metric 1: Impressions vs MoM
+    imp_delta = ((curr['earned_impressions'] - prev['earned_impressions']) / prev['earned_impressions'] * 100) if prev['earned_impressions'] > 0 else 0
+    k1.metric("Earned Impressions", f"{curr['earned_impressions']:,}", delta=f"{imp_delta:.1f}% vs MoM")
+
+    # Metric 2: Mentions vs 3-Month Avg
+    ment_avg = avg_3m['earned_mentions'].mean()
+    ment_delta = curr['earned_mentions'] - ment_avg
+    k2.metric("Media Mentions", f"{curr['earned_mentions']}", delta=f"{ment_delta:+.1f} vs 3M Avg")
+
+    # Metric 3: Volume Change (Combined Index)
+    k3.metric("Primary Mediums", f"{len(str(curr['mediums']).split(','))} Outlets", delta="Live Coverage")
+
+    # 5. VISUAL PERFORMANCE TREND
+    st.write("### 📈 Earned Media Traction Trend")
+    fig_pr = go.Figure()
+    fig_pr.add_trace(go.Scatter(
+        x=df_pr['report_month'], y=df_pr['earned_impressions'], 
+        name="Impressions", line=dict(color='#FFCC00', width=4), yaxis="y"
+    ))
+    fig_pr.add_trace(go.Bar(
+        x=df_pr['report_month'], y=df_pr['earned_mentions'], 
+        name="Mentions", marker_color='rgba(255, 255, 255, 0.2)', yaxis="y2"
+    ))
+    
+    fig_pr.update_layout(
+        template="plotly_dark",
+        yaxis=dict(title="Impressions"),
+        yaxis2=dict(title="Mentions", overlaying="y", side="right"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=10, r=10, t=10, b=10), height=400
+    )
+    st.plotly_chart(fig_pr, use_container_width=True)
+
+    # 6. EXECUTIVE SUMMARY LOG
+    st.write("### 📜 Monthly PR Narrative Archive")
+    for index, row in df_pr.iterrows():
+        with st.expander(f"Analysis: {row['report_month'].strftime('%B %Y')} - {row['mediums']}", expanded=(index==0)):
+            st.markdown(f"**Earned Reach:** {row['earned_impressions']:,} impressions across {row['earned_mentions']} placements.")
+            st.info(row['executive_summary'] if row['executive_summary'] else "No summary vaulted for this period.")
 
 # =================================================================
 # 18. FOOTER
