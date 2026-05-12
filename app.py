@@ -2407,7 +2407,7 @@ elif page == "Experiment Vault":
                         st.rerun()
 
 # =================================================================
-# 14. PAGE 6: PR SCORECARD & EARNED MEDIA (v1.2 - Reset & Sync)
+# 14. PAGE 6: PR SCORECARD & EARNED MEDIA (v1.3 - CRUD Enabled)
 # =================================================================
 elif page == "PR Scorecard":
     import datetime
@@ -2421,11 +2421,11 @@ elif page == "PR Scorecard":
         "Public Relations"
     )
 
-    # 1. DATA RETRIEVAL
+    # --- 1. DATA RETRIEVAL ---
     pr_res = supabase.table("pr_scorecard").select("*").eq("property_id", st.session_state.current_property_id).order("report_month", desc=True).execute()
     df_pr = pd.DataFrame(pr_res.data) if pr_res.data else pd.DataFrame()
 
-    # 2. DATA ENTRY MODAL (Fields clear on Rerun)
+    # --- 2. DATA ENTRY MODAL ---
     with st.expander("📝 Log Monthly PR Metrics", expanded=False):
         with st.form("pr_entry_form", clear_on_submit=True):
             f1, f2, f3 = st.columns(3)
@@ -2447,78 +2447,89 @@ elif page == "PR Scorecard":
                 }
                 supabase.table("pr_scorecard").upsert(entry, on_conflict="property_id, report_month").execute()
                 st.success(f"PR Metrics for {m_date.strftime('%B %Y')} Vaulted.")
-                # st.rerun clears the form and updates the metrics below
                 st.rerun()
 
     if df_pr.empty:
         st.info("The PR Scorecard vault is currently empty. Log your first month to see analytics.")
         st.stop()
 
-    # 3. DATA PREP & CALCULATIONS
+    # --- 3. DATA PREP & CALCULATIONS ---
     df_pr['report_month'] = pd.to_datetime(df_pr['report_month'])
     curr = df_pr.iloc[0]
     prev = df_pr.iloc[1] if len(df_pr) > 1 else curr
     avg_3m_df = df_pr.head(3)
-    
-    # Benchmarks
     avg_3m_imp = avg_3m_df['earned_impressions'].mean()
     avg_3m_ment = avg_3m_df['earned_mentions'].mean()
 
-    # 4. METRIC CARDS: MOM PERFORMANCE
+    # --- 4. METRIC CARDS: MOM PERFORMANCE ---
     st.markdown("### 📊 Performance against MoM Baseline")
     k1, k2 = st.columns(2)
-    
-    # MoM Impressions %
     imp_mom_pct = ((curr['earned_impressions'] - prev['earned_impressions']) / prev['earned_impressions'] * 100) if prev['earned_impressions'] > 0 else 0
     k1.metric("Earned Media Impressions", f"{curr['earned_impressions']:,}", delta=f"{imp_mom_pct:+.1f}% MoM")
 
-    # MoM Mentions %
     ment_mom_pct = ((curr['earned_mentions'] - prev['earned_mentions']) / prev['earned_mentions'] * 100) if prev['earned_mentions'] > 0 else 0
     k2.metric("Earned Media Mentions", f"{curr['earned_mentions']}", delta=f"{ment_mom_pct:+.1f}% MoM")
 
-    # 5. METRIC CARDS: 3-MONTH AVERAGE PERFORMANCE
+    # --- 5. METRIC CARDS: 3-MONTH AVERAGE PERFORMANCE ---
     st.markdown("### 🏛️ Performance against 3-Month Average")
     k3, k4 = st.columns(2)
-
-    # 3M Avg Impressions %
     imp_3m_pct = ((curr['earned_impressions'] - avg_3m_imp) / avg_3m_imp * 100) if avg_3m_imp > 0 else 0
     k3.metric("Earned Media Impressions", f"{curr['earned_impressions']:,}", delta=f"{imp_3m_pct:+.1f}% vs 3M Avg")
 
-    # 3M Avg Mentions %
     ment_3m_pct = ((curr['earned_mentions'] - avg_3m_ment) / avg_3m_ment * 100) if avg_3m_ment > 0 else 0
     k4.metric("Earned Media Mentions", f"{curr['earned_mentions']}", delta=f"{ment_3m_pct:+.1f}% vs 3M Avg")
 
-    # 6. VISUAL PERFORMANCE TREND
+    # --- 6. VISUAL PERFORMANCE TREND ---
     st.write("### 📈 Earned Media Traction Trend")
     fig_pr = go.Figure()
     df_chart = df_pr.sort_values('report_month')
-    
-    fig_pr.add_trace(go.Scatter(
-        x=df_chart['report_month'], y=df_chart['earned_impressions'], 
-        name="Impressions", line=dict(color='#FFCC00', width=4), yaxis="y"
-    ))
-    fig_pr.add_trace(go.Bar(
-        x=df_chart['report_month'], y=df_chart['earned_mentions'], 
-        name="Mentions", marker_color='rgba(255, 255, 255, 0.2)', yaxis="y2"
-    ))
-    
-    fig_pr.update_layout(
-        template="plotly_dark",
-        yaxis=dict(title="Impressions (Line)", showgrid=False),
-        yaxis2=dict(title="Mentions (Bar)", overlaying="y", side="right", showgrid=False),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=10, r=10, t=30, b=10), height=400,
-        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
-    )
+    fig_pr.add_trace(go.Scatter(x=df_chart['report_month'], y=df_chart['earned_impressions'], name="Impressions", line=dict(color='#FFCC00', width=4), yaxis="y"))
+    fig_pr.add_trace(go.Bar(x=df_chart['report_month'], y=df_chart['earned_mentions'], name="Mentions", marker_color='rgba(255, 255, 255, 0.2)', yaxis="y2"))
+    fig_pr.update_layout(template="plotly_dark", yaxis=dict(title="Impressions", showgrid=False), yaxis2=dict(title="Mentions", overlaying="y", side="right", showgrid=False),
+                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), margin=dict(l=10, r=10, t=30, b=10), height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig_pr, use_container_width=True)
 
-    # 7. EXECUTIVE SUMMARY LOG
+    # --- 7. EXECUTIVE SUMMARY & CONTROLS ---
     st.write("### 📜 Monthly PR Narrative Archive")
     for index, row in df_pr.iterrows():
         date_label = row['report_month'].strftime('%B %Y')
+        row_id = row['id']
+        
         with st.expander(f"Audit: {date_label} — {row['mediums']}", expanded=(index==0)):
             st.markdown(f"**Earned Reach:** {row['earned_impressions']:,} impressions across {row['earned_mentions']} placements.")
             st.info(row['executive_summary'] if row['executive_summary'] else "No summary vaulted for this period.")
+            
+            # Action Buttons
+            c1, c2, _ = st.columns([1, 1, 4])
+            with c1:
+                if st.button("✏️ Edit", key=f"edit_{row_id}"):
+                    st.session_state.edit_pr_id = row_id
+                    st.rerun()
+            with c2:
+                if st.button("🗑️ Delete", key=f"del_{row_id}"):
+                    supabase.table("pr_scorecard").delete().eq("id", row_id).execute()
+                    st.toast(f"Deleted {date_label} entry.")
+                    st.rerun()
+
+    # --- 8. EDIT DIALOG ---
+    if st.session_state.get('edit_pr_id'):
+        @st.dialog("Edit PR Record")
+        def edit_pr_dialog(entry_id):
+            target = df_pr[df_pr['id'] == entry_id].iloc[0]
+            with st.form("edit_pr_form"):
+                new_imp = st.number_input("Impressions", value=int(target['earned_impressions']))
+                new_ment = st.number_input("Mentions", value=int(target['earned_mentions']))
+                new_med = st.text_input("Mediums", value=target['mediums'])
+                new_sum = st.text_area("Summary", value=target['executive_summary'])
+                if st.form_submit_button("Save Changes"):
+                    supabase.table("pr_scorecard").update({"earned_impressions": new_imp, "earned_mentions": new_ment, "mediums": new_med, "executive_summary": new_sum}).eq("id", entry_id).execute()
+                    st.session_state.edit_pr_id = None
+                    st.rerun()
+            if st.button("Cancel"):
+                st.session_state.edit_pr_id = None
+                st.rerun()
+        
+        edit_pr_dialog(st.session_state.edit_pr_id)
 
 # =================================================================
 # 18. FOOTER
