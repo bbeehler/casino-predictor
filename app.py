@@ -1433,7 +1433,7 @@ elif page == "Master Audit Report":
                 st.caption("Ratio of digital intent vs physical footfall.")
 
 # =================================================================
-# 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS (v52.0 SaaS)
+# 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS (v73.0 SaaS Sync)
 # =================================================================
 elif page == "AI Calibration":
     render_styled_header(
@@ -1442,17 +1442,43 @@ elif page == "AI Calibration":
         "Tuning"
     )
 
-    # Financial Discovery
+    # 1. DATA DISCOVERY
     df_ledger = pd.DataFrame(ledger_data)
-    live_avg = (df_ledger['actual_coin_in'].sum() / df_ledger['actual_traffic'].sum()) if not df_ledger.empty else 112.50
+    
+    # Calculate Live Averages
+    if not df_ledger.empty:
+        total_coin = df_ledger['actual_coin_in'].sum()
+        total_traffic = df_ledger['actual_traffic'].sum()
+        live_avg = (total_coin / total_traffic) if total_traffic > 0 else 112.50
+        
+        # --- SYNCED MODEL CONFIDENCE CALCULATION ---
+        # Filter for completed nodes only (Actuals > 0)
+        df_audit = df_ledger[df_ledger['actual_traffic'] > 0].copy()
+        
+        if not df_audit.empty:
+            s_act = df_audit['actual_traffic'].sum()
+            s_pred = df_audit['predicted_traffic'].sum() if 'predicted_traffic' in df_audit.columns else 0
+            
+            # Use Aggregated Variance Logic to match Executive Dashboard
+            accuracy_val = (1 - (abs(s_act - s_pred) / s_act)) * 100 if s_act > 0 else 0
+            conf_score = f"{accuracy_val:.1f}%"
+            conf_delta = "Optimized" if accuracy_val >= 95 else "Stable" if accuracy_val >= 85 else "Recalibration Suggested"
+        else:
+            conf_score, conf_delta = "---", "Awaiting Data"
+    else:
+        live_avg = 112.50
+        conf_score, conf_delta = "---", "No Vault Data"
 
+    # 2. RENDER PERFORMANCE METRIC
     c_health, _ = st.columns([1.5, 2])
     with c_health:
-        st.metric("Model Confidence", "92.5%", delta="Optimized")
+        st.metric("Model Confidence", conf_score, delta=conf_delta)
 
+    # 3. CALIBRATION FORM
     with st.form("master_calibration_form", border=True):
         st.markdown("#### 💰 Financial DNA & Benchmarks")
         st.caption(f"Current Ledger Average: ${live_avg:.2f} per guest")
+        
         b1, b2 = st.columns(2)
         with b1:
             n_avg_coin = st.number_input("Target Avg Coin-In ($)", value=float(st.session_state.coeffs.get('Avg_Coin_In', live_avg)))
@@ -1481,9 +1507,15 @@ elif page == "AI Calibration":
         st.markdown("<br>", unsafe_allow_html=True)
         if st.form_submit_button("🚀 Hard-Save Property DNA", use_container_width=True):
             updated = {
-                "property_id": st.session_state.current_property_id, "Avg_Coin_In": n_avg_coin,
-                "Hold_Pct": n_hold, "Clicks": n_clicks, "Social_Imp": n_social,
-                "Ad_Decay": n_decay, "Broadcast_Weight": n_broad, "Rain_mm": n_rain, "Snow_cm": n_snow
+                "property_id": st.session_state.current_property_id, 
+                "Avg_Coin_In": n_avg_coin,
+                "Hold_Pct": n_hold, 
+                "Clicks": n_clicks, 
+                "Social_Imp": n_social,
+                "Ad_Decay": n_decay, 
+                "Broadcast_Weight": n_broad, 
+                "Rain_mm": n_rain, 
+                "Snow_cm": n_snow
             }
             try:
                 supabase.table("coefficients").upsert(updated, on_conflict="property_id").execute()
