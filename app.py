@@ -716,7 +716,7 @@ if df.empty:
         st.stop()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v67.0 - Forensic Accuracy Alignment)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v69.0 - Full Restoration)
 # =================================================================
 if page == "Executive Dashboard":
     
@@ -726,12 +726,12 @@ if page == "Executive Dashboard":
     next_month = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
     last_of_month = next_month - datetime.timedelta(days=1)
 
-    # --- THE ABSOLUTE STATE FORCER (v4) ---
-    # Force the analysis window to Current Month by breaking the old session cache
-    if "global_range_v4" not in st.session_state:
-        st.session_state.global_range_v4 = (first_of_month, last_of_month)
-    if "pulse_range_v4" not in st.session_state:
-        st.session_state.pulse_range_v4 = (first_of_month, last_of_month)
+    # --- THE ABSOLUTE STATE FORCER (v6) ---
+    # Breaks cache to ensure current month is the default load
+    if "global_range_v6" not in st.session_state:
+        st.session_state.global_range_v6 = (first_of_month, last_of_month)
+    if "pulse_range_v6" not in st.session_state:
+        st.session_state.pulse_range_v6 = (first_of_month, last_of_month)
 
     # --- A. CONSOLIDATED GLOBAL VIEW (For Super Admins) ---
     if st.session_state.get('current_property_id') == "GLOBAL":
@@ -749,14 +749,14 @@ if page == "Executive Dashboard":
         with col_date:
             global_range = st.date_input(
                 "Network Audit Window:", 
-                value=st.session_state.global_range_v4,
+                value=st.session_state.global_range_v6,
                 min_value=min_date, 
                 max_value=max_date, 
-                key="global_range_v4"
+                key="global_range_v6"
             )
 
         if isinstance(global_range, tuple) and len(global_range) < 2:
-            st.info("💡 Please select the end date in the calendar to load network results.")
+            st.info("💡 Please select the end date in the calendar to load the network results.")
             st.stop() 
 
         if isinstance(global_range, tuple) and len(global_range) == 2:
@@ -767,8 +767,59 @@ if page == "Executive Dashboard":
             df_filtered = df.copy()
             start_g, end_g = first_of_month, last_of_month
 
-        # Top-line metrics and Leaderboard logic remains consistent...
-        # [Global View Leaderboard & Charts logic continues here]
+        if df_filtered.empty:
+            st.info("No network data found for the selected date range.")
+            st.stop()
+
+        # 2. NETWORK TOP-LINE METRICS
+        total_rev = df_filtered['actual_coin_in'].sum()
+        total_traffic = df_filtered['actual_traffic'].sum()
+        total_mems = df_filtered['new_members'].sum()
+
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Network Revenue", f"${total_rev:,.0f}")
+        k2.metric("Network Traffic", f"{total_traffic:,.0f}")
+        k3.metric("Network New Members", f"{total_mems:,.0f}")
+
+        st.divider()
+
+        # 3. PROPERTY PERFORMANCE LEADERBOARD
+        st.write(f"### 🏆 Property Performance Leaderboard ({start_g} to {end_g})")
+        
+        leaderboard = df_filtered.groupby('Property').agg({
+            'actual_coin_in': 'sum', 'actual_traffic': 'sum', 'new_members': 'sum'
+        }).reset_index()
+        
+        leaderboard['Yield_per_Guest'] = (leaderboard['actual_coin_in'] / leaderboard['actual_traffic'])
+        leaderboard['Conv_Rate'] = (leaderboard['new_members'] / leaderboard['actual_traffic'] * 100)
+        leaderboard['Rank'] = leaderboard['actual_coin_in'].rank(ascending=False, method='min').astype(int)
+        leaderboard = leaderboard.sort_values('Rank')
+
+        lb_display = leaderboard.copy()
+        lb_display['actual_coin_in'] = lb_display['actual_coin_in'].apply(lambda x: f"${x:,.0f}")
+        lb_display['actual_traffic'] = lb_display['actual_traffic'].apply(lambda x: f"{x:,.0f}")
+        lb_display['new_members'] = lb_display['new_members'].apply(lambda x: f"{x:,.0f}")
+        lb_display['Yield_per_Guest'] = lb_display['Yield_per_Guest'].apply(lambda x: f"${x:,.2f}")
+        lb_display['Conv_Rate'] = lb_display['Conv_Rate'].apply(lambda x: f"{x:.2f}%")
+
+        cols = ['Rank', 'Property', 'actual_coin_in', 'actual_traffic', 'new_members', 'Yield_per_Guest', 'Conv_Rate']
+        st.table(lb_display[cols].rename(columns={'actual_coin_in': 'Total Revenue', 'actual_traffic': 'Total Guests'}))
+
+        # 4. COMPARATIVE ANALYTICS
+        c1, c2 = st.columns(2)
+        with c1:
+            st.write("### 💰 Revenue Distribution")
+            fig_rev = px.pie(df_filtered, values='actual_coin_in', names='Property', hole=0.5,
+                             color_discrete_sequence=px.colors.sequential.Blues_r)
+            fig_rev.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=350)
+            st.plotly_chart(fig_rev, use_container_width=True)
+
+        with c2:
+            st.write("### 🧬 Network Guest Flow (Stacked)")
+            fig_flow = px.bar(df_filtered, x="entry_date", y="actual_traffic", color="Property",
+                             barmode="stack", color_discrete_sequence=px.colors.qualitative.Prism)
+            fig_flow.update_layout(template="plotly_white", margin=dict(l=10, r=10, t=10, b=10), height=350)
+            st.plotly_chart(fig_flow, use_container_width=True)
 
     # --- B. INDIVIDUAL PROPERTY VIEW (The Pulse) ---
     else:
@@ -791,8 +842,8 @@ if page == "Executive Dashboard":
         with col_date:
             pulse_range = st.date_input(
                 "Analysis Window:", 
-                value=st.session_state.pulse_range_v4, 
-                key="pulse_range_v4"
+                value=st.session_state.pulse_range_v6, 
+                key="pulse_range_v6"
             )
 
         if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
@@ -829,7 +880,7 @@ if page == "Executive Dashboard":
                         "entry_date": st.column_config.Column("Date", disabled=True),
                         "attendance": st.column_config.NumberColumn("Event Attendance", format="%d"),
                     },
-                    hide_index=True, use_container_width=True, key="p1_planner_v67_editor"
+                    hide_index=True, use_container_width=True, key="p1_planner_v69_editor"
                 )
                 
                 for field in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
@@ -851,9 +902,9 @@ if page == "Executive Dashboard":
             fig_pulse.add_trace(go.Scatter(x=df_act_chart['entry_date'], y=df_act_chart['actual_traffic'], name="Actual Guests", line=dict(color='#0047AB', width=4)))
             fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
             fig_pulse.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10), template="plotly_white")
-            st.plotly_chart(fig_pulse, use_container_width=True, key=f"pulse_chart_v67")
+            st.plotly_chart(fig_pulse, use_container_width=True, key=f"pulse_chart_v69")
 
-            # 7. EXECUTIVE KPI GRID (Accuracy Alignment Fix)
+            # 7. EXECUTIVE KPI GRID (Accuracy Sync Fix)
             st.write(f"### 🏛️ {st.session_state.current_property_name} Vital Signs vs. Network Avg")
             k1, k2, k3, k4, k5 = st.columns(5)
             LTV_VAL, AVG_SPEND = 1900.00, 1100.31
@@ -864,13 +915,11 @@ if page == "Executive Dashboard":
             local_yield = (ledger_rev / total_act) if total_act > 0 else 0
             local_conv = (actual_signups / total_act * 100) if total_act > 0 else 0
             
-            # --- CALCULATE MAPA ACCURACY (Matches Master Audit Report Logic) ---
-            valid_audit = df_final[(df_final['actual_traffic'] > 0) & (df_final['predicted_traffic'] > 0)]
+            # --- ACCURACY LOGIC: Only audits completed days in the view ---
+            valid_audit = df_final[(df_final['actual_traffic'] > 0) & (df_final['predicted_traffic'] > 0)].copy()
             if not valid_audit.empty:
-                # Accuracy = 1 - (|Actual - Predicted| / Actual)
-                variances = 1 - (abs(valid_audit['actual_traffic'] - valid_audit['predicted_traffic']) / valid_audit['actual_traffic'])
-                accuracy_val = max(0, min(1, variances.mean())) * 100
-                accuracy_display = f"{accuracy_val:.1f}%"
+                valid_audit['acc'] = 1 - (abs(valid_audit['actual_traffic'] - valid_audit['predicted_traffic']) / valid_audit['actual_traffic'])
+                accuracy_display = f"{max(0, valid_audit['acc'].mean()) * 100:.1f}%"
             else:
                 accuracy_display = "---"
 
@@ -880,7 +929,7 @@ if page == "Executive Dashboard":
                 k2.metric("Target Signups", f"{(total_vol * 0.0170):,.0f}")
                 k3.metric("Proj. Revenue", f"${proj_rev:,.0f}")
                 k4.metric("Marketing Impact", f"{mkt_impact_pct:.1f}%")
-                k5.metric("Historical Accuracy", accuracy_display)
+                k5.metric("Model Reliability", accuracy_display)
             else:
                 y_delta = local_yield - st.session_state.get('net_avg_yield', 0)
                 c_delta = local_conv - st.session_state.get('net_avg_conv', 0)
@@ -909,13 +958,46 @@ if page == "Executive Dashboard":
                     sel_date = g_months[g_labels.index(sel_period)]
                     g_res = global_query.filter("timestamp", "gte", sel_date.strftime("%Y-%m-%d")).execute()
                 if g_res.data:
-                    overall_score = np.mean([d['sentiment_score'] for d in g_res.data])
+                    # Smart mapping: Preserve already-mapped negatives, convert raw 0-1
+                    raw_scores = [d['sentiment_score'] for d in g_res.data]
+                    mapped_scores = [(s * 2 - 1) if 0 <= s <= 1 else s for s in raw_scores]
+                    overall_score = np.mean(mapped_scores)
             except: pass
 
-            st.metric(label=f"Consolidated Property Pulse ({sel_period})", value=f"{overall_score:+.2f}")
+            st.metric(label=f"Consolidated Property Pulse ({sel_period})", value=f"{overall_score:+.2f}",
+                delta="Positive Impact" if overall_score > 0.3 else "High Friction" if overall_score < -0.3 else "Neutral")
 
-            # Dynamic Asset Gauges logic remains consistent...
-        
+            # --- DYNAMIC ASSET GAUGES (RESTORED) ---
+            try:
+                asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
+                tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall Property"]
+                
+                gauge_cols = st.columns(len(tags))
+                for i, tag in enumerate(tags):
+                    with gauge_cols[i]:
+                        tag_score = 0.0
+                        try:
+                            t_res = supabase.table("sentiment_history").select("sentiment_score")\
+                                .eq("property_id", st.session_state.current_property_id)\
+                                .eq("asset", tag).order("timestamp", desc=True).limit(20).execute()
+                            if t_res.data:
+                                t_raw = [d['sentiment_score'] for d in t_res.data]
+                                t_mapped = [(s * 2 - 1) if 0 <= s <= 1 else s for s in t_raw]
+                                tag_score = np.mean(t_mapped)
+                        except: pass
+
+                        fig = go.Figure(go.Indicator(
+                            mode = "gauge+number", value = tag_score,
+                            number = {'font': {'size': 20}, 'valueformat': ".2f"},
+                            gauge = {'axis': {'range': [-1, 1]}, 'bar': {'color': "#0047AB"},
+                                'steps': [{'range': [-1, -0.3], 'color': "#FF4B4B"},
+                                          {'range': [-0.3, 0.3], 'color': "#F0F2F6"},
+                                          {'range': [0.3, 1], 'color': "#28A745"}]}))
+                        fig.update_layout(height=150, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True, key=f"p1_gauge_v69_{tag}")
+                        st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 14px;'>{tag}</p>", unsafe_allow_html=True)
+            except: pass
+
 # =================================================================
 # 10. PAGE 2: DAILY LEDGER AUDIT (v60.9 - Forensic Backfill Ready)
 # =================================================================
