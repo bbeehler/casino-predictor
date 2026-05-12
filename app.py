@@ -714,9 +714,7 @@ if st.session_state.show_ai_hub:
         st.markdown("### 🤖 FloorCast AI")
         st.caption("Reporting Level: Executive | Database Source: Ledger, Sentiment, ROI")
         
-        st.info("Ask FloorCast AI a question...")
-        
-        user_query = st.text_input("Ask a data-backed question:", placeholder="e.g., How did 'Rock of Ages' impact Unity signups vs our baseline?")
+        user_query = st.text_input("Ask FloorCast AI a question:", placeholder="e.g., How did 'Rock of Ages' impact Unity signups vs our baseline?")
         
         c1, c2 = st.columns([1, 4])
         with c1:
