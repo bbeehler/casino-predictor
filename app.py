@@ -2407,9 +2407,15 @@ elif page == "Experiment Vault":
                         st.rerun()
 
 # =================================================================
-# 20. PAGE 12: PR SCORECARD & EARNED MEDIA (v1.0)
+# 14. PAGE 6: PR SCORECARD & EARNED MEDIA (v1.1 - Fix: NameError)
 # =================================================================
 elif page == "PR Scorecard":
+    import datetime
+    from dateutil.relativedelta import relativedelta
+    
+    # Define 'today' locally to prevent NameError
+    today_pr = datetime.date.today()
+
     render_styled_header(
         f"PR Scorecard: {st.session_state.current_property_name}",
         "Tracking Earned Media Impact and Brand Authority",
@@ -2424,11 +2430,11 @@ elif page == "PR Scorecard":
     with st.expander("📝 Log Monthly PR Metrics", expanded=False):
         with st.form("pr_entry_form"):
             f1, f2, f3 = st.columns(3)
-            with f1: m_date = st.date_input("Report Month", value=today.replace(day=1))
+            with f1: m_date = st.date_input("Report Month", value=today_pr.replace(day=1))
             with f2: m_imp = st.number_input("Earned Impressions", min_value=0, step=1000)
             with f3: m_ment = st.number_input("Earned Mentions", min_value=0, step=1)
             
-            m_mediums = st.text_input("Primary Mediums (e.g., CTV News, Ottawa Citizen, Radio)")
+            m_mediums = st.text_input("Primary Mediums (e.g., CTV News, Ottawa Citizen)")
             m_comment = st.text_area("Executive Commentary (Key Wins/Narrative)")
             
             if st.form_submit_button("Vault PR Entry", use_container_width=True):
@@ -2448,67 +2454,67 @@ elif page == "PR Scorecard":
         st.info("The PR Scorecard vault is currently empty. Log your first month to see analytics.")
         st.stop()
 
-    # 3. DATE RANGE SELECTOR FOR METRICS
+    # 3. DATE RANGE SELECTOR
     st.divider()
     df_pr['report_month'] = pd.to_datetime(df_pr['report_month'])
     
-    col_range, _ = st.columns([2, 2])
-    with col_range:
-        selected_months = st.multiselect(
-            "Select Months for Comparison:", 
-            options=df_pr['report_month'].dt.strftime('%B %Y').tolist(),
-            default=df_pr['report_month'].dt.strftime('%B %Y').tolist()[:1]
-        )
-
     # 4. KPI BENCHMARKING ENGINE
-    # We use the most recent month as the "Current" for delta calculations
-    latest_idx = 0
-    curr = df_pr.iloc[latest_idx]
+    # Current Month (Top row)
+    curr = df_pr.iloc[0]
     
-    # MoM Logic
-    prev = df_pr.iloc[latest_idx + 1] if len(df_pr) > 1 else curr
+    # MoM Logic: Compare to row 1 (if exists)
+    prev = df_pr.iloc[1] if len(df_pr) > 1 else curr
+    
     # 3-Month Avg Logic
-    avg_3m = df_pr.iloc[latest_idx:latest_idx+3] if len(df_pr) >= 3 else df_pr
+    avg_3m_df = df_pr.head(3)
+    avg_3m_imp = avg_3m_df['earned_impressions'].mean()
+    avg_3m_ment = avg_3m_df['earned_mentions'].mean()
 
+    # 5. METRIC CARDS
     k1, k2, k3 = st.columns(3)
     
-    # Metric 1: Impressions vs MoM
+    # Impressions vs MoM
     imp_delta = ((curr['earned_impressions'] - prev['earned_impressions']) / prev['earned_impressions'] * 100) if prev['earned_impressions'] > 0 else 0
-    k1.metric("Earned Impressions", f"{curr['earned_impressions']:,}", delta=f"{imp_delta:.1f}% vs MoM")
+    k1.metric("Earned Impressions", f"{curr['earned_impressions']:,}", delta=f"{imp_delta:+.1f}% MoM")
 
-    # Metric 2: Mentions vs 3-Month Avg
-    ment_avg = avg_3m['earned_mentions'].mean()
-    ment_delta = curr['earned_mentions'] - ment_avg
+    # Mentions vs 3-Month Avg
+    ment_delta = curr['earned_mentions'] - avg_3m_ment
     k2.metric("Media Mentions", f"{curr['earned_mentions']}", delta=f"{ment_delta:+.1f} vs 3M Avg")
 
-    # Metric 3: Volume Change (Combined Index)
-    k3.metric("Primary Mediums", f"{len(str(curr['mediums']).split(','))} Outlets", delta="Live Coverage")
+    # Month-over-Month Growth in Mentions
+    ment_mom_delta = int(curr['earned_mentions'] - prev['earned_mentions'])
+    k3.metric("MoM Mention Shift", f"{curr['earned_mentions']}", delta=f"{ment_mom_delta:+} Placements")
 
-    # 5. VISUAL PERFORMANCE TREND
+    # 6. VISUAL PERFORMANCE TREND
     st.write("### 📈 Earned Media Traction Trend")
     fig_pr = go.Figure()
+    # Sort for the chart to be chronological (Left to Right)
+    df_chart = df_pr.sort_values('report_month')
+    
     fig_pr.add_trace(go.Scatter(
-        x=df_pr['report_month'], y=df_pr['earned_impressions'], 
+        x=df_chart['report_month'], y=df_chart['earned_impressions'], 
         name="Impressions", line=dict(color='#FFCC00', width=4), yaxis="y"
     ))
     fig_pr.add_trace(go.Bar(
-        x=df_pr['report_month'], y=df_pr['earned_mentions'], 
+        x=df_chart['report_month'], y=df_chart['earned_mentions'], 
         name="Mentions", marker_color='rgba(255, 255, 255, 0.2)', yaxis="y2"
     ))
     
     fig_pr.update_layout(
         template="plotly_dark",
-        yaxis=dict(title="Impressions"),
-        yaxis2=dict(title="Mentions", overlaying="y", side="right"),
+        yaxis=dict(title="Impressions (Line)", showgrid=False),
+        yaxis2=dict(title="Mentions (Bar)", overlaying="y", side="right", showgrid=False),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=10, r=10, t=10, b=10), height=400
+        margin=dict(l=10, r=10, t=30, b=10), height=400,
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
     )
     st.plotly_chart(fig_pr, use_container_width=True)
 
-    # 6. EXECUTIVE SUMMARY LOG
+    # 7. EXECUTIVE SUMMARY LOG
     st.write("### 📜 Monthly PR Narrative Archive")
     for index, row in df_pr.iterrows():
-        with st.expander(f"Analysis: {row['report_month'].strftime('%B %Y')} - {row['mediums']}", expanded=(index==0)):
+        date_label = row['report_month'].strftime('%B %Y')
+        with st.expander(f"Audit: {date_label} — {row['mediums']}", expanded=(index==0)):
             st.markdown(f"**Earned Reach:** {row['earned_impressions']:,} impressions across {row['earned_mentions']} placements.")
             st.info(row['executive_summary'] if row['executive_summary'] else "No summary vaulted for this period.")
 
