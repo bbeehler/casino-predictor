@@ -86,82 +86,72 @@ import pandas as pd
 import streamlit as st
 
 # =================================================================
-# GLOBAL AI ENGINES (v73.0 - Forensic Omniscience Integrated)
+# GLOBAL AI ENGINES (v74.0 - Strict Database Grounding)
 # =================================================================
-
-def generate_ai_prediction(target_date, property_name):
-    """Generates prediction using stable flash for backfill loops."""
-    try:
-        import google.generativeai as genai
-        import re
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        day_of_week = pd.to_datetime(target_date).day_name()
-        prompt = f"Predict casino traffic (integer) for {property_name} on {target_date} ({day_of_week}). Return ONLY the number."
-        
-        response = model.generate_content(prompt)
-        numbers = re.findall(r'\d+', response.text)
-        return float(numbers[0]) if numbers else 0.0
-    except Exception as e:
-        st.sidebar.error(f"AI Call Failed for {target_date}: {e}")
-        return 0.0
 
 def get_forensic_omniscience():
     """
-    The Brain: Pulls the entire property state (Ledger + Sentiment) 
-    to provide the AI with all-knowing context.
+    Pulls the entire property state and defines the Schema Legend to 
+    prevent the AI from guessing web-traffic terms like 'sessions'.
     """
     try:
         pid = st.session_state.get('current_property_id')
-        pname = st.session_state.get('current_property_name', 'The Property')
+        pname = st.session_state.get('current_property_name', 'Hard Rock Ottawa')
         
-        # 1. Fetch Ledger Data (Last 60 Days for trend analysis)
+        # 1. Fetch Data
         ledger_res = supabase.table("ledger").select("*").eq("property_id", pid).order("entry_date", desc=True).limit(60).execute()
-        ledger_df = pd.DataFrame(ledger_res.data) if ledger_res.data else pd.DataFrame()
-        
-        # 2. Fetch Sentiment Data (Last 100 entries for friction analysis)
-        sent_res = supabase.table("sentiment_history").select("asset, raw_text, sentiment_category, sentiment_score, timestamp").eq("property_id", pid).order("timestamp", desc=True).limit(100).execute()
-        sent_df = pd.DataFrame(sent_res.data) if sent_res.data else pd.DataFrame()
+        sent_res = supabase.table("sentiment_history").select("*").eq("property_id", pid).order("timestamp", desc=True).limit(100).execute()
 
-        # 3. Construct the "All-Knowing" Briefing
+        # 2. Schema Legend (The "Rules of the House")
+        schema_legend = """
+        STRICT COLUMN DEFINITIONS FOR HARD ROCK OTTAWA:
+        - 'actual_traffic': Physical guest count (The only definition of 'traffic').
+        - 'actual_coin_in': Total gaming revenue/volume.
+        - 'new_members': Unity card signups.
+        - 'active_promo': Marketing campaigns running that day.
+        - 'sentiment_score': AI-rated feedback from -1.0 to 1.0.
+        """
+
+        # 3. Construct Context
         context_string = f"""
-        SYSTEM ROLE: You are the Omniscient Forensic Analyst for {pname}. 
-        You have direct access to the SQL databases via this summary.
-        
-        --- PROPERTY PERFORMANCE DATA (LAST 60 NODES) ---
-        {ledger_df.to_string() if not ledger_df.empty else "No ledger records found."}
-        
-        --- GUEST SENTIMENT & FEEDBACK VAULT (LAST 100 NODES) ---
-        {sent_df.to_string() if not sent_df.empty else "No sentiment records found."}
-        
+        YOU ARE THE HARD ROCK OTTAWA DATA BOT. 
+        YOU ONLY ANSWER BASED ON THE PROVIDED DATABASE TABLES BELOW.
+        DO NOT USE EXTERNAL KNOWLEDGE OR WEB TERMS LIKE 'SESSIONS'.
+
+        {schema_legend}
+
+        --- TABLE: LEDGER (Last 60 Days) ---
+        {pd.DataFrame(ledger_res.data).to_string() if ledger_res.data else "Empty"}
+
+        --- TABLE: SENTIMENT_HISTORY (Last 100 Entries) ---
+        {pd.DataFrame(sent_res.data).to_string() if sent_res.data else "Empty"}
+
         INSTRUCTIONS:
-        - When asked questions, cross-reference Revenue, Traffic, and Sentiment.
-        - If a user asks 'How are we doing?', look at the Yield/Guest and the Sentiment Scores.
-        - If a user asks about a specific date, find it in the ledger data provided above.
-        - Be precise, managerial, and wit-sharp.
+        1. If a date is mentioned, locate the row in the LEDGER.
+        2. If 'Traffic' is asked, only use 'actual_traffic'.
+        3. If you cannot find the answer in the data above, say 'That information is not in the vault.'
         """
         return context_string
     except Exception as e:
-        return f"Omniscience Error: Could not reach databases. {e}"
+        return f"Database Link Error: {e}"
 
 def ask_omniscient_ai(user_query):
-    """General purpose inquiry that sees all data across all tables."""
+    """Execution engine for all-knowing queries."""
     try:
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        # Using 1.5-Flash for high-speed context processing
         model = genai.GenerativeModel('gemini-2.5-flash')
         
-        # Get the full database context
         full_context = get_forensic_omniscience()
         
-        # Create the combined prompt
-        final_prompt = f"{full_context}\n\nUSER QUESTION: {user_query}\n\nFORENSIC RESPONSE:"
+        # We wrap the query to enforce "Database-Only" behavior
+        prompt = f"{full_context}\n\nUSER QUESTION: {user_query}\n\nSTRICT DATA-BACKED ANSWER:"
         
-        response = model.generate_content(final_prompt)
+        response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return f"The AI is currently offline: {e}"
+        return f"Engine Error: {e}"
 
 # =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
