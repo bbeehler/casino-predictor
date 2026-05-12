@@ -678,28 +678,57 @@ with st.sidebar:
     st.caption("NAVIGATION")
     
     # 2. PAGE NAVIGATION
-    if st.session_state.current_property_id == "GLOBAL":
-        page = "Executive Dashboard"
-        st.info("Global View Active")
-    else:
-        nav_options = ["Executive Dashboard"]
+if st.session_state.current_property_id == "GLOBAL":
+    page = "Executive Dashboard"
+    st.info("Global View Active")
+else:
+    # Always include the primary dashboard
+    nav_options = ["Executive Dashboard"]
+    
+    # --- PERMISSION-BASED ROUTING ---
+    
+    # Ledger Access
+    if check_permission("view_ledger"): 
+        nav_options.append("Daily Ledger Audit")
         
-        # FIXED LOGIC HERE
-        if check_permission("view_ledger"): 
-            nav_options.extend(["Daily Ledger Audit", "PR Scorecard"])
-            
-        if check_permission("view_analytics"):
-            nav_options.extend(["Attribution Analytics", "Sentiment Scoring"])
-        if check_permission("view_reports"): nav_options.append("Master Audit Report")
-        if check_permission("run_simulations"): nav_options.append("Scenario Simulator")
-        if check_permission("run_experiments"): nav_options.append("Experiment Vault")
-        if check_permission("manage_alerts"): nav_options.append("Strategic Alerts")
-        if check_permission("calibrate_ai"):
-            nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
-        if st.session_state.get('user_role') == "Super Admin":
-            nav_options.append("Global Admin Console")
+    # NEW: PR Scorecard (Mapped to specific PR permission)
+    if check_permission("view_pr_scorecard"): 
+        nav_options.append("PR Scorecard")
+        
+    # Analytics & Sentiment
+    if check_permission("view_analytics"):
+        nav_options.extend(["Attribution Analytics", "Sentiment Scoring"])
+        
+    # Audits & Reporting
+    if check_permission("view_reports"): 
+        nav_options.append("Master Audit Report")
+        
+    # Strategy & Simulation
+    if check_permission("run_simulations"): 
+        nav_options.append("Scenario Simulator")
+        
+    if check_permission("run_experiments"): 
+        nav_options.append("Experiment Vault")
+        
+    # Intelligence & Alerts
+    if check_permission("manage_alerts"): 
+        nav_options.append("Strategic Alerts")
+        
+    # Engine Calibration
+    if check_permission("calibrate_ai"):
+        nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
+        
+    # Global System Management
+    if st.session_state.get('user_role') == "Super Admin":
+        nav_options.append("Global Admin Console")
 
-        page = st.radio("Navigation", nav_options, label_visibility="collapsed", on_change=reset_hub_on_nav)
+    # Render the navigation radio with the auto-close reset for the AI Hub
+    page = st.radio(
+        "Navigation", 
+        nav_options, 
+        label_visibility="collapsed", 
+        on_change=reset_hub_on_nav
+    )
 
     # --- 3. THE INTELLIGENCE HUB TRIGGER ---
     st.divider()
