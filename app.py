@@ -714,15 +714,15 @@ if st.session_state.show_ai_hub:
         st.markdown("### 🤖 Omniscient Property Analyst")
         st.caption("Reporting Level: Executive | Database Source: Ledger, Sentiment, ROI")
         
-        st.info("The AI now has the full SQL schema. It distinguishes between Physical Traffic and Web Sessions.")
+        st.info("Ask FloorCast AI a question...")
         
         user_query = st.text_input("Ask a data-backed question:", placeholder="e.g., How did 'Rock of Ages' impact Unity signups vs our baseline?")
         
         c1, c2 = st.columns([1, 4])
         with c1:
-            if st.button("Analyze Vault", use_container_width=True):
+            if st.button("Answer My Question", use_container_width=True):
                 if user_query:
-                    with st.spinner("Executing Forensic Analysis..."):
+                    with st.spinner("Executing Analysis..."):
                         # This calls the schema-grounded engine (v78.0)
                         answer = ask_omniscient_ai(user_query)
                         st.session_state.last_ai_response = answer
@@ -730,7 +730,7 @@ if st.session_state.show_ai_hub:
                     st.warning("Query required.")
         
         with c2:
-            if st.button("Exit Hub", use_container_width=True):
+            if st.button("Leave", use_container_width=True):
                 st.session_state.show_ai_hub = False
                 st.rerun()
 
