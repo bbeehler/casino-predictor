@@ -86,72 +86,74 @@ import pandas as pd
 import streamlit as st
 
 # =================================================================
-# GLOBAL AI ENGINES (v74.0 - Strict Database Grounding)
+# GLOBAL AI ENGINES (v75.0 - Forced Database Alignment)
 # =================================================================
 
 def get_forensic_omniscience():
     """
-    Pulls the entire property state and defines the Schema Legend to 
-    prevent the AI from guessing web-traffic terms like 'sessions'.
+    Pulls data and forces a 'Property-Only' mindset.
+    Rename columns in the data mapping to prevent session/web confusion.
     """
     try:
         pid = st.session_state.get('current_property_id')
         pname = st.session_state.get('current_property_name', 'Hard Rock Ottawa')
         
-        # 1. Fetch Data
-        ledger_res = supabase.table("ledger").select("*").eq("property_id", pid).order("entry_date", desc=True).limit(60).execute()
-        sent_res = supabase.table("sentiment_history").select("*").eq("property_id", pid).order("timestamp", desc=True).limit(100).execute()
+        # 1. Fetch Ledger (Renaming columns for AI clarity)
+        ledger_res = supabase.table("ledger").select("*").eq("property_id", pid).order("entry_date", desc=True).limit(45).execute()
+        if ledger_res.data:
+            df_l = pd.DataFrame(ledger_res.data)
+            # FORCE RENAME: This stops 'Traffic' from being confused with 'Web Sessions'
+            df_l = df_l.rename(columns={
+                'actual_traffic': 'PHYSICAL_GUESTS_IN_BUILDING',
+                'actual_coin_in': 'GAMING_REVENUE_DOLLARS',
+                'new_members': 'UNITY_CARD_SIGNUPS'
+            })
+            ledger_context = df_l.to_string()
+        else:
+            ledger_context = "No ledger records."
 
-        # 2. Schema Legend (The "Rules of the House")
-        schema_legend = """
-        STRICT COLUMN DEFINITIONS FOR HARD ROCK OTTAWA:
-        - 'actual_traffic': Physical guest count (The only definition of 'traffic').
-        - 'actual_coin_in': Total gaming revenue/volume.
-        - 'new_members': Unity card signups.
-        - 'active_promo': Marketing campaigns running that day.
-        - 'sentiment_score': AI-rated feedback from -1.0 to 1.0.
-        """
+        # 2. Fetch Sentiment
+        sent_res = supabase.table("sentiment_history").select("*").eq("property_id", pid).order("timestamp", desc=True).limit(50).execute()
+        sent_context = pd.DataFrame(sent_res.data).to_string() if sent_res.data else "No sentiment records."
 
-        # 3. Construct Context
+        # 3. The "Kill-Switch" Instructions
         context_string = f"""
-        YOU ARE THE HARD ROCK OTTAWA DATA BOT. 
-        YOU ONLY ANSWER BASED ON THE PROVIDED DATABASE TABLES BELOW.
-        DO NOT USE EXTERNAL KNOWLEDGE OR WEB TERMS LIKE 'SESSIONS'.
+        YOU ARE THE HARD ROCK OTTAWA ON-SITE ANALYST. 
+        YOU DO NOT HAVE AN INTERNET CONNECTION. 
+        YOU ONLY HAVE THE TWO TABLES BELOW.
 
-        {schema_legend}
+        RULES OF THE HOUSE:
+        - 'Traffic' refers ONLY to the column 'PHYSICAL_GUESTS_IN_BUILDING'. 
+        - DO NOT mention 'unique sessions', 'clicks', 'web analytics', or 'URLs'.
+        - If a user asks for 'Traffic', look at the door counts in 'PHYSICAL_GUESTS_IN_BUILDING'.
+        - If the data is not in the tables below, say 'Data missing from the Forensic Vault.'
 
-        --- TABLE: LEDGER (Last 60 Days) ---
-        {pd.DataFrame(ledger_res.data).to_string() if ledger_res.data else "Empty"}
+        --- TABLE 1: BUILDING PERFORMANCE (LEDGER) ---
+        {ledger_context}
 
-        --- TABLE: SENTIMENT_HISTORY (Last 100 Entries) ---
-        {pd.DataFrame(sent_res.data).to_string() if sent_res.data else "Empty"}
-
-        INSTRUCTIONS:
-        1. If a date is mentioned, locate the row in the LEDGER.
-        2. If 'Traffic' is asked, only use 'actual_traffic'.
-        3. If you cannot find the answer in the data above, say 'That information is not in the vault.'
+        --- TABLE 2: GUEST FEEDBACK (SENTIMENT) ---
+        {sent_context}
         """
         return context_string
     except Exception as e:
         return f"Database Link Error: {e}"
 
 def ask_omniscient_ai(user_query):
-    """Execution engine for all-knowing queries."""
+    """Execution engine for property queries."""
     try:
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        # Using 1.5-Flash for high-speed context processing
         model = genai.GenerativeModel('gemini-2.5-flash')
         
         full_context = get_forensic_omniscience()
         
-        # We wrap the query to enforce "Database-Only" behavior
-        prompt = f"{full_context}\n\nUSER QUESTION: {user_query}\n\nSTRICT DATA-BACKED ANSWER:"
+        # Final Guardrail: The prefix ensures the AI stays in character
+        final_prompt = f"{full_context}\n\nUSER QUESTION: {user_query}\n\nDATABASE-ONLY RESPONSE:"
         
-        response = model.generate_content(prompt)
+        response = model.generate_content(final_prompt)
         return response.text
     except Exception as e:
-        return f"Engine Error: {e}"
+        return f"Forensic Engine Offline: {e}"
 
 # =================================================================
 # 1. DATABASE CONNECTION & GLOBAL SAAS CONTEXT
