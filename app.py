@@ -1805,7 +1805,7 @@ ENHANCED TOTAL IMPACT: ${curr['enhanced_revenue']:,.0f}"""
                 )
 
 # =================================================================
-# 16. PAGE 8: GLOBAL ADMIN CONSOLE (v22.0 RBAC Enabled)
+# 16. PAGE 8: GLOBAL ADMIN CONSOLE (v25.0 RBAC & PR Integrated)
 # =================================================================
 elif page == "Global Admin Console":
     st.markdown(f"""
@@ -1815,9 +1815,9 @@ elif page == "Global Admin Console":
         </div>
     """, unsafe_allow_html=True)
 
-    tabs = st.tabs(["🏗️ Property Provisioning", "👥 User Access & Roles", "📊 System Health"])
+    tabs = st.tabs(["🏗️ Property Provisioning", "👥 User Access & Roles", "📊 System Health & Security"])
 
-    # --- TAB 1: PROPERTY PROVISIONING (Your existing "Build" logic) ---
+    # --- TAB 1: PROPERTY PROVISIONING ---
     with tabs[0]:
         st.subheader("Provision New SaaS Tenant")
         with st.form("provision_property_form"):
@@ -1845,7 +1845,7 @@ elif page == "Global Admin Console":
                     except Exception as e:
                         st.error(f"Provisioning Error: {e}")
 
-    # --- TAB 2: USER ACCESS & ROLES (v23.5 Management Suite) ---
+    # --- TAB 2: USER ACCESS & ROLES ---
     with tabs[1]:
         st.subheader("👥 System User Directory")
     
@@ -1862,16 +1862,13 @@ elif page == "Global Admin Console":
             if search_q:
                 df_access = df_access[df_access['user_email'].str.contains(search_q, case=False)]
 
-            # 3. INTERACTIVE MANAGEMENT LIST
             st.write(f"Showing **{len(df_access)}** access records:")
             
             for i, row in df_access.iterrows():
-                # The Label for the Expander
                 label = f"👤 {row['user_email']} | {row['Property Name']} ({row['user_role']})"
                 
                 with st.expander(label):
                     c1, c2, c3 = st.columns([2, 2, 1])
-                    
                     with c1:
                         role_list = ["Viewer", "Manager", "Admin", "Super Admin"]
                         current_role = row['user_role'] if row['user_role'] in role_list else "Viewer"
@@ -1882,16 +1879,13 @@ elif page == "Global Admin Console":
                         st.caption(f"Access ID: {row['id']}")
                     
                     with c3:
-                        # UPDATE BUTTON
                         if st.button("Update", key=f"upd_{row['id']}", use_container_width=True):
                             supabase.table("user_property_access").update({"user_role": new_role}).eq("id", row['id']).execute()
                             st.success("Synced.")
                             st.rerun()
                         
-                        # DELETE BUTTON (REVOKE ACCESS)
                         if st.button("🗑️ Revoke", key=f"rev_{row['id']}", type="secondary", use_container_width=True):
                             try:
-                                # This deletes the link between the user and the property
                                 supabase.table("user_property_access").delete().eq("id", row['id']).execute()
                                 st.warning(f"Access Revoked for {row['user_email']}")
                                 st.cache_data.clear()
@@ -1903,15 +1897,10 @@ elif page == "Global Admin Console":
 
         st.divider()
         st.subheader("➕ Assign User to Additional Property")
-            
         with st.form("assign_multi_prop"):
-            st.write("Link an existing email to a property or provision a new user access record.")
             target_email = st.text_input("User Email (Primary Key)", placeholder="user@company.com")
-            
-            # 1. Fetch fresh property list for the dropdown
             all_p_res = supabase.table("properties").select("id, property_name").execute()
             p_opts = {p['property_name']: p['id'] for p in all_p_res.data} if all_p_res.data else {}
-            
             target_prop_name = st.selectbox("Select Property to Link", list(p_opts.keys()))
             target_role = st.selectbox("Assign Role", ["Viewer", "Manager", "Admin", "Super Admin"])
             
@@ -1919,35 +1908,20 @@ elif page == "Global Admin Console":
                 if target_email and target_prop_name:
                     clean_email = target_email.lower().strip()
                     target_uuid = p_opts.get(target_prop_name)
-                    
-                    # 2. PRE-CHECK FOR DUPLICATES (Prevents 409 API Errors)
-                    check = supabase.table("user_property_access")\
-                        .select("*")\
-                        .eq("user_email", clean_email)\
-                        .eq("property_id", target_uuid)\
-                        .execute()
+                    check = supabase.table("user_property_access").select("*").eq("user_email", clean_email).eq("property_id", target_uuid).execute()
                     
                     if check.data:
-                        st.error(f"User {clean_email} already has an active link to {target_prop_name}.")
+                        st.error(f"User {clean_email} already linked to {target_prop_name}.")
                     else:
-                        # 3. ATTEMPT INSERT
-                        link_payload = {
-                            "user_email": clean_email,
-                            "property_id": target_uuid,
-                            "user_role": target_role
-                        }
-                        
                         try:
-                            supabase.table("user_property_access").insert(link_payload).execute()
-                            st.success(f"✅ Successfully linked {clean_email} to {target_prop_name}")
+                            supabase.table("user_property_access").insert({"user_email": clean_email, "property_id": target_uuid, "user_role": target_role}).execute()
+                            st.success(f"✅ Linked {clean_email}")
                             st.cache_data.clear()
                             st.rerun()
                         except Exception as e:
                             st.error(f"Database Error: {e}")
-                else:
-                    st.error("Please provide both an email and a property selection.")
 
-    # --- TAB 3: SYSTEM HEALTH & PERMISSIONS (Consolidated v24.8) ---
+    # --- TAB 3: SYSTEM HEALTH & SECURITY MATRIX ---
     with tabs[2]:
         st.write("### 📊 Database Orchestration Stats")
         try:
@@ -1962,27 +1936,21 @@ elif page == "Global Admin Console":
         st.divider()
         st.subheader("🛡️ Global Role Authorization Matrix")
         
-        # 1. Select the Role (This triggers a rerun when changed)
-        target_role_config = st.selectbox(
-            "Select Role to Configure:", 
-            ["Viewer", "Manager", "Admin", "Super Admin"],
-            key="role_selector_admin"
-        )
+        target_role_config = st.selectbox("Select Role to Configure:", ["Viewer", "Manager", "Admin", "Super Admin"], key="role_selector_admin")
         
-        # 2. FETCH EXISTING PERMS (The "Hydration" Step)
         existing_perms = {}
         try:
-            # We fetch the current JSON from Supabase for the selected role
             perm_fetch = supabase.table("role_permissions").select("perms").eq("role_name", target_role_config).execute()
             if perm_fetch.data:
                 existing_perms = perm_fetch.data[0].get('perms', {})
         except Exception as e:
-            st.caption(f"Note: Role '{target_role_config}' not yet initialized in DB.")
+            st.caption(f"Role '{target_role_config}' not yet initialized.")
 
-        # 3. Define the Global Capabilities List
+        # Updated Capabilities List with PR Scorecard
         capabilities = {
             "view_analytics": "Access Attribution & Executive Dashboards",
             "view_ledger": "Access Daily Ledger Audit",
+            "view_pr_scorecard": "Access PR Scorecard (Earned Media Tracking)",
             "view_reports": "Access Master Audit Reports",
             "run_simulations": "Access Predictive Scenario Simulator",
             "manage_alerts": "Create/Delete Strategic Watchdogs",
@@ -1990,47 +1958,23 @@ elif page == "Global Admin Console":
             "run_experiments": "Access A/B Experimentation Vault"
         }
         
-        # 4. The Configuration Form
-        # IMPORTANT: We use the role name in the form key to force a clean reset when switching roles
         with st.form(f"perm_matrix_form_{target_role_config}"):
             st.write(f"Adjusting capabilities for: **{target_role_config}**")
             updated_perms = {}
-            
-            # Create columns for a cleaner layout
             col1, col2 = st.columns(2)
             for i, (cap_id, cap_desc) in enumerate(capabilities.items()):
                 target_col = col1 if i % 2 == 0 else col2
-                
-                # CRITICAL: 'value' pulls from the 'existing_perms' we just fetched
                 is_checked = existing_perms.get(cap_id, False)
-                
-                updated_perms[cap_id] = target_col.checkbox(
-                    cap_desc, 
-                    value=is_checked, 
-                    key=f"check_{target_role_config}_{cap_id}" # Unique key per role
-                )
+                updated_perms[cap_id] = target_col.checkbox(cap_desc, value=is_checked, key=f"check_{target_role_config}_{cap_id}")
                 
             if st.form_submit_button("💾 Save Role Configuration", use_container_width=True):
                 try:
-                    perm_payload = {
-                        "role_name": target_role_config, 
-                        "perms": updated_perms
-                    }
-                    
-                    supabase.table("role_permissions").upsert(
-                        perm_payload, 
-                        on_conflict="role_name"
-                    ).execute()
-                    
-                    st.success(f"✅ Vault Updated: '{target_role_config}' permissions are now live.")
-                    
-                    # Clear cache so other parts of the app (like sidebar) see the change
+                    supabase.table("role_permissions").upsert({"role_name": target_role_config, "perms": updated_perms}, on_conflict="role_name").execute()
+                    st.success(f"✅ '{target_role_config}' permissions are now live.")
                     st.cache_data.clear()
-                    # Rerun to refresh the 'existing_perms' fetch
                     st.rerun()
-                    
                 except Exception as e:
-                    st.error(f"❌ Security Matrix Sync Error: {e}")
+                    st.error(f"Security Matrix Sync Error: {e}")
 
 # =================================================================
 # 17. PAGE 9: STRATEGIC ALERTS (v60.2 - Multi-Role Response Engine)
