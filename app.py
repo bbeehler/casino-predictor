@@ -86,82 +86,99 @@ import pandas as pd
 import streamlit as st
 
 # =================================================================
-# GLOBAL AI ENGINES (v85.0 - PR & Earned Media Integrated)
+# GLOBAL AI ENGINES (v86.0 - Grand Total & Multi-Table Precision)
 # =================================================================
 
 def get_forensic_omniscience():
     """
-    Directly serializes Ledger, Sentiment, ROI, and PR tables to 
-    provide the AI with a 360-degree executive view.
+    Calculates lifetime grand totals and serializes granular data 
+    across Ledger, PR, Sentiment, and ROI tables.
     """
     try:
         pid = st.session_state.get('current_property_id')
         
-        # 1. PULL DATA FROM THE FOUR CORE TABLES
-        ledger_res = supabase.table("ledger").select("*").eq("property_id", pid).order("entry_date", desc=True).limit(45).execute()
-        sent_res = supabase.table("sentiment_history").select("*").eq("property_id", pid).order("timestamp", desc=True).limit(30).execute()
-        roi_res = supabase.table("monthly_roi").select("*").eq("property_id", pid).order("report_month", desc=True).limit(6).execute()
-        # New PR Scorecard Pull
-        pr_res = supabase.table("pr_scorecard").select("*").eq("property_id", pid).order("report_month", desc=True).limit(12).execute()
+        # 1. FETCH ABSOLUTE GRAND TOTALS (The "Whole Truth")
+        # We calculate these from the session state to ensure 100% sync with Dashboard cards
+        full_ledger = st.session_state.get('ledger_data', [])
+        df_full = pd.DataFrame(full_ledger)
+        
+        if not df_full.empty:
+            grand_traffic = df_full['actual_traffic'].sum()
+            grand_revenue = df_full['actual_coin_in'].sum()
+            grand_members = df_full['new_members'].sum()
+            date_min = df_full['entry_date'].min()
+            date_max = df_full['entry_date'].max()
+            
+            vault_summary = f"""
+            --- CRITICAL: ABSOLUTE VAULT TOTALS (GROUND TRUTH) ---
+            Verified metrics for the entire property history ({date_min} to {date_max}):
+            - TOTAL ACTUAL TRAFFIC (Grand Total): {grand_traffic:,.0f}
+            - TOTAL GAMING REVENUE (Grand Total): ${grand_revenue:,.2f}
+            - TOTAL NEW UNITY MEMBERS: {grand_members:,}
+            """
+        else:
+            vault_summary = "--- VAULT STATUS: EMPTY ---"
 
-        # 2. DEFINE THE SCHEMA MAP (The AI's Logic Legend)
+        # 2. PULL GRANULAR DATA (Slice for context/patterns)
+        # Ledger is limited to 120 days for daily patterns; PR/ROI are small enough for full history
+        ledger_res = supabase.table("ledger").select("*").eq("property_id", pid).order("entry_date", desc=True).limit(120).execute()
+        pr_res = supabase.table("pr_scorecard").select("*").eq("property_id", pid).order("report_month", desc=True).execute()
+        sent_res = supabase.table("sentiment_history").select("*").eq("property_id", pid).order("timestamp", desc=True).limit(50).execute()
+        roi_res = supabase.table("monthly_roi").select("*").eq("property_id", pid).order("report_month", desc=True).execute()
+
+        # 3. SCHEMA DEFINITIONS (The AI's Logic Legend)
         schema_map = """
         ACTUAL DATABASE SCHEMA DEFINITIONS:
         
         Table: 'public.ledger' (Daily Floor Performance)
-        - entry_date (PK): The business date.
-        - actual_traffic: PHYSICAL GUEST door counts (The 'Ground Truth' for traffic).
+        - actual_traffic: PHYSICAL GUEST door counts.
         - actual_coin_in: Total gaming revenue.
-        - active_promo: Name of the marketing campaign running.
-        - new_members: Unity card signups.
+        - active_promo: Marketing campaign name.
         
         Table: 'public.pr_scorecard' (Earned Media Impact)
-        - report_month: The month of PR activity.
-        - earned_impressions: Total reach/viewership from unpaid media.
-        - earned_mentions: Number of times the property was featured in news/press.
-        - mediums: Outlets involved (e.g., CTV, Ottawa Citizen).
-        - executive_summary: Narrative wins for that month.
+        - earned_impressions: Total viewership reach (unpaid).
+        - earned_mentions: Number of news/press placements.
+        - executive_summary: Narrative wins/analysis.
 
         Table: 'public.sentiment_history' (Guest Vibe)
-        - asset: Location (CHOP, Slots, etc.).
         - sentiment_score: -1.0 (Critical) to 1.0 (Exceptional).
-        - raw_text: Literal guest feedback.
         
-        Table: 'public.monthly_roi' (Digital Marketing)
-        - utm_sessions: Digital web traffic (DO NOT confuse with physical traffic).
-        - ad_spend: Paid media cost.
+        Table: 'public.monthly_roi' (Paid Digital)
+        - utm_sessions: Web clicks (DO NOT confuse with physical traffic).
         """
 
-        # 3. SERIALIZE DATA
-        ledger_data = pd.DataFrame(ledger_res.data).to_string(index=False) if ledger_res.data else "No Ledger Data."
-        sent_data = pd.DataFrame(sent_res.data).to_string(index=False) if sent_res.data else "No Sentiment Data."
-        roi_data = pd.DataFrame(roi_res.data).to_string(index=False) if roi_res.data else "No ROI Data."
-        pr_data = pd.DataFrame(pr_res.data).to_string(index=False) if pr_res.data else "No PR Data."
+        # 4. SERIALIZE TO TEXT
+        ledger_data = pd.DataFrame(ledger_res.data).to_string(index=False) if ledger_res.data else "Empty"
+        pr_data = pd.DataFrame(pr_res.data).to_string(index=False) if pr_res.data else "Empty"
+        sent_data = pd.DataFrame(sent_res.data).to_string(index=False) if sent_res.data else "Empty"
+        roi_data = pd.DataFrame(roi_res.data).to_string(index=False) if roi_res.data else "Empty"
 
-        # 4. CONSTRUCT CONTEXT
+        # 5. CONSTRUCT INTEGRATED CONTEXT
         context = f"""
         YOU ARE THE OMNISCIENT ANALYST FOR HARD ROCK OTTAWA.
-        YOU ARE REPORTING DIRECTLY TO THE EXECUTIVE LEADERSHIP TEAM.
+        REPORTING LEVEL: EXECUTIVE LEADERSHIP TEAM.
+
+        {vault_summary}
 
         {schema_map}
 
-        --- LIVE DATA: LEDGER (DAILY ACTUALS) ---
-        {ledger_data}
-
-        --- LIVE DATA: PR SCORECARD (EARNED MEDIA) ---
+        --- LIVE DATA: PR SCORECARD (FULL HISTORY) ---
         {pr_data}
 
-        --- LIVE DATA: SENTIMENT HISTORY (GUEST VOICE) ---
+        --- LIVE DATA: LEDGER (DAILY SLICE - RECENT 120 DAYS) ---
+        {ledger_data}
+
+        --- LIVE DATA: SENTIMENT (RECENT 50) ---
         {sent_data}
 
-        --- LIVE DATA: MONTHLY ROI (PAID MEDIA) ---
+        --- LIVE DATA: MONTHLY ROI (FULL HISTORY) ---
         {roi_data}
 
         EXECUTIVE DIRECTIVES:
-        1. When asked about 'PR' or 'Earned Media', analyze impressions vs. mentions.
-        2. Cross-reference PR wins with Ledger traffic. (e.g., 'Did a high-impression PR month correlate with a traffic spike?').
-        3. 'Traffic' is strictly 'actual_traffic' in the ledger.
-        4. If a user asks for a 'PR Summary', read the 'executive_summary' from the PR table.
+        1. When asked for 'Total Traffic' or 'Grand Total', ALWAYS refer to the 'ABSOLUTE VAULT TOTALS' section.
+        2. Use the daily Ledger slice only to identify recent trends, promo impacts, or daily spikes.
+        3. For PR queries, cross-reference 'earned_impressions' with the Grand Total traffic to discuss 'Halo Effect'.
+        4. If a query requires data outside the 120-day daily slice, utilize the Grand Totals to provide the answer.
         """
         return context
     except Exception as e:
@@ -172,6 +189,7 @@ def ask_omniscient_ai(user_query):
     try:
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        # Upgraded to 2.5-flash as per your snippet for maximum reasoning power
         model = genai.GenerativeModel('gemini-2.5-flash')
         
         vault_context = get_forensic_omniscience()
