@@ -716,7 +716,7 @@ if df.empty:
         st.stop()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v71.0 - Full Restoration + Dropdown)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v72.0 - Hard Rock Vital Signs Restored)
 # =================================================================
 if page == "Executive Dashboard":
     
@@ -726,11 +726,11 @@ if page == "Executive Dashboard":
     next_month = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
     last_of_month = next_month - datetime.timedelta(days=1)
 
-    # --- THE ABSOLUTE STATE FORCER (v8) ---
-    if "global_range_v8" not in st.session_state:
-        st.session_state.global_range_v8 = (first_of_month, last_of_month)
-    if "pulse_range_v8" not in st.session_state:
-        st.session_state.pulse_range_v8 = (first_of_month, last_of_month)
+    # --- THE ABSOLUTE STATE FORCER (v9) ---
+    if "global_range_v9" not in st.session_state:
+        st.session_state.global_range_v9 = (first_of_month, last_of_month)
+    if "pulse_range_v9" not in st.session_state:
+        st.session_state.pulse_range_v9 = (first_of_month, last_of_month)
 
     # --- A. CONSOLIDATED GLOBAL VIEW ---
     if st.session_state.get('current_property_id') == "GLOBAL":
@@ -743,7 +743,7 @@ if page == "Executive Dashboard":
         min_date, max_date = df['entry_date'].min().date(), df['entry_date'].max().date()
         col_date, _ = st.columns([1.5, 2.5])
         with col_date:
-            global_range = st.date_input("Network Audit Window:", value=st.session_state.global_range_v8, key="global_range_v8")
+            global_range = st.date_input("Network Audit Window:", value=st.session_state.global_range_v9, key="global_range_v9")
 
         if isinstance(global_range, tuple) and len(global_range) == 2:
             start_g, end_g = global_range
@@ -753,7 +753,6 @@ if page == "Executive Dashboard":
             df_filtered = df.copy()
             start_g, end_g = first_of_month, last_of_month
 
-        # Top-line metrics and Leaderboard logic
         total_rev = df_filtered['actual_coin_in'].sum()
         total_traffic = df_filtered['actual_traffic'].sum()
         total_mems = df_filtered['new_members'].sum()
@@ -771,7 +770,7 @@ if page == "Executive Dashboard":
 
     # --- B. INDIVIDUAL PROPERTY VIEW (The Pulse) ---
     else:
-        render_styled_header(f"{st.session_state.current_property_name} Pulse", "Operational Demand & Impact", "Operational")
+        render_styled_header(f"{st.session_state.current_property_name} Pulse", "Strategic Demand Projection & Marketing Impact", "Operational")
         current_weights = st.session_state.get('coeffs', {})
         
         df_raw = df.copy()
@@ -781,7 +780,7 @@ if page == "Executive Dashboard":
 
         col_date, _ = st.columns([1.5, 2.5])
         with col_date:
-            pulse_range = st.date_input("Analysis Window:", value=st.session_state.pulse_range_v8, key="pulse_range_v8")
+            pulse_range = st.date_input("Analysis Window:", value=st.session_state.pulse_range_v9, key="pulse_range_v9")
 
         if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
             start_p, end_p = pulse_range
@@ -805,7 +804,7 @@ if page == "Executive Dashboard":
                 planner_cols = ['entry_date', 'active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
                 df_plan_display = df_p[planner_cols].copy()
                 df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
-                edited_df = st.data_editor(df_plan_display, hide_index=True, use_container_width=True, key="p1_planner_v71")
+                edited_df = st.data_editor(df_plan_display, hide_index=True, use_container_width=True, key="p1_planner_v72")
                 for field in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
                     df_p[field] = edited_df[field].values
 
@@ -819,46 +818,52 @@ if page == "Executive Dashboard":
             fig_pulse.add_trace(go.Scatter(x=df_act_chart['entry_date'], y=df_act_chart['actual_traffic'], name="Actual Guests", line=dict(color='#0047AB', width=4)))
             fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
             fig_pulse.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10), template="plotly_white")
-            st.plotly_chart(fig_pulse, use_container_width=True, key="pulse_chart_v71")
+            st.plotly_chart(fig_pulse, use_container_width=True, key="pulse_chart_v72")
 
-            # 7. EXECUTIVE KPI GRID (SYNCCED WITH AUDIT REPORT)
-            st.write(f"### 🏛️ {st.session_state.current_property_name} Vital Signs")
+            # 7. EXECUTIVE KPI GRID (Hard Rock Ottawa Vital Signs Restored)
+            st.write(f"### 🏛️ {st.session_state.current_property_name} Vital Signs vs. Network Avg")
             k1, k2, k3, k4, k5 = st.columns(5)
-            
+            LTV_VAL, AVG_SPEND = 1900.00, 1100.31
+
             total_act = df_final['actual_traffic'].sum()
             ledger_rev = df_final['actual_coin_in'].sum()
+            actual_signups = df_final['new_members'].sum()
+            local_yield = (ledger_rev / total_act) if total_act > 0 else 0
+            local_conv = (actual_signups / total_act * 100) if total_act > 0 else 0
             
-            # --- SYNCED ACCURACY LOGIC ---
+            y_delta = local_yield - st.session_state.get('net_avg_yield', 0)
+            c_delta = local_conv - st.session_state.get('net_avg_conv', 0)
+
+            # --- ACCURACY SYNC ---
             df_audit = df_final[df_final['actual_traffic'] > 0].copy()
             if not df_audit.empty:
-                s_act = df_audit['actual_traffic'].sum()
-                s_pred = df_audit['predicted_traffic'].sum()
-                accuracy_val = (1 - (abs(s_act - s_pred) / s_act)) * 100 if s_act > 0 else 0
-                accuracy_display = f"{accuracy_val:.1f}%"
+                s_act, s_pred = df_audit['actual_traffic'].sum(), df_audit['predicted_traffic'].sum()
+                accuracy_display = f"{(1 - (abs(s_act - s_pred) / s_act)) * 100:.1f}%"
             else: accuracy_display = "---"
 
             if start_p >= today:
-                proj_rev = (total_vol * 1100.31) + ((total_vol * 0.05) * 1900.00)
-                k1.metric("Projected Demand", f"{total_vol:,.0f}")
+                proj_rev = (total_vol * AVG_SPEND) + ((total_vol * 0.05) * LTV_VAL)
+                k1.metric("Projected Demand", f"{total_vol:,.0f} Guests")
+                k2.metric("Target Signups", f"{(total_vol * 0.0170):,.0f}")
                 k3.metric("Proj. Revenue", f"${proj_rev:,.0f}")
+                k4.metric("Marketing Impact", f"{((total_vol - df_p['baseline'].sum()) / total_vol * 100):.1f}%")
                 k5.metric("Model Reliability", accuracy_display)
             else:
                 k1.metric("Actual Guest Flow", f"{total_act:,.0f}")
-                k2.metric("Yield / Guest", f"${(ledger_rev / total_act if total_act > 0 else 0):,.2f}")
+                k2.metric("Yield / Guest", f"${local_yield:,.2f}", delta=f"${y_delta:+.2f} vs Net")
+                k3.metric("Enrollment %", f"{local_conv:.2f}%", delta=f"{c_delta:+.2f}% vs Net")
                 k4.metric("Ledger Revenue", f"${ledger_rev:,.0f}")
                 k5.metric("AI Accuracy", accuracy_display)
 
             # 8. EXECUTIVE BRAND SENTIMENT PULSE
             st.divider()
             st.write("### 🏛️ Executive Brand Sentiment Pulse")
-            
             col_h1, col_h2 = st.columns([2, 1])
             with col_h2:
-                # --- DROPDOWN RESTORED HERE ---
                 from dateutil.relativedelta import relativedelta
                 g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(3)]
                 g_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in g_months[1:]]
-                sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select_v71")
+                sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select_v72")
 
             overall_score = 0.0
             try:
@@ -868,7 +873,6 @@ if page == "Executive Dashboard":
                 else:
                     sel_date = g_months[g_labels.index(sel_period)]
                     g_res = base_query.gte("timestamp", sel_date.strftime("%Y-%m-%d")).lte("timestamp", (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")).execute()
-                
                 if g_res.data:
                     mapped = [(s['sentiment_score'] * 2 - 1) if 0 <= s['sentiment_score'] <= 1 else s['sentiment_score'] for s in g_res.data]
                     overall_score = np.mean(mapped)
@@ -876,7 +880,7 @@ if page == "Executive Dashboard":
             
             st.metric(label=f"Property Pulse ({sel_period})", value=f"{overall_score:+.2f}")
 
-            # --- DYNAMIC ASSET GAUGES ---
+            # --- DYNAMIC ASSET GAUGES (Full Restore) ---
             try:
                 asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
                 tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall"]
@@ -890,16 +894,14 @@ if page == "Executive Dashboard":
                                 t_res = t_query.order("timestamp", desc=True).limit(15).execute()
                             else:
                                 t_res = t_query.gte("timestamp", sel_date.strftime("%Y-%m-%d")).lte("timestamp", (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")).execute()
-                            
                             if t_res.data:
-                                t_mapped = [(s['sentiment_score'] * 2 - 1) if 0 <= s['sentiment_score'] <= 1 else s['sentiment_score'] for s in t_res.data]
-                                tag_score = np.mean(t_mapped)
+                                tag_score = np.mean([(s['sentiment_score'] * 2 - 1) if 0 <= s['sentiment_score'] <= 1 else s['sentiment_score'] for s in t_res.data])
                         except: pass
                         fig = go.Figure(go.Indicator(mode="gauge+number", value=tag_score, number={'font': {'size': 18}, 'valueformat': ".2f"},
                                                      gauge={'axis': {'range': [-1, 1]}, 'bar': {'color': "#0047AB"},
                                                             'steps': [{'range': [-1, -0.3], 'color': "#FF4B4B"}, {'range': [-0.3, 0.3], 'color': "#F0F2F6"}, {'range': [0.3, 1], 'color': "#28A745"}]}))
                         fig.update_layout(height=140, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig, use_container_width=True, key=f"p1_gauge_{tag}_{i}")
+                        st.plotly_chart(fig, use_container_width=True, key=f"gauge_{tag}_{i}")
                         st.markdown(f"<p style='text-align: center; font-size: 12px;'>{tag}</p>", unsafe_allow_html=True)
             except: pass
 
