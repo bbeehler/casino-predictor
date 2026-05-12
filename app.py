@@ -608,15 +608,19 @@ def show_ai_analyst_hub():
             st.error("Intelligence Hub Offline.")
     
 # =================================================================
-# 8. EXECUTIVE NAVIGATION (SaaS Sidebar Architecture v60.5)
+# 8. EXECUTIVE NAVIGATION & AI HUB (v79.0 - Integrated Modal)
 # =================================================================
-page = "Executive Dashboard"
 
-# Global Role Scan
+# --- A. INITIALIZE HUB STATE ---
+if 'show_ai_hub' not in st.session_state:
+    st.session_state.show_ai_hub = False
+
+# --- B. PERMISSIONS & ROLE SCAN ---
 user_links_res = supabase.table("user_property_access").select("user_role").eq("user_email", st.session_state.get('user_email')).execute()
 all_my_roles = [r['user_role'] for r in user_links_res.data] if user_links_res.data else []
 is_global_admin = any(role in ["Super Admin", "Manager", "Admin"] for role in all_my_roles)
 
+# --- C. SIDEBAR ARCHITECTURE ---
 with st.sidebar:
     # Sidebar Logo
     st.markdown("""
@@ -659,7 +663,7 @@ with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
     st.caption("NAVIGATION")
     
-    # 2. NAVIGATION
+    # 2. PAGE NAVIGATION
     if st.session_state.current_property_id == "GLOBAL":
         page = "Executive Dashboard"
         st.info("Global View Active")
@@ -679,10 +683,11 @@ with st.sidebar:
 
         page = st.radio("Navigation", nav_options, label_visibility="collapsed")
 
-    # --- 3. THE INTELLIGENCE HUB (Modal Launch) ---
+    # --- 3. THE INTELLIGENCE HUB TRIGGER ---
     st.divider()
-    if st.button("🕵️ Open Strategic AI Hub", use_container_width=True):
-        show_ai_analyst_hub()
+    if st.button("🕵️ Open Strategic AI Hub", use_container_width=True, type="primary"):
+        st.session_state.show_ai_hub = True
+        st.rerun()
 
     # 4. FOOTER CONTEXT
     st.markdown("<div style='padding-top: 20px;'>", unsafe_allow_html=True)
@@ -700,6 +705,44 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
+
+# --- D. THE GLOBAL MODAL HANDLER ---
+# Sitting at the top level so it can trigger over any page
+if st.session_state.show_ai_hub:
+    @st.dialog("Strategic AI Analyst Hub", width="large")
+    def ai_hub_modal():
+        st.markdown("### 🤖 Omniscient Property Analyst")
+        st.caption("Reporting Level: Executive | Database Source: Ledger, Sentiment, ROI")
+        
+        st.info("The AI now has the full SQL schema. It distinguishes between Physical Traffic and Web Sessions.")
+        
+        user_query = st.text_input("Ask a data-backed question:", placeholder="e.g., How did 'Rock of Ages' impact Unity signups vs our baseline?")
+        
+        c1, c2 = st.columns([1, 4])
+        with c1:
+            if st.button("Analyze Vault", use_container_width=True):
+                if user_query:
+                    with st.spinner("Executing Forensic Analysis..."):
+                        # This calls the schema-grounded engine (v78.0)
+                        answer = ask_omniscient_ai(user_query)
+                        st.session_state.last_ai_response = answer
+                else:
+                    st.warning("Query required.")
+        
+        with c2:
+            if st.button("Exit Hub", use_container_width=True):
+                st.session_state.show_ai_hub = False
+                st.rerun()
+
+        # Display Response
+        if "last_ai_response" in st.session_state:
+            st.markdown("---")
+            st.markdown(st.session_state.last_ai_response)
+            if st.button("Clear Results"):
+                del st.session_state.last_ai_response
+                st.rerun()
+
+    ai_hub_modal()
 
 # =================================================================
 # 9. THE DATA VAULT (v24.0 - CACHED & THREAD-SAFE)
