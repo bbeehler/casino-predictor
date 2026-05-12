@@ -711,7 +711,7 @@ with st.sidebar:
 if st.session_state.show_ai_hub:
     @st.dialog("Strategic AI Analyst Hub", width="large")
     def ai_hub_modal():
-        st.markdown("### 🤖 Omniscient Property Analyst")
+        st.markdown("### 🤖 FloorCast AI")
         st.caption("Reporting Level: Executive | Database Source: Ledger, Sentiment, ROI")
         
         st.info("Ask FloorCast AI a question...")
