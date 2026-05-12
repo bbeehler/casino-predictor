@@ -1286,13 +1286,13 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for full ROI Audit.")
 
 # =================================================================
-# 12. PAGE 4: MASTER FORENSIC AUDIT (v60.5 - AI Variance & Social)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (v85.0 - PR & Earned Media Integrated)
 # =================================================================
 elif page == "Master Audit Report":
     # 1. PREMIUM HEADER
     render_styled_header(
         f"Master Property Audit: {st.session_state.current_property_name}",
-        "Forensic Ledger: Financials, Multi-Channel Attribution, & AI Accuracy",
+        "Forensic Ledger: Financials, Multi-Channel Attribution, & Earned Media",
         "Audit Ready"
     )
     
@@ -1320,14 +1320,14 @@ elif page == "Master Audit Report":
         st.warning(f"⚠️ Audit Vault for {st.session_state.current_property_name} is empty.")
         st.stop()
 
-    # --- 2. AUDIT WINDOW & ENGINE SYNC ---
+    # --- 2. AUDIT WINDOW & DATA PREP ---
     df_audit_raw = pd.DataFrame(ledger_data)
     df_audit_raw['entry_date'] = pd.to_datetime(df_audit_raw['entry_date'])
     min_audit, max_audit = df_audit_raw['entry_date'].min().date(), df_audit_raw['entry_date'].max().date()
 
     col_date, col_export = st.columns([2, 1])
     with col_date:
-        audit_range = st.date_input("Audit Window:", value=(min_audit, max_audit), key="master_audit_v60")
+        audit_range = st.date_input("Audit Window:", value=(min_audit, max_audit), key="master_audit_v85")
 
     if isinstance(audit_range, tuple) and len(audit_range) == 2:
         s_date, e_date = audit_range
@@ -1338,29 +1338,63 @@ elif page == "Master Audit Report":
             st.error("No records found for selected range.")
             st.stop()
 
+        # Engine Sync
         m = get_forensic_metrics(df_audit_filtered.to_dict(orient='records'), st.session_state.coeffs)
         df_final = m['df']
         
-        # --- 3. CALCULATIONS ---
+        # Calculations
         t_rev = df_final['actual_coin_in'].sum()
         t_traf = df_final['actual_traffic'].sum()
         t_mems = df_final['new_members'].sum()
         t_clicks = df_final['ad_clicks'].sum() if 'ad_clicks' in df_final.columns else 0
         t_imps = df_final['ad_impressions'].sum() if 'ad_impressions' in df_final.columns else 0
-        
-        # AI Variance Logic
         t_pred = df_final['predicted_traffic'].sum() if 'predicted_traffic' in df_final.columns else 0
         accuracy = (1 - (abs(t_traf - t_pred) / t_traf)) * 100 if t_traf > 0 else 0
 
-        # --- 4. EXECUTIVE SCOREBOARD ---
+        # --- 3. EXECUTIVE SCOREBOARD ---
         st.markdown("### 📊 Executive Summary")
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.metric("Total Traffic", f"{t_traf:,}")
         k2.metric("Actual Revenue", f"${t_rev:,.0f}")
-        k3.metric("Ad Clicks (Intent)", f"{t_clicks:,.0f}")
+        k3.metric("Ad Clicks", f"{t_clicks:,.0f}")
         k4.metric("New Members", f"{t_mems:,}")
         k5.metric("Social Reach", f"{t_imps:,.0f}")
-        k6.metric("AI Forecast Accuracy", f"{accuracy:.1f}%", help="Closeness of AI predictions to floor actuals.")
+        k6.metric("AI Accuracy", f"{accuracy:.1f}%")
+
+        # --- 4. PR & EARNED MEDIA IMPACT (NEW SECTION) ---
+        st.divider()
+        st.markdown("### 📢 Earned Media & PR Audit")
+        
+        # Fetch PR data for the selected audit range
+        try:
+            pr_res = supabase.table("pr_scorecard")\
+                .select("*")\
+                .eq("property_id", st.session_state.current_property_id)\
+                .gte("report_month", s_date.strftime("%Y-%m-01"))\
+                .lte("report_month", e_date.strftime("%Y-%m-%d"))\
+                .execute()
+            
+            if pr_res.data:
+                df_pr_audit = pd.DataFrame(pr_res.data)
+                total_pr_imps = df_pr_audit['earned_impressions'].sum()
+                total_pr_mentions = df_pr_audit['earned_mentions'].sum()
+                
+                p1, p2, p3 = st.columns([1, 1, 2])
+                p1.metric("Earned Reach", f"{total_pr_imps:,}")
+                p2.metric("Media Placements", f"{total_pr_mentions}")
+                
+                # Halo Effect Calculation: PR Impressions per Guest
+                halo = (total_pr_imps / t_traf) if t_traf > 0 else 0
+                p3.metric("PR Halo Index", f"{halo:.2f} Imps/Guest", help="Volume of earned media reach relative to physical footfall.")
+                
+                with st.expander("🔍 View Narrative PR Wins for this Period"):
+                    for _, pr_row in df_pr_audit.iterrows():
+                        st.markdown(f"**{pd.to_datetime(pr_row['report_month']).strftime('%B %Y')}:** {pr_row['mediums']}")
+                        st.caption(pr_row['executive_summary'])
+            else:
+                st.info("No PR Scorecard data found for this audit window.")
+        except Exception as e:
+            st.caption(f"PR Data unavailable for this range: {e}")
 
         # --- 5. ATTRIBUTION FLOW CHART ---
         st.divider()
@@ -1382,18 +1416,14 @@ elif page == "Master Audit Report":
         fig_stack.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10), template="plotly_white")
         st.plotly_chart(fig_stack, use_container_width=True)
 
-        # --- 6. AI VARIANCE AUDIT (THE "REPORT CARD") ---
-        st.markdown("### 🎯 Prediction vs. Reality: AI Variance Audit")
+        # --- 6. AI VARIANCE AUDIT ---
+        st.markdown("### 🎯 Prediction vs. Reality")
         v_col, i_col = st.columns([2, 1])
-        
         with v_col:
             fig_var = go.Figure()
-            fig_var.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['actual_traffic'], 
-                                         name="Actual Guests", line=dict(color='#0047AB', width=3)))
-            fig_var.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['predicted_traffic'], 
-                                         name="AI Forecast", line=dict(color='#FFCC00', width=2, dash='dot')))
-            fig_var.update_layout(height=350, template="plotly_white", margin=dict(l=10, r=10, t=10, b=10),
-                                  hovermode="x unified", legend=dict(orientation="h", y=1.1))
+            fig_var.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['actual_traffic'], name="Actual Guests", line=dict(color='#0047AB', width=3)))
+            fig_var.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['predicted_traffic'], name="AI Forecast", line=dict(color='#FFCC00', width=2, dash='dot')))
+            fig_var.update_layout(height=350, template="plotly_white", margin=dict(l=10, r=10, t=10, b=10), hovermode="x unified", legend=dict(orientation="h", y=1.1))
             st.plotly_chart(fig_var, use_container_width=True)
             
         with i_col:
@@ -1401,39 +1431,15 @@ elif page == "Master Audit Report":
                 st.markdown("#### 🏁 Model Reliability")
                 avg_error = abs(t_traf - t_pred) / len(df_final) if len(df_final) > 0 else 0
                 st.metric("Avg Daily Variance", f"{avg_error:,.0f} guests")
-                
-                # Dynamic Status
-                if accuracy > 90:
-                    st.success("High Confidence: AI is tracking floor behavior with elite precision.")
-                elif accuracy > 75:
-                    st.warning("Moderate Drift: Consider recalibrating weights in the Calibration page.")
-                else:
-                    st.error("High Variance: Significant data outliers detected. Manual audit required.")
-                
-                st.info("💡 High variance often occurs during unmapped community events or extreme weather shifts.")
+                if accuracy > 90: st.success("Elite Precision Tracking.")
+                elif accuracy > 75: st.warning("Moderate Drift: Calibration Suggested.")
+                else: st.error("High Variance: Manual Audit Required.")
 
-        # --- 7. SOCIAL VELOCITY & EXPORT ---
+        # --- 7. EXPORT ---
         st.divider()
-        st.markdown("### 📲 Social Velocity & Conversion Audit")
-        
-        s1, s2 = st.columns([2, 1])
-        with s1:
-            fig_social = go.Figure()
-            fig_social.add_trace(go.Bar(x=df_final['entry_date'], y=df_final['ad_impressions'], 
-                                        name="Reach", marker_color='#E2E8F0', opacity=0.75))
-            fig_social.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['ad_clicks'], 
-                                            name="Intent", line=dict(color='#0047AB', width=3), yaxis="y2"))
-            fig_social.update_layout(height=350, template="plotly_white", yaxis2=dict(overlaying="y", side="right"),
-                                     margin=dict(l=10, r=10, t=30, b=10), legend=dict(orientation="h", y=1.1))
-            st.plotly_chart(fig_social, use_container_width=True)
-        
-        with s2:
-            st.download_button("📥 Export Integrated Audit", 
-                               data=df_final.to_csv(index=False).encode('utf-8'), 
-                               file_name=f"Master_Audit_{s_date}.csv", use_container_width=True)
-            with st.container(border=True):
-                st.metric("Social-to-Floor Bridge", f"{(t_clicks/t_traf if t_traf > 0 else 0):.2f}x")
-                st.caption("Ratio of digital intent vs physical footfall.")
+        st.download_button("📥 Export Integrated Audit", 
+                           data=df_final.to_csv(index=False).encode('utf-8'), 
+                           file_name=f"Master_Audit_{s_date}.csv", use_container_width=True)
 
 # =================================================================
 # 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS (v73.0 SaaS Sync)
