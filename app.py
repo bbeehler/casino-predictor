@@ -394,7 +394,8 @@ with st.sidebar:
 
     # 3. THE INTELLIGENCE HUB TRIGGER
     st.divider()
-    if st.button("🕵️ Open Strategic AI Hub", use_container_width=True, type="primary"):
+    # Adding a unique key here prevents the DuplicateElementId error
+    if st.button("🕵️ Open Strategic AI Hub", use_container_width=True, type="primary", key="sidebar_ai_hub_btn"):
         st.session_state.show_ai_hub = True
         st.rerun()
 
