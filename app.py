@@ -441,15 +441,29 @@ def get_forensic_metrics(df_input, coeffs):
     if not df_input: return {"df": pd.DataFrame()}
     df = pd.DataFrame(df_input).copy()
     df['entry_date'] = pd.to_datetime(df['entry_date'])
+    
+    # 1. Heartbeat Baseline
     hb = {d: float(coeffs.get(f'{d[:3]}_Base', 5000)) for d in ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']}
     df['baseline'] = df['entry_date'].dt.day_name().map(hb).astype(float)
+    
+    # 2. Marketing Attribution Logic
     dec, c1, c2 = float(coeffs.get('Ad_Decay', 85))/100, float(coeffs.get('Clicks', 0.05)), float(coeffs.get('Social_Imp', 0.0002))
     pool, lift = 0.0, []
     for _, r in df.iterrows():
         pool = ((float(r.get('ad_clicks', 0) or 0)*c1) + (float(r.get('ad_impressions', 0) or 0)*c2)) + (pool * dec)
         lift.append(pool)
     df['residual_lift'] = lift
-    df['expected'] = df['baseline'] + df['residual_lift'] + float(coeffs.get('Promo', 500.0))
+    
+    # 3. FINAL SYNTHESIS: Prioritize 'predicted_traffic' from Ledger Table
+    # This ensures the Unified Pulse Chart reflects saved AI/Manual forecasts
+    if 'predicted_traffic' in df.columns:
+        # We fill any nulls in the predicted column with our forensic baseline calculation
+        fallback_calc = df['baseline'] + df['residual_lift'] + float(coeffs.get('Promo', 500.0))
+        df['expected'] = pd.to_numeric(df['predicted_traffic'], errors='coerce').fillna(fallback_calc)
+    else:
+        # Fallback if column is missing from schema
+        df['expected'] = df['baseline'] + df['residual_lift'] + float(coeffs.get('Promo', 500.0))
+        
     return {"df": df}
 
 @st.cache_data(ttl=60)
@@ -461,6 +475,7 @@ def get_hydrated_data(property_id, _client):
         if property_id != "GLOBAL": q = q.eq("property_id", str(property_id))
         l_res = q.order("entry_date", desc=True).execute()
         if not l_res.data: return pd.DataFrame(), []
+        
         raw, frames = l_res.data, []
         for pid in list(set([r['property_id'] for r in raw])):
             c_res = _client.table("coefficients").select("*").eq("property_id", pid).execute()
@@ -471,9 +486,11 @@ def get_hydrated_data(property_id, _client):
         return pd.concat(frames, ignore_index=True), raw
     except: return pd.DataFrame(), []
 
+# --- EXECUTION & PERSISTENCE ---
 df, ledger_data = get_hydrated_data(st.session_state.current_property_id, supabase)
 st.session_state.ledger_data = ledger_data
 
+# Safety Gate
 if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Daily Ledger Audit", "PR Scorecard"]:
     st.warning("🎰 Forensic Vault is currently empty.")
     st.stop()
