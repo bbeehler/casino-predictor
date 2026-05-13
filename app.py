@@ -237,14 +237,14 @@ def apply_high_end_styling():
         /* Metric Label (Title) */
         [data-testid="stMetricLabel"] p {
             font-size: 0.9rem !important;
-            font-weight: 600 !important;
+            font-weight: 400 !important;
             color: #1A1C1E !important;
         }
 
         /* Metric Value (Big Number) */
         [data-testid="stMetricValue"] div {
-            font-size: 1.8rem !important;
-            font-weight: 800 !important;
+            font-size: 1.0rem !important;
+            font-weight: 600 !important;
             color: #1A1C1E !important;
         }
 
