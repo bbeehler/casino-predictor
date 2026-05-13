@@ -224,55 +224,73 @@ if not st.session_state.authenticated:
     st.stop()
 
 # =================================================================
-# BLOCK 7: NAVIGATION & AI HUB (Full Feature Restoration)
+# BLOCK 7: NAVIGATION & AI HUB (Instructional Switcher & Full Menu)
 # =================================================================
-if 'show_ai_hub' not in st.session_state: st.session_state.show_ai_hub = False
+if 'show_ai_hub' not in st.session_state: 
+    st.session_state.show_ai_hub = False
 
 def reset_hub_on_nav():
     st.session_state.show_ai_hub = False
-    if "last_ai_response" in st.session_state: del st.session_state.last_ai_response
+    if "last_ai_response" in st.session_state: 
+        del st.session_state.last_ai_response
 
-# Admin Switcher Check
+# Role Scan for Switcher Visibility
 user_links = supabase.table("user_property_access").select("user_role").eq("user_email", st.session_state.user_email).execute()
 is_global = any(r['user_role'] in ["Super Admin", "Manager", "Admin"] for r in user_links.data)
 
 with st.sidebar:
     st.markdown('<div style="padding-bottom:30px;"><img src="https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png" width="160"></div>', unsafe_allow_html=True)
     
+    # 1. SCOPE SWITCHER WITH INSTRUCTIONAL LABEL
     if is_global:
-        st.caption("PROPERTIES")
+        st.caption("SYSTEM SCOPE")
         try:
             all_props = supabase.table("properties").select("id, property_name").execute()
             p_map = {p['property_name']: p['id'] for p in all_props.data}
             p_options = ["📊 CONSOLIDATED VIEW"] + list(p_map.keys())
+            
             curr_v = "📊 CONSOLIDATED VIEW" if st.session_state.current_property_id == "GLOBAL" else st.session_state.current_property_name
             
-            sel_view = st.selectbox("Scope:", p_options, index=p_options.index(curr_v), label_visibility="collapsed", on_change=reset_hub_on_nav, key="sidebar_switcher")
+            # Replaced "label_visibility=collapsed" with visible instruction
+            sel_view = st.selectbox(
+                "Select Property or View:", # This is your indicator
+                p_options, 
+                index=p_options.index(curr_v) if curr_v in p_options else 0, 
+                on_change=reset_hub_on_nav, 
+                key="sidebar_switcher_v88"
+            )
+            
             if sel_view == "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != "GLOBAL":
                 st.session_state.current_property_id, st.session_state.current_property_name = "GLOBAL", "All Properties"
                 st.rerun()
             elif sel_view != "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != p_map.get(sel_view):
                 st.session_state.current_property_id, st.session_state.current_property_name = p_map[sel_view], sel_view
                 st.rerun()
-        except: pass
+        except Exception as e:
+            st.error("Switcher Registry Error")
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.caption("NAVIGATION")
+    st.caption("STRATEGIC NAVIGATION")
     nav = ["Executive Dashboard"]
     
+    # 2. FULL FEATURE MENU (Including Scenario, A/B, and Alerts)
     if st.session_state.current_property_id != "GLOBAL":
         if check_permission("view_ledger"): nav.append("Daily Ledger Audit")
         if check_permission("view_pr_scorecard"): nav.append("PR Scorecard")
         if check_permission("view_analytics"): nav.extend(["Attribution Analytics", "Sentiment Scoring"])
         if check_permission("view_reports"): nav.append("Master Audit Report")
-        if check_permission("run_simulations"): nav.append("Scenario Simulator")      # RESTORED
-        if check_permission("run_experiments"): nav.append("Experiment Vault")        # RESTORED (A/B)
-        if check_permission("manage_alerts"): nav.append("Strategic Alerts")          # RESTORED
+        
+        # RESTORED MISSING MODULES
+        if check_permission("run_simulations"): nav.append("Scenario Simulator")
+        if check_permission("run_experiments"): nav.append("Experiment Vault") # This is your A/B page
+        if check_permission("manage_alerts"): nav.append("Strategic Alerts")
+        
         if check_permission("calibrate_ai"): nav.extend(["AI Calibration", "BL-ROAS Calculator"])
         if st.session_state.user_role == "Super Admin": nav.append("Global Admin Console")
 
-    page = st.radio("Navigation", nav, label_visibility="collapsed", on_change=reset_hub_on_nav, key="main_nav_radio")
+    page = st.radio("Navigation", nav, label_visibility="collapsed", on_change=reset_hub_on_nav, key="main_nav_radio_v88")
 
+    # 3. AI HUB & LOGOUT
     st.divider()
     if st.button("🕵️ Open Strategic AI Hub", use_container_width=True, type="primary", key="btn_ai_trigger"):
         st.session_state.show_ai_hub = True
@@ -282,13 +300,17 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
+# 4. GLOBAL MODAL HANDLER
 if st.session_state.show_ai_hub:
     @st.dialog("Strategic AI Analyst Hub", width="large")
     def ai_hub_modal():
         st.markdown("### 🤖 FloorCast AI Analyst")
-        q = st.text_input("Query:", key="ai_q_input")
-        if st.button("Analyze", use_container_width=True, key="ai_proc_btn"):
-            if q: st.session_state.last_ai_response = ask_omniscient_ai(q)
+        st.caption(f"Context: {st.session_state.current_property_name}")
+        q = st.text_input("Query forensic intelligence:", key="ai_q_input")
+        if st.button("Execute Analysis", use_container_width=True, key="ai_proc_btn"):
+            if q: 
+                with st.spinner("Analyzing data nodes..."):
+                    st.session_state.last_ai_response = ask_omniscient_ai(q)
         if "last_ai_response" in st.session_state:
             st.markdown("---")
             st.markdown(st.session_state.last_ai_response)
