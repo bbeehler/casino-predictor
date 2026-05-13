@@ -132,7 +132,12 @@ def ask_omniscient_ai(user_query):
 # =================================================================
 # BLOCK 4: PREMIUM STYLING & PAGE CONFIG
 # =================================================================
-st.set_page_config(page_title="FloorCast Pro", layout="wide", page_icon="🎰", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="FloorCast Pro", 
+    layout="wide", 
+    page_icon="🎰", 
+    initial_sidebar_state="expanded"
+)
 
 def apply_high_end_styling():
     st.markdown("""
@@ -160,7 +165,6 @@ def apply_high_end_styling():
         }
 
         /* 1. SELECTBOX FIX - Forcing Black Text inside the White Selection Box */
-        /* This targets the actual text value selected */
         [data-testid="stSidebar"] div[data-baseweb="select"] span,
         [data-testid="stSidebar"] div[data-baseweb="select"] div {
             color: #000000 !important;
@@ -221,7 +225,7 @@ def apply_high_end_styling():
             color: white !important;
         }
 
-        /* METRIC CARDS */
+        /* --- METRIC CARDS STYLE SUITE --- */
         [data-testid="stMetric"] {
             background: #FFFFFF !important;
             border: 1px solid #E1E8F0 !important;
@@ -230,12 +234,26 @@ def apply_high_end_styling():
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
         }
 
-        [data-testid="stMetricLabel"] > div, 
-        [data-testid="stMetricValue"] > div {
+        /* Metric Label (Title) */
+        [data-testid="stMetricLabel"] p {
+            font-size: 0.9rem !important;
+            font-weight: 600 !important;
             color: #1A1C1E !important;
         }
 
-        /* MAIN ACTION BUTTONS */
+        /* Metric Value (Big Number) */
+        [data-testid="stMetricValue"] div {
+            font-size: 1.8rem !important;
+            font-weight: 800 !important;
+            color: #1A1C1E !important;
+        }
+
+        /* Metric Delta (+/-) */
+        [data-testid="stMetricDelta"] div {
+            font-size: 0.8rem !important;
+        }
+
+        /* --- MAIN ACTION BUTTONS --- */
         .stButton>button {
             border-radius: 8px !important;
             font-weight: 600 !important;
