@@ -146,60 +146,55 @@ def apply_high_end_styling():
             color: #1A1C1E;
         }
 
-        /* 1. Force the SELECTED text in the dropdown to be BLACK */
-        [data-testid="stSidebar"] div[data-baseweb="select"] > div {
-            color: #1A1C1E !important;
-        }
-
-        /* 2. Force the dropdown arrow and clear button to be DARK */
-        [data-testid="stSidebar"] div[data-baseweb="select"] svg {
-            fill: #1A1C1E !important;
-        }
-
-        /* 3. Ensure the placeholder text is also readable */
-        [data-testid="stSidebar"] div[data-baseweb="select"] [data-testid="stMarkdownContainer"] p {
-            color: #000000 !important;
-        }
-
-        /* 4. Keep the LABEL (the 'Switch Environment' text) GOLD or WHITE for visibility */
-        [data-testid="stSidebar"] label[data-testid="stWidgetLabel"] p {
-            color: #FFCC00 !important; /* Hard Rock Gold for contrast */
-            font-weight: 700 !important;
-        }
-        
         /* --- THE BLACK SIDEBAR REFINEMENT --- */
         [data-testid="stSidebar"] {
             background-color: #000000 !important;
             border-right: 1px solid #222222;
         }
 
-        /* Sidebar Captions & General Text */
+        /* Global Sidebar Text Default (White) */
         [data-testid="stSidebar"] *, 
         [data-testid="stSidebar"] .stMarkdown p,
         [data-testid="stSidebar"] .st-at {
             color: #FFFFFF !important;
         }
 
-        /* FIX: TARGET SELECTBOX LABELS SPECIFICALLY */
-        /* If you want the 'Select Property' label to be BLACK: */
-        [data-testid="stSidebar"] label[data-testid="stWidgetLabel"] p {
+        /* 1. SELECTBOX FIX - Forcing Black Text inside the White Selection Box */
+        /* This targets the actual text value selected */
+        [data-testid="stSidebar"] div[data-baseweb="select"] span,
+        [data-testid="stSidebar"] div[data-baseweb="select"] div {
             color: #000000 !important;
-            font-weight: 700 !important;
+            -webkit-text-fill-color: #000000 !important;
         }
 
-        /* Sidebar Captions */
+        /* Ensure the input background stays white for contrast */
+        [data-testid="stSidebar"] div[data-baseweb="input"] > div, 
+        [data-testid="stSidebar"] div[data-baseweb="select"] > div {
+            background-color: #FFFFFF !important;
+        }
+
+        /* 2. Force the dropdown arrow and clear button to be DARK */
+        [data-testid="stSidebar"] div[data-baseweb="select"] svg {
+            fill: #000000 !important;
+        }
+
+        /* 3. WIDGET LABEL (Switch Environment / Select Property) - HARD ROCK GOLD */
+        [data-testid="stSidebar"] label[data-testid="stWidgetLabel"] p {
+            color: #FFCC00 !important; 
+            font-weight: 700 !important;
+            font-size: 0.9rem !important;
+        }
+
+        /* 4. Sidebar Captions (PROPERTIES / NAVIGATION) */
         [data-testid="stSidebar"] .stCaption {
             color: #A1A1A1 !important;
             font-weight: 600;
             letter-spacing: 0.05em;
+            text-transform: uppercase;
         }
 
-        /* Sidebar Divider */
-        [data-testid="stSidebar"] hr {
-            border-color: #333333 !important;
-        }
-
-        /* Sidebar Buttons */
+        /* Sidebar Divider & Buttons */
+        [data-testid="stSidebar"] hr { border-color: #333333 !important; }
         [data-testid="stSidebar"] .stButton>button {
             background-color: #1A1A1A !important;
             color: #FFFFFF !important;
@@ -253,9 +248,7 @@ def apply_high_end_styling():
 
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
-        header[data-testid="stHeader"] {
-            background-color: transparent !important;
-        }
+        header[data-testid="stHeader"] { background-color: transparent !important; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -265,7 +258,7 @@ def render_styled_header(title, subtitle, badge_text="Live"):
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <h1 style="margin: 0; font-size: 2rem; font-weight: 800;">{title}</h1>
-                    <p style="margin: 8px 0 0 0; color: #94a3b8;">{subtitle}</p>
+                    <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 1.1rem;">{subtitle}</p>
                 </div>
                 <div style="background: rgba(255, 204, 0, 0.15); color: #FFCC00; padding: 6px 16px; border-radius: 12px; font-weight: 700;">● {badge_text}</div>
             </div>
