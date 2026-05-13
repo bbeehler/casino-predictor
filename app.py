@@ -168,7 +168,7 @@ def ask_omniscient_ai(user_query):
     """Executes the prompt against the forensic context."""
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         vault_context = get_forensic_omniscience()
         prompt = f"{vault_context}\n\nEXECUTIVE INQUIRY: {user_query}\n\nFORENSIC ANALYSIS:"
         response = model.generate_content(prompt)
