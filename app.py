@@ -310,64 +310,45 @@ df, ledger_data = hydrate_vault(st.session_state.current_property_id, supabase)
 st.session_state.ledger_data = ledger_data
 
 # =================================================================
-# BLOCK 7: NAVIGATION & STRATEGIC AI HUB
+# BLOCK 7: NAVIGATION & AI HUB
 # =================================================================
 
-if 'show_ai_hub' not in st.session_state:
-    st.session_state.show_ai_hub = False
+if 'show_ai_hub' not in st.session_state: st.session_state.show_ai_hub = False
 
-def reset_hub():
+def reset_hub_on_nav():
     st.session_state.show_ai_hub = False
     if "last_ai_response" in st.session_state: del st.session_state.last_ai_response
 
-# 1. SIDEBAR ARCHITECTURE
 with st.sidebar:
     st.image("https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png", width=160)
-    
-    # Property Switcher (For Admins)
-    st.caption("ENVIRONMENT")
-    all_p = supabase.table("properties").select("id, property_name").execute()
-    p_map = {p['property_name']: p['id'] for p in all_p.data} if all_p.data else {}
-    
-    sel_p = st.selectbox("Switch:", list(p_map.keys()), index=list(p_map.keys()).index(st.session_state.current_property_name), on_change=reset_hub)
-    if sel_p != st.session_state.current_property_name:
-        st.session_state.current_property_id = p_map[sel_p]
-        st.session_state.current_property_name = sel_p
-        st.rerun()
-
     st.divider()
-    st.caption("NAVIGATION")
-    nav = ["Executive Dashboard"]
-    if check_permission("view_ledger"): nav.append("Daily Ledger Audit")
-    if check_permission("view_pr_scorecard"): nav.append("PR Scorecard")
-    if check_permission("view_reports"): nav.append("Master Audit Report")
-    if check_permission("calibrate_ai"): nav.append("AI Calibration")
-    if st.session_state.user_role == "Super Admin": nav.append("Global Admin Console")
-    
-    page = st.radio("Go to:", nav, label_visibility="collapsed", on_change=reset_hub)
+    nav_options = ["Executive Dashboard"]
+    if check_permission("view_ledger"): nav_options.append("Daily Ledger Audit")
+    if check_permission("view_pr_scorecard"): nav_options.append("PR Scorecard")
+    if check_permission("view_analytics"): nav_options.extend(["Attribution Analytics", "Sentiment Scoring"])
+    if check_permission("view_reports"): nav_options.append("Master Audit Report")
+    if check_permission("calibrate_ai"): nav_options.append("AI Calibration")
+    if st.session_state.get('user_role') == "Super Admin": nav_options.append("Global Admin Console")
 
+    page = st.radio("Navigation", nav_options, label_visibility="collapsed", on_change=reset_hub_on_nav)
     st.divider()
     if st.button("🕵️ Open Strategic AI Hub", use_container_width=True, type="primary"):
         st.session_state.show_ai_hub = True
         st.rerun()
 
-# 2. AI HUB MODAL HANDLER
 if st.session_state.show_ai_hub:
     @st.dialog("Strategic AI Analyst Hub", width="large")
     def ai_hub_modal():
         st.markdown("### 🤖 FloorCast AI Analyst")
-        query = st.text_input("Ask a data-backed question:")
+        query = st.text_input("Query property intelligence...")
         if st.button("Analyze Vault"):
             if query:
                 with st.spinner("Processing..."):
-                    ans = ask_omniscient_ai(query)
-                    st.session_state.last_ai_response = ans
-        
+                    st.session_state.last_ai_response = ask_omniscient_ai(query)
         if "last_ai_response" in st.session_state:
             st.markdown("---")
             st.markdown(st.session_state.last_ai_response)
-            if st.button("Close"): reset_hub(); st.rerun()
-
+            if st.button("Close"): reset_hub_on_nav(); st.rerun()
     ai_hub_modal()
 
 # =================================================================
