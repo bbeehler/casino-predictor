@@ -137,19 +137,104 @@ st.set_page_config(page_title="FloorCast Pro", layout="wide", page_icon="🎰", 
 def apply_high_end_styling():
     st.markdown("""
         <style>
+        /* IMPORT HIGH-END FONTS */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-        html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: #1A1C1E; }
-        [data-testid="stSidebar"] { background-color: #000000 !important; border-right: 1px solid #222222; }
-        [data-testid="stSidebar"] *, [data-testid="stSidebar"] label { color: #FFFFFF !important; }
-        [data-testid="stSidebar"] .stCaption { color: #A1A1A1 !important; font-weight: 600; letter-spacing: 0.05em; }
-        [data-testid="stSidebar"] hr { border-color: #333333 !important; }
-        [data-testid="stSidebar"] .stButton>button { background-color: #1A1A1A !important; color: #FFFFFF !important; border: 1px solid #333333 !important; }
-        .main .block-container { padding-top: 2rem; padding-bottom: 5rem; padding-left: 4rem; padding-right: 4rem; max-width: 1400px; }
-        .glass-header { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 28px; border-radius: 18px; color: white !important; margin-bottom: 35px; }
-        [data-testid="stMetric"] { background: #FFFFFF !important; border: 1px solid #E1E8F0 !important; padding: 20px !important; border-radius: 12px !important; }
-        [data-testid="stMetricLabel"] > div, [data-testid="stMetricValue"] > div { color: #1A1C1E !important; }
-        .stButton>button { border-radius: 8px !important; font-weight: 600 !important; background-color: #0047AB !important; color: white !important; transition: all 0.2s; }
-        #MainMenu {visibility: hidden;} footer {visibility: hidden;}
+
+        /* GLOBAL RESET & TYPOGRAPHY */
+        html, body, [class*="css"] {
+            font-family: 'Inter', sans-serif;
+            color: #1A1C1E;
+        }
+
+        /* --- THE BLACK SIDEBAR REFINEMENT --- */
+        [data-testid="stSidebar"] {
+            background-color: #000000 !important;
+            border-right: 1px solid #222222;
+        }
+
+        /* Sidebar Captions & General Text */
+        [data-testid="stSidebar"] *, 
+        [data-testid="stSidebar"] .stMarkdown p,
+        [data-testid="stSidebar"] .st-at {
+            color: #FFFFFF !important;
+        }
+
+        /* FIX: TARGET SELECTBOX LABELS SPECIFICALLY */
+        /* If you want the 'Select Property' label to be BLACK: */
+        [data-testid="stSidebar"] label[data-testid="stWidgetLabel"] p {
+            color: #000000 !important;
+            font-weight: 700 !important;
+        }
+
+        /* Sidebar Captions */
+        [data-testid="stSidebar"] .stCaption {
+            color: #A1A1A1 !important;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+
+        /* Sidebar Divider */
+        [data-testid="stSidebar"] hr {
+            border-color: #333333 !important;
+        }
+
+        /* Sidebar Buttons */
+        [data-testid="stSidebar"] .stButton>button {
+            background-color: #1A1A1A !important;
+            color: #FFFFFF !important;
+            border: 1px solid #333333 !important;
+        }
+
+        /* RESPONSIVE PADDING */
+        .main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 5rem;
+            padding-left: 4rem;
+            padding-right: 4rem;
+            max-width: 1400px;
+        }
+
+        /* HIGH-END EXECUTIVE HEADER */
+        .glass-header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 28px;
+            border-radius: 18px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+            margin-bottom: 35px;
+            color: white !important;
+        }
+
+        /* METRIC CARDS */
+        [data-testid="stMetric"] {
+            background: #FFFFFF !important;
+            border: 1px solid #E1E8F0 !important;
+            padding: 20px !important;
+            border-radius: 12px !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+        }
+
+        [data-testid="stMetricLabel"] > div, 
+        [data-testid="stMetricValue"] > div {
+            color: #1A1C1E !important;
+        }
+
+        /* MAIN ACTION BUTTONS */
+        .stButton>button {
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+            background-color: #0047AB !important;
+            color: white !important;
+            border: none !important;
+            padding: 0.5rem 1rem !important;
+            transition: all 0.2s;
+        }
+
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header[data-testid="stHeader"] {
+            background-color: transparent !important;
+        }
         </style>
     """, unsafe_allow_html=True)
 
