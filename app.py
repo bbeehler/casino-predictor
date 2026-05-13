@@ -243,7 +243,7 @@ def apply_high_end_styling():
 
         /* Metric Value (Big Number) */
         [data-testid="stMetricValue"] div {
-            font-size: 1.0rem !important;
+            font-size: 1.25rem !important;
             font-weight: 600 !important;
             color: #1A1C1E !important;
         }
