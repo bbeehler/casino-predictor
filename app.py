@@ -149,21 +149,158 @@ def ask_omniscient_ai(user_query):
         return f"Analyst unavailable: {e}"
 
 # =================================================================
-# BLOCK 4: PREMIUM STYLING & HEADERS
+# BLOCK 4: PREMIUM STYLING & PAGE CONFIG
 # =================================================================
 
-st.set_page_config(page_title="FloorCast Pro | Strategic Intelligence", layout="wide", page_icon="🎰")
+st.set_page_config(
+    page_title="FloorCast Pro | Strategic Intelligence", 
+    layout="wide", 
+    page_icon="🎰", 
+    initial_sidebar_state="expanded"
+)
 
 def apply_high_end_styling():
     st.markdown("""
         <style>
+        /* IMPORT HIGH-END FONTS */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-        html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: #1A1C1E; }
-        [data-testid="stSidebar"] { background-color: #000000 !important; border-right: 1px solid #222222; }
-        [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-        .glass-header { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 28px; border-radius: 18px; margin-bottom: 35px; color: white !important; }
-        [data-testid="stMetric"] { background: #FFFFFF !important; border: 1px solid #E1E8F0 !important; border-radius: 12px !important; padding: 20px !important; }
-        .stButton>button { background-color: #0047AB !important; color: white !important; border-radius: 8px !important; }
+
+        /* GLOBAL RESET & TYPOGRAPHY */
+        html, body, [class*="css"] {
+            font-family: 'Inter', sans-serif;
+            color: #1A1C1E;
+        }
+
+        /* --- THE BLACK SIDEBAR REFINEMENT --- */
+        [data-testid="stSidebar"] {
+            background-color: #000000 !important;
+            border-right: 1px solid #222222;
+        }
+
+        /* Force Sidebar Text, Labels, and Radio Button text to White */
+        [data-testid="stSidebar"] *, 
+        [data-testid="stSidebar"] .stMarkdown p,
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] .st-at {
+            color: #FFFFFF !important;
+        }
+
+        /* Sidebar Captions */
+        [data-testid="stSidebar"] .stCaption {
+            color: #A1A1A1 !important;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+
+        /* Sidebar Divider */
+        [data-testid="stSidebar"] hr {
+            border-color: #333333 !important;
+        }
+
+        /* Sidebar Buttons */
+        [data-testid="stSidebar"] .stButton>button {
+            background-color: #1A1A1A !important;
+            color: #FFFFFF !important;
+            border: 1px solid #333333 !important;
+        }
+
+        /* RESPONSIVE PADDING */
+        .main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 5rem;
+            padding-left: 4rem;
+            padding-right: 4rem;
+            max-width: 1400px;
+        }
+
+        /* --- MOBILE OVERRIDES & MENU BUTTON FIX --- */
+        @media (max-width: 768px) {
+            .main .block-container {
+                padding-left: 1rem;
+                padding-right: 1rem;
+                padding-top: 5rem !important;
+            }
+            
+            button[kind="headerNoContext"] {
+                display: flex !important;
+                color: #1A1C1E !important; 
+                background-color: #FFFFFF !important;
+                border-radius: 50% !important;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+                z-index: 999999 !important;
+                top: 15px !important;
+                left: 15px !important;
+                width: 40px !important;
+                height: 40px !important;
+            }
+        }
+
+        /* HIGH-END EXECUTIVE HEADER */
+        .glass-header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 28px;
+            border-radius: 18px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+            margin-bottom: 35px;
+            color: white !important;
+        }
+
+        /* --- HIGH-END METRIC CARDS VISIBILITY FIX --- */
+        [data-testid="stMetric"] {
+            background: #FFFFFF !important;
+            border: 1px solid #E1E8F0 !important;
+            padding: 20px !important;
+            border-radius: 12px !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+        }
+
+        [data-testid="stMetricLabel"] > div, 
+        [data-testid="stMetricValue"] > div,
+        [data-testid="stMetricLabel"] p {
+            color: #1A1C1E !important;
+            -webkit-text-fill-color: #1A1C1E !important;
+        }
+
+        /* --- INPUT & FLOORCAST AI VISIBILITY KIT --- */
+        .stChatInputContainer, .stTextArea textarea, .stChatInput input {
+            background-color: #FFFFFF !important;
+            color: #1A1C1E !important;
+        }
+
+        div[data-baseweb="input"] > div, 
+        div[data-baseweb="select"] > div {
+            background-color: #FFFFFF !important;
+            border: 1px solid #D0D5DD !important;
+            border-radius: 8px !important;
+        }
+
+        input, textarea, div[data-baseweb="select"] * {
+            color: #1A1C1E !important;
+            -webkit-text-fill-color: #1A1C1E !important;
+        }
+
+        /* MAIN ACTION BUTTONS */
+        .stButton>button {
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+            background-color: #0047AB !important;
+            color: white !important;
+            border: none !important;
+            padding: 0.5rem 1rem !important;
+            transition: all 0.2s;
+        }
+
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header[data-testid="stHeader"] {
+            background-color: transparent !important;
+        }
+
+        /* METRIC TEXT SIZING */
+        [data-testid="stMetricLabel"] { font-size: 0.8rem !important; font-weight: 600 !important; }
+        [data-testid="stMetricValue"] { font-size: 1.5rem !important; }
+        [data-testid="stMetricDelta"] { font-size: 0.7rem !important; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -172,11 +309,13 @@ def render_styled_header(title, subtitle, badge_text="Live"):
         <div class="glass-header">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <h1 style="margin: 0; font-size: 2rem; font-weight: 800;">{title}</h1>
-                    <p style="margin: 8px 0 0 0; color: #94a3b8;">{subtitle}</p>
+                    <h1 style="margin: 0; font-size: 2rem; font-weight: 800; color: #FFFFFF; letter-spacing: -0.025em;">{title}</h1>
+                    <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 1.1rem; font-weight: 400;">{subtitle}</p>
                 </div>
-                <div style="background: rgba(255, 204, 0, 0.15); color: #FFCC00; padding: 6px 16px; border-radius: 12px; font-weight: 700;">
-                    ● {badge_text}
+                <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                    <div style="background: rgba(255, 204, 0, 0.15); color: #FFCC00; padding: 6px 16px; border-radius: 12px; font-size: 0.85rem; font-weight: 700; border: 1px solid rgba(255, 204, 0, 0.3); text-transform: uppercase; letter-spacing: 0.05em;">
+                        ● {badge_text}
+                    </div>
                 </div>
             </div>
         </div>
