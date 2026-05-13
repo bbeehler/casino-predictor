@@ -34,7 +34,7 @@ except Exception as e:
     st.stop()
 
 # =================================================================
-# BLOCK 2: UTILITIES & SENTIMENT ARCHIVE
+# BLOCK 2: CORE PERMISSIONS & SENTIMENT ARCHIVE
 # =================================================================
 
 def check_permission(capability):
@@ -43,10 +43,10 @@ def check_permission(capability):
     return perms.get(capability, False)
 
 def archive_sentiment_entry(text, asset_tag):
-    """AI-Analyzes and archives manual sentiment entries."""
+    """AI-Analyzes and archives manual sentiment entries with explicit message_id."""
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash') 
         
         score_prompt = f"Analyze sentiment of this casino review. Return ONLY a single float between -1.0 and 1.0: {text}"
         ai_res = model.generate_content(score_prompt)
@@ -56,12 +56,12 @@ def archive_sentiment_entry(text, asset_tag):
         except:
             sentiment_score = 0.0
 
-        # Category Logic
+        # Derive Category
         if sentiment_score > 0.3: sentiment_category = "Positive"
         elif sentiment_score < -0.3: sentiment_category = "Negative"
         else: sentiment_category = "Neutral"
 
-        # Intensity Logic
+        # Derive Intensity
         abs_score = abs(sentiment_score)
         if abs_score >= 0.8: intensity_level = "Extreme"
         elif abs_score >= 0.4: intensity_level = "Moderate"
@@ -77,6 +77,7 @@ def archive_sentiment_entry(text, asset_tag):
             "raw_text": text,
             "timestamp": datetime.datetime.now().isoformat()
         }
+        
         supabase.table("sentiment_history").insert(payload).execute()
         return True
     except Exception as e:
@@ -112,15 +113,13 @@ def generate_ai_prediction(target_date, property_name):
         return 4500
 
 # =================================================================
-# BLOCK 3: GLOBAL AI ENGINES (v86.0 - Grand Total Integration)
+# BLOCK 3: GLOBAL AI ENGINES (v86.0 - Grand Total Precision)
 # =================================================================
 
 def get_forensic_omniscience():
-    """Serializes lifetime totals and daily slices for the Executive AI."""
+    """Calculates lifetime grand totals and serializes granular data."""
     try:
         pid = st.session_state.get('current_property_id')
-        
-        # 1. CALCULATE GROUND TRUTH TOTALS
         full_ledger = st.session_state.get('ledger_data', [])
         df_full = pd.DataFrame(full_ledger)
         
@@ -128,9 +127,12 @@ def get_forensic_omniscience():
             grand_traffic = df_full['actual_traffic'].sum()
             grand_revenue = df_full['actual_coin_in'].sum()
             grand_members = df_full['new_members'].sum()
+            date_min = df_full['entry_date'].min()
+            date_max = df_full['entry_date'].max()
             
             vault_summary = f"""
             --- CRITICAL: ABSOLUTE VAULT TOTALS (GROUND TRUTH) ---
+            Verified metrics for the entire property history ({date_min} to {date_max}):
             - TOTAL ACTUAL TRAFFIC (Grand Total): {grand_traffic:,.0f}
             - TOTAL GAMING REVENUE (Grand Total): ${grand_revenue:,.2f}
             - TOTAL NEW UNITY MEMBERS: {grand_members:,}
@@ -138,37 +140,37 @@ def get_forensic_omniscience():
         else:
             vault_summary = "--- VAULT STATUS: EMPTY ---"
 
-        # 2. PULL RECENT SLICES (Ledger 120 days, PR full, Sentiment 50)
+        # Granular Slices
         l_res = supabase.table("ledger").select("*").eq("property_id", pid).order("entry_date", desc=True).limit(120).execute()
         p_res = supabase.table("pr_scorecard").select("*").eq("property_id", pid).order("report_month", desc=True).execute()
         s_res = supabase.table("sentiment_history").select("*").eq("property_id", pid).order("timestamp", desc=True).limit(50).execute()
+        r_res = supabase.table("monthly_roi").select("*").eq("property_id", pid).order("report_month", desc=True).execute()
 
         context = f"""
         YOU ARE THE OMNISCIENT ANALYST FOR HARD ROCK OTTAWA.
         {vault_summary}
         
-        --- LIVE DATA: PR SCORECARD ---
+        --- LIVE DATA: PR SCORECARD (FULL HISTORY) ---
         {pd.DataFrame(p_res.data).to_string(index=False) if p_res.data else "Empty"}
 
-        --- LIVE DATA: LEDGER (DAILY SLICE) ---
+        --- LIVE DATA: LEDGER (DAILY SLICE - RECENT 120 DAYS) ---
         {pd.DataFrame(l_res.data).to_string(index=False) if l_res.data else "Empty"}
 
-        --- LIVE DATA: SENTIMENT ---
+        --- LIVE DATA: SENTIMENT (RECENT 50) ---
         {pd.DataFrame(s_res.data).to_string(index=False) if s_res.data else "Empty"}
 
-        EXECUTIVE DIRECTIVES:
-        1. Always quote the Grand Total Traffic from the summary when asked for total volume.
-        2. Cross-reference PR wins with ledger traffic spikes.
+        --- LIVE DATA: MONTHLY ROI (FULL HISTORY) ---
+        {pd.DataFrame(r_res.data).to_string(index=False) if r_res.data else "Empty"}
         """
         return context
     except Exception as e:
         return f"Database Connectivity Error: {e}"
 
 def ask_omniscient_ai(user_query):
-    """Executes the prompt against the forensic context."""
+    """Execution function for the Executive Analyst."""
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         vault_context = get_forensic_omniscience()
         prompt = f"{vault_context}\n\nEXECUTIVE INQUIRY: {user_query}\n\nFORENSIC ANALYSIS:"
         response = model.generate_content(prompt)
@@ -176,156 +178,42 @@ def ask_omniscient_ai(user_query):
     except Exception as e:
         return f"Analyst unavailable: {e}"
 
+def generate_ai_prediction(target_date, property_name):
+    """Calculates forecast based on coefficients."""
+    try:
+        coeffs = st.session_state.get('coeffs', {})
+        base = 5000
+        rain = coeffs.get('Rain_mm', -12.0)
+        snow = coeffs.get('Snow_cm', -45.0)
+        return int(base + (rain * 2) + (snow * 5))
+    except:
+        return 4500
+
 # =================================================================
 # BLOCK 4: PREMIUM STYLING & PAGE CONFIG
 # =================================================================
-
-st.set_page_config(
-    page_title="FloorCast Pro | Strategic Intelligence", 
-    layout="wide", 
-    page_icon="🎰", 
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="FloorCast Pro | Strategic Intelligence", layout="wide", page_icon="🎰", initial_sidebar_state="expanded")
 
 def apply_high_end_styling():
     st.markdown("""
         <style>
-        /* IMPORT HIGH-END FONTS */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-
-        /* GLOBAL RESET & TYPOGRAPHY */
-        html, body, [class*="css"] {
-            font-family: 'Inter', sans-serif;
-            color: #1A1C1E;
-        }
-
-        /* --- THE BLACK SIDEBAR REFINEMENT --- */
-        [data-testid="stSidebar"] {
-            background-color: #000000 !important;
-            border-right: 1px solid #222222;
-        }
-
-        /* Force Sidebar Text, Labels, and Radio Button text to White */
-        [data-testid="stSidebar"] *, 
-        [data-testid="stSidebar"] .stMarkdown p,
-        [data-testid="stSidebar"] label,
-        [data-testid="stSidebar"] .st-at {
-            color: #FFFFFF !important;
-        }
-
-        /* Sidebar Captions */
-        [data-testid="stSidebar"] .stCaption {
-            color: #A1A1A1 !important;
-            font-weight: 600;
-            letter-spacing: 0.05em;
-        }
-
-        /* Sidebar Divider */
-        [data-testid="stSidebar"] hr {
-            border-color: #333333 !important;
-        }
-
-        /* Sidebar Buttons */
-        [data-testid="stSidebar"] .stButton>button {
-            background-color: #1A1A1A !important;
-            color: #FFFFFF !important;
-            border: 1px solid #333333 !important;
-        }
-
-        /* RESPONSIVE PADDING */
-        .main .block-container {
-            padding-top: 2rem;
-            padding-bottom: 5rem;
-            padding-left: 4rem;
-            padding-right: 4rem;
-            max-width: 1400px;
-        }
-
-        /* --- MOBILE OVERRIDES & MENU BUTTON FIX --- */
-        @media (max-width: 768px) {
-            .main .block-container {
-                padding-left: 1rem;
-                padding-right: 1rem;
-                padding-top: 5rem !important;
-            }
-            
-            button[kind="headerNoContext"] {
-                display: flex !important;
-                color: #1A1C1E !important; 
-                background-color: #FFFFFF !important;
-                border-radius: 50% !important;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
-                z-index: 999999 !important;
-                top: 15px !important;
-                left: 15px !important;
-                width: 40px !important;
-                height: 40px !important;
-            }
-        }
-
-        /* HIGH-END EXECUTIVE HEADER */
-        .glass-header {
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 28px;
-            border-radius: 18px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
-            margin-bottom: 35px;
-            color: white !important;
-        }
-
-        /* --- HIGH-END METRIC CARDS VISIBILITY FIX --- */
-        [data-testid="stMetric"] {
-            background: #FFFFFF !important;
-            border: 1px solid #E1E8F0 !important;
-            padding: 20px !important;
-            border-radius: 12px !important;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
-        }
-
-        [data-testid="stMetricLabel"] > div, 
-        [data-testid="stMetricValue"] > div,
-        [data-testid="stMetricLabel"] p {
-            color: #1A1C1E !important;
-            -webkit-text-fill-color: #1A1C1E !important;
-        }
-
-        /* --- INPUT & FLOORCAST AI VISIBILITY KIT --- */
-        .stChatInputContainer, .stTextArea textarea, .stChatInput input {
-            background-color: #FFFFFF !important;
-            color: #1A1C1E !important;
-        }
-
-        div[data-baseweb="input"] > div, 
-        div[data-baseweb="select"] > div {
-            background-color: #FFFFFF !important;
-            border: 1px solid #D0D5DD !important;
-            border-radius: 8px !important;
-        }
-
-        input, textarea, div[data-baseweb="select"] * {
-            color: #1A1C1E !important;
-            -webkit-text-fill-color: #1A1C1E !important;
-        }
-
-        /* MAIN ACTION BUTTONS */
-        .stButton>button {
-            border-radius: 8px !important;
-            font-weight: 600 !important;
-            background-color: #0047AB !important;
-            color: white !important;
-            border: none !important;
-            padding: 0.5rem 1rem !important;
-            transition: all 0.2s;
-        }
-
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header[data-testid="stHeader"] {
-            background-color: transparent !important;
-        }
-
-        /* METRIC TEXT SIZING */
+        html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: #1A1C1E; }
+        [data-testid="stSidebar"] { background-color: #000000 !important; border-right: 1px solid #222222; }
+        [data-testid="stSidebar"] *, [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] .st-at { color: #FFFFFF !important; }
+        [data-testid="stSidebar"] .stCaption { color: #A1A1A1 !important; font-weight: 600; letter-spacing: 0.05em; }
+        [data-testid="stSidebar"] hr { border-color: #333333 !important; }
+        [data-testid="stSidebar"] .stButton>button { background-color: #1A1A1A !important; color: #FFFFFF !important; border: 1px solid #333333 !important; }
+        .main .block-container { padding-top: 2rem; padding-bottom: 5rem; padding-left: 4rem; padding-right: 4rem; max-width: 1400px; }
+        @media (max-width: 768px) { .main .block-container { padding-left: 1rem; padding-right: 1rem; padding-top: 5rem !important; } }
+        .glass-header { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1px solid rgba(255, 255, 255, 0.1); padding: 28px; border-radius: 18px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2); margin-bottom: 35px; color: white !important; }
+        [data-testid="stMetric"] { background: #FFFFFF !important; border: 1px solid #E1E8F0 !important; padding: 20px !important; border-radius: 12px !important; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important; }
+        [data-testid="stMetricLabel"] > div, [data-testid="stMetricValue"] > div, [data-testid="stMetricLabel"] p { color: #1A1C1E !important; -webkit-text-fill-color: #1A1C1E !important; }
+        .stChatInputContainer, .stTextArea textarea, .stChatInput input { background-color: #FFFFFF !important; color: #1A1C1E !important; }
+        div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { background-color: #FFFFFF !important; border: 1px solid #D0D5DD !important; border-radius: 8px !important; }
+        input, textarea, div[data-baseweb="select"] * { color: #1A1C1E !important; -webkit-text-fill-color: #1A1C1E !important; }
+        .stButton>button { border-radius: 8px !important; font-weight: 600 !important; background-color: #0047AB !important; color: white !important; border: none !important; padding: 0.5rem 1rem !important; transition: all 0.2s; }
+        #MainMenu {visibility: hidden;} footer {visibility: hidden;} header[data-testid="stHeader"] { background-color: transparent !important; }
         [data-testid="stMetricLabel"] { font-size: 0.8rem !important; font-weight: 600 !important; }
         [data-testid="stMetricValue"] { font-size: 1.5rem !important; }
         [data-testid="stMetricDelta"] { font-size: 0.7rem !important; }
@@ -337,13 +225,11 @@ def render_styled_header(title, subtitle, badge_text="Live"):
         <div class="glass-header">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <h1 style="margin: 0; font-size: 2rem; font-weight: 800; color: #FFFFFF; letter-spacing: -0.025em;">{title}</h1>
-                    <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 1.1rem; font-weight: 400;">{subtitle}</p>
+                    <h1 style="margin: 0; font-size: 2rem; font-weight: 800; color: #FFFFFF;">{title}</h1>
+                    <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 1.1rem;">{subtitle}</p>
                 </div>
-                <div style="display: flex; flex-direction: column; align-items: flex-end;">
-                    <div style="background: rgba(255, 204, 0, 0.15); color: #FFCC00; padding: 6px 16px; border-radius: 12px; font-size: 0.85rem; font-weight: 700; border: 1px solid rgba(255, 204, 0, 0.3); text-transform: uppercase; letter-spacing: 0.05em;">
-                        ● {badge_text}
-                    </div>
+                <div style="background: rgba(255, 204, 0, 0.15); color: #FFCC00; padding: 6px 16px; border-radius: 12px; font-size: 0.85rem; font-weight: 700; border: 1px solid rgba(255, 204, 0, 0.3);">
+                    ● {badge_text}
                 </div>
             </div>
         </div>
@@ -352,7 +238,34 @@ def render_styled_header(title, subtitle, badge_text="Live"):
 apply_high_end_styling()
 
 # =================================================================
-# BLOCK 5: AUTHENTICATION & IDENTITY GATEKEEPER
+# BLOCK 5: IDENTITY & COEFFICIENT INITIALIZATION
+# =================================================================
+
+if 'current_property_name' not in st.session_state:
+    st.session_state.current_property_name = "Hard Rock Ottawa"
+
+if 'current_property_id' not in st.session_state or st.session_state.current_property_id is None:
+    try:
+        if st.session_state.current_property_name == "All Properties":
+            st.session_state.current_property_id = "GLOBAL"
+        else:
+            p_res = supabase.table("properties").select("id").eq("property_name", st.session_state.current_property_name).execute()
+            st.session_state.current_property_id = p_res.data[0]['id'] if p_res.data else None
+    except:
+        st.session_state.current_property_id = None
+
+if 'coeffs' not in st.session_state:
+    cur_id = st.session_state.get('current_property_id')
+    if cur_id and cur_id != "GLOBAL":
+        try:
+            c_res = supabase.table("coefficients").select("*").eq("property_id", cur_id).execute()
+            if c_res.data: st.session_state.coeffs = c_res.data[0]
+            else: st.session_state.coeffs = {'Promo': 500.0, 'Ad_Decay': 85, 'Rain_mm': -12.0, 'Snow_cm': -45.0}
+        except: st.session_state.coeffs = {'Promo': 500.0}
+    else: st.session_state.coeffs = {'Promo': 500.0}
+
+# =================================================================
+# BLOCK 6: AUTHENTICATION GATE
 # =================================================================
 
 if 'authenticated' not in st.session_state:
@@ -360,122 +273,31 @@ if 'authenticated' not in st.session_state:
 
 if not st.session_state.authenticated:
     _, col_login, _ = st.columns([1, 1.5, 1])
-    
     with col_login:
         st.markdown("<br><br>", unsafe_allow_html=True)
         st.image("https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png", width=200)
-        st.markdown("### Executive Portal <span style='color:#667085; font-size:1rem;'>FloorCast AI</span>", unsafe_allow_html=True)
-        
+        st.markdown("### Executive Portal", unsafe_allow_html=True)
         with st.form("login_form", border=True):
             e_mail = st.text_input("Email").strip().lower()
             p_word = st.text_input("Password", type="password")
-            
             if st.form_submit_button("Login", use_container_width=True):
                 try:
-                    auth_res = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
-                    
-                    if auth_res.user:
-                        # Map User to Property & Role
-                        acc_res = supabase.table("user_property_access").select("*, properties(property_name)").eq("user_email", e_mail).execute()
-                        
-                        if acc_res.data:
-                            u_data = acc_res.data[0]
+                    auth = supabase.auth.sign_in_with_password({"email": e_mail, "password": p_word})
+                    if auth.user:
+                        acc = supabase.table("user_property_access").select("*, properties(property_name)").eq("user_email", e_mail).execute()
+                        if acc.data:
+                            u = acc.data[0]
                             st.session_state.authenticated = True
                             st.session_state.user_email = e_mail
-                            st.session_state.user_role = u_data['user_role']
-                            st.session_state.current_property_id = u_data['property_id']
-                            st.session_state.current_property_name = u_data['properties']['property_name']
-                            
-                            # Hydrate Permissions
-                            perm_res = supabase.table("role_permissions").select("perms").eq("role_name", u_data['user_role']).execute()
-                            st.session_state.user_permissions = perm_res.data[0]['perms'] if perm_res.data else {"view_analytics": True}
-                            
-                            st.success("Access Granted.")
+                            st.session_state.user_role = u['user_role']
+                            st.session_state.current_property_id = u['property_id']
+                            st.session_state.current_property_name = u['properties']['property_name']
+                            p_res = supabase.table("role_permissions").select("perms").eq("role_name", u['user_role']).execute()
+                            st.session_state.user_permissions = p_res.data[0]['perms'] if p_res.data else {"view_analytics": True}
                             st.rerun()
-                        else:
-                            st.error("No property mapping found for this account.")
-                    else:
-                        st.error("Invalid Credentials.")
                 except Exception as e:
-                    st.error(f"Authentication Error: {e}")
+                    st.error(f"Login Error: {e}")
     st.stop()
-
-# =================================================================
-# BLOCK 6: FORENSIC DATA ENGINE & ATTRIBUTION LOGIC
-# =================================================================
-
-def get_forensic_metrics(df_input, coeffs):
-    """Calculates Baseline, Ad Decay Lift, and Event Gravity."""
-    if not df_input: 
-        return {"df": pd.DataFrame()}
-    
-    df = pd.DataFrame(df_input).copy()
-    df['entry_date'] = pd.to_datetime(df['entry_date'])
-
-    # 1. Baseline Definitions (Organic Heartbeat)
-    heartbeats = {
-        'Monday': float(coeffs.get('Mon_Base', 3398)),
-        'Tuesday': float(coeffs.get('Tue_Base', 3525)),
-        'Wednesday': float(coeffs.get('Wed_Base', 6312)),
-        'Thursday': float(coeffs.get('Thu_Base', 4924)),
-        'Friday': float(coeffs.get('Fri_Base', 7523)),
-        'Saturday': float(coeffs.get('Sat_Base', 9863)),
-        'Sunday': float(coeffs.get('Sun_Base', 5894))
-    }
-    df['baseline'] = df['entry_date'].dt.day_name().map(heartbeats).astype(float)
-    
-    # 2. Attribution Constants
-    c_clicks = float(coeffs.get('Clicks', 0.05))
-    c_social = float(coeffs.get('Social_Imp', 0.0002))
-    decay = float(coeffs.get('Ad_Decay', 85)) / 100 
-    gravity = float(coeffs.get('Event_Gravity', 0.25))
-
-    # 3. Adstock Decay Loop (Digital Lift)
-    current_pool = 0.0
-    lift_pool = []
-    for _, row in df.iterrows():
-        daily_in = (float(row.get('ad_clicks', 0) or 0) * c_clicks) + \
-                   (float(row.get('ad_impressions', 0) or 0) * c_social)
-        current_pool = daily_in + (current_pool * decay)
-        lift_pool.append(current_pool)
-    
-    df['residual_lift'] = lift_pool
-    
-    # 4. Event Gravity Logic
-    df['gravity_lift'] = pd.to_numeric(df.get('attendance', 0), errors='coerce').fillna(0) * gravity
-
-    # 5. Final Synthesis
-    promo_const = float(coeffs.get('Promo', 500.0))
-    df['expected'] = df['baseline'] + df['residual_lift'] + df['gravity_lift'] + promo_const
-    
-    return {"df": df}
-
-@st.cache_data(ttl=60)
-def hydrate_vault(property_id, _supabase):
-    """Fetches full history and processes it through the Forensic Engine."""
-    try:
-        # Pull Ledger
-        query = _supabase.table("ledger").select("*")
-        if property_id != "GLOBAL":
-            query = query.eq("property_id", property_id)
-        res = query.order("entry_date", desc=True).execute()
-        
-        if not res.data: return pd.DataFrame(), []
-        
-        # Pull Coeffs for this specific property
-        c_res = _supabase.table("coefficients").select("*").eq("property_id", property_id).execute()
-        coeffs = c_res.data[0] if c_res.data else {}
-        
-        # Process
-        processed = get_forensic_metrics(res.data, coeffs)
-        return processed['df'], res.data
-    except:
-        return pd.DataFrame(), []
-
-# Execute Hydration for Global Use
-df, ledger_data = hydrate_vault(st.session_state.current_property_id, supabase)
-st.session_state.ledger_data = ledger_data
-
 # =================================================================
 # BLOCK 7: NAVIGATION & AI HUB (v85.0 - Switcher & PR Integrated)
 # =================================================================
@@ -617,6 +439,112 @@ if st.session_state.show_ai_hub:
             st.markdown(st.session_state.last_ai_response)
 
     ai_hub_modal()
+
+# =================================================================
+# BLOCK 7: NAVIGATION & AI HUB (Restored Consolidated Switcher)
+# =================================================================
+
+if 'show_ai_hub' not in st.session_state:
+    st.session_state.show_ai_hub = False
+
+def reset_hub_on_nav():
+    st.session_state.show_ai_hub = False
+    if "last_ai_response" in st.session_state:
+        del st.session_state.last_ai_response
+
+# Role Scan
+links = supabase.table("user_property_access").select("user_role").eq("user_email", st.session_state.get('user_email')).execute()
+roles = [r['user_role'] for r in links.data] if links.data else []
+is_admin = any(r in ["Super Admin", "Manager", "Admin"] for r in roles)
+
+with st.sidebar:
+    st.markdown('<div style="padding-bottom:30px;"><img src="https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png" width="160"></div>', unsafe_allow_html=True)
+    
+    if is_admin:
+        st.caption("PROPERTIES")
+        try:
+            props = supabase.table("properties").select("id, property_name").execute()
+            pmap = {p['property_name']: p['id'] for p in props.data}
+            opts = ["📊 CONSOLIDATED VIEW"] + list(pmap.keys())
+            curr = "📊 CONSOLIDATED VIEW" if st.session_state.current_property_id == "GLOBAL" else st.session_state.current_property_name
+            
+            sel = st.selectbox("Switch Environment:", opts, index=opts.index(curr) if curr in opts else 0, label_visibility="collapsed", on_change=reset_hub_on_nav)
+            
+            if sel == "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != "GLOBAL":
+                st.session_state.current_property_id, st.session_state.current_property_name = "GLOBAL", "All Properties"
+                st.rerun()
+            elif sel != "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != pmap.get(sel):
+                st.session_state.current_property_id, st.session_state.current_property_name = pmap[sel], sel
+                st.rerun()
+        except: pass
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.caption("NAVIGATION")
+    nav_options = ["Executive Dashboard"]
+    if st.session_state.current_property_id != "GLOBAL":
+        if check_permission("view_ledger"): nav_options.append("Daily Ledger Audit")
+        if check_permission("view_pr_scorecard"): nav_options.append("PR Scorecard")
+        if check_permission("view_analytics"): nav_options.extend(["Attribution Analytics", "Sentiment Scoring"])
+        if check_permission("view_reports"): nav_options.append("Master Audit Report")
+        if check_permission("calibrate_ai"): nav_options.extend(["AI Calibration", "BL-ROAS Calculator"])
+        if st.session_state.get('user_role') == "Super Admin": nav_options.append("Global Admin Console")
+
+    page = st.radio("Navigation", nav_options, label_visibility="collapsed", on_change=reset_hub_on_nav)
+
+    st.divider()
+    if st.button("🕵️ Open Strategic AI Hub", use_container_width=True, type="primary"):
+        st.session_state.show_ai_hub = True
+        st.rerun()
+
+    st.markdown(f'<div style="background:#1e1e1e; padding:10px; border-radius:8px; border:1px solid #333; margin-top:20px;"><p style="margin:0; font-size:0.7rem; color:#888;">CURRENT ROLE</p><p style="margin:0; font-size:0.85rem; font-weight:600; color:#FFCC00;">{st.session_state.get("user_role", "Viewer")}</p></div>', unsafe_allow_html=True)
+    if st.button("LOGOUT", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
+
+if st.session_state.show_ai_hub:
+    @st.dialog("Strategic AI Analyst Hub", width="large")
+    def ai_hub_modal():
+        st.markdown("### 🤖 FloorCast AI Analyst")
+        q = st.text_input("Query property intelligence:")
+        if st.button("Analyze", use_container_width=True):
+            if q:
+                with st.spinner("Analyzing..."): st.session_state.last_ai_response = ask_omniscient_ai(q)
+        if "last_ai_response" in st.session_state:
+            st.markdown("---")
+            st.markdown(st.session_state.last_ai_response)
+    ai_hub_modal()
+
+# =================================================================
+# BLOCK 8: DATA VAULT & SAFETY GATE
+# =================================================================
+
+@st.cache_data(ttl=60)
+def get_hydrated_data(property_id, _supabase_client):
+    try:
+        p_res = _supabase_client.table("properties").select("id, property_name").execute()
+        p_map = {p['id']: p['property_name'] for p in p_res.data}
+        query = _supabase_client.table("ledger").select("*")
+        if property_id != "GLOBAL": query = query.eq("property_id", str(property_id))
+        l_res = query.order("entry_date", desc=True).execute()
+        if not l_res.data: return pd.DataFrame(), []
+        unique_ids = list(set([r['property_id'] for r in l_res.data]))
+        frames = []
+        for uid in unique_ids:
+            c_res = _supabase_client.table("coefficients").select("*").eq("property_id", uid).execute()
+            coeffs = c_res.data[0] if c_res.data else {'Promo': 500.0}
+            processed = get_forensic_metrics([r for r in l_res.data if r['property_id'] == uid], coeffs)
+            p_df = processed['df']
+            p_df['Property'] = p_map.get(uid, "Unknown")
+            frames.append(p_df)
+        return pd.concat(frames, ignore_index=True), l_res.data
+    except: return pd.DataFrame(), []
+
+df, ledger_data = get_hydrated_data(st.session_state.current_property_id, supabase)
+st.session_state.ledger_data = ledger_data
+
+if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Daily Ledger Audit", "PR Scorecard"]:
+    st.warning("🎰 Forensic Vault is currently empty.")
+    st.stop()
 
 # =================================================================
 # 9. PAGE 1: EXECUTIVE DASHBOARD (v72.0 - Hard Rock Vital Signs Restored)
