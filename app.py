@@ -310,45 +310,145 @@ df, ledger_data = hydrate_vault(st.session_state.current_property_id, supabase)
 st.session_state.ledger_data = ledger_data
 
 # =================================================================
-# BLOCK 7: NAVIGATION & AI HUB
+# BLOCK 7: NAVIGATION & AI HUB (v85.0 - Switcher & PR Integrated)
 # =================================================================
 
-if 'show_ai_hub' not in st.session_state: st.session_state.show_ai_hub = False
+# --- A. HUB STATE MANAGEMENT ---
+if 'show_ai_hub' not in st.session_state:
+    st.session_state.show_ai_hub = False
 
 def reset_hub_on_nav():
+    """Auto-closes the AI modal and clears state during navigation or scope shifts."""
     st.session_state.show_ai_hub = False
-    if "last_ai_response" in st.session_state: del st.session_state.last_ai_response
+    if "last_ai_response" in st.session_state:
+        del st.session_state.last_ai_response
 
+# --- B. ROLE & PERMISSION SCAN ---
+user_links_res = supabase.table("user_property_access").select("user_role").eq("user_email", st.session_state.get('user_email')).execute()
+all_my_roles = [r['user_role'] for r in user_links_res.data] if user_links_res.data else []
+is_global_admin = any(role in ["Super Admin", "Manager", "Admin"] for role in all_my_roles)
+
+# --- C. SIDEBAR ARCHITECTURE ---
 with st.sidebar:
-    st.image("https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png", width=160)
-    st.divider()
-    nav_options = ["Executive Dashboard"]
-    if check_permission("view_ledger"): nav_options.append("Daily Ledger Audit")
-    if check_permission("view_pr_scorecard"): nav_options.append("PR Scorecard")
-    if check_permission("view_analytics"): nav_options.extend(["Attribution Analytics", "Sentiment Scoring"])
-    if check_permission("view_reports"): nav_options.append("Master Audit Report")
-    if check_permission("calibrate_ai"): nav_options.append("AI Calibration")
-    if st.session_state.get('user_role') == "Super Admin": nav_options.append("Global Admin Console")
+    # Sidebar Logo
+    st.markdown("""
+        <div style="padding: 10px 0px 30px 0px;">
+            <img src="https://casino.hardrock.com/ottawa/-/media/project/shrss/hri/casinos/hard-rock/ottawa/logos-and-icons/logo.png" width="160">
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # 1. SCOPE SWITCHER (Property Dropdown)
+    if is_global_admin:
+        st.caption("PROPERTIES")
+        try:
+            all_props = supabase.table("properties").select("id, property_name").execute()
+            prop_map = {p['property_name']: p['id'] for p in all_props.data}
+            options = ["📊 CONSOLIDATED VIEW"] + list(prop_map.keys())
+            
+            curr_label = "📊 CONSOLIDATED VIEW" if st.session_state.current_property_id == "GLOBAL" else st.session_state.current_property_name
+            s_idx = options.index(curr_label) if curr_label in options else 0
+            
+            selected_view = st.selectbox(
+                "Switch Environment:", 
+                options, 
+                index=s_idx, 
+                label_visibility="collapsed",
+                on_change=reset_hub_on_nav
+            )
+            
+            # Switcher Logic
+            if selected_view == "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != "GLOBAL":
+                st.session_state.current_property_id = "GLOBAL"
+                st.session_state.current_property_name = "All Properties"
+                st.rerun()
+            elif selected_view != "📊 CONSOLIDATED VIEW" and st.session_state.current_property_id != prop_map.get(selected_view):
+                st.session_state.current_property_id = prop_map[selected_view]
+                st.session_state.current_property_name = selected_view
+                st.rerun()
+        except Exception as e:
+            st.error(f"Switcher Error: {e}")
 
-    page = st.radio("Navigation", nav_options, label_visibility="collapsed", on_change=reset_hub_on_nav)
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.caption("NAVIGATION")
+    
+    # 2. PAGE NAVIGATION
+    if st.session_state.current_property_id == "GLOBAL":
+        nav_options = ["Executive Dashboard"]
+    else:
+        nav_options = ["Executive Dashboard"]
+        
+        # Wrapped in specific permission checks
+        if check_permission("view_ledger"): 
+            nav_options.append("Daily Ledger Audit")
+            
+        if check_permission("view_pr_scorecard"): 
+            nav_options.append("PR Scorecard")
+            
+        if check_permission("view_analytics"):
+            nav_options.extend(["Attribution Analytics", "Sentiment Scoring"])
+            
+        if check_permission("view_reports"): 
+            nav_options.append("Master Audit Report")
+            
+        if check_permission("calibrate_ai"):
+            nav_options.append("AI Calibration")
+            
+        if st.session_state.get('user_role') == "Super Admin":
+            nav_options.append("Global Admin Console")
+
+    page = st.radio(
+        "Navigation", 
+        nav_options, 
+        label_visibility="collapsed", 
+        on_change=reset_hub_on_nav
+    )
+
+    # 3. THE INTELLIGENCE HUB TRIGGER
     st.divider()
     if st.button("🕵️ Open Strategic AI Hub", use_container_width=True, type="primary"):
         st.session_state.show_ai_hub = True
         st.rerun()
 
+    # 4. FOOTER CONTEXT
+    st.markdown("<div style='padding-top: 20px;'>", unsafe_allow_html=True)
+    st.divider()
+    st.caption(f"User: {st.session_state.get('user_email')}")
+    st.markdown(f"""
+        <div style="background: #1e1e1e; padding: 10px; border-radius: 8px; border: 1px solid #333; margin-bottom: 10px;">
+            <p style="margin:0; font-size: 0.7rem; color: #888;">CURRENT ROLE</p>
+            <p style="margin:0; font-size: 0.85rem; font-weight: 600; color: #FFCC00;">{st.session_state.get('user_role', 'Viewer')}</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    if st.button("LOGOUT", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# --- D. THE GLOBAL MODAL HANDLER ---
 if st.session_state.show_ai_hub:
     @st.dialog("Strategic AI Analyst Hub", width="large")
     def ai_hub_modal():
         st.markdown("### 🤖 FloorCast AI Analyst")
-        query = st.text_input("Query property intelligence...")
-        if st.button("Analyze Vault"):
-            if query:
-                with st.spinner("Processing..."):
-                    st.session_state.last_ai_response = ask_omniscient_ai(query)
+        st.caption("Reporting Level: Executive | Source: Ledger, Sentiment, ROI, PR")
+        
+        user_query = st.text_input("Ask FloorCast AI a question:", placeholder="e.g. Summarize our PR halo effect.")
+        
+        c1, c2 = st.columns([1, 4])
+        with c1:
+            if st.button("Analyze", use_container_width=True):
+                if user_query:
+                    with st.spinner("Executing Forensic Analysis..."):
+                        st.session_state.last_ai_response = ask_omniscient_ai(user_query)
+        with c2:
+            if st.button("Leave Hub", use_container_width=True):
+                reset_hub_on_nav()
+                st.rerun()
+
         if "last_ai_response" in st.session_state:
             st.markdown("---")
             st.markdown(st.session_state.last_ai_response)
-            if st.button("Close"): reset_hub_on_nav(); st.rerun()
+
     ai_hub_modal()
 
 # =================================================================
