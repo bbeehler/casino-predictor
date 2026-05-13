@@ -158,7 +158,7 @@ def apply_high_end_styling():
 
         /* 3. Ensure the placeholder text is also readable */
         [data-testid="stSidebar"] div[data-baseweb="select"] [data-testid="stMarkdownContainer"] p {
-            color: #FFFFFF !important;
+            color: #000000 !important;
         }
 
         /* 4. Keep the LABEL (the 'Switch Environment' text) GOLD or WHITE for visibility */
