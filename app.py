@@ -146,6 +146,27 @@ def apply_high_end_styling():
             color: #1A1C1E;
         }
 
+        /* 1. Force the SELECTED text in the dropdown to be BLACK */
+        [data-testid="stSidebar"] div[data-baseweb="select"] > div {
+            color: #1A1C1E !important;
+        }
+
+        /* 2. Force the dropdown arrow and clear button to be DARK */
+        [data-testid="stSidebar"] div[data-baseweb="select"] svg {
+            fill: #1A1C1E !important;
+        }
+
+        /* 3. Ensure the placeholder text is also readable */
+        [data-testid="stSidebar"] div[data-baseweb="select"] [data-testid="stMarkdownContainer"] p {
+            color: #1A1C1E !important;
+        }
+
+        /* 4. Keep the LABEL (the 'Switch Environment' text) GOLD or WHITE for visibility */
+        [data-testid="stSidebar"] label[data-testid="stWidgetLabel"] p {
+            color: #FFCC00 !important; /* Hard Rock Gold for contrast */
+            font-weight: 700 !important;
+        }
+        
         /* --- THE BLACK SIDEBAR REFINEMENT --- */
         [data-testid="stSidebar"] {
             background-color: #000000 !important;
