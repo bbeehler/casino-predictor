@@ -856,7 +856,7 @@ elif page == "Daily Ledger Audit":
                 st.error(f"Sync Error: {e}")
 
 # =================================================================
-# 11. PAGE 3: ATTRIBUTION ANALYTICS (v52.0 - High-End Suite)
+# BLOCK 11: PAGE 3: ATTRIBUTION ANALYTICS (v52.5 - Ironclad Edition)
 # =================================================================
 elif page == "Attribution Analytics":
     # 1. PREMIUM HEADER
@@ -872,10 +872,32 @@ elif page == "Attribution Analytics":
 
     # --- 1. DATA PREP & MTA ENGINE ---
     current_weights = st.session_state.get('coeffs', {})
-    m_full = get_forensic_metrics(ledger_data, current_weights)
-    df_attr = m_full['df']
     
-    # Calculate Component Parts
+    # Safely unpacking the forensic dictionary payload
+    m_full = get_forensic_metrics(ledger_data, current_weights)
+    df_attr = m_full.get('df', pd.DataFrame()) if isinstance(m_full, dict) else m_full
+    
+    if df_attr.empty:
+        st.warning("🧪 Attribution Engine returned an empty dataframe structure.")
+        st.stop()
+
+    # --- DATA STRUCTURE INSURANCE: PREVENT KEYERRORS ---
+    # If background calculations fail to populate specific keys, initialize safe defaults
+    required_columns = {
+        'actual_traffic': 0.0,
+        'baseline': 5000.0,
+        'residual_lift': 0.0,
+        'gravity_lift': 0.0,
+        'ad_clicks': 0.0
+    }
+    for col, default_val in required_columns.items():
+        if col not in df_attr.columns:
+            df_attr[col] = default_val
+        else:
+            # Clean up potential database null values inline to protect mathematical operations
+            df_attr[col] = pd.to_numeric(df_attr[col], errors='coerce').fillna(default_val)
+    
+    # Calculate Component Parts (Guaranteed safe from KeyError)
     total_guests = df_attr['actual_traffic'].sum()
     organic_base = df_attr['baseline'].sum()
     digital_lift = df_attr['residual_lift'].sum()
@@ -921,11 +943,10 @@ elif page == "Attribution Analytics":
             color_discrete_sequence=['#E1E8F0', '#0047AB', '#5D707F', '#FFCC00'],
             hole=0.6
         )
-        fig_pie.update_layout(showlegend=True, height=350, margin=dict(l=0,r=0,t=0,b=0))
+        fig_pie.update_layout(showlegend=True, height=350, margin=dict(l=0, r=0, t=0, b=0))
         st.plotly_chart(fig_pie, use_container_width=True, key="attr_pie_v52")
 
     with col_water:
-        # Waterfall showing how different layers build to the final traffic
         fig_water = go.Figure(go.Waterfall(
             orientation = "v",
             measure = ["relative", "relative", "relative", "relative", "total"],
@@ -942,12 +963,21 @@ elif page == "Attribution Analytics":
 
     # --- 4. LIFT CORRELATION ---
     st.markdown("### 📈 Signal Correlation Analysis")
-    fig_corr = px.scatter(
-        df_attr, x='ad_clicks', y='actual_traffic', 
-        trendline="ols", 
-        labels={'ad_clicks': 'Digital Signal (Clicks)', 'actual_traffic': 'Property Traffic'},
-        color_discrete_sequence=['#0047AB']
-    )
+    # Trendlines require statsmodels. Enclose in error boundaries for safety.
+    try:
+        fig_corr = px.scatter(
+            df_attr, x='ad_clicks', y='actual_traffic', 
+            trendline="ols", 
+            labels={'ad_clicks': 'Digital Signal (Clicks)', 'actual_traffic': 'Property Traffic'},
+            color_discrete_sequence=['#0047AB']
+        )
+    except:
+        # Fallback plot configuration if statsmodels dependency fails in cloud containers
+        fig_corr = px.scatter(
+            df_attr, x='ad_clicks', y='actual_traffic', 
+            labels={'ad_clicks': 'Digital Signal (Clicks)', 'actual_traffic': 'Property Traffic'},
+            color_discrete_sequence=['#0047AB']
+        )
     fig_corr.update_layout(height=400, plot_bgcolor='rgba(248,249,250,1)', template="plotly_white")
     st.plotly_chart(fig_corr, use_container_width=True, key="attr_corr_v52")
 
@@ -961,13 +991,15 @@ elif page == "Attribution Analytics":
         mkt_guests = digital_lift + brand_inertia + gravity_lift
         mkt_revenue = mkt_guests * avg_coin
         
-        # Calculate Efficiency Metrics
-        yield_per_click = digital_lift / df_attr['ad_clicks'].sum() if df_attr['ad_clicks'].sum() > 0 else 0
+        # Calculate Efficiency Metrics safely
+        clicks_sum = df_attr['ad_clicks'].sum()
+        yield_per_click = digital_lift / clicks_sum if clicks_sum > 0 else 0.0
+        pull_efficiency = (mkt_guests / total_guests) * 100 if total_guests > 0 else 0.0
         
         # Action Cards for ROI
         c1, c2, c3 = st.columns(3)
         c1.metric("Marketing Yield (Est. $)", f"${mkt_revenue:,.0f}")
-        c2.metric("Guest Pull Efficiency", f"{(mkt_guests/total_guests)*100:.1f}%")
+        c2.metric("Guest Pull Efficiency", f"{pull_efficiency:.1f}%")
         c3.metric("Digital Conversion", f"{yield_per_click:.2f}x")
 
         # Premium Themed Summary Box
