@@ -1030,7 +1030,7 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for full ROI Audit.")
 
 # =================================================================
-# BLOCK 12: PAGE 4: MASTER FORENSIC AUDIT (v85.6 - Full Stack Attribution Flow)
+# BLOCK 12: PAGE 4: MASTER FORENSIC AUDIT (v85.7 - Attendance Column Mapping)
 # =================================================================
 elif page == "Master Audit Report":
     # 1. PREMIUM HEADER
@@ -1151,19 +1151,21 @@ elif page == "Master Audit Report":
         except Exception as e:
             st.caption(f"PR Data unavailable for this range: {e}")
 
-        # --- 5. ATTRIBUTION FLOW CHART (Event Layer Integrated) ---
+        # --- 5. ATTRIBUTION FLOW CHART (Enforced True Attendance Mapping) ---
         st.divider()
         st.markdown("### 🌊 Multi-Channel Attribution Flow")
         fig_stack = go.Figure()
         
-        # Guardrail: Ensure gravity_lift exists inside the dataframe structure to catch zero-event audit frames cleanly
-        if 'gravity_lift' not in df_final.columns:
-            df_final['gravity_lift'] = 0.0
+        # Enforce column safety and convert to clean values
+        if 'attendance' not in df_final.columns:
+            df_final['attendance'] = 0.0
+        else:
+            df_final['attendance'] = pd.to_numeric(df_final['attendance'], errors='coerce').fillna(0.0)
             
         layers = [
             ('Organic Heartbeat', 'baseline', '#8E9AAF'),
             ('Digital ROI Lift', 'residual_lift', '#0047AB'),
-            ('Event Gravity', 'gravity_lift', '#FFCC00') # Fixed: Now correctly processing live attribution flows
+            ('Event Attendance', 'attendance', '#FFCC00') # FIXED: Successfully switched out lift weighting for raw Ledger volume
         ]
         
         for name, col, color in layers:
@@ -1182,7 +1184,7 @@ elif page == "Master Audit Report":
             margin=dict(l=10, r=10, t=10, b=10), 
             template="plotly_white",
             xaxis=dict(title="Timeline Nodes"),
-            yaxis=dict(title="Guest Volume Attribution")
+            yaxis=dict(title="Volume Flow Attribution")
         )
         st.plotly_chart(fig_stack, use_container_width=True)
 
@@ -1213,7 +1215,7 @@ elif page == "Master Audit Report":
         st.divider()
         st.download_button("📥 Export Integrated Audit", 
                            data=df_final.to_csv(index=False).encode('utf-8'), 
-                           file_name=f"Master_Audit_{s_date}.csv", use_container_width=True)
+                           file_name=f"Master_Audit_{s_date}.csv", use_container_width=True)s
 
 # =================================================================
 # 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS (v73.0 SaaS Sync)
