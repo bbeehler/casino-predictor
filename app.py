@@ -687,7 +687,7 @@ if page == "Executive Dashboard":
                 k1.metric("Actual Guest Flow", f"{total_act:,.0f}", delta=f"+{mom_traffic_delta:,.0f} MoM")
                 k2.metric("Yield / Guest", f"${local_yield:,.2f}", delta=f"${mom_yield_delta:+.2f} MoM")
                 k3.metric("Enrollment %", f"{local_conv:.2f}%", delta=f"{mom_enroll_delta:+.2f}% MoM")
-                k4.metric("Ledger Revenue", f"${ledger_rev:,.0f}", delta=f"${mom_rev_delta:+,0f} MoM")
+                k4.metric("Ledger Revenue", f"${ledger_rev:,.0f}", delta=f"${mom_rev_delta:+,.0f} MoM")
                 k5.metric("AI Accuracy", accuracy_display)
 
             # 8. EXECUTIVE BRAND SENTIMENT PULSE
