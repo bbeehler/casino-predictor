@@ -1758,7 +1758,7 @@ ENHANCED TOTAL IMPACT: ${curr['enhanced_revenue']:,.0f}"""
                 )
 
 # =================================================================
-# 16. PAGE 8: GLOBAL ADMIN CONSOLE (v25.2 - Dynamic Month Fallbacks)
+# 16. PAGE 8: GLOBAL ADMIN CONSOLE (v25.3 - Unified UUID Synchronization)
 # =================================================================
 elif page == "Global Admin Console":
     st.markdown(f"""
@@ -1801,24 +1801,35 @@ elif page == "Global Admin Console":
         st.divider()
 
         # =================================================================
-        # EXECUTIVE SNAPSHOT VAULT COMPILER (Dynamic Initialization)
+        # EXECUTIVE SNAPSHOT VAULT COMPILER (Dynamic UUID Ingestion)
         # =================================================================
         with st.expander("📊 Compile Monthly Executive Marketing Snapshots", expanded=False):
             st.markdown("### 📥 Ingest Monthly Performance Matrix")
             st.caption("Input high-level monthly marketing and brand alignment metrics directly into the Supabase database layer.")
 
+            # Live synchronization fetch to map raw text dropdown choices to correct relational database UUID keys
+            try:
+                db_prop_query = supabase.table("properties").select("id, property_name").execute()
+                live_prop_options = {p['property_name']: p['id'] for p in db_prop_query.data} if db_prop_query.data else {}
+            except Exception as e:
+                live_prop_options = {}
+                st.error(f"Failed to synchronize admin properties list: {e}")
+
             with st.form("marketing_snapshot_admin_form", clear_on_submit=False):
                 # 1. Scope Selections (Dynamically Synced to Real-Time System Arrays)
                 c1, c2, c3 = st.columns(3)
                 with c1:
-                    target_prop_id = st.selectbox("Target Property:", ["OTTAWA", "TORONTO", "VANCOUVER"], key="snap_admin_prop")
+                    # FIXED: Now displays literal naming contexts while safely outputting backend UUID tokens on evaluation
+                    if live_prop_options:
+                        selected_prop_display = st.selectbox("Target Property:", list(live_prop_options.keys()), key="snap_admin_prop")
+                        target_prop_id = live_prop_options.get(selected_prop_display)
+                    else:
+                        target_prop_id = st.text_input("Target Property ID (Fallback):", placeholder="Enter raw property UUID...", key="snap_admin_prop_fallback")
                 with c2:
-                    # FIXED: Form now automatically identifies and highlights the current calendar month node
                     month_list = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
                     current_month_idx = datetime.date.today().month - 1
                     target_month = st.selectbox("Reporting Month:", month_list, index=current_month_idx)
                 with c3:
-                    # FIXED: Form automatically maps and updates target years inline
                     year_list = [2024, 2025, 2026, 2027]
                     current_year = datetime.date.today().year
                     current_year_idx = year_list.index(current_year) if current_year in year_list else 2
@@ -1887,6 +1898,7 @@ elif page == "Global Admin Console":
                         months_map = {"January":"01","February":"02","March":"03","April":"04","May":"05","June":"06","July":"07","August":"08","September":"09","October":"10","November":"11","December":"12"}
                         date_iso_str = f"{target_year}-{months_map[target_month]}-01"
 
+                        # Build transaction payload mapped cleanly to core property UUID signatures
                         snapshot_payload = {
                             "property_id": str(target_prop_id),
                             "snapshot_month": date_iso_str,
@@ -1919,7 +1931,7 @@ elif page == "Global Admin Console":
                         }
 
                         supabase.table("monthly_marketing_snapshots").upsert(snapshot_payload).execute()
-                        st.success(f"🎉 Successfully vaulted the {target_month} {target_year} Performance Matrix for '{target_prop_id}'!")
+                        st.success(f"🎉 Successfully vaulted the {target_month} {target_year} Performance Matrix!")
                         st.cache_data.clear()
                     except Exception as e:
                         st.error(f"Failed to submit snapshot matrix array to table layer: {e}")
