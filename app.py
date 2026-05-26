@@ -602,387 +602,403 @@ if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Dai
     st.stop()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v73.7 - Native Layout Parser)
+# 16. PAGE 8: GLOBAL ADMIN CONSOLE (v25.5 - True UUID Binding)
 # =================================================================
-if page == "Executive Dashboard":
-    
-    # --- 0. DYNAMIC MONTH BOUNDARIES ---
-    today = datetime.date.today()
-    first_of_month = today.replace(day=1)
-    next_month = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-    last_of_month = next_month - datetime.timedelta(days=1)
+elif page == "Global Admin Console":
+    st.markdown(f"""
+        <div style="background-color: #1A1A1B; padding: 20px; border-radius: 12px; border-left: 6px solid #FFCC00; margin-bottom: 25px;">
+            <h2 style="color: #FFCC00; margin: 0;">🛠️ Global Admin Console</h2>
+            <p style="color: #DDD; margin: 0;">System Provisioning, Role Management, and Property Orchestration.</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-    # --- THE ABSOLUTE STATE FORCER (v9) ---
-    if "global_range_v9" not in st.session_state:
-        st.session_state.global_range_v9 = (first_of_month, last_of_month)
-    if "pulse_range_v9" not in st.session_state:
-        st.session_state.pulse_range_v9 = (first_of_month, last_of_month)
+    tabs = st.tabs(["🏗️ Property Provisioning", "👥 User Access & Roles", "📊 System Health & Security"])
 
-    # --- A. CONSOLIDATED GLOBAL VIEW ---
-    if st.session_state.get('current_property_id') == "GLOBAL":
-        render_styled_header("Global Network Intelligence", "Aggregate Portfolio Performance", "Global")
-        if df.empty:
-            st.warning("No network data found.")
-            st.stop()
-
-        df['entry_date'] = pd.to_datetime(df['entry_date'])
-        min_date, max_date = df['entry_date'].min().date(), df['entry_date'].max().date()
-        col_date, _ = st.columns([1.5, 2.5])
-        with col_date:
-            global_range = st.date_input("Network Audit Window:", value=st.session_state.global_range_v9, key="global_range_v9")
-
-        if isinstance(global_range, tuple) and len(global_range) == 2:
-            start_g, end_g = global_range
-            mask = (df['entry_date'].dt.date >= start_g) & (df['entry_date'].dt.date <= end_g)
-            df_filtered = df.loc[mask].copy()
-        else:
-            df_filtered = df.copy()
-            start_g, end_g = first_of_month, last_of_month
-
-        total_rev = df_filtered['actual_coin_in'].sum()
-        total_traffic = df_filtered['actual_traffic'].sum()
-        total_mems = df_filtered['new_members'].sum()
-
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Network Revenue", f"${total_rev:,.0f}")
-        k2.metric("Network Traffic", f"{total_traffic:,.0f}")
-        k3.metric("Network New Members", f"{total_mems:,.0f}")
-
-        st.divider()
-        st.write(f"### 🏆 Property Performance Leaderboard ({start_g} to {end_g})")
-        leaderboard = df_filtered.groupby('Property').agg({'actual_coin_in': 'sum', 'actual_traffic': 'sum', 'new_members': 'sum'}).reset_index()
-        leaderboard['Rank'] = leaderboard['actual_coin_in'].rank(ascending=False, method='min').astype(int)
-        st.table(leaderboard.sort_values('Rank'))
-
-    # --- B. INDIVIDUAL PROPERTY VIEW (The Pulse) ---
-    else:
-        render_styled_header(f"{st.session_state.current_property_name} Pulse", "Strategic Demand Projection & Marketing Impact", "Operational")
-        current_weights = st.session_state.get('coeffs', {})
-        
-        df_raw = df.copy()
-        df_raw['entry_date'] = pd.to_datetime(df_raw['entry_date'])
-        df_raw['dow'] = df_raw['entry_date'].dt.day_name()
-        master_baselines = df_raw.groupby('dow')['actual_traffic'].mean().to_dict()
-
-        col_date, _ = st.columns([1.5, 2.5])
-        with col_date:
-            pulse_range = st.date_input("Analysis Window:", value=st.session_state.pulse_range_v9, key="pulse_range_v9_active")
-
-        start_p, end_p = first_of_month, last_of_month
-
-        if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
-            start_p, end_p = pulse_range
-            date_list = pd.date_range(start=start_p, end=end_p)
-            df_p = pd.DataFrame({'entry_date': date_list})
-            df_p['entry_date'] = pd.to_datetime(df_p['entry_date'])
-            df_p['dow'] = df_p['entry_date'].dt.day_name()
+    # --- TAB 1: PROPERTY PROVISIONING ---
+    with tabs[0]:
+        st.subheader("Provision New SaaS Tenant")
+        with st.form("provision_property_form"):
+            new_p_name = st.text_input("Property Name", placeholder="e.g. Hard Rock Las Vegas")
+            new_p_region = st.selectbox("Region", ["North America", "EMEA", "APAC", "LATAM"])
             
-            ledger_lookup = df_raw.set_index(df_raw['entry_date'].dt.strftime('%Y-%m-%d')).to_dict('index')
-            def map_data(row, col_name):
-                d_str = row['entry_date'].strftime('%Y-%m-%d')
-                return ledger_lookup[d_str].get(col_name, 0) if d_str in ledger_lookup else (0 if col_name != 'active_promo' else "")
-
-            map_cols = ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm', 'actual_traffic', 'new_members', 'actual_coin_in', 'predicted_traffic']
-            for c in map_cols:
-                df_p[c] = df_p.apply(lambda r: map_data(r, c), axis=1)
-
-            df_p['baseline'] = df_p['dow'].map(master_baselines).fillna(0)
-
-            with st.form("planner_form_v72"):
-                st.write("📅 Strategic Daily Planner")
-                planner_cols = ['entry_date', 'active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']
-                df_plan_display = df_p[planner_cols].copy()
-                df_plan_display['entry_date'] = df_plan_display['entry_date'].dt.strftime('%a, %b %d')
-                edited_df = st.data_editor(df_plan_display, hide_index=True, use_container_width=True, key="p1_planner_v72")
-                submit_planner = st.form_submit_button("Recalculate Yield Matrix")
-                
-                if submit_planner:
-                    for field in ['active_promo', 'attendance', 'ad_clicks', 'ad_impressions', 'rain_mm', 'snow_cm']:
-                        df_p[field] = edited_df[field].values
-
-            m = get_forensic_metrics(df_p.to_dict(orient='records'), current_weights)
-            df_final = m['df'].sort_values('entry_date')
-            
-            total_vol = df_final['expected'].sum()
-            st.write("### 🎰 The Unified Pulse")
-            fig_pulse = go.Figure()
-            df_act_chart = df_final[df_final['entry_date'].dt.date < today]
-            fig_pulse.add_trace(go.Scatter(x=df_act_chart['entry_date'], y=df_act_chart['actual_traffic'], name="Actual Guests", line=dict(color='#0047AB', width=4)))
-            fig_pulse.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final['expected'].round(0), name="AI Target", line=dict(color='#FFCC00', width=2, dash='dot')))
-            fig_pulse.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10), template="plotly_white")
-            st.plotly_chart(fig_pulse, use_container_width=True, key="pulse_chart_v72")
-
-            # 7. EXECUTIVE KPI GRID 
-            st.write(f"### 🏛️ {st.session_state.current_property_name} Vital Signs")
-            k1, k2, k3, k4, k5 = st.columns(5)
-            LTV_VAL, AVG_SPEND = 1900.00, 1100.31
-
-            total_act = df_final['actual_traffic'].sum()
-            ledger_rev = df_final['actual_coin_in'].sum()
-            actual_signups = df_final['new_members'].sum()
-            local_yield = (ledger_rev / total_act) if total_act > 0 else 0
-            local_conv = (actual_signups / total_act * 100) if total_act > 0 else 0
-            
-            mom_traffic_delta = total_act * 0.042  
-            mom_yield_delta = local_yield * 0.019
-            mom_enroll_delta = local_conv * 0.024
-            mom_rev_delta = ledger_rev * 0.035
-
-            df_audit = df_final[df_final['actual_traffic'] > 0].copy()
-            if not df_audit.empty:
-                s_act, s_pred = df_audit['actual_traffic'].sum(), df_audit['predicted_traffic'].sum()
-                accuracy_display = f"{(1 - (abs(s_act - s_pred) / s_act)) * 100:.1f}%"
-            else: 
-                accuracy_display = "---"
-
-            if start_p >= today:
-                proj_rev = (total_vol * AVG_SPEND) + ((total_vol * 0.05) * LTV_VAL)
-                k1.metric("Projected Demand", f"{total_vol:,.0f} Guests")
-                k2.metric("Target Signups", f"{(total_vol * 0.0170):,.0f}")
-                k3.metric("Proj. Revenue", f"${proj_rev:,.0f}")
-                k4.metric("Marketing Impact", f"{((total_vol - df_p['baseline'].sum()) / total_vol * 100):.1f}%")
-                k5.metric("Model Reliability", accuracy_display)
-            else:
-                k1.metric("Actual Guest Flow", f"{total_act:,.0f}", delta=f"+{mom_traffic_delta:,.0f} MoM")
-                k2.metric("Yield / Guest", f"${local_yield:,.2f}", delta=f"${mom_yield_delta:+,.2f} MoM")
-                k3.metric("Enrollment %", f"{local_conv:.2f}%", delta=f"{mom_enroll_delta:+,.2f}% MoM")
-                k4.metric("Ledger Revenue", f"${ledger_rev:,.0f}", delta=f"${mom_rev_delta:+,.0f} MoM")
-                k5.metric("AI Accuracy", accuracy_display)
-
-        # =================================================================
-        # EXECUTIVE MARKETING & BRAND PERFORMANCE MATRIX
-        # =================================================================
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.write("### 📊 Executive Marketing & Brand Performance")
-        st.caption("Comprehensive analysis tracking digital acquisition cost efficiencies alongside overall brand sentiment loops.")
-
-        p_name_raw = str(st.session_state.get('current_property_name', '')).upper()
-        matched_search_token = "OTTAWA" if "OTTAWA" in p_name_raw else "TORONTO" if "TORONTO" in p_name_raw else "VANCOUVER" if "VANCOUVER" in p_name_raw else p_name_raw
-
-        try:
-            latest_snap_res = supabase.table("monthly_marketing_snapshots")\
-                .select("*")\
-                .eq("property_id", matched_search_token)\
-                .order("snapshot_month", desc=True)\
-                .limit(1)\
-                .execute()
-            snapshot = latest_snap_res.data[0] if latest_snap_res.data else None
-        except Exception as e:
-            snapshot = None
-            st.caption(f"⚠️ Error loading latest snapshot matrix: {e}")
-
-        if snapshot:
-            db_month_date = pd.to_datetime(snapshot.get('snapshot_month'))
-            m_name = db_month_date.strftime('%B %Y')
-
-            def s_get(field, default_val=0.0):
-                val = snapshot.get(field)
-                return default_val if val is None else float(val)
-
-            ctr_val = f"{s_get('ctr')*100:.2f}%" if snapshot.get('ctr') is not None else "---"
-            ctr_mom = f"{s_get('mom_ctr_pct'):+.2f}%" if snapshot.get('mom_ctr_pct') is not None else "---"
-            ctr_ytd = f"{s_get('ytd_ctr')*100:.2f}%" if snapshot.get('ytd_ctr') is not None else "---"
-
-            cpc_val = f"${s_get('cpc'):,.2f}" if snapshot.get('cpc') is not None else "---"
-            cpc_mom = f"{s_get('mom_cpc_pct'):+.2f}%" if snapshot.get('mom_cpc_pct') is not None else "---"
-            cpc_ytd = f"${s_get('ytd_cpc'):,.2f}" if snapshot.get('ytd_cpc') is not None else "---"
-            
-            imps_val = f"{int(s_get('impressions')):,}" if snapshot.get('impressions') is not None else "---"
-            imps_mom = f"{s_get('mom_imps_pct'):+.2f}%" if snapshot.get('mom_imps_pct') is not None else "---"
-            imps_ytd = f"{int(s_get('ytd_imps')):,}" if snapshot.get('ytd_imps') is not None else "---"
-
-            growth_val = f"{s_get('social_growth_rate'):.2f}%" if snapshot.get('social_growth_rate') is not None else "---"
-            growth_mom = f"{s_get('mom_growth_pct'):+.2f}%" if snapshot.get('mom_growth_pct') is not None else "---"
-            growth_ytd = f"{s_get('ytd_growth_rate'):.2f}%" if snapshot.get('ytd_growth_rate') is not None else "---"
-
-            followers_val = f"{int(s_get('followers')):,}" if snapshot.get('followers') is not None else "---"
-            followers_mom = f"{s_get('mom_followers_pct'):+.2f}%" if snapshot.get('mom_followers_pct') is not None else "---"
-            followers_ytd = f"{int(s_get('ytd_followers_net')):+,.0f} (Net)" if snapshot.get('ytd_followers_net') is not None else "---"
-
-            engage_val = f"{s_get('engagement_rate'):.2f}%" if snapshot.get('engagement_rate') is not None else "---"
-            engage_mom = f"{s_get('mom_engage_pct'):+.2f}%" if snapshot.get('mom_engage_pct') is not None else "---"
-            engage_ytd = f"{s_get('ytd_engagement_rate'):.2f}%" if snapshot.get('ytd_engagement_rate') is not None else "---"
-
-            share_val = f"{s_get('share_rate'):.2f} / post" if snapshot.get('share_rate') is not None else "---"
-            share_mom = f"{s_get('mom_share_pct'):+.2f}%" if snapshot.get('mom_share_pct') is not None else "---"
-            share_ytd = f"{s_get('ytd_share_rate'):.2f} / post" if snapshot.get('ytd_share_rate') is not None else "---"
-
-            senti_val = f"{s_get('sentiment_score'):.2f}" if snapshot.get('sentiment_score') is not None else "---"
-            senti_mom = f"{s_get('mom_sentiment_pct'):+.2f}%" if snapshot.get('mom_sentiment_pct') is not None else "---"
-            senti_ytd = f"{s_get('ytd_sentiment_score'):.2f}" if snapshot.get('ytd_sentiment_score') is not None else "---"
-
-            nps_val = f"{s_get('nps_pct'):.0f}%" if snapshot.get('nps_pct') is not None else "---"
-            nps_mom = f"{s_get('mom_nps_pct'):+.2f}%" if snapshot.get('mom_nps_pct') is not None else "N/A"
-            nps_ytd = f"{s_get('ytd_nps_pct'):.0f}%" if snapshot.get('ytd_nps_pct') is not None else "---"
-
-            st.markdown(f"""
-            <div style="border: 1px solid #E1E8F0; border-radius: 12px; overflow: hidden; margin-bottom: 25px;">
-                <table style="width:100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 0.95rem; text-align: left;">
-                    <thead>
-                        <tr style="background-color: #0F172A; color: #FFFFFF;">
-                            <th style="padding: 12px 16px; font-weight: 700;">Metrics</th>
-                            <th style="padding: 12px 16px; font-weight: 700;">{m_name}</th>
-                            <th style="padding: 12px 16px; font-weight: 700;">MoM</th>
-                            <th style="padding: 12px 16px; font-weight: 700;">YTD</th>
-                        </tr>
-                    </thead>
-                    <tbody style="background-color: #FFFFFF; color: #1A1C1E;">
-                        <tr style="border-bottom: 1px solid #E1E8F0; background-color: #F8FAFC;">
-                            <td style="padding: 12px 16px; font-weight: 600; color: #0047AB;">CTR</td>
-                            <td style="padding: 12px 16px;">{ctr_val}</td>
-                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_ctr_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{ctr_mom}</td>
-                            <td style="padding: 12px 16px;">{ctr_ytd}</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #E1E8F0;">
-                            <td style="padding: 12px 16px; font-weight: 600; color: #0047AB;">CPC</td>
-                            <td style="padding: 12px 16px;">{cpc_val}</td>
-                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_cpc_pct') <= 0 else '#FF4B4B'}; font-weight: 600;">{cpc_mom}</td>
-                            <td style="padding: 12px 16px;">{cpc_ytd}</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #E1E8F0; background-color: #F8FAFC;">
-                            <td style="padding: 12px 16px; font-weight: 600;">Impressions</td>
-                            <td style="padding: 12px 16px;">{imps_val}</td>
-                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_imps_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{imps_mom}</td>
-                            <td style="padding: 12px 16px;">{imps_ytd}</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #E1E8F0;">
-                            <td style="padding: 12px 16px; font-weight: 600;">Social Growth Rate</td>
-                            <td style="padding: 12px 16px;">{growth_val}</td>
-                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_growth_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{growth_mom}</td>
-                            <td style="padding: 12px 16px;">{growth_ytd}</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #E1E8F0; background-color: #F8FAFC;">
-                            <td style="padding: 12px 16px; font-weight: 600;">Followers</td>
-                            <td style="padding: 12px 16px;">{followers_val}</td>
-                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_followers_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{followers_mom}</td>
-                            <td style="padding: 12px 16px;">{followers_ytd}</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #E1E8F0;">
-                            <td style="padding: 12px 16px; font-weight: 600;">Engagement Rate</td>
-                            <td style="padding: 12px 16px;">{engage_val}</td>
-                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_engage_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{engage_mom}</td>
-                            <td style="padding: 12px 16px;">{engage_ytd}</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #E1E8F0; background-color: #F8FAFC;">
-                            <td style="padding: 12px 16px; font-weight: 600;">Share Rate</td>
-                            <td style="padding: 12px 16px;">{share_val}</td>
-                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_share_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{share_mom}</td>
-                            <td style="padding: 12px 16px;">{share_ytd}</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #E1E8F0;">
-                            <td style="padding: 12px 16px; font-weight: 600; color: #FFCC00;">Sentiment Score</td>
-                            <td style="padding: 12px 16px;">{senti_val}</td>
-                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_sentiment_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{senti_mom}</td>
-                            <td style="padding: 12px 16px;">{senti_ytd}</td>
-                        </tr>
-                        <tr style="background-color: #F8FAFC;">
-                            <td style="padding: 12px 16px; font-weight: 600; color: #FFCC00;">Net Promoter Score</td>
-                            <td style="padding: 12px 16px;">{nps_val}</td>
-                            <td style="padding: 12px 16px; color: #64748B;">{nps_mom}</td>
-                            <td style="padding: 12px 16px;">{nps_ytd}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.info("📊 No vaulted monthly performance snapshot records found for this property.")
-
-        # =================================================================
-        # LIVE EMAIL PERFORMANCE & DISTRIBUTION PANEL
-        # =================================================================
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.write("### 📨 Email Performance & Distribution Audit")
-        st.caption("Detailed segment distribution tracking operational engagement metrics across active player database categories.")
-
-        macro_email, campaign_list = get_monthly_email_analytics(st.session_state.current_property_name)
-
-        if macro_email:
-            em_month_date = pd.to_datetime(macro_email.get('snapshot_month'))
-            em_month_name = em_month_date.strftime('%B %Y')
-            
-            ec1, ec2, ec3, ec4, ec5 = st.columns(5)
-            ec1.metric("Emails Delivered", f"{macro_email.get('total_emails_delivered', 0):,}")
-            ec2.metric("Unique Open Rate", f"{float(macro_email.get('avg_unique_open_rate', 0))*100:.2f}%")
-            ec3.metric("Reads / Unique Open", f"{macro_email.get('avg_reads_per_unique_open', 0):.2f}")
-            ec4.metric("Avg Bounce Rate", f"{float(macro_email.get('avg_bounce_rate', 0))*100:.2f}%")
-            ec5.metric("Unsubscribe Rate", f"{float(macro_email.get('avg_unsubscribe_rate', 0))*100:.2f}%")
-            
-            if campaign_list:
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.write(f"#### 🎯 Campaign Group Breakdown Summary ({em_month_name})")
-                
-                # FIXED: Transformed raw HTML rows layout compilation into a clean, parsed structural data frame array mapping
-                processed_table_data = []
-                for camp in campaign_list:
-                    processed_table_data.append({
-                        "Campaign Group": str(camp.get('campaign_group_name', 'N/A')),
-                        "Emails Delivered": f"{int(camp.get('emails_delivered', 0)):,}",
-                        "Unique Open Rate": f"{float(camp.get('avg_unique_open_rate', 0))*100:.2f}%",
-                        "Unique Click Rate": f"{float(camp.get('avg_unique_click_rate', 0))*100:.2f}%",
-                        "Bounce Rate": f"{float(camp.get('avg_bounce_rate', 0))*100:.2f}%",
-                        "% of Total Sent": f"{float(camp.get('pct_of_total_emails_sent', 0))*100:.2f}%"
-                    })
-                
-                # Render using native component arrays to avoid text rendering glitches
-                st.dataframe(processed_table_data, use_container_width=True, hide_index=True)
-            else:
-                st.info("No campaign segment distribution rows logged under this monthly block timeline.")
-        else:
-            st.info("📨 No vaulted monthly email metrics snapshot found for this property location.")
-
-        # 8. EXECUTIVE BRAND SENTIMENT PULSE
-        st.divider()
-        st.write("### 🏛️ Executive Brand Sentiment Pulse")
-        col_h1, col_h2 = st.columns([2, 1])
-        with col_h2:
-            from dateutil.relativedelta import relativedelta
-            g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(3)]
-            g_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in g_months[1:]]
-            sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select_v72")
-
-        overall_score = 0.0
-        try:
-            base_query = supabase.table("sentiment_history").select("sentiment_score").eq("property_id", st.session_state.current_property_id)
-            if sel_period == "Current (Live)":
-                g_res = base_query.order("timestamp", desc=True).limit(50).execute()
-            else:
-                sel_date = g_months[g_labels.index(sel_period)]
-                g_res = base_query.gte("timestamp", sel_date.strftime("%Y-%m-%d")).lte("timestamp", (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")).execute()
-            if g_res.data:
-                mapped = [(s['sentiment_score'] * 2 - 1) if 0 <= s['sentiment_score'] <= 1 else s['sentiment_score'] for s in g_res.data]
-                overall_score = np.mean(mapped)
-        except: 
-            pass
-        
-        st.metric(label=f"Property Pulse ({sel_period})", value=f"{overall_score:+.2f}")
-
-        # --- DYNAMIC ASSET GAUGES ---
-        try:
-            asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
-            tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall"]
-            gauge_cols = st.columns(len(tags))
-            for i, tag in enumerate(tags):
-                with gauge_cols[i]:
-                    tag_score = 0.0
+            if st.form_submit_button("🚀 Build Property Tenant"):
+                if new_p_name:
                     try:
-                        t_query = supabase.table("sentiment_history").select("sentiment_score").eq("property_id", st.session_state.current_property_id).eq("asset", tag)
-                        if sel_period == "Current (Live)":
-                            t_res = t_query.order("timestamp", desc=True).limit(15).execute()
-                        else:
-                            t_res = t_query.gte("timestamp", sel_date.strftime("%Y-%m-%d")).lte("timestamp", (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")).execute()
-                        if t_res.data:
-                            tag_score = np.mean([(s['sentiment_score'] * 2 - 1) if 0 <= s['sentiment_score'] <= 1 else s['sentiment_score'] for s in t_res.data])
-                    except: 
-                        pass
-                    fig = go.Figure(go.Indicator(mode="gauge+number", value=tag_score, number={'font': {'size': 18}, 'valueformat': ".2f"},
-                                                 gauge={'axis': {'range': [-1, 1]}, 'bar': {'color': "#0047AB"},
-                                                        'steps': [{'range': [-1, -0.3], 'color': "#FF4B4B"}, {'range': [-0.3, 0.3], 'color': "#F0F2F6"}, {'range': [0.3, 1], 'color': "#28A745"}]}))
-                    fig.update_layout(height=140, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig, use_container_width=True, key=f"gauge_{tag}_{i}")
-                    st.markdown(f"<p style='text-align: center; font-size: 12px;'>{tag}</p>", unsafe_allow_html=True)
-        except: 
-            pass
+                        # 1. Create Property
+                        p_res = supabase.table("properties").insert({
+                            "property_name": new_p_name, 
+                            "region": new_p_region
+                        }).execute()
+                        
+                        if p_res.data:
+                            new_id = p_res.data[0]['id']
+                            # 2. Seed Coefficients (Copy Ottawa DNA)
+                            seed_coeffs = st.session_state.coeffs.copy()
+                            seed_coeffs['property_id'] = new_id
+                            if 'id' in seed_coeffs: del seed_coeffs['id']
+                            
+                            supabase.table("coefficients").insert(seed_coeffs).execute()
+                            st.success(f"Tenant {new_p_name} provisioned with ID: {new_id}")
+                    except Exception as e:
+                        st.error(f"Provisioning Error: {e}")
+
+        st.divider()
+
+        # Live synchronization fetch to map raw text dropdown choices to correct relational database UUID keys
+        try:
+            db_prop_query = supabase.table("properties").select("id, property_name").execute()
+            live_prop_options = {p['property_name']: p['id'] for p in db_prop_query.data} if db_prop_query.data else {}
+        except Exception as e:
+            live_prop_options = {}
+            st.error(f"Failed to synchronize admin properties list: {e}")
+
+        # Shared Dynamic Date Ingestion Setup
+        month_list = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+        current_month_idx = datetime.date.today().month - 1
+        year_list = [2024, 2025, 2026, 2027]
+        current_year = datetime.date.today().year
+        current_year_idx = year_list.index(current_year) if current_year in year_list else 2
+
+        # =================================================================
+        # EXECUTIVE SNAPSHOT VAULT COMPILER
+        # =================================================================
+        with st.expander("📊 Compile Monthly Executive Marketing Snapshots", expanded=False):
+            st.markdown("### 📥 Ingest Monthly Performance Matrix")
+            st.caption("Input high-level monthly marketing and brand alignment metrics directly into the Supabase database layer.")
+
+            with st.form("marketing_snapshot_admin_form", clear_on_submit=False):
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    if live_prop_options:
+                        selected_prop_display = st.selectbox("Target Property:", list(live_prop_options.keys()), key="snap_admin_prop")
+                        target_prop_id = live_prop_options.get(selected_prop_display)
+                    else:
+                        target_prop_id = st.text_input("Target Property ID (Fallback):", placeholder="Enter raw property UUID...", key="snap_admin_prop_fallback")
+                with c2:
+                    target_month = st.selectbox("Reporting Month:", month_list, index=current_month_idx, key="snap_admin_month")
+                with c3:
+                    target_year = st.selectbox("Reporting Year:", year_list, index=current_year_idx, key="snap_admin_year")
+
+                st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+
+                st.markdown("#### 🎯 Paid Media Efficiencies")
+                m_col1, m_col2, m_col3 = st.columns(3)
+                with m_col1:
+                    in_ctr = st.number_input("Click-Through Rate (CTR %):", min_value=0.00, max_value=100.00, value=0.88, step=0.01, format="%.2f")
+                    in_mom_ctr = st.number_input("CTR MoM Change (%):", value=300.00, step=1.00)
+                    in_ytd_ctr = st.number_input("YTD CTR (%):", min_value=0.00, max_value=100.00, value=0.25, step=0.01, format="%.2f")
+                with m_col2:
+                    in_cpc = st.number_input("Cost Per Click (CPC $):", min_value=0.00, value=0.95, step=0.01, format="%.2f")
+                    in_mom_cpc = st.number_input("CPC MoM Change (%):", value=-54.76, step=0.01)
+                    in_ytd_cpc = st.number_input("YTD CPC ($):", min_value=0.00, value=2.53, step=0.01, format="%.2f")
+                with m_col3:
+                    in_imps = st.number_input("Impressions Count:", min_value=0, value=37096000, step=1000)
+                    in_mom_imps = st.number_input("Impressions MoM Change (%):", value=86.42, step=0.01)
+                    in_ytd_imps = st.number_input("YTD Total Impressions:", min_value=0, value=80068400, step=1000)
+
+                st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+
+                st.markdown("#### ⚖️ Audience Engagement & Brand Equity")
+                a_col1, a_col2, a_col3 = st.columns(3)
+                with a_col1:
+                    in_growth = st.number_input("Social Growth Rate (%):", value=7.59, step=0.01)
+                    in_mom_growth = st.number_input("Social Growth MoM Change (%):", value=83.78, step=0.01)
+                    in_ytd_growth = st.number_input("YTD Social Growth Rate (%):", value=5.11, step=0.01)
+                with a_col2:
+                    in_followers = st.number_input("Total Followers:", min_value=0, value=39240, step=10)
+                    in_mom_followers = st.number_input("Followers MoM Change (%):", value=7.59, step=0.01)
+                    in_ytd_followers = st.number_input("YTD Net Followers Added:", value=7969, step=1)
+                with a_col3:
+                    in_engage = st.number_input("Engagement Rate (%):", value=4.07, step=0.01)
+                    in_mom_engage = st.number_input("Engagement MoM Change (%):", value=12.74, step=0.01)
+                    in_ytd_engage = st.number_input("YTD Avg Engagement Rate (%):", value=3.92, step=0.01)
+
+                st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+
+                s_col1, s_col2 = st.columns(2)
+                with s_col1:
+                    in_share = st.number_input("Share Rate (Shares/Post):", value=3.35, step=0.01)
+                    in_mom_share = st.number_input("Share Rate MoM Change (%):", value=7.21, step=0.01)
+                    in_ytd_share = st.number_input("YTD Avg Share Rate:", value=2.71, step=0.01)
+                with s_col2:
+                    in_senti = st.number_input("Derived Sentiment Score (-1 to +1):", min_value=-1.00, max_value=1.00, value=0.15, step=0.01)
+                    in_mom_senti = st.number_input("Sentiment MoM Change (%):", value=50.00, step=0.01)
+                    in_ytd_senti = st.number_input("YTD Avg Sentiment Score:", min_value=-1.00, max_value=1.00, value=0.10, step=0.01)
+
+                st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+
+                n_col1, n_col2 = st.columns(2)
+                with n_col1:
+                    in_nps = st.number_input("Net Promoter Score (NPS %):", min_value=0.00, max_value=100.00, value=64.00, step=1.00)
+                with n_col2:
+                    in_ytd_nps = st.number_input("YTD Avg Net Promoter Score (%):", min_value=0.00, max_value=100.00, value=63.00, step=1.00)
+
+                submit_snapshot = st.form_submit_button("🔒 Vault Performance Snapshot", use_container_width=True)
+
+                if submit_snapshot:
+                    try:
+                        months_map = {"January":"01","February":"02","March":"03","April":"04","May":"05","June":"06","July":"07","August":"08","September":"09","October":"10","November":"11","December":"12"}
+                        date_iso_str = f"{target_year}-{months_map[target_month]}-01"
+
+                        snapshot_payload = {
+                            "property_id": str(target_prop_id), # FIXED: Relational UUID token binding
+                            "snapshot_month": date_iso_str,
+                            "ctr": float(in_ctr / 100),
+                            "mom_ctr_pct": float(in_mom_ctr),
+                            "ytd_ctr": float(in_ytd_ctr / 100),
+                            "cpc": float(in_cpc),
+                            "mom_cpc_pct": float(in_mom_cpc),
+                            "ytd_cpc": float(in_ytd_cpc),
+                            "impressions": int(in_imps),
+                            "mom_imps_pct": float(in_mom_imps),
+                            "ytd_imps": int(in_ytd_imps),
+                            "social_growth_rate": float(in_growth),
+                            "mom_growth_pct": float(in_mom_growth),
+                            "ytd_growth_rate": float(in_ytd_growth),
+                            "followers": int(in_followers),
+                            "mom_followers_pct": float(in_mom_followers),
+                            "ytd_followers_net": int(in_ytd_followers),
+                            "engagement_rate": float(in_engage),
+                            "mom_engage_pct": float(in_mom_engage),
+                            "ytd_engagement_rate": float(in_ytd_engage),
+                            "share_rate": float(in_share),
+                            "mom_share_pct": float(in_mom_share),
+                            "ytd_share_rate": float(in_ytd_share),
+                            "sentiment_score": float(in_senti),
+                            "mom_sentiment_pct": float(in_mom_senti),
+                            "ytd_sentiment_score": float(in_ytd_senti),
+                            "nps_pct": float(in_nps),
+                            "ytd_nps_pct": float(in_ytd_nps)
+                        }
+
+                        supabase.table("monthly_marketing_snapshots").upsert(snapshot_payload).execute()
+                        st.success(f"🎉 Successfully vaulted the {target_month} {target_year} Performance Matrix!")
+                        st.cache_data.clear()
+                    except Exception as e:
+                        st.error(f"Failed to submit snapshot matrix array to table layer: {e}")
+
+        # =================================================================
+        # EXECUTIVE EMAIL PERFORMANCE COMPILER BLOCK
+        # =================================================================
+        with st.expander("📨 Compile Monthly Email Analytics Snapshot", expanded=False):
+            st.markdown("### 📈 Email Performance Summary Builder")
+            st.caption("Log monthly macro deliverability health alongside specific target segmentation campaign group data blocks.")
+
+            # 1. Selection Scope Declarations
+            es_c1, es_c2, es_c3 = st.columns(3)
+            with es_c1:
+                if live_prop_options:
+                    selected_email_prop = st.selectbox("Select Target Property:", list(live_prop_options.keys()), key="email_admin_prop_select")
+                    email_prop_id = live_prop_options.get(selected_email_prop)
+                else:
+                    email_prop_id = st.text_input("Target Property ID (Fallback URL):", key="email_admin_prop_fallback_text")
+            with es_c2:
+                email_month = st.selectbox("Reporting Month Window:", month_list, index=current_month_idx, key="email_admin_month_select")
+            with es_c3:
+                email_year = st.selectbox("Reporting Year Window:", year_list, index=current_year_idx, key="email_admin_year_select")
+
+            months_map = {"January":"01","February":"02","March":"03","April":"04","May":"05","June":"06","July":"07","August":"08","September":"09","October":"10","November":"11","December":"12"}
+            target_date_iso = f"{email_year}-{months_map[email_month]}-01"
+
+            st.markdown("<hr style='margin:15px 0;'>", unsafe_allow_html=True)
+
+            # FORM A: Macro Performance Summary
+            st.write("#### 📊 Part A: Macro Performance Summary Indicators")
+            with st.form("macro_email_performance_form"):
+                mac_col1, mac_col2, mac_col3 = st.columns(3)
+                with mac_col1:
+                    mac_delivered = st.number_input("Total Emails Delivered:", min_value=0, value=1095966, step=1)
+                    mac_open_rate = st.number_input("Avg Unique Open Rate (%):", min_value=0.00, max_value=100.00, value=46.28, step=0.01, format="%.2f")
+                with mac_col2:
+                    mac_reads = st.number_input("Avg Reads per Unique Open:", min_value=0.00, value=1.71, step=0.01, format="%.2f")
+                    mac_bounce = st.number_input("Avg Bounce Rate (%):", min_value=0.00, max_value=100.00, value=1.47, step=0.01, format="%.2f")
+                with mac_col3:
+                    mac_unsub = st.number_input("Avg Unsubscribe Rate (%):", min_value=0.00, max_value=100.00, value=0.09, step=0.01, format="%.2f")
+
+                submit_macro_email = st.form_submit_button("🔒 Save Macro Summary Data", use_container_width=True)
+                
+                if submit_macro_email:
+                    try:
+                        macro_payload = {
+                            "property_id": str(email_prop_id), # FIXED: Relational UUID token binding
+                            "snapshot_month": target_date_iso,
+                            "total_emails_delivered": int(mac_delivered),
+                            "avg_unique_open_rate": float(mac_open_rate / 100),
+                            "avg_reads_per_unique_open": float(mac_reads),
+                            "avg_bounce_rate": float(mac_bounce / 100),
+                            "avg_unsubscribe_rate": float(mac_unsub / 100)
+                        }
+                        supabase.table("monthly_email_snapshots").upsert(macro_payload).execute()
+                        st.success(f"✅ Macro Email Performance safely saved to your core master data registry!")
+                        st.cache_data.clear()
+                    except Exception as e:
+                        st.error(f"Failed to record summary data block: {e}")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # FORM B: Campaign Group Breakdown Form
+            st.write("#### 🎯 Part B: Segment Campaign Group Registry")
+            core_groups = ["Core", "Hotel", "Entertainment", "Forever Young", "Bounce Back", "Free Bet", "Player Boutique", "Food", "Slot Pull Promo", "P200", "Fun in the Sun", "Other"]
+            if "custom_campaign_groups" not in st.session_state:
+                st.session_state.custom_campaign_groups = []
+            
+            combined_campaign_options = core_groups + st.session_state.custom_campaign_groups
+
+            new_camp_name = st.text_input("➕ Register Brand New Custom Campaign Group (Optional):", placeholder="Type new group name...")
+            if st.button("Add Custom Group Option to Dropdown Matrix"):
+                if new_camp_name and new_camp_name.strip() not in combined_campaign_options:
+                    st.session_state.custom_campaign_groups.append(new_camp_name.strip())
+                    st.success(f"Added '{new_camp_name.strip()}' to selection memory index arrays.")
+                    st.rerun()
+
+            with st.form("campaign_group_breakdown_form"):
+                cg_c1, cg_c2, cg_c3 = st.columns(3)
+                with cg_c1:
+                    sel_group_name = st.selectbox("Select Target Campaign Group Name:", combined_campaign_options)
+                    cg_delivered = st.number_input("Emails Delivered in Segment:", min_value=0, value=267863, step=1)
+                with cg_c2:
+                    cg_open_rate = st.number_input("Segment Unique Open Rate (%):", min_value=0.00, max_value=100.00, value=42.31, step=0.01, format="%.2f")
+                    cg_click_rate = st.number_input("Segment Unique Click Rate (%):", min_value=0.00, max_value=100.00, value=1.52, step=0.01, format="%.2f")
+                with cg_c3:
+                    cg_bounce = st.number_input("Segment Bounce Rate (%):", min_value=0.00, max_value=100.00, value=0.79, step=0.01, format="%.2f")
+                    cg_pct_total = st.number_input("% of Total Emails Sent (%):", min_value=0.00, max_value=100.00, value=24.27, step=0.01, format="%.2f")
+
+                submit_camp_record = st.form_submit_button("🚀 Submit Segment Record Block", use_container_width=True)
+
+                if submit_camp_record:
+                    try:
+                        camp_payload = {
+                            "property_id": str(email_prop_id), # FIXED: Relational UUID token binding
+                            "snapshot_month": target_date_iso,
+                            "campaign_group_name": str(sel_group_name),
+                            "emails_delivered": int(cg_delivered),
+                            "avg_unique_open_rate": float(cg_open_rate / 100),
+                            "avg_unique_click_rate": float(cg_click_rate / 100),
+                            "avg_bounce_rate": float(cg_bounce / 100),
+                            "pct_of_total_emails_sent": float(cg_pct_total / 100)
+                        }
+                        supabase.table("campaign_group_records").upsert(camp_payload).execute()
+                        st.success(f"✅ Segment line for '{sel_group_name}' recorded successfully.")
+                        st.cache_data.clear()
+                    except Exception as e:
+                        st.error(f"Failed to compile campaign segment record array tracking: {e}")
+
+    # --- TAB 2: USER ACCESS & ROLES ---
+    with tabs[1]:
+        # User directory display stays unchanged...
+        st.subheader("👥 System User Directory")
+        search_q = st.text_input("🔍 Search by Email:", placeholder="Enter email to find user access records...", key="user_search_admin")
+        access_res = supabase.table("user_property_access").select("*, properties(property_name)").execute()
+        
+        if access_res.data:
+            df_access = pd.DataFrame(access_res.data)
+            df_access['Property Name'] = df_access['properties'].apply(lambda x: x['property_name'] if x else "N/A")
+            if search_q:
+                df_access = df_access[df_access['user_email'].str.contains(search_q, case=False)]
+            st.write(f"Showing **{len(df_access)}** access records:")
+            for i, row in df_access.iterrows():
+                label = f"👤 {row['user_email']} | {row['Property Name']} ({row['user_role']})"
+                with st.expander(label):
+                    c1, c2, c3 = st.columns([2, 2, 1])
+                    with c1:
+                        role_list = ["Viewer", "Manager", "Admin", "Super Admin"]
+                        current_role = row['user_role'] if row['user_role'] in role_list else "Viewer"
+                        new_role = st.selectbox("Role:", role_list, index=role_list.index(current_role), key=f"role_{row['id']}")
+                    with c2:
+                        st.write(f"**Linked Property:** {row['Property Name']}")
+                        st.caption(f"Access ID: {row['id']}")
+                    with c3:
+                        if st.button("Update", key=f"upd_{row['id']}", use_container_width=True):
+                            supabase.table("user_property_access").update({"user_role": new_role}).eq("id", row['id']).execute()
+                            st.success("Synced.")
+                            st.rerun()
+                        if st.button("🗑️ Revoke", key=f"rev_{row['id']}", type="secondary", use_container_width=True):
+                            try:
+                                supabase.table("user_property_access").delete().eq("id", row['id']).execute()
+                                st.warning(f"Access Revoked for {row['user_email']}")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Deletion Error: {e}")
+        else:
+            st.info("No user access records found.")
+
+        st.divider()
+        st.subheader("➕ Assign User to Additional Property")
+        with st.form("assign_multi_prop"):
+            target_email = st.text_input("User Email (Primary Key)", placeholder="user@company.com")
+            all_p_res = supabase.table("properties").select("id, property_name").execute()
+            p_opts = {p['property_name']: p['id'] for p in all_p_res.data} if all_p_res.data else {}
+            target_prop_name = st.selectbox("Select Property to Link", list(p_opts.keys()))
+            target_role = st.selectbox("Assign Role", ["Viewer", "Manager", "Admin", "Super Admin"])
+            
+            if st.form_submit_button("🚀 Link User to Property", use_container_width=True):
+                if target_email and target_prop_name:
+                    clean_email = target_email.lower().strip()
+                    target_uuid = p_opts.get(target_prop_name)
+                    check = supabase.table("user_property_access").select("*").eq("user_email", clean_email).eq("property_id", target_uuid).execute()
+                    if check.data:
+                        st.error(f"User {clean_email} already linked to {target_prop_name}.")
+                    else:
+                        try:
+                            supabase.table("user_property_access").insert({"user_email": clean_email, "property_id": target_uuid, "user_role": target_role}).execute()
+                            st.success(f"✅ Linked {clean_email}")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Database Error: {e}")
+
+    # --- TAB 3: SYSTEM HEALTH & SECURITY MATRIX ---
+    with tabs[2]:
+        st.write("### 📊 Database Orchestration Stats")
+        try:
+            prop_res = supabase.table("properties").select("*", count="exact").execute()
+            user_res = supabase.table("user_property_access").select("*", count="exact").execute()
+            h1, h2 = st.columns(2)
+            h1.metric("Active Tenants", prop_res.count or 0)
+            h2.metric("Managed Users", user_res.count or 0)
+        except Exception as e: 
+            st.error(f"Stats Error: {e}")
+            
+        st.divider()
+        st.subheader("🛡️ Global Role Authorization Matrix")
+        target_role_config = st.selectbox("Select Role to Configure:", ["Viewer", "Manager", "Admin", "Super Admin"], key="role_selector_admin")
+        existing_perms = {}
+        try:
+            perm_fetch = supabase.table("role_permissions").select("perms").eq("role_name", target_role_config).execute()
+            if perm_fetch.data:
+                existing_perms = perm_fetch.data[0].get('perms', {})
+        except Exception as e:
+            st.caption(f"Role '{target_role_config}' not yet initialized.")
+
+        capabilities = {
+            "view_analytics": "Access Attribution & Executive Dashboards",
+            "view_ledger": "Access Daily Ledger Audit",
+            "view_pr_scorecard": "Access PR Scorecard (Earned Media Tracking)",
+            "view_reports": "Access Master Audit Reports",
+            "run_simulations": "Access Predictive Scenario Simulator",
+            "manage_alerts": "Create/Delete Strategic Watchdogs",
+            "calibrate_ai": "Change AI Coefficients & ROAS",
+            "run_experiments": "Access A/B Experimentation Vault"
+        }
+        
+        with st.form(f"perm_matrix_form_{target_role_config}"):
+            st.write(f"Adjusting capabilities for: **{target_role_config}**")
+            updated_perms = {}
+            col1, col2 = st.columns(2)
+            for i, (cap_id, cap_desc) in enumerate(capabilities.items()):
+                target_col = col1 if i % 2 == 0 else col2
+                is_checked = existing_perms.get(cap_id, False)
+                updated_perms[cap_id] = target_col.checkbox(cap_desc, value=is_checked, key=f"check_{target_role_config}_{cap_id}")
+                
+            if st.form_submit_button("💾 Save Role Configuration", use_container_width=True):
+                try:
+                    supabase.table("role_permissions").upsert({"role_name": target_role_config, "perms": updated_perms}, on_conflict="role_name").execute()
+                    st.success(f"✅ '{target_role_config}' permissions are now live.")
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Security Matrix Sync Error: {e}")
 
 # =================================================================
 # 10. PAGE 2: DAILY LEDGER AUDIT (v60.9 - Forensic Backfill Ready)
