@@ -1714,7 +1714,7 @@ ENHANCED TOTAL IMPACT: ${curr['enhanced_revenue']:,.0f}"""
                 )
 
 # =================================================================
-# 16. PAGE 8: GLOBAL ADMIN CONSOLE (v25.1 - Marketing Snapshots Integrated)
+# 16. PAGE 8: GLOBAL ADMIN CONSOLE (v25.2 - Dynamic Month Fallbacks)
 # =================================================================
 elif page == "Global Admin Console":
     st.markdown(f"""
@@ -1757,21 +1757,28 @@ elif page == "Global Admin Console":
         st.divider()
 
         # =================================================================
-        # ADDED: EXECUTIVE SNAPSHOT VAULT COMPILER
+        # EXECUTIVE SNAPSHOT VAULT COMPILER (Dynamic Initialization)
         # =================================================================
         with st.expander("📊 Compile Monthly Executive Marketing Snapshots", expanded=False):
             st.markdown("### 📥 Ingest Monthly Performance Matrix")
             st.caption("Input high-level monthly marketing and brand alignment metrics directly into the Supabase database layer.")
 
             with st.form("marketing_snapshot_admin_form", clear_on_submit=False):
-                # 1. Scope Selections
+                # 1. Scope Selections (Dynamically Synced to Real-Time System Arrays)
                 c1, c2, c3 = st.columns(3)
                 with c1:
                     target_prop_id = st.selectbox("Target Property:", ["OTTAWA", "TORONTO", "VANCOUVER"], key="snap_admin_prop")
                 with c2:
-                    target_month = st.selectbox("Reporting Month:", ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"], index=3)
+                    # FIXED: Form now automatically identifies and highlights the current calendar month node
+                    month_list = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+                    current_month_idx = datetime.date.today().month - 1
+                    target_month = st.selectbox("Reporting Month:", month_list, index=current_month_idx)
                 with c3:
-                    target_year = st.selectbox("Reporting Year:", [2024, 2025, 2026, 2027], index=2)
+                    # FIXED: Form automatically maps and updates target years inline
+                    year_list = [2024, 2025, 2026, 2027]
+                    current_year = datetime.date.today().year
+                    current_year_idx = year_list.index(current_year) if current_year in year_list else 2
+                    target_year = st.selectbox("Reporting Year:", year_list, index=current_year_idx)
 
                 st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
 
@@ -1856,7 +1863,7 @@ elif page == "Global Admin Console":
                             "ytd_followers_net": int(in_ytd_followers),
                             "engagement_rate": float(in_engage),
                             "mom_engage_pct": float(in_mom_engage),
-                            "ytd_engagement_rate": float(in_ytd_engage),
+                            "ytd_engagement_rate": float(in_ytd_engagement_rate),
                             "share_rate": float(in_share),
                             "mom_share_pct": float(in_mom_share),
                             "ytd_share_rate": float(in_ytd_share),
