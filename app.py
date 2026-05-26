@@ -563,7 +563,7 @@ if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Dai
     st.stop()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v73.0 - Integrated Performance Matrix)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v73.1 - Current Snapshot Optimization)
 # =================================================================
 if page == "Executive Dashboard":
     
@@ -717,8 +717,8 @@ if page == "Executive Dashboard":
             st.write("### 📊 Executive Marketing & Brand Performance")
             st.caption("Comprehensive analysis tracking digital acquisition cost efficiencies alongside overall brand sentiment loops.")
 
-            # Live Fetch based on selected range start date or current month view context
-            snapshot = get_monthly_marketing_snapshot(st.session_state.current_property_id, start_p)
+            # FIXED: Forces lookup based on live system month ('today') to lock presentation to the newest vaulted analysis record
+            snapshot = get_monthly_marketing_snapshot(st.session_state.current_property_id, today)
 
             if snapshot:
                 # Extract and format parameters safely out of the active database snapshot data row
@@ -730,7 +730,7 @@ if page == "Executive Dashboard":
                 cpc_mom = f"{snapshot.get('mom_cpc_pct', 0):+.2f}%" if snapshot.get('mom_cpc_pct') is not None else "---"
                 cpc_ytd = f"${snapshot.get('ytd_cpc', 0):,.2f}" if snapshot.get('ytd_cpc') is not None else "---"
 
-                m_name = start_p.strftime('%B %Y')
+                m_name = today.strftime('%B %Y')
 
                 st.markdown(f"""
                 <div style="border: 1px solid #E1E8F0; border-radius: 12px; overflow: hidden; margin-bottom: 25px;">
@@ -753,7 +753,7 @@ if page == "Executive Dashboard":
                             <tr style="border-bottom: 1px solid #E1E8F0;">
                                 <td style="padding: 12px 16px; font-weight: 600; color: #0047AB;">CPC</td>
                                 <td style="padding: 12px 16px;">{cpc_val}</td>
-                                <td style="padding: 12px 16px; color: {'#28A745' if snapshot.get('mom_cpc_pct',0) <= 0 else '#FF4B4B'}; font-weight: 600;">{cpc_mom}</td>
+                                <td style="padding: 12px 16px;">{cpc_mom}</td>
                                 <td style="padding: 12px 16px;">{cpc_ytd}</td>
                             </tr>
                             <tr style="border-bottom: 1px solid #E1E8F0; background-color: #F8FAFC;">
@@ -803,7 +803,8 @@ if page == "Executive Dashboard":
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                st.info(f"📊 Marketing Snapshot matrix data not yet compiled for {start_p.strftime('%B %Y')}.")
+                # Clean error state fallback
+                st.info(f"📊 Marketing Snapshot matrix data not yet compiled for {today.strftime('%B %Y')}.")
 
             # 8. EXECUTIVE BRAND SENTIMENT PULSE
             st.divider()
