@@ -563,7 +563,7 @@ if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Dai
     st.stop()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v73.1 - Current Snapshot Optimization)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v73.2 - Absolute Newest Snapshot Mapping)
 # =================================================================
 if page == "Executive Dashboard":
     
@@ -717,10 +717,24 @@ if page == "Executive Dashboard":
             st.write("### 📊 Executive Marketing & Brand Performance")
             st.caption("Comprehensive analysis tracking digital acquisition cost efficiencies alongside overall brand sentiment loops.")
 
-            # FIXED: Forces lookup based on live system month ('today') to lock presentation to the newest vaulted analysis record
-            snapshot = get_monthly_marketing_snapshot(st.session_state.current_property_id, today)
+            # FIXED: Modified Live Fetch to pull the absolute newest record matching this property from Supabase
+            try:
+                latest_snap_res = supabase.table("monthly_marketing_snapshots")\
+                    .select("*")\
+                    .eq("property_id", st.session_state.current_property_id)\
+                    .order("snapshot_month", desc=True)\
+                    .limit(1)\
+                    .execute()
+                snapshot = latest_snap_res.data[0] if latest_snap_res.data else None
+            except Exception as e:
+                snapshot = None
+                st.caption(f"⚠️ Error loading latest snapshot matrix: {e}")
 
             if snapshot:
+                # FIXED: Extracting header month metadata directly from the returned database payload
+                db_month_date = pd.to_datetime(snapshot.get('snapshot_month'))
+                m_name = db_month_date.strftime('%B %Y')
+
                 # Extract and format parameters safely out of the active database snapshot data row
                 ctr_val = f"{float(snapshot.get('ctr', 0))*100:.2f}%" if snapshot.get('ctr') is not None else "---"
                 ctr_mom = f"+{snapshot['mom_ctr_pct']:.2f}%" if snapshot.get('mom_ctr_pct', 0) > 0 else f"{snapshot.get('mom_ctr_pct', 0):.2f}%"
@@ -729,8 +743,6 @@ if page == "Executive Dashboard":
                 cpc_val = f"${snapshot.get('cpc', 0):,.2f}" if snapshot.get('cpc') is not None else "---"
                 cpc_mom = f"{snapshot.get('mom_cpc_pct', 0):+.2f}%" if snapshot.get('mom_cpc_pct') is not None else "---"
                 cpc_ytd = f"${snapshot.get('ytd_cpc', 0):,.2f}" if snapshot.get('ytd_cpc') is not None else "---"
-
-                m_name = today.strftime('%B %Y')
 
                 st.markdown(f"""
                 <div style="border: 1px solid #E1E8F0; border-radius: 12px; overflow: hidden; margin-bottom: 25px;">
@@ -753,7 +765,7 @@ if page == "Executive Dashboard":
                             <tr style="border-bottom: 1px solid #E1E8F0;">
                                 <td style="padding: 12px 16px; font-weight: 600; color: #0047AB;">CPC</td>
                                 <td style="padding: 12px 16px;">{cpc_val}</td>
-                                <td style="padding: 12px 16px;">{cpc_mom}</td>
+                                <td style="padding: 12px 16px; color: {'#28A745' if snapshot.get('mom_cpc_pct',0) <= 0 else '#FF4B4B'}; font-weight: 600;">{cpc_mom}</td>
                                 <td style="padding: 12px 16px;">{cpc_ytd}</td>
                             </tr>
                             <tr style="border-bottom: 1px solid #E1E8F0; background-color: #F8FAFC;">
@@ -803,8 +815,7 @@ if page == "Executive Dashboard":
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                # Clean error state fallback
-                st.info(f"📊 Marketing Snapshot matrix data not yet compiled for {today.strftime('%B %Y')}.")
+                st.info("📊 No vaulted monthly performance snapshot records found for this property.")
 
             # 8. EXECUTIVE BRAND SENTIMENT PULSE
             st.divider()
