@@ -857,7 +857,7 @@ if page == "Executive Dashboard":
             with col_h2:
                 from dateutil.relativedelta import relativedelta
                 g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(3)]
-                g_labels = ["Current (Live)"] +
+                g_labels = ["Current (Live)"]
 
 # =================================================================
 # 10. PAGE 2: DAILY LEDGER AUDIT (v60.9 - Forensic Backfill Ready)
