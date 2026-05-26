@@ -503,19 +503,19 @@ def get_monthly_marketing_snapshot(property_id, target_date):
 def get_monthly_email_analytics(property_id):
     """
     Queries both macro email snapshots and campaign group breakdowns 
-    for the absolute latest available reporting month node in Supabase.
+    directly matching the core relational database property UUID key standard.
     """
     macro_data = None
     campaign_records = []
     
     try:
-        # 1. Pull the absolute newest macro snapshot row
-        p_name_raw = str(property_id).upper()
-        matched_token = "OTTAWA" if "OTTAWA" in p_name_raw else "TORONTO" if "TORONTO" in p_name_raw else "VANCOUVER" if "VANCOUVER" in p_name_raw else p_name_raw
+        # Enforce pure string type conversion for the property UUID token filter
+        target_uuid = str(property_id)
         
+        # 1. Pull the absolute newest macro snapshot row via explicit Property UUID
         mac_res = supabase.table("monthly_email_snapshots")\
             .select("*")\
-            .eq("property_id", matched_token)\
+            .eq("property_id", target_uuid)\
             .order("snapshot_month", desc=True)\
             .limit(1)\
             .execute()
@@ -524,10 +524,10 @@ def get_monthly_email_analytics(property_id):
             macro_data = mac_res.data[0]
             target_month = macro_data.get("snapshot_month")
             
-            # 2. Pull all campaign group segments tied to that exact same month snapshot
+            # 2. Pull campaign segments matching that exact same month & property UUID
             camp_res = supabase.table("campaign_group_records")\
                 .select("*")\
-                .eq("property_id", matched_token)\
+                .eq("property_id", target_uuid)\
                 .eq("snapshot_month", target_month)\
                 .order("emails_delivered", desc=True)\
                 .execute()
