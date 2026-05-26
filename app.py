@@ -1863,7 +1863,7 @@ elif page == "Global Admin Console":
                             "ytd_followers_net": int(in_ytd_followers),
                             "engagement_rate": float(in_engage),
                             "mom_engage_pct": float(in_mom_engage),
-                            "ytd_engagement_rate": float(in_ytd_engagement_rate),
+                            "ytd_engagement_rate": float(in_ytd_engage),
                             "share_rate": float(in_share),
                             "mom_share_pct": float(in_mom_share),
                             "ytd_share_rate": float(in_ytd_share),
