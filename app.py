@@ -601,7 +601,7 @@ if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Dai
     st.stop()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v74.1 - MoM Email Delta Indicators)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v74.2 - Corrected Python Null Identifiers)
 # =================================================================
 if page == "Executive Dashboard":
     
@@ -749,12 +749,6 @@ if page == "Executive Dashboard":
                 k5.metric("AI Accuracy", accuracy_display)
 
         # =================================================================
-        # CORE MARKETING RECOVERY TOKEN OVERRIDE
-        # =================================================================
-        p_name_raw = str(st.session_state.get('current_property_name', '')).upper()
-        matched_search_token = "OTTAWA" if "OTTAWA" in p_name_raw else "TORONTO" if "TORONTO" in p_name_raw else "VANCOUVER" if "VANCOUVER" in p_name_raw else p_name_raw
-
-        # =================================================================
         # EXECUTIVE MARKETING & BRAND PERFORMANCE MATRIX
         # =================================================================
         st.markdown("<br>", unsafe_allow_html=True)
@@ -897,45 +891,30 @@ if page == "Executive Dashboard":
     st.write("### 📨 Email Performance & Distribution Audit")
     st.caption("Detailed segment distribution tracking operational engagement metrics across active player database categories.")
 
-    # Fetch macro metrics list using the unified property database UUID signature
     macro_email_list, campaign_list = get_monthly_email_analytics(st.session_state.current_property_id)
 
     if macro_email_list:
-        # The first item in the sorted array represents the active calendar month snapshot
         macro_email = macro_email_list[0]
         em_month_date = pd.to_datetime(macro_email.get('snapshot_month'))
         em_month_name = em_month_date.strftime('%B %Y')
         
-        # --- BACKGROUND MOM DELTA CALCULATION MATRIX LAYER ---
-        # Initialize default comparison values in case a previous month doesn't exist yet
         deliv_delta, open_delta, reads_delta, bounce_delta, unsub_delta = None, None, None, None, None
         
         if len(macro_email_list) > 1:
             prev_email = macro_email_list[1]
-            
-            # 1. Total Volume Delta
             deliv_delta = float(macro_email.get('total_emails_delivered', 0) - prev_email.get('total_emails_delivered', 0))
-            
-            # 2. Unique Open Rate Delta
             open_delta = float(macro_email.get('avg_unique_open_rate', 0) - prev_email.get('avg_unique_open_rate', 0)) * 100
-            
-            # 3. Reads / Unique Open Delta
             reads_delta = float(macro_email.get('avg_reads_per_unique_open', 0) - prev_email.get('avg_reads_per_unique_open', 0))
-            
-            # 4. Bounce Rate Delta
             bounce_delta = float(macro_email.get('avg_bounce_rate', 0) - prev_email.get('avg_bounce_rate', 0)) * 100
-            
-            # 5. Unsubscribe Rate Delta
             unsub_delta = float(macro_email.get('avg_unsubscribe_rate', 0) - prev_email.get('avg_unsubscribe_rate', 0)) * 100
 
-        # Build clean string delta indicators for metrics card components
-        fmt_deliv_delta = f"{deliv_delta:+,.0f} MoM" if deliv_delta is not NULL else "---"
-        fmt_open_delta = f"{open_delta:+.2f}% MoM" if open_delta is not NULL else "---"
-        fmt_reads_delta = f"{reads_delta:+.2f} MoM" if reads_delta is not NULL else "---"
-        fmt_bounce_delta = f"{bounce_delta:+.2f}% MoM" if bounce_delta is not NULL else "---"
-        fmt_unsub_delta = f"{unsub_delta:+.2f}% MoM" if unsub_delta is not NULL else "---"
+        # FIXED: Resolved invalid syntax by converting NULL evaluation contexts to native Python None states
+        fmt_deliv_delta = f"{deliv_delta:+,.0f} MoM" if deliv_delta is not None else "---"
+        fmt_open_delta = f"{open_delta:+.2f}% MoM" if open_delta is not None else "---"
+        fmt_reads_delta = f"{reads_delta:+.2f} MoM" if reads_delta is not None else "---"
+        fmt_bounce_delta = f"{bounce_delta:+.2f}% MoM" if bounce_delta is not None else "---"
+        fmt_unsub_delta = f"{unsub_delta:+.2f}% MoM" if unsub_delta is not None else "---"
 
-        # Render Macro Metric Summary Cards with full live MoM delta tracking strings
         ec1, ec2, ec3, ec4, ec5 = st.columns(5)
         ec1.metric("Emails Delivered", f"{macro_email.get('total_emails_delivered', 0):,}", delta=fmt_deliv_delta)
         ec2.metric("Unique Open Rate", f"{float(macro_email.get('avg_unique_open_rate', 0))*100:.2f}%", delta=fmt_open_delta)
