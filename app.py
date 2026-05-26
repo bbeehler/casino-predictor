@@ -857,7 +857,51 @@ if page == "Executive Dashboard":
             with col_h2:
                 from dateutil.relativedelta import relativedelta
                 g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(3)]
-                g_labels = ["Current (Live)"]
+                g_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in g_months[1:]]
+                sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select_v72")
+
+            overall_score = 0.0
+            try:
+                base_query = supabase.table("sentiment_history").select("sentiment_score").eq("property_id", st.session_state.current_property_id)
+                if sel_period == "Current (Live)":
+                    g_res = base_query.order("timestamp", desc=True).limit(50).execute()
+                else:
+                    sel_date = g_months[g_labels.index(sel_period)]
+                    g_res = base_query.gte("timestamp", sel_date.strftime("%Y-%m-%d")).lte("timestamp", (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")).execute()
+                if g_res.data:
+                    mapped = [(s['sentiment_score'] * 2 - 1) if 0 <= s['sentiment_score'] <= 1 else s['sentiment_score'] for s in g_res.data]
+                    overall_score = np.mean(mapped)
+            except: 
+                pass
+            
+            st.metric(label=f"Property Pulse ({sel_period})", value=f"{overall_score:+.2f}")
+
+            # --- DYNAMIC ASSET GAUGES ---
+            try:
+                asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
+                tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall"]
+                gauge_cols = st.columns(len(tags))
+                for i, tag in enumerate(tags):
+                    with gauge_cols[i]:
+                        tag_score = 0.0
+                        try:
+                            t_query = supabase.table("sentiment_history").select("sentiment_score").eq("property_id", st.session_state.current_property_id).eq("asset", tag)
+                            if sel_period == "Current (Live)":
+                                t_res = t_query.order("timestamp", desc=True).limit(15).execute()
+                            else:
+                                t_res = t_query.gte("timestamp", sel_date.strftime("%Y-%m-%d")).lte("timestamp", (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")).execute()
+                            if t_res.data:
+                                tag_score = np.mean([(s['sentiment_score'] * 2 - 1) if 0 <= s['sentiment_score'] <= 1 else s['sentiment_score'] for s in t_res.data])
+                        except: 
+                            pass
+                        fig = go.Figure(go.Indicator(mode="gauge+number", value=tag_score, number={'font': {'size': 18}, 'valueformat': ".2f"},
+                                                     gauge={'axis': {'range': [-1, 1]}, 'bar': {'color': "#0047AB"},
+                                                            'steps': [{'range': [-1, -0.3], 'color': "#FF4B4B"}, {'range': [-0.3, 0.3], 'color': "#F0F2F6"}, {'range': [0.3, 1], 'color': "#28A745"}]}))
+                        fig.update_layout(height=140, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True, key=f"gauge_{tag}_{i}")
+                        st.markdown(f"<p style='text-align: center; font-size: 12px;'>{tag}</p>", unsafe_allow_html=True)
+            except: 
+                pass
 
 # =================================================================
 # 10. PAGE 2: DAILY LEDGER AUDIT (v60.9 - Forensic Backfill Ready)
