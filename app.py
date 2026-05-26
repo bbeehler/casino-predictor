@@ -1836,7 +1836,7 @@ ENHANCED TOTAL IMPACT: ${curr['enhanced_revenue']:,.0f}"""
                 )
 
 # =================================================================
-# 16. PAGE 8: GLOBAL ADMIN CONSOLE (v25.4 - Email Performance Sync)
+# 16. PAGE 8: GLOBAL ADMIN CONSOLE (v25.6 - Automated CSV Ingestion)
 # =================================================================
 elif page == "Global Admin Console":
     st.markdown(f"""
@@ -2012,150 +2012,149 @@ elif page == "Global Admin Console":
                         st.error(f"Failed to submit snapshot matrix array to table layer: {e}")
 
         # =================================================================
-        # EXECUTIVE EMAIL PERFORMANCE COMPILER BLOCK
+        # AUTOMATED EMAIL PERFORMANCE INGESTION CONSOLE
         # =================================================================
         with st.expander("📨 Compile Monthly Email Analytics Snapshot", expanded=False):
-            st.markdown("### 📈 Email Performance Summary Builder")
-            st.caption("Log monthly macro deliverability health alongside specific target segmentation campaign group data blocks.")
+            st.markdown("### 📈 Automated Email Analytics Processing Engine")
+            st.caption("Drop your marketing campaign statement CSV files directly below to automatically parse delivery and categorization metrics.")
 
-            # 1. Selection Scope Declarations
+            # Scope Declarations
             es_c1, es_c2, es_c3 = st.columns(3)
             with es_c1:
                 if live_prop_options:
-                    selected_email_prop = st.selectbox("Select Target Property:", list(live_prop_options.keys()), key="email_admin_prop_select")
+                    selected_email_prop = st.selectbox("Select Target Property ID Mapping:", list(live_prop_options.keys()), key="email_admin_prop_select")
                     email_prop_id = live_prop_options.get(selected_email_prop)
                 else:
                     email_prop_id = st.text_input("Target Property ID (Fallback URL):", key="email_admin_prop_fallback_text")
             with es_c2:
-                email_month = st.selectbox("Reporting Month Window:", month_list, index=current_month_idx, key="email_admin_month_select")
+                email_month = st.selectbox("Target Reporting Month Window:", month_list, index=current_month_idx, key="email_admin_month_select")
             with es_c3:
-                email_year = st.selectbox("Reporting Year Window:", year_list, index=current_year_idx, key="email_admin_year_select")
+                email_year = st.selectbox("Target Reporting Year Window:", year_list, index=current_year_idx, key="email_admin_year_select")
 
             months_map = {"January":"01","February":"02","March":"03","April":"04","May":"05","June":"06","July":"07","August":"08","September":"09","October":"10","November":"11","December":"12"}
             target_date_iso = f"{email_year}-{months_map[email_month]}-01"
 
             st.markdown("<hr style='margin:15px 0;'>", unsafe_allow_html=True)
-
-            # FORM A: Macro Performance Summary
-            st.write("#### 📊 Part A: Macro Performance Summary Indicators")
-            with st.form("macro_email_performance_form"):
-                mac_col1, mac_col2, mac_col3 = st.columns(3)
-                with mac_col1:
-                    mac_delivered = st.number_input("Total Emails Delivered:", min_value=0, value=1095966, step=1)
-                    mac_open_rate = st.number_input("Avg Unique Open Rate (%):", min_value=0.00, max_value=100.00, value=46.28, step=0.01, format="%.2f")
-                with mac_col2:
-                    mac_reads = st.number_input("Avg Reads per Unique Open:", min_value=0.00, value=1.71, step=0.01, format="%.2f")
-                    mac_bounce = st.number_input("Avg Bounce Rate (%):", min_value=0.00, max_value=100.00, value=1.47, step=0.01, format="%.2f")
-                with mac_col3:
-                    mac_unsub = st.number_input("Avg Unsubscribe Rate (%):", min_value=0.00, max_value=100.00, value=0.09, step=0.01, format="%.2f")
-
-                submit_macro_email = st.form_submit_button("🔒 Save Macro Summary Data", use_container_width=True)
-                
-                if submit_macro_email:
-                    try:
-                        macro_payload = {
-                            "property_id": str(email_prop_id),
-                            "snapshot_month": target_date_iso,
-                            "total_emails_delivered": int(mac_delivered),
-                            "avg_unique_open_rate": float(mac_open_rate / 100),
-                            "avg_reads_per_unique_open": float(mac_reads),
-                            "avg_bounce_rate": float(mac_bounce / 100),
-                            "avg_unsubscribe_rate": float(mac_unsub / 100)
-                        }
-                        supabase.table("monthly_email_snapshots").upsert(macro_payload).execute()
-                        st.success(f"✅ Macro Email Performance for {email_month} {email_year} safely saved to your core master data registry!")
-                        st.cache_data.clear()
-                    except Exception as e:
-                        st.error(f"Failed to record summary data block: {e}")
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            # FORM B: Campaign Group Breakdown Form
-            st.write("#### 🎯 Part B: Segment Campaign Group Registry")
-            core_groups = ["Core", "Hotel", "Entertainment", "Forever Young", "Bounce Back", "Free Bet", "Player Boutique", "Food", "Slot Pull Promo", "P200", "Fun in the Sun", "Other"]
-            if "custom_campaign_groups" not in st.session_state:
-                st.session_state.custom_campaign_groups = []
             
-            combined_campaign_options = core_groups + st.session_state.custom_campaign_groups
+            # Reusable structural grouping function based directly on statement layout logic
+            def get_campaign_category(name):
+                if pd.isna(name): return "Other"
+                n = str(name).upper()
+                if "FUN IN THE SUN" in n: return "Fun in the Sun"
+                if "PLAYER BOUTIQUE" in n: return "Player Boutique"
+                if "HOTEL" in n: return "Hotel"
+                if "CORE" in n: return "Core"
+                if "ENTERTAINMENT" in n: return "Entertainment"
+                if "FOREVER YOUNG" in n: return "Forever Young"
+                if "BOUNCE BACK" in n or "BOUCEBACK" in n: return "Bounce Back"
+                if "FREE BET" in n: return "Free Bet"
+                if "FOOD" in n or "RESTAURANT" in n or "CHOP" in n: return "Food"
+                if "SLOT PULL" in n: return "Slot Pull Promo"
+                if "P200" in n: return "P200"
+                return "Other"
 
-            new_camp_name = st.text_input("➕ Register Brand New Custom Campaign Group (Optional):", placeholder="Type new group name...")
-            if st.button("Add Custom Group Option to Dropdown Matrix"):
-                if new_camp_name and new_camp_name.strip() not in combined_campaign_options:
-                    st.session_state.custom_campaign_groups.append(new_camp_name.strip())
-                    st.success(f"Added '{new_camp_name.strip()}' to selection memory index arrays.")
-                    st.rerun()
-
-            with st.form("campaign_group_breakdown_form"):
-                cg_c1, cg_c2, cg_c3 = st.columns(3)
-                with cg_c1:
-                    sel_group_name = st.selectbox("Select Target Campaign Group Name:", combined_campaign_options)
-                    cg_delivered = st.number_input("Emails Delivered in Segment:", min_value=0, value=267863, step=1)
-                with cg_c2:
-                    cg_open_rate = st.number_input("Segment Unique Open Rate (%):", min_value=0.00, max_value=100.00, value=42.31, step=0.01, format="%.2f")
-                    cg_click_rate = st.number_input("Segment Unique Click Rate (%):", min_value=0.00, max_value=100.00, value=1.52, step=0.01, format="%.2f")
-                with cg_c3:
-                    cg_bounce = st.number_input("Segment Bounce Rate (%):", min_value=0.00, max_value=100.00, value=0.79, step=0.01, format="%.2f")
-                    cg_pct_total = st.number_input("% of Total Emails Sent (%):", min_value=0.00, max_value=100.00, value=24.27, step=0.01, format="%.2f")
-
-                submit_camp_record = st.form_submit_button("🚀 Submit Segment Record Block", use_container_width=True)
-
-                if submit_camp_record:
-                    try:
-                        camp_payload = {
-                            "property_id": str(email_prop_id),
-                            "snapshot_month": target_date_iso,
-                            "campaign_group_name": str(sel_group_name),
-                            "emails_delivered": int(cg_delivered),
-                            "avg_unique_open_rate": float(cg_open_rate / 100),
-                            "avg_unique_click_rate": float(cg_click_rate / 100),
-                            "avg_bounce_rate": float(cg_bounce / 100),
-                            "pct_of_total_emails_sent": float(cg_pct_total / 100)
-                        }
-                        supabase.table("campaign_group_records").upsert(camp_payload).execute()
-                        st.success(f"✅ Segment line for '{sel_group_name}' recorded under {email_month} {email_year} profile maps.")
-                        st.cache_data.clear()
-                    except Exception as e:
-                        st.error(f"Failed to compile campaign segment record array tracking: {e}")
+            # Drag and Drop File Interface
+            uploaded_csv = st.file_uploader("📥 Upload Campaign Performance Statement CSV:", type=["csv"], key="automated_email_csv_uploader")
+            
+            if uploaded_csv is not None:
+                try:
+                    # Ingest and structural row checks
+                    raw_csv_df = pd.read_csv(uploaded_csv)
+                    
+                    if "Campaign Name" in raw_csv_df.columns and "Emails Delivered" in raw_csv_df.columns:
+                        st.success("File verified successfully. Click button below to run parsing matrix loops.")
+                        
+                        if st.button("🚀 Process & Vault Statement to Supabase", use_container_width=True):
+                            # Split macro totals row from segment lines cleanly
+                            summary_row_idx = raw_csv_df[raw_csv_df["Campaign Name"] == "Total / Average"].index
+                            
+                            if len(summary_row_idx) > 0:
+                                total_idx = summary_row_idx[0]
+                                macro_row = raw_csv_df.iloc[total_idx]
+                                segments_df = raw_csv_df.iloc[0:total_idx].copy()
+                            else:
+                                macro_row = raw_csv_df.iloc[-1]
+                                segments_df = raw_csv_df.iloc[0:-1].copy()
+                                
+                            # 1. Parse and compile Part A indicators
+                            mac_delivered = int(macro_row["Emails Delivered"])
+                            mac_open_rate = float(macro_row["Unique Email Opens"] / mac_delivered)
+                            mac_reads = float(macro_row["Total Email Opens"] / macro_row["Unique Email Opens"])
+                            mac_bounce = float(macro_row["Total Email Bounces"] / mac_delivered)
+                            mac_unsub = float(macro_row["Unsubscribes"] / mac_delivered)
+                            
+                            macro_payload = {
+                                "property_id": str(email_prop_id),
+                                "snapshot_month": target_date_iso,
+                                "total_emails_delivered": mac_delivered,
+                                "avg_unique_open_rate": mac_open_rate,
+                                "avg_reads_per_unique_open": mac_reads,
+                                "avg_bounce_rate": mac_bounce,
+                                "avg_unsubscribe_rate": mac_unsub
+                            }
+                            supabase.table("monthly_email_snapshots").upsert(macro_payload).execute()
+                            
+                            # 2. Parse and compile Part B segmentations
+                            segments_df["Category"] = segments_df["Campaign Name"].apply(get_campaign_category)
+                            
+                            group_agg = segments_df.groupby("Category").agg(
+                                delivered=("Emails Delivered", "sum"),
+                                unique_opens=("Unique Email Opens", "sum"),
+                                unique_clicks=("Unique Email Clicks", "sum"),
+                                bounces=("Total Email Bounces", "sum")
+                            ).reset_index()
+                            
+                            for _, g_row in group_agg.iterrows():
+                                g_delivered = int(g_row["delivered"])
+                                if g_delivered == 0: continue
+                                
+                                camp_payload = {
+                                    "property_id": str(email_prop_id),
+                                    "snapshot_month": target_date_iso,
+                                    "campaign_group_name": str(g_row["Category"]),
+                                    "emails_delivered": g_delivered,
+                                    "avg_unique_open_rate": float(g_row["unique_opens"] / g_delivered),
+                                    "avg_unique_click_rate": float(g_row["unique_clicks"] / g_delivered),
+                                    "avg_bounce_rate": float(g_row["bounces"] / g_delivered),
+                                    "pct_of_total_emails_sent": float(g_delivered / mac_delivered)
+                                }
+                                supabase.table("campaign_group_records").upsert(camp_payload).execute()
+                                
+                            st.success(f"🎉 Complete structural statement compiled and safely vaulted for {email_month} {email_year}!")
+                            st.cache_data.clear()
+                    else:
+                        st.error("Invalid file design template schema. Statement must contain matching 'Campaign Name' and 'Emails Delivered' tracking indices.")
+                except Exception as e:
+                    st.error(f"Infiltration compiler process failure: {e}")
 
     # --- TAB 2: USER ACCESS & ROLES ---
     with tabs[1]:
         st.subheader("👥 System User Directory")
-    
-        # 1. SEARCH & FILTER
         search_q = st.text_input("🔍 Search by Email:", placeholder="Enter email to find user access records...", key="user_search_admin")
-        
-        # 2. FETCH & DISPLAY
         access_res = supabase.table("user_property_access").select("*, properties(property_name)").execute()
         
         if access_res.data:
             df_access = pd.DataFrame(access_res.data)
             df_access['Property Name'] = df_access['properties'].apply(lambda x: x['property_name'] if x else "N/A")
-            
             if search_q:
                 df_access = df_access[df_access['user_email'].str.contains(search_q, case=False)]
-
             st.write(f"Showing **{len(df_access)}** access records:")
-            
             for i, row in df_access.iterrows():
                 label = f"👤 {row['user_email']} | {row['Property Name']} ({row['user_role']})"
-                
                 with st.expander(label):
                     c1, c2, c3 = st.columns([2, 2, 1])
                     with c1:
                         role_list = ["Viewer", "Manager", "Admin", "Super Admin"]
                         current_role = row['user_role'] if row['user_role'] in role_list else "Viewer"
                         new_role = st.selectbox("Role:", role_list, index=role_list.index(current_role), key=f"role_{row['id']}")
-                    
                     with c2:
                         st.write(f"**Linked Property:** {row['Property Name']}")
                         st.caption(f"Access ID: {row['id']}")
-                    
                     with c3:
                         if st.button("Update", key=f"upd_{row['id']}", use_container_width=True):
                             supabase.table("user_property_access").update({"user_role": new_role}).eq("id", row['id']).execute()
                             st.success("Synced.")
                             st.rerun()
-                        
                         if st.button("🗑️ Revoke", key=f"rev_{row['id']}", type="secondary", use_container_width=True):
                             try:
                                 supabase.table("user_property_access").delete().eq("id", row['id']).execute()
@@ -2181,7 +2180,6 @@ elif page == "Global Admin Console":
                     clean_email = target_email.lower().strip()
                     target_uuid = p_opts.get(target_prop_name)
                     check = supabase.table("user_property_access").select("*").eq("user_email", clean_email).eq("property_id", target_uuid).execute()
-                    
                     if check.data:
                         st.error(f"User {clean_email} already linked to {target_prop_name}.")
                     else:
@@ -2207,9 +2205,7 @@ elif page == "Global Admin Console":
             
         st.divider()
         st.subheader("🛡️ Global Role Authorization Matrix")
-        
         target_role_config = st.selectbox("Select Role to Configure:", ["Viewer", "Manager", "Admin", "Super Admin"], key="role_selector_admin")
-        
         existing_perms = {}
         try:
             perm_fetch = supabase.table("role_permissions").select("perms").eq("role_name", target_role_config).execute()
