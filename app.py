@@ -1885,7 +1885,7 @@ elif page == "Global Admin Console":
             if st.form_submit_button("🚀 Build Property Tenant"):
                 if new_p_name:
                     try:
-                        -- 1. Create Property
+                        # 1. Create Property
                         p_res = supabase.table("properties").insert({
                             "property_name": new_p_name, 
                             "region": new_p_region
@@ -1893,7 +1893,7 @@ elif page == "Global Admin Console":
                         
                         if p_res.data:
                             new_id = p_res.data[0]['id']
-                            -- 2. Seed Coefficients (Copy Ottawa DNA)
+                            # 2. Seed Coefficients (Copy Ottawa DNA)
                             seed_coeffs = st.session_state.coeffs.copy()
                             seed_coeffs['property_id'] = new_id
                             if 'id' in seed_coeffs: del seed_coeffs['id']
@@ -2039,7 +2039,7 @@ elif page == "Global Admin Console":
                         st.error(f"Failed to submit snapshot matrix array to table layer: {e}")
 
         # =================================================================
-        # NEW: EXECUTIVE EMAIL PERFORMANCE COMPILER BLOCK
+        # EXECUTIVE EMAIL PERFORMANCE COMPILER BLOCK
         # =================================================================
         with st.expander("📨 Compile Monthly Email Analytics Snapshot", expanded=False):
             st.markdown("### 📈 Email Performance Summary Builder")
