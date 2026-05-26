@@ -602,7 +602,7 @@ if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Dai
     st.stop()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v73.5 - Email Distribution Integrated)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v73.6 - Structural Component Fix)
 # =================================================================
 if page == "Executive Dashboard":
     
@@ -666,7 +666,10 @@ if page == "Executive Dashboard":
 
         col_date, _ = st.columns([1.5, 2.5])
         with col_date:
-            pulse_range = st.date_input("Analysis Window:", value=st.session_state.pulse_range_v9, key="pulse_range_v9")
+            pulse_range = st.date_input("Analysis Window:", value=st.session_state.pulse_range_v9, key="pulse_range_v9_active")
+
+        # Create localized operational variables to protect backend calculations from missing date fields
+        start_p, end_p = first_of_month, last_of_month
 
         if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
             start_p, end_p = pulse_range
@@ -710,7 +713,7 @@ if page == "Executive Dashboard":
             fig_pulse.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10), template="plotly_white")
             st.plotly_chart(fig_pulse, use_container_width=True, key="pulse_chart_v72")
 
-            # 7. EXECUTIVE KPI GRID (Hard Rock Ottawa Vital Signs - Network Avg Removed)
+            # 7. EXECUTIVE KPI GRID 
             st.write(f"### 🏛️ {st.session_state.current_property_name} Vital Signs")
             k1, k2, k3, k4, k5 = st.columns(5)
             LTV_VAL, AVG_SPEND = 1900.00, 1100.31
@@ -721,13 +724,11 @@ if page == "Executive Dashboard":
             local_yield = (ledger_rev / total_act) if total_act > 0 else 0
             local_conv = (actual_signups / total_act * 100) if total_act > 0 else 0
             
-            # Dynamic MoM Calculation Layer
             mom_traffic_delta = total_act * 0.042  
             mom_yield_delta = local_yield * 0.019
             mom_enroll_delta = local_conv * 0.024
             mom_rev_delta = ledger_rev * 0.035
 
-            # --- ACCURACY SYNC ---
             df_audit = df_final[df_final['actual_traffic'] > 0].copy()
             if not df_audit.empty:
                 s_act, s_pred = df_audit['actual_traffic'].sum(), df_audit['predicted_traffic'].sum()
@@ -749,264 +750,259 @@ if page == "Executive Dashboard":
                 k4.metric("Ledger Revenue", f"${ledger_rev:,.0f}", delta=f"${mom_rev_delta:+,.0f} MoM")
                 k5.metric("AI Accuracy", accuracy_display)
 
-            # =================================================================
-            # DYNAMIC EXECUTIVE MARKETING & BRAND PERFORMANCE MATRIX
-            # =================================================================
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.write("### 📊 Executive Marketing & Brand Performance")
-            st.caption("Comprehensive analysis tracking digital acquisition cost efficiencies alongside overall brand sentiment loops.")
+        # =================================================================
+        # FIXED: EXECUTIVE MARKETING & BRAND PERFORMANCE MATRIX (OUTSIDE ENVELOPE)
+        # =================================================================
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.write("### 📊 Executive Marketing & Brand Performance")
+        st.caption("Comprehensive analysis tracking digital acquisition cost efficiencies alongside overall brand sentiment loops.")
 
-            p_name_raw = str(st.session_state.get('current_property_name', '')).upper()
-            matched_search_token = "OTTAWA" if "OTTAWA" in p_name_raw else "TORONTO" if "TORONTO" in p_name_raw else "VANCOUVER" if "VANCOUVER" in p_name_raw else p_name_raw
+        p_name_raw = str(st.session_state.get('current_property_name', '')).upper()
+        matched_search_token = "OTTAWA" if "OTTAWA" in p_name_raw else "TORONTO" if "TORONTO" in p_name_raw else "VANCOUVER" if "VANCOUVER" in p_name_raw else p_name_raw
 
-            try:
-                latest_snap_res = supabase.table("monthly_marketing_snapshots")\
-                    .select("*")\
-                    .eq("property_id", matched_search_token)\
-                    .order("snapshot_month", desc=True)\
-                    .limit(1)\
-                    .execute()
-                snapshot = latest_snap_res.data[0] if latest_snap_res.data else None
-            except Exception as e:
-                snapshot = None
-                st.caption(f"⚠️ Error loading latest snapshot matrix: {e}")
+        try:
+            latest_snap_res = supabase.table("monthly_marketing_snapshots")\
+                .select("*")\
+                .eq("property_id", matched_search_token)\
+                .order("snapshot_month", desc=True)\
+                .limit(1)\
+                .execute()
+            snapshot = latest_snap_res.data[0] if latest_snap_res.data else None
+        except Exception as e:
+            snapshot = None
+            st.caption(f"⚠️ Error loading latest snapshot matrix: {e}")
 
-            if snapshot:
-                db_month_date = pd.to_datetime(snapshot.get('snapshot_month'))
-                m_name = db_month_date.strftime('%B %Y')
+        if snapshot:
+            db_month_date = pd.to_datetime(snapshot.get('snapshot_month'))
+            m_name = db_month_date.strftime('%B %Y')
 
-                def s_get(field, default_val=0.0):
-                    val = snapshot.get(field)
-                    return default_val if val is None else float(val)
+            def s_get(field, default_val=0.0):
+                val = snapshot.get(field)
+                return default_val if val is None else float(val)
 
-                ctr_val = f"{s_get('ctr')*100:.2f}%" if snapshot.get('ctr') is not None else "---"
-                ctr_mom = f"{s_get('mom_ctr_pct'):+.2f}%" if snapshot.get('mom_ctr_pct') is not None else "---"
-                ctr_ytd = f"{s_get('ytd_ctr')*100:.2f}%" if snapshot.get('ytd_ctr') is not None else "---"
+            ctr_val = f"{s_get('ctr')*100:.2f}%" if snapshot.get('ctr') is not None else "---"
+            ctr_mom = f"{s_get('mom_ctr_pct'):+.2f}%" if snapshot.get('mom_ctr_pct') is not None else "---"
+            ctr_ytd = f"{s_get('ytd_ctr')*100:.2f}%" if snapshot.get('ytd_ctr') is not None else "---"
 
-                cpc_val = f"${s_get('cpc'):,.2f}" if snapshot.get('cpc') is not None else "---"
-                cpc_mom = f"{s_get('mom_cpc_pct'):+.2f}%" if snapshot.get('mom_cpc_pct') is not None else "---"
-                cpc_ytd = f"${s_get('ytd_cpc'):,.2f}" if snapshot.get('ytd_cpc') is not None else "---"
+            cpc_val = f"${s_get('cpc'):,.2f}" if snapshot.get('cpc') is not None else "---"
+            cpc_mom = f"{s_get('mom_cpc_pct'):+.2f}%" if snapshot.get('mom_cpc_pct') is not None else "---"
+            cpc_ytd = f"${s_get('ytd_cpc'):,.2f}" if snapshot.get('ytd_cpc') is not None else "---"
+            
+            imps_val = f"{int(s_get('impressions')):,}" if snapshot.get('impressions') is not None else "---"
+            imps_mom = f"{s_get('mom_imps_pct'):+.2f}%" if snapshot.get('mom_imps_pct') is not None else "---"
+            imps_ytd = f"{int(s_get('ytd_imps')):,}" if snapshot.get('ytd_imps') is not None else "---"
+
+            growth_val = f"{s_get('social_growth_rate'):.2f}%" if snapshot.get('social_growth_rate') is not None else "---"
+            growth_mom = f"{s_get('mom_growth_pct'):+.2f}%" if snapshot.get('mom_growth_pct') is not None else "---"
+            growth_ytd = f"{s_get('ytd_growth_rate'):.2f}%" if snapshot.get('ytd_growth_rate') is not None else "---"
+
+            followers_val = f"{int(s_get('followers')):,}" if snapshot.get('followers') is not None else "---"
+            followers_mom = f"{s_get('mom_followers_pct'):+.2f}%" if snapshot.get('mom_followers_pct') is not None else "---"
+            followers_ytd = f"{int(s_get('ytd_followers_net')):+,.0f} (Net)" if snapshot.get('ytd_followers_net') is not None else "---"
+
+            engage_val = f"{s_get('engagement_rate'):.2f}%" if snapshot.get('engagement_rate') is not None else "---"
+            engage_mom = f"{s_get('mom_engage_pct'):+.2f}%" if snapshot.get('mom_engage_pct') is not None else "---"
+            engage_ytd = f"{s_get('ytd_engagement_rate'):.2f}%" if snapshot.get('ytd_engagement_rate') is not None else "---"
+
+            share_val = f"{s_get('share_rate'):.2f} / post" if snapshot.get('share_rate') is not None else "---"
+            share_mom = f"{s_get('mom_share_pct'):+.2f}%" if snapshot.get('mom_share_pct') is not None else "---"
+            share_ytd = f"{s_get('ytd_share_rate'):.2f} / post" if snapshot.get('ytd_share_rate') is not None else "---"
+
+            senti_val = f"{s_get('sentiment_score'):.2f}" if snapshot.get('sentiment_score') is not None else "---"
+            senti_mom = f"{s_get('mom_sentiment_pct'):+.2f}%" if snapshot.get('mom_sentiment_pct') is not None else "---"
+            senti_ytd = f"{s_get('ytd_sentiment_score'):.2f}" if snapshot.get('ytd_sentiment_score') is not None else "---"
+
+            nps_val = f"{s_get('nps_pct'):.0f}%" if snapshot.get('nps_pct') is not None else "---"
+            nps_mom = f"{s_get('mom_nps_pct'):+.2f}%" if snapshot.get('mom_nps_pct') is not None else "N/A"
+            nps_ytd = f"{s_get('ytd_nps_pct'):.0f}%" if snapshot.get('ytd_nps_pct') is not None else "---"
+
+            st.markdown(f"""
+            <div style="border: 1px solid #E1E8F0; border-radius: 12px; overflow: hidden; margin-bottom: 25px;">
+                <table style="width:100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 0.95rem; text-align: left;">
+                    <thead>
+                        <tr style="background-color: #0F172A; color: #FFFFFF;">
+                            <th style="padding: 12px 16px; font-weight: 700;">Metrics</th>
+                            <th style="padding: 12px 16px; font-weight: 700;">{m_name}</th>
+                            <th style="padding: 12px 16px; font-weight: 700;">MoM</th>
+                            <th style="padding: 12px 16px; font-weight: 700;">YTD</th>
+                        </tr>
+                    </thead>
+                    <tbody style="background-color: #FFFFFF; color: #1A1C1E;">
+                        <tr style="border-bottom: 1px solid #E1E8F0; background-color: #F8FAFC;">
+                            <td style="padding: 12px 16px; font-weight: 600; color: #0047AB;">CTR</td>
+                            <td style="padding: 12px 16px;">{ctr_val}</td>
+                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_ctr_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{ctr_mom}</td>
+                            <td style="padding: 12px 16px;">{ctr_ytd}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #E1E8F0;">
+                            <td style="padding: 12px 16px; font-weight: 600; color: #0047AB;">CPC</td>
+                            <td style="padding: 12px 16px;">{cpc_val}</td>
+                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_cpc_pct') <= 0 else '#FF4B4B'}; font-weight: 600;">{cpc_mom}</td>
+                            <td style="padding: 12px 16px;">{cpc_ytd}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #E1E8F0; background-color: #F8FAFC;">
+                            <td style="padding: 12px 16px; font-weight: 600;">Impressions</td>
+                            <td style="padding: 12px 16px;">{imps_val}</td>
+                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_imps_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{imps_mom}</td>
+                            <td style="padding: 12px 16px;">{imps_ytd}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #E1E8F0;">
+                            <td style="padding: 12px 16px; font-weight: 600;">Social Growth Rate</td>
+                            <td style="padding: 12px 16px;">{growth_val}</td>
+                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_growth_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{growth_mom}</td>
+                            <td style="padding: 12px 16px;">{growth_ytd}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #E1E8F0; background-color: #F8FAFC;">
+                            <td style="padding: 12px 16px; font-weight: 600;">Followers</td>
+                            <td style="padding: 12px 16px;">{followers_val}</td>
+                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_followers_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{followers_mom}</td>
+                            <td style="padding: 12px 16px;">{followers_ytd}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #E1E8F0;">
+                            <td style="padding: 12px 16px; font-weight: 600;">Engagement Rate</td>
+                            <td style="padding: 12px 16px;">{engage_val}</td>
+                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_engage_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{engage_mom}</td>
+                            <td style="padding: 12px 16px;">{engage_ytd}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #E1E8F0; background-color: #F8FAFC;">
+                            <td style="padding: 12px 16px; font-weight: 600;">Share Rate</td>
+                            <td style="padding: 12px 16px;">{share_val}</td>
+                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_share_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{share_mom}</td>
+                            <td style="padding: 12px 16px;">{share_ytd}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #E1E8F0;">
+                            <td style="padding: 12px 16px; font-weight: 600; color: #FFCC00;">Sentiment Score</td>
+                            <td style="padding: 12px 16px;">{senti_val}</td>
+                            <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_sentiment_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{senti_mom}</td>
+                            <td style="padding: 12px 16px;">{senti_ytd}</td>
+                        </tr>
+                        <tr style="background-color: #F8FAFC;">
+                            <td style="padding: 12px 16px; font-weight: 600; color: #FFCC00;">Net Promoter Score</td>
+                            <td style="padding: 12px 16px;">{nps_val}</td>
+                            <td style="padding: 12px 16px; color: #64748B;">{nps_mom}</td>
+                            <td style="padding: 12px 16px;">{nps_ytd}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.info("📊 No vaulted monthly performance snapshot records found for this property.")
+
+        # =================================================================
+        # FIXED: LIVE EMAIL PERFORMANCE & DISTRIBUTION PANEL (OUTSIDE ENVELOPE)
+        # =================================================================
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.write("### 📨 Email Performance & Distribution Audit")
+        st.caption("Detailed segment distribution tracking operational engagement metrics across active player database categories.")
+
+        macro_email, campaign_list = get_monthly_email_analytics(st.session_state.current_property_name)
+
+        if macro_email:
+            em_month_date = pd.to_datetime(macro_email.get('snapshot_month'))
+            em_month_name = em_month_date.strftime('%B %Y')
+            
+            ec1, ec2, ec3, ec4, ec5 = st.columns(5)
+            ec1.metric("Emails Delivered", f"{macro_email.get('total_emails_delivered', 0):,}", help="Total volume output successfully processed.")
+            ec2.metric("Unique Open Rate", f"{float(macro_email.get('avg_unique_open_rate', 0))*100:.2f}%")
+            ec3.metric("Reads / Unique Open", f"{macro_email.get('avg_reads_per_unique_open', 0):.2f}")
+            ec4.metric("Avg Bounce Rate", f"{float(macro_email.get('avg_bounce_rate', 0))*100:.2f}%")
+            ec5.metric("Unsubscribe Rate", f"{float(macro_email.get('avg_unsubscribe_rate', 0))*100:.2f}%")
+            
+            if campaign_list:
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.write(f"#### 🎯 Campaign Group Breakdown Summary ({em_month_name})")
                 
-                imps_val = f"{int(s_get('impressions')):,}" if snapshot.get('impressions') is not None else "---"
-                imps_mom = f"{s_get('mom_imps_pct'):+.2f}%" if snapshot.get('mom_imps_pct') is not None else "---"
-                imps_ytd = f"{int(s_get('ytd_imps')):,}" if snapshot.get('ytd_imps') is not None else "---"
-
-                growth_val = f"{s_get('social_growth_rate'):.2f}%" if snapshot.get('social_growth_rate') is not None else "---"
-                growth_mom = f"{s_get('mom_growth_pct'):+.2f}%" if snapshot.get('mom_growth_pct') is not None else "---"
-                growth_ytd = f"{s_get('ytd_growth_rate'):.2f}%" if snapshot.get('ytd_growth_rate') is not None else "---"
-
-                followers_val = f"{int(s_get('followers')):,}" if snapshot.get('followers') is not None else "---"
-                followers_mom = f"{s_get('mom_followers_pct'):+.2f}%" if snapshot.get('mom_followers_pct') is not None else "---"
-                followers_ytd = f"{int(s_get('ytd_followers_net')):+,.0f} (Net)" if snapshot.get('ytd_followers_net') is not None else "---"
-
-                engage_val = f"{s_get('engagement_rate'):.2f}%" if snapshot.get('engagement_rate') is not None else "---"
-                engage_mom = f"{s_get('mom_engage_pct'):+.2f}%" if snapshot.get('mom_engage_pct') is not None else "---"
-                engage_ytd = f"{s_get('ytd_engagement_rate'):.2f}%" if snapshot.get('ytd_engagement_rate') is not None else "---"
-
-                share_val = f"{s_get('share_rate'):.2f} / post" if snapshot.get('share_rate') is not None else "---"
-                share_mom = f"{s_get('mom_share_pct'):+.2f}%" if snapshot.get('mom_share_pct') is not None else "---"
-                share_ytd = f"{s_get('ytd_share_rate'):.2f} / post" if snapshot.get('ytd_share_rate') is not None else "---"
-
-                senti_val = f"{s_get('sentiment_score'):.2f}" if snapshot.get('sentiment_score') is not None else "---"
-                senti_mom = f"{s_get('mom_sentiment_pct'):+.2f}%" if snapshot.get('mom_sentiment_pct') is not None else "---"
-                senti_ytd = f"{s_get('ytd_sentiment_score'):.2f}" if snapshot.get('ytd_sentiment_score') is not None else "---"
-
-                nps_val = f"{s_get('nps_pct'):.0f}%" if snapshot.get('nps_pct') is not None else "---"
-                nps_mom = f"{s_get('mom_nps_pct'):+.2f}%" if snapshot.get('mom_nps_pct') is not None else "N/A"
-                nps_ytd = f"{s_get('ytd_nps_pct'):.0f}%" if snapshot.get('ytd_nps_pct') is not None else "---"
-
+                table_rows_html = ""
+                for idx, camp in enumerate(campaign_list):
+                    bg_color = "#F8FAFC" if idx % 2 == 0 else "#FFFFFF"
+                    table_rows_html += f"""
+                    <tr style="border-bottom: 1px solid #E1E8F0; background-color: {bg_color};">
+                        <td style="padding: 12px 16px; font-weight: 600; color: #1E293B;">{camp.get('campaign_group_name', 'N/A')}</td>
+                        <td style="padding: 12px 16px; font-weight: 500;">{camp.get('emails_delivered', 0):,}</td>
+                        <td style="padding: 12px 16px; color: #0047AB; font-weight: 600;">{float(camp.get('avg_unique_open_rate', 0))*100:.2f}%</td>
+                        <td style="padding: 12px 16px; color: #28A745; font-weight: 600;">{float(camp.get('avg_unique_click_rate', 0))*100:.2f}%</td>
+                        <td style="padding: 12px 16px; color: #64748B;">{float(camp.get('avg_bounce_rate', 0))*100:.2f}%</td>
+                        <td style="padding: 12px 16px; font-weight: 600; text-align: right; color: #0F172A;">{float(camp.get('pct_of_total_emails_sent', 0))*100:.2f}%</td>
+                    </tr>
+                    """
+                    
                 st.markdown(f"""
-                <div style="border: 1px solid #E1E8F0; border-radius: 12px; overflow: hidden; margin-bottom: 25px;">
-                    <table style="width:100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 0.95rem; text-align: left;">
+                <div style="border: 1px solid #E1E8F0; border-radius: 12px; overflow: hidden; margin-top: 10px; margin-bottom: 25px;">
+                    <table style="width:100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 0.92rem; text-align: left;">
                         <thead>
                             <tr style="background-color: #0F172A; color: #FFFFFF;">
-                                <th style="padding: 12px 16px; font-weight: 700;">Metrics</th>
-                                <th style="padding: 12px 16px; font-weight: 700;">{m_name}</th>
-                                <th style="padding: 12px 16px; font-weight: 700;">MoM</th>
-                                <th style="padding: 12px 16px; font-weight: 700;">YTD</th>
+                                <th style="padding: 12px 16px; font-weight: 700;">Campaign Group</th>
+                                <th style="padding: 12px 16px; font-weight: 700;">Delivered</th>
+                                <th style="padding: 12px 16px; font-weight: 700;">Unique Open Rate</th>
+                                <th style="padding: 12px 16px; font-weight: 700;">Unique Click Rate</th>
+                                <th style="padding: 12px 16px; font-weight: 700;">Bounce Rate</th>
+                                <th style="padding: 12px 16px; font-weight: 700; text-align: right;">% of Total Emails Sent</th>
                             </tr>
                         </thead>
-                        <tbody style="background-color: #FFFFFF; color: #1A1C1E;">
-                            <tr style="border-bottom: 1px solid #E1E8F0; background-color: #F8FAFC;">
-                                <td style="padding: 12px 16px; font-weight: 600; color: #0047AB;">CTR</td>
-                                <td style="padding: 12px 16px;">{ctr_val}</td>
-                                <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_ctr_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{ctr_mom}</td>
-                                <td style="padding: 12px 16px;">{ctr_ytd}</td>
-                            </tr>
-                            <tr style="border-bottom: 1px solid #E1E8F0;">
-                                <td style="padding: 12px 16px; font-weight: 600; color: #0047AB;">CPC</td>
-                                <td style="padding: 12px 16px;">{cpc_val}</td>
-                                <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_cpc_pct') <= 0 else '#FF4B4B'}; font-weight: 600;">{cpc_mom}</td>
-                                <td style="padding: 12px 16px;">{cpc_ytd}</td>
-                            </tr>
-                            <tr style="border-bottom: 1px solid #E1E8F0; background-color: #F8FAFC;">
-                                <td style="padding: 12px 16px; font-weight: 600;">Impressions</td>
-                                <td style="padding: 12px 16px;">{imps_val}</td>
-                                <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_imps_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{imps_mom}</td>
-                                <td style="padding: 12px 16px;">{imps_ytd}</td>
-                            </tr>
-                            <tr style="border-bottom: 1px solid #E1E8F0;">
-                                <td style="padding: 12px 16px; font-weight: 600;">Social Growth Rate</td>
-                                <td style="padding: 12px 16px;">{growth_val}</td>
-                                <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_growth_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{growth_mom}</td>
-                                <td style="padding: 12px 16px;">{growth_ytd}</td>
-                            </tr>
-                            <tr style="border-bottom: 1px solid #E1E8F0; background-color: #F8FAFC;">
-                                <td style="padding: 12px 16px; font-weight: 600;">Followers</td>
-                                <td style="padding: 12px 16px;">{followers_val}</td>
-                                <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_followers_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{followers_mom}</td>
-                                <td style="padding: 12px 16px;">{followers_ytd}</td>
-                            </tr>
-                            <tr style="border-bottom: 1px solid #E1E8F0;">
-                                <td style="padding: 12px 16px; font-weight: 600;">Engagement Rate</td>
-                                <td style="padding: 12px 16px;">{engage_val}</td>
-                                <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_engage_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{engage_mom}</td>
-                                <td style="padding: 12px 16px;">{engage_ytd}</td>
-                            </tr>
-                            <tr style="border-bottom: 1px solid #E1E8F0; background-color: #F8FAFC;">
-                                <td style="padding: 12px 16px; font-weight: 600;">Share Rate</td>
-                                <td style="padding: 12px 16px;">{share_val}</td>
-                                <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_share_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{share_mom}</td>
-                                <td style="padding: 12px 16px;">{share_ytd}</td>
-                            </tr>
-                            <tr style="border-bottom: 1px solid #E1E8F0;">
-                                <td style="padding: 12px 16px; font-weight: 600; color: #FFCC00;">Sentiment Score</td>
-                                <td style="padding: 12px 16px;">{senti_val}</td>
-                                <td style="padding: 12px 16px; color: {'#28A745' if s_get('mom_sentiment_pct') >= 0 else '#FF4B4B'}; font-weight: 600;">{senti_mom}</td>
-                                <td style="padding: 12px 16px;">{senti_ytd}</td>
-                            </tr>
-                            <tr style="background-color: #F8FAFC;">
-                                <td style="padding: 12px 16px; font-weight: 600; color: #FFCC00;">Net Promoter Score</td>
-                                <td style="padding: 12px 16px;">{nps_val}</td>
-                                <td style="padding: 12px 16px; color: #64748B;">{nps_mom}</td>
-                                <td style="padding: 12px 16px;">{nps_ytd}</td>
-                            </tr>
+                        <tbody>
+                            {table_rows_html}
                         </tbody>
                     </table>
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                st.info("📊 No vaulted monthly performance snapshot records found for this property.")
+                st.info("No campaign segment distribution rows logged under this monthly block timeline.")
+        else:
+            st.info("📨 No vaulted monthly email metrics snapshot found for this property location.")
 
-            # =================================================================
-            # NEW: LIVE EMAIL PERFORMANCE & DISTRIBUTION PANEL
-            # =================================================================
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.write("### 📨 Email Performance & Distribution Audit")
-            st.caption("Detailed segment distribution tracking operational engagement metrics across active player database categories.")
+        # 8. EXECUTIVE BRAND SENTIMENT PULSE
+        st.divider()
+        st.write("### 🏛️ Executive Brand Sentiment Pulse")
+        col_h1, col_h2 = st.columns([2, 1])
+        with col_h2:
+            from dateutil.relativedelta import relativedelta
+            g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(3)]
+            g_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in g_months[1:]]
+            sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select_v72")
 
-            # Invoke the hydration helper to load data rows from Supabase dynamically
-            macro_email, campaign_list = get_monthly_email_analytics(st.session_state.current_property_name)
-
-            if macro_email:
-                em_month_date = pd.to_datetime(macro_email.get('snapshot_month'))
-                em_month_name = em_month_date.strftime('%B %Y')
-                
-                # Render Macro Metric Summary Cards (Matching Image 2 parameters perfectly)
-                ec1, ec2, ec3, ec4, ec5 = st.columns(5)
-                ec1.metric("Emails Delivered", f"{macro_email.get('total_emails_delivered', 0):,}", help="Total volume output successfully reached and processed by customer endpoints.")
-                ec2.metric("Unique Open Rate", f"{float(macro_email.get('avg_unique_open_rate', 0))*100:.2f}%")
-                ec3.metric("Reads / Unique Open", f"{macro_email.get('avg_reads_per_unique_open', 0):.2f}")
-                ec4.metric("Avg Bounce Rate", f"{float(macro_email.get('avg_bounce_rate', 0))*100:.2f}%", delta_color="inverse")
-                ec5.metric("Unsubscribe Rate", f"{float(macro_email.get('avg_unsubscribe_rate', 0))*100:.2f}%", delta_color="inverse")
-                
-                # Render Detailed Distribution Table Layout if records exist (Matching Image 1 parameters)
-                if campaign_list:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    st.write(f"#### 🎯 Campaign Group Breakdown Summary ({em_month_name})")
-                    
-                    table_rows_html = ""
-                    for idx, camp in enumerate(campaign_list):
-                        # Alternating zebra striping color variables for pure design contrast
-                        bg_color = "#F8FAFC" if idx % 2 == 0 else "#FFFFFF"
-                        
-                        table_rows_html += f"""
-                        <tr style="border-bottom: 1px solid #E1E8F0; background-color: {bg_color};">
-                            <td style="padding: 12px 16px; font-weight: 600; color: #1E293B;">{camp.get('campaign_group_name', 'N/A')}</td>
-                            <td style="padding: 12px 16px; font-weight: 500;">{camp.get('emails_delivered', 0):,}</td>
-                            <td style="padding: 12px 16px; color: #0047AB; font-weight: 600;">{float(camp.get('avg_unique_open_rate', 0))*100:.2f}%</td>
-                            <td style="padding: 12px 16px; color: #28A745; font-weight: 600;">{float(camp.get('avg_unique_click_rate', 0))*100:.2f}%</td>
-                            <td style="padding: 12px 16px; color: #64748B;">{float(camp.get('avg_bounce_rate', 0))*100:.2f}%</td>
-                            <td style="padding: 12px 16px; font-weight: 600; text-align: right; color: #0F172A;">{float(camp.get('pct_of_total_emails_sent', 0))*100:.2f}%</td>
-                        </tr>
-                        """
-                        
-                    st.markdown(f"""
-                    <div style="border: 1px solid #E1E8F0; border-radius: 12px; overflow: hidden; margin-top: 10px; margin-bottom: 25px;">
-                        <table style="width:100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 0.92rem; text-align: left;">
-                            <thead>
-                                <tr style="background-color: #0F172A; color: #FFFFFF;">
-                                    <th style="padding: 12px 16px; font-weight: 700;">Campaign Group</th>
-                                    <th style="padding: 12px 16px; font-weight: 700;">Delivered</th>
-                                    <th style="padding: 12px 16px; font-weight: 700;">Unique Open Rate</th>
-                                    <th style="padding: 12px 16px; font-weight: 700;">Unique Click Rate</th>
-                                    <th style="padding: 12px 16px; font-weight: 700;">Bounce Rate</th>
-                                    <th style="padding: 12px 16px; font-weight: 700; text-align: right;">% of Total Emails Sent</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {table_rows_html}
-                            </tbody>
-                        </table>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.info("No campaign segment distribution rows logged under this monthly block timeline.")
+        overall_score = 0.0
+        try:
+            base_query = supabase.table("sentiment_history").select("sentiment_score").eq("property_id", st.session_state.current_property_id)
+            if sel_period == "Current (Live)":
+                g_res = base_query.order("timestamp", desc=True).limit(50).execute()
             else:
-                st.info("📨 No vaulted monthly email metrics snapshot found for this property location.")
+                sel_date = g_months[g_labels.index(sel_period)]
+                g_res = base_query.gte("timestamp", sel_date.strftime("%Y-%m-%d")).lte("timestamp", (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")).execute()
+            if g_res.data:
+                mapped = [(s['sentiment_score'] * 2 - 1) if 0 <= s['sentiment_score'] <= 1 else s['sentiment_score'] for s in g_res.data]
+                overall_score = np.mean(mapped)
+        except: 
+            pass
+        
+        st.metric(label=f"Property Pulse ({sel_period})", value=f"{overall_score:+.2f}")
 
-            # 8. EXECUTIVE BRAND SENTIMENT PULSE
-            st.divider()
-            st.write("### 🏛️ Executive Brand Sentiment Pulse")
-            col_h1, col_h2 = st.columns([2, 1])
-            with col_h2:
-                from dateutil.relativedelta import relativedelta
-                g_months = [(today - relativedelta(months=i)).replace(day=1) for i in range(3)]
-                g_labels = ["Current (Live)"] + [m.strftime("%B %Y") for m in g_months[1:]]
-                sel_period = st.selectbox("Audit Period:", g_labels, key="gauge_historical_select_v72")
-
-            overall_score = 0.0
-            try:
-                base_query = supabase.table("sentiment_history").select("sentiment_score").eq("property_id", st.session_state.current_property_id)
-                if sel_period == "Current (Live)":
-                    g_res = base_query.order("timestamp", desc=True).limit(50).execute()
-                else:
-                    sel_date = g_months[g_labels.index(sel_period)]
-                    g_res = base_query.gte("timestamp", sel_date.strftime("%Y-%m-%d")).lte("timestamp", (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")).execute()
-                if g_res.data:
-                    mapped = [(s['sentiment_score'] * 2 - 1) if 0 <= s['sentiment_score'] <= 1 else s['sentiment_score'] for s in g_res.data]
-                    overall_score = np.mean(mapped)
-            except: 
-                pass
-            
-            st.metric(label=f"Property Pulse ({sel_period})", value=f"{overall_score:+.2f}")
-
-            # --- DYNAMIC ASSET GAUGES ---
-            try:
-                asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
-                tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall"]
-                gauge_cols = st.columns(len(tags))
-                for i, tag in enumerate(tags):
-                    with gauge_cols[i]:
-                        tag_score = 0.0
-                        try:
-                            t_query = supabase.table("sentiment_history").select("sentiment_score").eq("property_id", st.session_state.current_property_id).eq("asset", tag)
-                            if sel_period == "Current (Live)":
-                                t_res = t_query.order("timestamp", desc=True).limit(15).execute()
-                            else:
-                                t_res = t_query.gte("timestamp", sel_date.strftime("%Y-%m-%d")).lte("timestamp", (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")).execute()
-                            if t_res.data:
-                                tag_score = np.mean([(s['sentiment_score'] * 2 - 1) if 0 <= s['sentiment_score'] <= 1 else s['sentiment_score'] for s in t_res.data])
-                        except: 
-                            pass
-                        fig = go.Figure(go.Indicator(mode="gauge+number", value=tag_score, number={'font': {'size': 18}, 'valueformat': ".2f"},
-                                                     gauge={'axis': {'range': [-1, 1]}, 'bar': {'color': "#0047AB"},
-                                                            'steps': [{'range': [-1, -0.3], 'color': "#FF4B4B"}, {'range': [-0.3, 0.3], 'color': "#F0F2F6"}, {'range': [0.3, 1], 'color': "#28A745"}]}))
-                        fig.update_layout(height=140, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig, use_container_width=True, key=f"gauge_{tag}_{i}")
-                        st.markdown(f"<p style='text-align: center; font-size: 12px;'>{tag}</p>", unsafe_allow_html=True)
-            except: 
-                pass
+        # --- DYNAMIC ASSET GAUGES ---
+        try:
+            asset_res = supabase.table("property_assets").select("asset_name").eq("property_id", st.session_state.current_property_id).execute()
+            tags = [item['asset_name'] for item in asset_res.data] if asset_res.data else ["Overall"]
+            gauge_cols = st.columns(len(tags))
+            for i, tag in enumerate(tags):
+                with gauge_cols[i]:
+                    tag_score = 0.0
+                    try:
+                        t_query = supabase.table("sentiment_history").select("sentiment_score").eq("property_id", st.session_state.current_property_id).eq("asset", tag)
+                        if sel_period == "Current (Live)":
+                            t_res = t_query.order("timestamp", desc=True).limit(15).execute()
+                        else:
+                            t_res = t_query.gte("timestamp", sel_date.strftime("%Y-%m-%d")).lte("timestamp", (sel_date + relativedelta(months=1)).strftime("%Y-%m-%d")).execute()
+                        if t_res.data:
+                            tag_score = np.mean([(s['sentiment_score'] * 2 - 1) if 0 <= s['sentiment_score'] <= 1 else s['sentiment_score'] for s in t_res.data])
+                    except: 
+                        pass
+                    fig = go.Figure(go.Indicator(mode="gauge+number", value=tag_score, number={'font': {'size': 18}, 'valueformat': ".2f"},
+                                                 gauge={'axis': {'range': [-1, 1]}, 'bar': {'color': "#0047AB"},
+                                                        'steps': [{'range': [-1, -0.3], 'color': "#FF4B4B"}, {'range': [-0.3, 0.3], 'color': "#F0F2F6"}, {'range': [0.3, 1], 'color': "#28A745"}]}))
+                    fig.update_layout(height=140, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True, key=f"gauge_{tag}_{i}")
+                    st.markdown(f"<p style='text-align: center; font-size: 12px;'>{tag}</p>", unsafe_allow_html=True)
+        except: 
+            pass
 
 # =================================================================
 # 10. PAGE 2: DAILY LEDGER AUDIT (v60.9 - Forensic Backfill Ready)
