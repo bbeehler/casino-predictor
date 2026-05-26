@@ -500,6 +500,45 @@ def get_monthly_marketing_snapshot(property_id, target_date):
         st.sidebar.caption(f"⚠️ Marketing Matrix offline: {e}")
     return None
 
+def get_monthly_email_analytics(property_id):
+    """
+    Queries both macro email snapshots and campaign group breakdowns 
+    for the absolute latest available reporting month node in Supabase.
+    """
+    macro_data = None
+    campaign_records = []
+    
+    try:
+        # 1. Pull the absolute newest macro snapshot row
+        p_name_raw = str(property_id).upper()
+        matched_token = "OTTAWA" if "OTTAWA" in p_name_raw else "TORONTO" if "TORONTO" in p_name_raw else "VANCOUVER" if "VANCOUVER" in p_name_raw else p_name_raw
+        
+        mac_res = supabase.table("monthly_email_snapshots")\
+            .select("*")\
+            .eq("property_id", matched_token)\
+            .order("snapshot_month", desc=True)\
+            .limit(1)\
+            .execute()
+            
+        if mac_res.data:
+            macro_data = mac_res.data[0]
+            target_month = macro_data.get("snapshot_month")
+            
+            # 2. Pull all campaign group segments tied to that exact same month snapshot
+            camp_res = supabase.table("campaign_group_records")\
+                .select("*")\
+                .eq("property_id", matched_token)\
+                .eq("snapshot_month", target_month)\
+                .order("emails_delivered", desc=True)\
+                .execute()
+                
+            if camp_res.data:
+                campaign_records = camp_res.data
+    except Exception as e:
+        st.sidebar.caption(f"⚠️ Email analytics sync offline: {e}")
+        
+    return macro_data, campaign_records
+
 # =================================================================
 # BLOCK 8: DATA HYDRATION & VAULT GUARDRAIL
 # =================================================================
@@ -563,7 +602,7 @@ if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Dai
     st.stop()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v73.3 - Stable Metric Formatter)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v73.5 - Email Distribution Integrated)
 # =================================================================
 if page == "Executive Dashboard":
     
@@ -717,11 +756,13 @@ if page == "Executive Dashboard":
             st.write("### 📊 Executive Marketing & Brand Performance")
             st.caption("Comprehensive analysis tracking digital acquisition cost efficiencies alongside overall brand sentiment loops.")
 
-            # Live Fetch: Pull the absolute newest record matching this property from Supabase
+            p_name_raw = str(st.session_state.get('current_property_name', '')).upper()
+            matched_search_token = "OTTAWA" if "OTTAWA" in p_name_raw else "TORONTO" if "TORONTO" in p_name_raw else "VANCOUVER" if "VANCOUVER" in p_name_raw else p_name_raw
+
             try:
                 latest_snap_res = supabase.table("monthly_marketing_snapshots")\
                     .select("*")\
-                    .eq("property_id", st.session_state.current_property_id)\
+                    .eq("property_id", matched_search_token)\
                     .order("snapshot_month", desc=True)\
                     .limit(1)\
                     .execute()
@@ -731,16 +772,13 @@ if page == "Executive Dashboard":
                 st.caption(f"⚠️ Error loading latest snapshot matrix: {e}")
 
             if snapshot:
-                # Extract header month metadata directly from the returned database payload
                 db_month_date = pd.to_datetime(snapshot.get('snapshot_month'))
                 m_name = db_month_date.strftime('%B %Y')
 
-                # Helper functions to securely protect mathematical configurations against database null variables
                 def s_get(field, default_val=0.0):
                     val = snapshot.get(field)
                     return default_val if val is None else float(val)
 
-                # Extract and format parameters safely out of the active database snapshot data row
                 ctr_val = f"{s_get('ctr')*100:.2f}%" if snapshot.get('ctr') is not None else "---"
                 ctr_mom = f"{s_get('mom_ctr_pct'):+.2f}%" if snapshot.get('mom_ctr_pct') is not None else "---"
                 ctr_ytd = f"{s_get('ytd_ctr')*100:.2f}%" if snapshot.get('ytd_ctr') is not None else "---"
@@ -849,6 +887,73 @@ if page == "Executive Dashboard":
                 """, unsafe_allow_html=True)
             else:
                 st.info("📊 No vaulted monthly performance snapshot records found for this property.")
+
+            # =================================================================
+            # NEW: LIVE EMAIL PERFORMANCE & DISTRIBUTION PANEL
+            # =================================================================
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.write("### 📨 Email Performance & Distribution Audit")
+            st.caption("Detailed segment distribution tracking operational engagement metrics across active player database categories.")
+
+            # Invoke the hydration helper to load data rows from Supabase dynamically
+            macro_email, campaign_list = get_monthly_email_analytics(st.session_state.current_property_name)
+
+            if macro_email:
+                em_month_date = pd.to_datetime(macro_email.get('snapshot_month'))
+                em_month_name = em_month_date.strftime('%B %Y')
+                
+                # Render Macro Metric Summary Cards (Matching Image 2 parameters perfectly)
+                ec1, ec2, ec3, ec4, ec5 = st.columns(5)
+                ec1.metric("Emails Delivered", f"{macro_email.get('total_emails_delivered', 0):,}", help="Total volume output successfully reached and processed by customer endpoints.")
+                ec2.metric("Unique Open Rate", f"{float(macro_email.get('avg_unique_open_rate', 0))*100:.2f}%")
+                ec3.metric("Reads / Unique Open", f"{macro_email.get('avg_reads_per_unique_open', 0):.2f}")
+                ec4.metric("Avg Bounce Rate", f"{float(macro_email.get('avg_bounce_rate', 0))*100:.2f}%", delta_color="inverse")
+                ec5.metric("Unsubscribe Rate", f"{float(macro_email.get('avg_unsubscribe_rate', 0))*100:.2f}%", delta_color="inverse")
+                
+                # Render Detailed Distribution Table Layout if records exist (Matching Image 1 parameters)
+                if campaign_list:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.write(f"#### 🎯 Campaign Group Breakdown Summary ({em_month_name})")
+                    
+                    table_rows_html = ""
+                    for idx, camp in enumerate(campaign_list):
+                        # Alternating zebra striping color variables for pure design contrast
+                        bg_color = "#F8FAFC" if idx % 2 == 0 else "#FFFFFF"
+                        
+                        table_rows_html += f"""
+                        <tr style="border-bottom: 1px solid #E1E8F0; background-color: {bg_color};">
+                            <td style="padding: 12px 16px; font-weight: 600; color: #1E293B;">{camp.get('campaign_group_name', 'N/A')}</td>
+                            <td style="padding: 12px 16px; font-weight: 500;">{camp.get('emails_delivered', 0):,}</td>
+                            <td style="padding: 12px 16px; color: #0047AB; font-weight: 600;">{float(camp.get('avg_unique_open_rate', 0))*100:.2f}%</td>
+                            <td style="padding: 12px 16px; color: #28A745; font-weight: 600;">{float(camp.get('avg_unique_click_rate', 0))*100:.2f}%</td>
+                            <td style="padding: 12px 16px; color: #64748B;">{float(camp.get('avg_bounce_rate', 0))*100:.2f}%</td>
+                            <td style="padding: 12px 16px; font-weight: 600; text-align: right; color: #0F172A;">{float(camp.get('pct_of_total_emails_sent', 0))*100:.2f}%</td>
+                        </tr>
+                        """
+                        
+                    st.markdown(f"""
+                    <div style="border: 1px solid #E1E8F0; border-radius: 12px; overflow: hidden; margin-top: 10px; margin-bottom: 25px;">
+                        <table style="width:100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 0.92rem; text-align: left;">
+                            <thead>
+                                <tr style="background-color: #0F172A; color: #FFFFFF;">
+                                    <th style="padding: 12px 16px; font-weight: 700;">Campaign Group</th>
+                                    <th style="padding: 12px 16px; font-weight: 700;">Delivered</th>
+                                    <th style="padding: 12px 16px; font-weight: 700;">Unique Open Rate</th>
+                                    <th style="padding: 12px 16px; font-weight: 700;">Unique Click Rate</th>
+                                    <th style="padding: 12px 16px; font-weight: 700;">Bounce Rate</th>
+                                    <th style="padding: 12px 16px; font-weight: 700; text-align: right;">% of Total Emails Sent</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {table_rows_html}
+                            </tbody>
+                        </table>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.info("No campaign segment distribution rows logged under this monthly block timeline.")
+            else:
+                st.info("📨 No vaulted monthly email metrics snapshot found for this property location.")
 
             # 8. EXECUTIVE BRAND SENTIMENT PULSE
             st.divider()
@@ -1758,7 +1863,7 @@ ENHANCED TOTAL IMPACT: ${curr['enhanced_revenue']:,.0f}"""
                 )
 
 # =================================================================
-# 16. PAGE 8: GLOBAL ADMIN CONSOLE (v25.3 - Unified UUID Synchronization)
+# 16. PAGE 8: GLOBAL ADMIN CONSOLE (v25.4 - Email Performance Sync)
 # =================================================================
 elif page == "Global Admin Console":
     st.markdown(f"""
@@ -1780,7 +1885,7 @@ elif page == "Global Admin Console":
             if st.form_submit_button("🚀 Build Property Tenant"):
                 if new_p_name:
                     try:
-                        # 1. Create Property
+                        -- 1. Create Property
                         p_res = supabase.table("properties").insert({
                             "property_name": new_p_name, 
                             "region": new_p_region
@@ -1788,7 +1893,7 @@ elif page == "Global Admin Console":
                         
                         if p_res.data:
                             new_id = p_res.data[0]['id']
-                            # 2. Seed Coefficients (Copy Ottawa DNA)
+                            -- 2. Seed Coefficients (Copy Ottawa DNA)
                             seed_coeffs = st.session_state.coeffs.copy()
                             seed_coeffs['property_id'] = new_id
                             if 'id' in seed_coeffs: del seed_coeffs['id']
@@ -1800,44 +1905,43 @@ elif page == "Global Admin Console":
 
         st.divider()
 
+        # Live synchronization fetch to map raw text dropdown choices to correct relational database UUID keys
+        try:
+            db_prop_query = supabase.table("properties").select("id, property_name").execute()
+            live_prop_options = {p['property_name']: p['id'] for p in db_prop_query.data} if db_prop_query.data else {}
+        except Exception as e:
+            live_prop_options = {}
+            st.error(f"Failed to synchronize admin properties list: {e}")
+
+        # Shared Dynamic Date Ingestion Setup
+        month_list = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+        current_month_idx = datetime.date.today().month - 1
+        year_list = [2024, 2025, 2026, 2027]
+        current_year = datetime.date.today().year
+        current_year_idx = year_list.index(current_year) if current_year in year_list else 2
+
         # =================================================================
-        # EXECUTIVE SNAPSHOT VAULT COMPILER (Dynamic UUID Ingestion)
+        # EXECUTIVE SNAPSHOT VAULT COMPILER
         # =================================================================
         with st.expander("📊 Compile Monthly Executive Marketing Snapshots", expanded=False):
             st.markdown("### 📥 Ingest Monthly Performance Matrix")
             st.caption("Input high-level monthly marketing and brand alignment metrics directly into the Supabase database layer.")
 
-            # Live synchronization fetch to map raw text dropdown choices to correct relational database UUID keys
-            try:
-                db_prop_query = supabase.table("properties").select("id, property_name").execute()
-                live_prop_options = {p['property_name']: p['id'] for p in db_prop_query.data} if db_prop_query.data else {}
-            except Exception as e:
-                live_prop_options = {}
-                st.error(f"Failed to synchronize admin properties list: {e}")
-
             with st.form("marketing_snapshot_admin_form", clear_on_submit=False):
-                # 1. Scope Selections (Dynamically Synced to Real-Time System Arrays)
                 c1, c2, c3 = st.columns(3)
                 with c1:
-                    # FIXED: Now displays literal naming contexts while safely outputting backend UUID tokens on evaluation
                     if live_prop_options:
                         selected_prop_display = st.selectbox("Target Property:", list(live_prop_options.keys()), key="snap_admin_prop")
                         target_prop_id = live_prop_options.get(selected_prop_display)
                     else:
                         target_prop_id = st.text_input("Target Property ID (Fallback):", placeholder="Enter raw property UUID...", key="snap_admin_prop_fallback")
                 with c2:
-                    month_list = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-                    current_month_idx = datetime.date.today().month - 1
-                    target_month = st.selectbox("Reporting Month:", month_list, index=current_month_idx)
+                    target_month = st.selectbox("Reporting Month:", month_list, index=current_month_idx, key="snap_admin_month")
                 with c3:
-                    year_list = [2024, 2025, 2026, 2027]
-                    current_year = datetime.date.today().year
-                    current_year_idx = year_list.index(current_year) if current_year in year_list else 2
-                    target_year = st.selectbox("Reporting Year:", year_list, index=current_year_idx)
+                    target_year = st.selectbox("Reporting Year:", year_list, index=current_year_idx, key="snap_admin_year")
 
                 st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
 
-                # 2. Paid Media Core Inputs
                 st.markdown("#### 🎯 Paid Media Efficiencies")
                 m_col1, m_col2, m_col3 = st.columns(3)
                 with m_col1:
@@ -1855,7 +1959,6 @@ elif page == "Global Admin Console":
 
                 st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
 
-                # 3. Audience Growth & Sentiment Inputs
                 st.markdown("#### ⚖️ Audience Engagement & Brand Equity")
                 a_col1, a_col2, a_col3 = st.columns(3)
                 with a_col1:
@@ -1898,7 +2001,6 @@ elif page == "Global Admin Console":
                         months_map = {"January":"01","February":"02","March":"03","April":"04","May":"05","June":"06","July":"07","August":"08","September":"09","October":"10","November":"11","December":"12"}
                         date_iso_str = f"{target_year}-{months_map[target_month]}-01"
 
-                        # Build transaction payload mapped cleanly to core property UUID signatures
                         snapshot_payload = {
                             "property_id": str(target_prop_id),
                             "snapshot_month": date_iso_str,
@@ -1935,6 +2037,112 @@ elif page == "Global Admin Console":
                         st.cache_data.clear()
                     except Exception as e:
                         st.error(f"Failed to submit snapshot matrix array to table layer: {e}")
+
+        # =================================================================
+        # NEW: EXECUTIVE EMAIL PERFORMANCE COMPILER BLOCK
+        # =================================================================
+        with st.expander("📨 Compile Monthly Email Analytics Snapshot", expanded=False):
+            st.markdown("### 📈 Email Performance Summary Builder")
+            st.caption("Log monthly macro deliverability health alongside specific target segmentation campaign group data blocks.")
+
+            # 1. Selection Scope Declarations
+            es_c1, es_c2, es_c3 = st.columns(3)
+            with es_c1:
+                if live_prop_options:
+                    selected_email_prop = st.selectbox("Select Target Property:", list(live_prop_options.keys()), key="email_admin_prop_select")
+                    email_prop_id = live_prop_options.get(selected_email_prop)
+                else:
+                    email_prop_id = st.text_input("Target Property ID (Fallback URL):", key="email_admin_prop_fallback_text")
+            with es_c2:
+                email_month = st.selectbox("Reporting Month Window:", month_list, index=current_month_idx, key="email_admin_month_select")
+            with es_c3:
+                email_year = st.selectbox("Reporting Year Window:", year_list, index=current_year_idx, key="email_admin_year_select")
+
+            months_map = {"January":"01","February":"02","March":"03","April":"04","May":"05","June":"06","July":"07","August":"08","September":"09","October":"10","November":"11","December":"12"}
+            target_date_iso = f"{email_year}-{months_map[email_month]}-01"
+
+            st.markdown("<hr style='margin:15px 0;'>", unsafe_allow_html=True)
+
+            # FORM A: Macro Performance Summary
+            st.write("#### 📊 Part A: Macro Performance Summary Indicators")
+            with st.form("macro_email_performance_form"):
+                mac_col1, mac_col2, mac_col3 = st.columns(3)
+                with mac_col1:
+                    mac_delivered = st.number_input("Total Emails Delivered:", min_value=0, value=1095966, step=1)
+                    mac_open_rate = st.number_input("Avg Unique Open Rate (%):", min_value=0.00, max_value=100.00, value=46.28, step=0.01, format="%.2f")
+                with mac_col2:
+                    mac_reads = st.number_input("Avg Reads per Unique Open:", min_value=0.00, value=1.71, step=0.01, format="%.2f")
+                    mac_bounce = st.number_input("Avg Bounce Rate (%):", min_value=0.00, max_value=100.00, value=1.47, step=0.01, format="%.2f")
+                with mac_col3:
+                    mac_unsub = st.number_input("Avg Unsubscribe Rate (%):", min_value=0.00, max_value=100.00, value=0.09, step=0.01, format="%.2f")
+
+                submit_macro_email = st.form_submit_button("🔒 Save Macro Summary Data", use_container_width=True)
+                
+                if submit_macro_email:
+                    try:
+                        macro_payload = {
+                            "property_id": str(email_prop_id),
+                            "snapshot_month": target_date_iso,
+                            "total_emails_delivered": int(mac_delivered),
+                            "avg_unique_open_rate": float(mac_open_rate / 100),
+                            "avg_reads_per_unique_open": float(mac_reads),
+                            "avg_bounce_rate": float(mac_bounce / 100),
+                            "avg_unsubscribe_rate": float(mac_unsub / 100)
+                        }
+                        supabase.table("monthly_email_snapshots").upsert(macro_payload).execute()
+                        st.success(f"✅ Macro Email Performance for {email_month} {email_year} safely saved to your core master data registry!")
+                        st.cache_data.clear()
+                    except Exception as e:
+                        st.error(f"Failed to record summary data block: {e}")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # FORM B: Campaign Group Breakdown Form
+            st.write("#### 🎯 Part B: Segment Campaign Group Registry")
+            core_groups = ["Core", "Hotel", "Entertainment", "Forever Young", "Bounce Back", "Free Bet", "Player Boutique", "Food", "Slot Pull Promo", "P200", "Fun in the Sun", "Other"]
+            if "custom_campaign_groups" not in st.session_state:
+                st.session_state.custom_campaign_groups = []
+            
+            combined_campaign_options = core_groups + st.session_state.custom_campaign_groups
+
+            new_camp_name = st.text_input("➕ Register Brand New Custom Campaign Group (Optional):", placeholder="Type new group name...")
+            if st.button("Add Custom Group Option to Dropdown Matrix"):
+                if new_camp_name and new_camp_name.strip() not in combined_campaign_options:
+                    st.session_state.custom_campaign_groups.append(new_camp_name.strip())
+                    st.success(f"Added '{new_camp_name.strip()}' to selection memory index arrays.")
+                    st.rerun()
+
+            with st.form("campaign_group_breakdown_form"):
+                cg_c1, cg_c2, cg_c3 = st.columns(3)
+                with cg_c1:
+                    sel_group_name = st.selectbox("Select Target Campaign Group Name:", combined_campaign_options)
+                    cg_delivered = st.number_input("Emails Delivered in Segment:", min_value=0, value=267863, step=1)
+                with cg_c2:
+                    cg_open_rate = st.number_input("Segment Unique Open Rate (%):", min_value=0.00, max_value=100.00, value=42.31, step=0.01, format="%.2f")
+                    cg_click_rate = st.number_input("Segment Unique Click Rate (%):", min_value=0.00, max_value=100.00, value=1.52, step=0.01, format="%.2f")
+                with cg_c3:
+                    cg_bounce = st.number_input("Segment Bounce Rate (%):", min_value=0.00, max_value=100.00, value=0.79, step=0.01, format="%.2f")
+                    cg_pct_total = st.number_input("% of Total Emails Sent (%):", min_value=0.00, max_value=100.00, value=24.27, step=0.01, format="%.2f")
+
+                submit_camp_record = st.form_submit_button("🚀 Submit Segment Record Block", use_container_width=True)
+
+                if submit_camp_record:
+                    try:
+                        camp_payload = {
+                            "property_id": str(email_prop_id),
+                            "snapshot_month": target_date_iso,
+                            "campaign_group_name": str(sel_group_name),
+                            "emails_delivered": int(cg_delivered),
+                            "avg_unique_open_rate": float(cg_open_rate / 100),
+                            "avg_unique_click_rate": float(cg_click_rate / 100),
+                            "avg_bounce_rate": float(cg_bounce / 100),
+                            "pct_of_total_emails_sent": float(cg_pct_total / 100)
+                        }
+                        supabase.table("campaign_group_records").upsert(camp_payload).execute()
+                        st.success(f"✅ Segment line for '{sel_group_name}' recorded under {email_month} {email_year} profile maps.")
+                        st.cache_data.clear()
+                    except Exception as e:
+                        st.error(f"Failed to compile campaign segment record array tracking: {e}")
 
     # --- TAB 2: USER ACCESS & ROLES ---
     with tabs[1]:
