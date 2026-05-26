@@ -1713,7 +1713,7 @@ ENHANCED TOTAL IMPACT: ${curr['enhanced_revenue']:,.0f}"""
                 )
 
 # =================================================================
-# 16. PAGE 8: GLOBAL ADMIN CONSOLE (v25.0 RBAC & PR Integrated)
+# 16. PAGE 8: GLOBAL ADMIN CONSOLE (v25.1 - Marketing Snapshots Integrated)
 # =================================================================
 elif page == "Global Admin Console":
     st.markdown(f"""
@@ -1753,12 +1753,131 @@ elif page == "Global Admin Console":
                     except Exception as e:
                         st.error(f"Provisioning Error: {e}")
 
+        st.divider()
+
+        # =================================================================
+        # ADDED: EXECUTIVE SNAPSHOT VAULT COMPILER
+        # =================================================================
+        with st.expander("📊 Compile Monthly Executive Marketing Snapshots", expanded=False):
+            st.markdown("### 📥 Ingest Monthly Performance Matrix")
+            st.caption("Input high-level monthly marketing and brand alignment metrics directly into the Supabase database layer.")
+
+            with st.form("marketing_snapshot_admin_form", clear_on_submit=False):
+                # 1. Scope Selections
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    target_prop_id = st.selectbox("Target Property:", ["OTTAWA", "TORONTO", "VANCOUVER"], key="snap_admin_prop")
+                with c2:
+                    target_month = st.selectbox("Reporting Month:", ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"], index=3)
+                with c3:
+                    target_year = st.selectbox("Reporting Year:", [2024, 2025, 2026, 2027], index=2)
+
+                st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+
+                # 2. Paid Media Core Inputs
+                st.markdown("#### 🎯 Paid Media Efficiencies")
+                m_col1, m_col2, m_col3 = st.columns(3)
+                with m_col1:
+                    in_ctr = st.number_input("Click-Through Rate (CTR %):", min_value=0.00, max_value=100.00, value=0.88, step=0.01, format="%.2f")
+                    in_mom_ctr = st.number_input("CTR MoM Change (%):", value=300.00, step=1.00)
+                    in_ytd_ctr = st.number_input("YTD CTR (%):", min_value=0.00, max_value=100.00, value=0.25, step=0.01, format="%.2f")
+                with m_col2:
+                    in_cpc = st.number_input("Cost Per Click (CPC $):", min_value=0.00, value=0.95, step=0.01, format="%.2f")
+                    in_mom_cpc = st.number_input("CPC MoM Change (%):", value=-54.76, step=0.01)
+                    in_ytd_cpc = st.number_input("YTD CPC ($):", min_value=0.00, value=2.53, step=0.01, format="%.2f")
+                with m_col3:
+                    in_imps = st.number_input("Impressions Count:", min_value=0, value=37096000, step=1000)
+                    in_mom_imps = st.number_input("Impressions MoM Change (%):", value=86.42, step=0.01)
+                    in_ytd_imps = st.number_input("YTD Total Impressions:", min_value=0, value=80068400, step=1000)
+
+                st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+
+                # 3. Audience Growth & Sentiment Inputs
+                st.markdown("#### ⚖️ Audience Engagement & Brand Equity")
+                a_col1, a_col2, a_col3 = st.columns(3)
+                with a_col1:
+                    in_growth = st.number_input("Social Growth Rate (%):", value=7.59, step=0.01)
+                    in_mom_growth = st.number_input("Social Growth MoM Change (%):", value=83.78, step=0.01)
+                    in_ytd_growth = st.number_input("YTD Social Growth Rate (%):", value=5.11, step=0.01)
+                with a_col2:
+                    in_followers = st.number_input("Total Followers:", min_value=0, value=39240, step=10)
+                    in_mom_followers = st.number_input("Followers MoM Change (%):", value=7.59, step=0.01)
+                    in_ytd_followers = st.number_input("YTD Net Followers Added:", value=7969, step=1)
+                with a_col3:
+                    in_engage = st.number_input("Engagement Rate (%):", value=4.07, step=0.01)
+                    in_mom_engage = st.number_input("Engagement MoM Change (%):", value=12.74, step=0.01)
+                    in_ytd_engage = st.number_input("YTD Avg Engagement Rate (%):", value=3.92, step=0.01)
+
+                st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+
+                s_col1, s_col2 = st.columns(2)
+                with s_col1:
+                    in_share = st.number_input("Share Rate (Shares/Post):", value=3.35, step=0.01)
+                    in_mom_share = st.number_input("Share Rate MoM Change (%):", value=7.21, step=0.01)
+                    in_ytd_share = st.number_input("YTD Avg Share Rate:", value=2.71, step=0.01)
+                with s_col2:
+                    in_senti = st.number_input("Derived Sentiment Score (-1 to +1):", min_value=-1.00, max_value=1.00, value=0.15, step=0.01)
+                    in_mom_senti = st.number_input("Sentiment MoM Change (%):", value=50.00, step=0.01)
+                    in_ytd_senti = st.number_input("YTD Avg Sentiment Score:", min_value=-1.00, max_value=1.00, value=0.10, step=0.01)
+
+                st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+
+                n_col1, n_col2 = st.columns(2)
+                with n_col1:
+                    in_nps = st.number_input("Net Promoter Score (NPS %):", min_value=0.00, max_value=100.00, value=64.00, step=1.00)
+                with n_col2:
+                    in_ytd_nps = st.number_input("YTD Avg Net Promoter Score (%):", min_value=0.00, max_value=100.00, value=63.00, step=1.00)
+
+                submit_snapshot = st.form_submit_button("🔒 Vault Performance Snapshot", use_container_width=True)
+
+                if submit_snapshot:
+                    try:
+                        months_map = {"January":"01","February":"02","March":"03","April":"04","May":"05","June":"06","July":"07","August":"08","September":"09","October":"10","November":"11","December":"12"}
+                        date_iso_str = f"{target_year}-{months_map[target_month]}-01"
+
+                        snapshot_payload = {
+                            "property_id": str(target_prop_id),
+                            "snapshot_month": date_iso_str,
+                            "ctr": float(in_ctr / 100),
+                            "mom_ctr_pct": float(in_mom_ctr),
+                            "ytd_ctr": float(in_ytd_ctr / 100),
+                            "cpc": float(in_cpc),
+                            "mom_cpc_pct": float(in_mom_cpc),
+                            "ytd_cpc": float(in_ytd_cpc),
+                            "impressions": int(in_imps),
+                            "mom_imps_pct": float(in_mom_imps),
+                            "ytd_imps": int(in_ytd_imps),
+                            "social_growth_rate": float(in_growth),
+                            "mom_growth_pct": float(in_mom_growth),
+                            "ytd_growth_rate": float(in_ytd_growth),
+                            "followers": int(in_followers),
+                            "mom_followers_pct": float(in_mom_followers),
+                            "ytd_followers_net": int(in_ytd_followers),
+                            "engagement_rate": float(in_engage),
+                            "mom_engage_pct": float(in_mom_engage),
+                            "ytd_engagement_rate": float(in_ytd_engage),
+                            "share_rate": float(in_share),
+                            "mom_share_pct": float(in_mom_share),
+                            "ytd_share_rate": float(in_ytd_share),
+                            "sentiment_score": float(in_senti),
+                            "mom_sentiment_pct": float(in_mom_senti),
+                            "ytd_sentiment_score": float(in_ytd_senti),
+                            "nps_pct": float(in_nps),
+                            "ytd_nps_pct": float(in_ytd_nps)
+                        }
+
+                        supabase.table("monthly_marketing_snapshots").upsert(snapshot_payload).execute()
+                        st.success(f"🎉 Successfully vaulted the {target_month} {target_year} Performance Matrix for '{target_prop_id}'!")
+                        st.cache_data.clear()
+                    except Exception as e:
+                        st.error(f"Failed to submit snapshot matrix array to table layer: {e}")
+
     # --- TAB 2: USER ACCESS & ROLES ---
     with tabs[1]:
         st.subheader("👥 System User Directory")
     
         # 1. SEARCH & FILTER
-        search_q = st.text_input("🔍 Search by Email:", placeholder="Enter email to find user access records...")
+        search_q = st.text_input("🔍 Search by Email:", placeholder="Enter email to find user access records...", key="user_search_admin")
         
         # 2. FETCH & DISPLAY
         access_res = supabase.table("user_property_access").select("*, properties(property_name)").execute()
@@ -1854,7 +1973,6 @@ elif page == "Global Admin Console":
         except Exception as e:
             st.caption(f"Role '{target_role_config}' not yet initialized.")
 
-        # Updated Capabilities List with PR Scorecard
         capabilities = {
             "view_analytics": "Access Attribution & Executive Dashboards",
             "view_ledger": "Access Daily Ledger Audit",
