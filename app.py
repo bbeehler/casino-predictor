@@ -502,29 +502,28 @@ def get_monthly_marketing_snapshot(property_id, target_date):
 
 def get_monthly_email_analytics(property_id):
     """
-    Queries both macro email snapshots and campaign group breakdowns 
+    Queries the top 2 macro email snapshots and the active campaign group breakdowns 
     directly matching the core relational database property UUID key standard.
     """
-    macro_data = None
+    macro_data_list = []
     campaign_records = []
     
     try:
-        # Enforce pure string type conversion for the property UUID token filter
         target_uuid = str(property_id)
         
-        # 1. Pull the absolute newest macro snapshot row via explicit Property UUID
+        # Pull the top 2 macro snapshot rows to calculate MoM tracking deltas
         mac_res = supabase.table("monthly_email_snapshots")\
             .select("*")\
             .eq("property_id", target_uuid)\
             .order("snapshot_month", desc=True)\
-            .limit(1)\
+            .limit(2)\
             .execute()
             
         if mac_res.data:
-            macro_data = mac_res.data[0]
-            target_month = macro_data.get("snapshot_month")
+            macro_data_list = mac_res.data
+            target_month = macro_data_list[0].get("snapshot_month")
             
-            # 2. Pull campaign segments matching that exact same month & property UUID
+            # Pull active campaign segments tied to the latest month snapshot
             camp_res = supabase.table("campaign_group_records")\
                 .select("*")\
                 .eq("property_id", target_uuid)\
@@ -535,9 +534,9 @@ def get_monthly_email_analytics(property_id):
             if camp_res.data:
                 campaign_records = camp_res.data
     except Exception as e:
-        st.sidebar.caption(f"⚠️ Email analytics sync offline: {e}")
+        st.sidebar.caption(f"⚠️ Email analytics delta sync offline: {e}")
         
-    return macro_data, campaign_records
+    return macro_data_list, campaign_records
 
 # =================================================================
 # BLOCK 8: DATA HYDRATION & VAULT GUARDRAIL
@@ -602,7 +601,7 @@ if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Dai
     st.stop()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v74.0 - Global System Relational ID Standard)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v74.1 - MoM Email Delta Indicators)
 # =================================================================
 if page == "Executive Dashboard":
     
@@ -750,6 +749,12 @@ if page == "Executive Dashboard":
                 k5.metric("AI Accuracy", accuracy_display)
 
         # =================================================================
+        # CORE MARKETING RECOVERY TOKEN OVERRIDE
+        # =================================================================
+        p_name_raw = str(st.session_state.get('current_property_name', '')).upper()
+        matched_search_token = "OTTAWA" if "OTTAWA" in p_name_raw else "TORONTO" if "TORONTO" in p_name_raw else "VANCOUVER" if "VANCOUVER" in p_name_raw else p_name_raw
+
+        # =================================================================
         # EXECUTIVE MARKETING & BRAND PERFORMANCE MATRIX
         # =================================================================
         st.markdown("<br>", unsafe_allow_html=True)
@@ -757,7 +762,6 @@ if page == "Executive Dashboard":
         st.caption("Comprehensive analysis tracking digital acquisition cost efficiencies alongside overall brand sentiment loops.")
 
         try:
-            # CONNECTED FIX: Pulling cleanly based on core global session tracking UUID
             latest_snap_res = supabase.table("monthly_marketing_snapshots")\
                 .select("*")\
                 .eq("property_id", str(st.session_state.current_property_id))\
@@ -893,19 +897,51 @@ if page == "Executive Dashboard":
     st.write("### 📨 Email Performance & Distribution Audit")
     st.caption("Detailed segment distribution tracking operational engagement metrics across active player database categories.")
 
-    # CONNECTED FIX: Query uses the precise database relational UUID standard directly
-    macro_email, campaign_list = get_monthly_email_analytics(st.session_state.current_property_id)
+    # Fetch macro metrics list using the unified property database UUID signature
+    macro_email_list, campaign_list = get_monthly_email_analytics(st.session_state.current_property_id)
 
-    if macro_email:
+    if macro_email_list:
+        # The first item in the sorted array represents the active calendar month snapshot
+        macro_email = macro_email_list[0]
         em_month_date = pd.to_datetime(macro_email.get('snapshot_month'))
         em_month_name = em_month_date.strftime('%B %Y')
         
+        # --- BACKGROUND MOM DELTA CALCULATION MATRIX LAYER ---
+        # Initialize default comparison values in case a previous month doesn't exist yet
+        deliv_delta, open_delta, reads_delta, bounce_delta, unsub_delta = None, None, None, None, None
+        
+        if len(macro_email_list) > 1:
+            prev_email = macro_email_list[1]
+            
+            # 1. Total Volume Delta
+            deliv_delta = float(macro_email.get('total_emails_delivered', 0) - prev_email.get('total_emails_delivered', 0))
+            
+            # 2. Unique Open Rate Delta
+            open_delta = float(macro_email.get('avg_unique_open_rate', 0) - prev_email.get('avg_unique_open_rate', 0)) * 100
+            
+            # 3. Reads / Unique Open Delta
+            reads_delta = float(macro_email.get('avg_reads_per_unique_open', 0) - prev_email.get('avg_reads_per_unique_open', 0))
+            
+            # 4. Bounce Rate Delta
+            bounce_delta = float(macro_email.get('avg_bounce_rate', 0) - prev_email.get('avg_bounce_rate', 0)) * 100
+            
+            # 5. Unsubscribe Rate Delta
+            unsub_delta = float(macro_email.get('avg_unsubscribe_rate', 0) - prev_email.get('avg_unsubscribe_rate', 0)) * 100
+
+        # Build clean string delta indicators for metrics card components
+        fmt_deliv_delta = f"{deliv_delta:+,.0f} MoM" if deliv_delta is not NULL else "---"
+        fmt_open_delta = f"{open_delta:+.2f}% MoM" if open_delta is not NULL else "---"
+        fmt_reads_delta = f"{reads_delta:+.2f} MoM" if reads_delta is not NULL else "---"
+        fmt_bounce_delta = f"{bounce_delta:+.2f}% MoM" if bounce_delta is not NULL else "---"
+        fmt_unsub_delta = f"{unsub_delta:+.2f}% MoM" if unsub_delta is not NULL else "---"
+
+        # Render Macro Metric Summary Cards with full live MoM delta tracking strings
         ec1, ec2, ec3, ec4, ec5 = st.columns(5)
-        ec1.metric("Emails Delivered", f"{macro_email.get('total_emails_delivered', 0):,}")
-        ec2.metric("Unique Open Rate", f"{float(macro_email.get('avg_unique_open_rate', 0))*100:.2f}%")
-        ec3.metric("Reads / Unique Open", f"{macro_email.get('avg_reads_per_unique_open', 0):.2f}")
-        ec4.metric("Avg Bounce Rate", f"{float(macro_email.get('avg_bounce_rate', 0))*100:.2f}%")
-        ec5.metric("Unsubscribe Rate", f"{float(macro_email.get('avg_unsubscribe_rate', 0))*100:.2f}%")
+        ec1.metric("Emails Delivered", f"{macro_email.get('total_emails_delivered', 0):,}", delta=fmt_deliv_delta)
+        ec2.metric("Unique Open Rate", f"{float(macro_email.get('avg_unique_open_rate', 0))*100:.2f}%", delta=fmt_open_delta)
+        ec3.metric("Reads / Unique Open", f"{macro_email.get('avg_reads_per_unique_open', 0):.2f}", delta=fmt_reads_delta)
+        ec4.metric("Avg Bounce Rate", f"{float(macro_email.get('avg_bounce_rate', 0))*100:.2f}%", delta=fmt_bounce_delta, delta_color="inverse")
+        ec5.metric("Unsubscribe Rate", f"{float(macro_email.get('avg_unsubscribe_rate', 0))*100:.2f}%", delta=fmt_unsub_delta, delta_color="inverse")
         
         if campaign_list:
             st.markdown("<br>", unsafe_allow_html=True)
