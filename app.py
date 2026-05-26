@@ -1315,7 +1315,7 @@ elif page == "AI Calibration":
         st.json(st.session_state.coeffs)
 
 # =================================================================
-# 14. PAGE 6: SENTIMENT SCORING (v64.6 - Metric Cards Integrated)
+# 14. PAGE 6: SENTIMENT SCORING (v64.7 - Unlimited Vault Capacity)
 # =================================================================
 elif page == "Sentiment Scoring":
     render_styled_header(
@@ -1382,7 +1382,7 @@ elif page == "Sentiment Scoring":
         categories = ["All Categories", "Positive", "Neutral", "Negative"]
         filter_cat = st.selectbox("Sentiment Category", categories, index=0)
 
-    # Fetch and Process Data
+    # Fetch and Process Data (Uncapped Analytics)
     try:
         query = supabase.table("sentiment_history").select("*").eq("property_id", st.session_state.current_property_id)
         if filter_asset != "All Assets":
@@ -1395,7 +1395,8 @@ elif page == "Sentiment Scoring":
             start_date, end_date = date_range
             query = query.gte("timestamp", start_date.isoformat()).lte("timestamp", f"{end_date.isoformat()}T23:59:59")
         
-        vault_res = query.order("timestamp", desc=True).limit(100).execute()
+        # FIXED: Removed .limit(100) to allow full database scan matching active filters
+        vault_res = query.order("timestamp", desc=True).execute()
 
         if vault_res.data:
             df_vault = pd.DataFrame(vault_res.data)
@@ -1405,7 +1406,6 @@ elif page == "Sentiment Scoring":
 
             if not df_vault.empty:
                 # --- METRIC GENERATION ENGINE ---
-                # Safe categorization based on categorical strings
                 total_reviews = len(df_vault)
                 positive_count = len(df_vault[df_vault['sentiment_category'].str.lower() == 'positive'])
                 negative_count = len(df_vault[df_vault['sentiment_category'].str.lower() == 'negative'])
@@ -1424,15 +1424,15 @@ elif page == "Sentiment Scoring":
                 st.markdown("---")
 
                 # --- THE CONDITIONAL SCALER FIX ---
-                # 1. Force numeric conversion
                 df_vault['sentiment_score'] = pd.to_numeric(df_vault['sentiment_score'], errors='coerce').fillna(0.5)
                 
-                # 2. Apply Smart Mapping
                 df_vault['display_score'] = df_vault['sentiment_score'].apply(
                     lambda x: (x * 2) - 1 if 0 <= x <= 1 else x
                 )
 
-                for _, row in df_vault.iterrows():
+                # UI Display Limitation: Only render the first 100 card blocks to keep web browser performance fast, 
+                # even though the total metrics above analyze the entire table.
+                for _, row in df_vault.head(100).iterrows():
                     with st.container(border=True):
                         v_col1, v_col2 = st.columns([4, 1])
                         with v_col1:
@@ -1445,7 +1445,6 @@ elif page == "Sentiment Scoring":
                         
                         with v_col2:
                             d_score = row.get('display_score', 0.0)
-                            # Forensic color coding
                             score_color = "#E63946" if cat_label in ["Critical", "Negative"] or d_score < -0.3 else "#F4A261" if cat_label == "Neutral" else "#2A9D8F"
                             st.metric("AI Score", f"{d_score:.2f}")
                             st.markdown(f"<div style='height:8px; width:100%; background:{score_color}; border-radius:4px;'></div>", unsafe_allow_html=True)
