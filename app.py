@@ -602,7 +602,7 @@ if df.empty and page not in ["Global Admin Console", "Master Audit Report", "Dai
     st.stop()
 
 # =================================================================
-# 9. PAGE 1: EXECUTIVE DASHBOARD (v73.6 - Structural Component Fix)
+# 9. PAGE 1: EXECUTIVE DASHBOARD (v73.7 - Native Layout Parser)
 # =================================================================
 if page == "Executive Dashboard":
     
@@ -668,7 +668,6 @@ if page == "Executive Dashboard":
         with col_date:
             pulse_range = st.date_input("Analysis Window:", value=st.session_state.pulse_range_v9, key="pulse_range_v9_active")
 
-        # Create localized operational variables to protect backend calculations from missing date fields
         start_p, end_p = first_of_month, last_of_month
 
         if isinstance(pulse_range, tuple) and len(pulse_range) == 2:
@@ -751,7 +750,7 @@ if page == "Executive Dashboard":
                 k5.metric("AI Accuracy", accuracy_display)
 
         # =================================================================
-        # FIXED: EXECUTIVE MARKETING & BRAND PERFORMANCE MATRIX (OUTSIDE ENVELOPE)
+        # EXECUTIVE MARKETING & BRAND PERFORMANCE MATRIX
         # =================================================================
         st.markdown("<br>", unsafe_allow_html=True)
         st.write("### 📊 Executive Marketing & Brand Performance")
@@ -890,7 +889,7 @@ if page == "Executive Dashboard":
             st.info("📊 No vaulted monthly performance snapshot records found for this property.")
 
         # =================================================================
-        # FIXED: LIVE EMAIL PERFORMANCE & DISTRIBUTION PANEL (OUTSIDE ENVELOPE)
+        # LIVE EMAIL PERFORMANCE & DISTRIBUTION PANEL
         # =================================================================
         st.markdown("<br>", unsafe_allow_html=True)
         st.write("### 📨 Email Performance & Distribution Audit")
@@ -903,7 +902,7 @@ if page == "Executive Dashboard":
             em_month_name = em_month_date.strftime('%B %Y')
             
             ec1, ec2, ec3, ec4, ec5 = st.columns(5)
-            ec1.metric("Emails Delivered", f"{macro_email.get('total_emails_delivered', 0):,}", help="Total volume output successfully processed.")
+            ec1.metric("Emails Delivered", f"{macro_email.get('total_emails_delivered', 0):,}")
             ec2.metric("Unique Open Rate", f"{float(macro_email.get('avg_unique_open_rate', 0))*100:.2f}%")
             ec3.metric("Reads / Unique Open", f"{macro_email.get('avg_reads_per_unique_open', 0):.2f}")
             ec4.metric("Avg Bounce Rate", f"{float(macro_email.get('avg_bounce_rate', 0))*100:.2f}%")
@@ -913,39 +912,20 @@ if page == "Executive Dashboard":
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.write(f"#### 🎯 Campaign Group Breakdown Summary ({em_month_name})")
                 
-                table_rows_html = ""
-                for idx, camp in enumerate(campaign_list):
-                    bg_color = "#F8FAFC" if idx % 2 == 0 else "#FFFFFF"
-                    table_rows_html += f"""
-                    <tr style="border-bottom: 1px solid #E1E8F0; background-color: {bg_color};">
-                        <td style="padding: 12px 16px; font-weight: 600; color: #1E293B;">{camp.get('campaign_group_name', 'N/A')}</td>
-                        <td style="padding: 12px 16px; font-weight: 500;">{camp.get('emails_delivered', 0):,}</td>
-                        <td style="padding: 12px 16px; color: #0047AB; font-weight: 600;">{float(camp.get('avg_unique_open_rate', 0))*100:.2f}%</td>
-                        <td style="padding: 12px 16px; color: #28A745; font-weight: 600;">{float(camp.get('avg_unique_click_rate', 0))*100:.2f}%</td>
-                        <td style="padding: 12px 16px; color: #64748B;">{float(camp.get('avg_bounce_rate', 0))*100:.2f}%</td>
-                        <td style="padding: 12px 16px; font-weight: 600; text-align: right; color: #0F172A;">{float(camp.get('pct_of_total_emails_sent', 0))*100:.2f}%</td>
-                    </tr>
-                    """
-                    
-                st.markdown(f"""
-                <div style="border: 1px solid #E1E8F0; border-radius: 12px; overflow: hidden; margin-top: 10px; margin-bottom: 25px;">
-                    <table style="width:100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 0.92rem; text-align: left;">
-                        <thead>
-                            <tr style="background-color: #0F172A; color: #FFFFFF;">
-                                <th style="padding: 12px 16px; font-weight: 700;">Campaign Group</th>
-                                <th style="padding: 12px 16px; font-weight: 700;">Delivered</th>
-                                <th style="padding: 12px 16px; font-weight: 700;">Unique Open Rate</th>
-                                <th style="padding: 12px 16px; font-weight: 700;">Unique Click Rate</th>
-                                <th style="padding: 12px 16px; font-weight: 700;">Bounce Rate</th>
-                                <th style="padding: 12px 16px; font-weight: 700; text-align: right;">% of Total Emails Sent</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {table_rows_html}
-                        </tbody>
-                    </table>
-                </div>
-                """, unsafe_allow_html=True)
+                # FIXED: Transformed raw HTML rows layout compilation into a clean, parsed structural data frame array mapping
+                processed_table_data = []
+                for camp in campaign_list:
+                    processed_table_data.append({
+                        "Campaign Group": str(camp.get('campaign_group_name', 'N/A')),
+                        "Emails Delivered": f"{int(camp.get('emails_delivered', 0)):,}",
+                        "Unique Open Rate": f"{float(camp.get('avg_unique_open_rate', 0))*100:.2f}%",
+                        "Unique Click Rate": f"{float(camp.get('avg_unique_click_rate', 0))*100:.2f}%",
+                        "Bounce Rate": f"{float(camp.get('avg_bounce_rate', 0))*100:.2f}%",
+                        "% of Total Sent": f"{float(camp.get('pct_of_total_emails_sent', 0))*100:.2f}%"
+                    })
+                
+                # Render using native component arrays to avoid text rendering glitches
+                st.dataframe(processed_table_data, use_container_width=True, hide_index=True)
             else:
                 st.info("No campaign segment distribution rows logged under this monthly block timeline.")
         else:
