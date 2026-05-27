@@ -934,7 +934,7 @@ if page == "Executive Dashboard":
     st.write("### 📨 Email Performance & Distribution Audit")
     st.caption("Detailed segment distribution tracking operational engagement metrics across active player database categories.")
 
-    macro_email_list, campaign_list = get_monthly_email_analytics(st.session_state.current_property_id)
+    macro_data, current_campaigns, prev_data, prev_campaigns = get_aggregated_email_analytics(st.session_state.current_property_id, s_date, e_date)
 
     if macro_email_list:
         macro_email = macro_email_list[0]
