@@ -1379,7 +1379,7 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for full ROI Audit.")
 
 # =================================================================
-# BLOCK 12: PAGE 4: MASTER FORENSIC AUDIT (v86.8 - Dynamic Date Aggregation)
+# BLOCK 12: PAGE 4: MASTER FORENSIC AUDIT (v86.9 - Campaign Matrix Alignment)
 # =================================================================
 elif page == "Master Audit Report":
     # 1. PREMIUM HEADER
@@ -1451,17 +1451,19 @@ elif page == "Master Audit Report":
         st.divider()
         st.markdown(f"### 📨 Email Performance & Distribution Audit ({s_date} to {e_date})")
         
-        # FIXED: Hooking into the custom aggregation function
-        macro_email, campaign_list, prev_email, prev_campaigns = get_aggregated_email_analytics(st.session_state.current_property_id, s_date, e_date)
+        macro_email_list, campaign_list, prev_campaigns = get_aggregated_email_analytics(st.session_state.current_property_id, s_date, e_date)
         
-        if macro_email:
+        if macro_email_list:
+            macro_email = macro_email_list[0]
+            
             deliv_delta_fmt, open_delta_fmt, reads_delta_fmt, bounce_delta_fmt, unsub_delta_fmt = "---", "---", "---", "---", "---"
             
-            # True Period-over-Period Delta Calculations
-            if prev_email and prev_email.get('total_emails_delivered', 0) > 0:
+            if len(macro_email_list) > 1:
+                prev_email = macro_email_list[1]
+                
                 curr_deliv = float(macro_email.get('total_emails_delivered', 0))
                 prev_deliv = float(prev_email.get('total_emails_delivered', 0))
-                deliv_pct = ((curr_deliv - prev_deliv) / prev_deliv * 100)
+                deliv_pct = ((curr_deliv - prev_deliv) / prev_deliv * 100) if prev_deliv > 0 else 0
                 deliv_delta_fmt = f"{deliv_pct:+.1f}% PoP"
                 
                 open_pt = (float(macro_email.get('avg_unique_open_rate', 0)) - float(prev_email.get('avg_unique_open_rate', 0))) * 100
@@ -1490,25 +1492,39 @@ elif page == "Master Audit Report":
                     processed_table_data = []
                     for camp in campaign_list:
                         camp_name = str(camp.get('campaign_group_name', 'N/A'))
+                        
+                        # Current Values
                         curr_vol = float(camp.get('emails_delivered', 0))
                         curr_open = float(camp.get('avg_unique_open_rate', 0)) * 100
+                        curr_click = float(camp.get('avg_unique_click_rate', 0)) * 100
+                        curr_bounce = float(camp.get('avg_bounce_rate', 0)) * 100
                         curr_pct = float(camp.get('pct_of_total_emails_sent', 0)) * 100
                         
+                        # Previous Values
                         p_camp = prev_camp_dict.get(camp_name, {})
                         prev_vol = float(p_camp.get('emails_delivered', 0))
                         prev_open = float(p_camp.get('avg_unique_open_rate', 0)) * 100
+                        prev_click = float(p_camp.get('avg_unique_click_rate', 0)) * 100
+                        prev_bounce = float(p_camp.get('avg_bounce_rate', 0)) * 100
                         
+                        # MoM Calcs
                         vol_mom = f"{((curr_vol - prev_vol) / prev_vol * 100):+.1f}%" if prev_vol > 0 else "---"
-                        open_mom = f"{(curr_open - prev_open):+.1f}%" if prev_open > 0 else "---"
+                        open_mom = f"{(curr_open - prev_open):+.2f}%" if prev_open > 0 else "---"
+                        click_mom = f"{(curr_click - prev_click):+.2f}%" if prev_click > 0 else "---"
+                        bounce_mom = f"{(curr_bounce - prev_bounce):+.2f}%" if prev_bounce > 0 else "---"
                         
+                        # Build Table Matrix explicitly matching your reference slide columns
                         processed_table_data.append({
                             "Campaign Group": camp_name,
-                            "% of Total Sent": f"{curr_pct:.2f}%",
-                            "Total Delivered": f"{int(curr_vol):,}",
-                            "Vol Delta": vol_mom,
-                            "Avg Open Rate": f"{curr_open:.2f}%",
-                            "Open Delta": open_mom,
-                            "Avg Click Rate": f"{float(camp.get('avg_unique_click_rate', 0))*100:.2f}%"
+                            "Emails Delivered": f"{int(curr_vol):,}",
+                            "Deliv. MoM": vol_mom,
+                            "Avg Unique Open Rate": f"{curr_open:.2f}%",
+                            "Open MoM": open_mom,
+                            "Avg Unique Click Rate": f"{curr_click:.2f}%",
+                            "Click MoM": click_mom,
+                            "Avg Bounce Rate": f"{curr_bounce:.2f}%",
+                            "Bounce MoM": bounce_mom,
+                            "% of Total Emails Sent": f"{curr_pct:.2f}%"
                         })
                         
                     st.dataframe(processed_table_data, use_container_width=True, hide_index=True)
