@@ -935,64 +935,65 @@ if page == "Executive Dashboard":
     st.caption("Detailed segment distribution tracking operational engagement metrics across active player database categories.")
 
     if isinstance(audit_range, tuple) and len(audit_range) == 2:
-    s_date, e_date = audit_range # These must be defined first!
-    
-    # Now call the function using those defined variables
-    macro_data, current_campaigns, prev_data, prev_campaigns = get_aggregated_email_analytics(
-        st.session_state.current_property_id, 
-        s_date, 
-        e_date
-    )
-    
-    if macro_email_list:
-        macro_email = macro_email_list[0]
-        em_month_date = pd.to_datetime(macro_email.get('snapshot_month'))
-        em_month_name = em_month_date.strftime('%B %Y')
+        s_date, e_date = audit_range 
         
-        deliv_delta, open_delta, reads_delta, bounce_delta, unsub_delta = None, None, None, None, None
+        # Now call the function using those defined variables
+        # Note: 'macro_data' is your aggregated snapshot result
+        macro_email, campaign_list, prev_email, prev_campaigns = get_aggregated_email_analytics(
+            st.session_state.current_property_id, 
+            s_date, 
+            e_date
+        )
         
-        if len(macro_email_list) > 1:
-            prev_email = macro_email_list[1]
-            deliv_delta = float(macro_email.get('total_emails_delivered', 0) - prev_email.get('total_emails_delivered', 0))
-            open_delta = float(macro_email.get('avg_unique_open_rate', 0) - prev_email.get('avg_unique_open_rate', 0)) * 100
-            reads_delta = float(macro_email.get('avg_reads_per_unique_open', 0) - prev_email.get('avg_reads_per_unique_open', 0))
-            bounce_delta = float(macro_email.get('avg_bounce_rate', 0) - prev_email.get('avg_bounce_rate', 0)) * 100
-            unsub_delta = float(macro_email.get('avg_unsubscribe_rate', 0) - prev_email.get('avg_unsubscribe_rate', 0)) * 100
-
-        # FIXED: Resolved invalid syntax by converting NULL evaluation contexts to native Python None states
-        fmt_deliv_delta = f"{deliv_delta:+,.0f} MoM" if deliv_delta is not None else "---"
-        fmt_open_delta = f"{open_delta:+.2f}% MoM" if open_delta is not None else "---"
-        fmt_reads_delta = f"{reads_delta:+.2f} MoM" if reads_delta is not None else "---"
-        fmt_bounce_delta = f"{bounce_delta:+.2f}% MoM" if bounce_delta is not None else "---"
-        fmt_unsub_delta = f"{unsub_delta:+.2f}% MoM" if unsub_delta is not None else "---"
-
-        ec1, ec2, ec3, ec4, ec5 = st.columns(5)
-        ec1.metric("Emails Delivered", f"{macro_email.get('total_emails_delivered', 0):,}", delta=fmt_deliv_delta)
-        ec2.metric("Unique Open Rate", f"{float(macro_email.get('avg_unique_open_rate', 0))*100:.2f}%", delta=fmt_open_delta)
-        ec3.metric("Reads / Unique Open", f"{macro_email.get('avg_reads_per_unique_open', 0):.2f}", delta=fmt_reads_delta)
-        ec4.metric("Avg Bounce Rate", f"{float(macro_email.get('avg_bounce_rate', 0))*100:.2f}%", delta=fmt_bounce_delta, delta_color="inverse")
-        ec5.metric("Unsubscribe Rate", f"{float(macro_email.get('avg_unsubscribe_rate', 0))*100:.2f}%", delta=fmt_unsub_delta, delta_color="inverse")
-        
-        if campaign_list:
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.write(f"#### 🎯 Campaign Group Breakdown Summary ({em_month_name})")
+        # We check if we have data in macro_email (which is a dictionary)
+        if macro_email and macro_email.get('total_emails_delivered', 0) > 0:
             
-            processed_table_data = []
-            for camp in campaign_list:
-                processed_table_data.append({
-                    "Campaign Group": str(camp.get('campaign_group_name', 'N/A')),
-                    "Emails Delivered": f"{int(camp.get('emails_delivered', 0)):,}",
-                    "Unique Open Rate": f"{float(camp.get('avg_unique_open_rate', 0))*100:.2f}%",
-                    "Unique Click Rate": f"{float(camp.get('avg_unique_click_rate', 0))*100:.2f}%",
-                    "Bounce Rate": f"{float(camp.get('avg_bounce_rate', 0))*100:.2f}%",
-                    "% of Total Sent": f"{float(camp.get('pct_of_total_emails_sent', 0))*100:.2f}%"
-                })
+            # (Assuming you are using the snapshot month from the results for headers)
+            # You may need to replace this if your macro_email result doesn't contain 'snapshot_month'
+            em_month_name = s_date.strftime('%B %Y')
             
-            st.dataframe(processed_table_data, use_container_width=True, hide_index=True)
+            # Logic for deltas (MoM/PoP)
+            deliv_delta, open_delta, reads_delta, bounce_delta, unsub_delta = None, None, None, None, None
+            
+            if prev_email and prev_email.get('total_emails_delivered', 0) > 0:
+                deliv_delta = float(macro_email.get('total_emails_delivered', 0) - prev_email.get('total_emails_delivered', 0))
+                open_delta = (float(macro_email.get('avg_unique_open_rate', 0)) - float(prev_email.get('avg_unique_open_rate', 0))) * 100
+                reads_delta = float(macro_email.get('avg_reads_per_unique_open', 0)) - float(prev_email.get('avg_reads_per_unique_open', 0))
+                bounce_delta = (float(macro_email.get('avg_bounce_rate', 0)) - float(prev_email.get('avg_bounce_rate', 0))) * 100
+                unsub_delta = (float(macro_email.get('avg_unsubscribe_rate', 0)) - float(prev_email.get('avg_unsubscribe_rate', 0))) * 100
+
+            fmt_deliv_delta = f"{deliv_delta:+,.0f} MoM" if deliv_delta is not None else "---"
+            fmt_open_delta = f"{open_delta:+.2f}% MoM" if open_delta is not None else "---"
+            fmt_reads_delta = f"{reads_delta:+.2f} MoM" if reads_delta is not None else "---"
+            fmt_bounce_delta = f"{bounce_delta:+.2f}% MoM" if bounce_delta is not None else "---"
+            fmt_unsub_delta = f"{unsub_delta:+.2f}% MoM" if unsub_delta is not None else "---"
+
+            ec1, ec2, ec3, ec4, ec5 = st.columns(5)
+            ec1.metric("Emails Delivered", f"{macro_email.get('total_emails_delivered', 0):,}", delta=fmt_deliv_delta)
+            ec2.metric("Unique Open Rate", f"{float(macro_email.get('avg_unique_open_rate', 0))*100:.2f}%", delta=fmt_open_delta)
+            ec3.metric("Reads / Unique Open", f"{macro_email.get('avg_reads_per_unique_open', 0):.2f}", delta=fmt_reads_delta)
+            ec4.metric("Avg Bounce Rate", f"{float(macro_email.get('avg_bounce_rate', 0))*100:.2f}%", delta=fmt_bounce_delta, delta_color="inverse")
+            ec5.metric("Unsubscribe Rate", f"{float(macro_email.get('avg_unsubscribe_rate', 0))*100:.2f}%", delta=fmt_unsub_delta, delta_color="inverse")
+            
+            if campaign_list:
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.write(f"#### 🎯 Campaign Group Breakdown Summary ({em_month_name})")
+                
+                processed_table_data = []
+                for camp in campaign_list:
+                    processed_table_data.append({
+                        "Campaign Group": str(camp.get('campaign_group_name', 'N/A')),
+                        "Emails Delivered": f"{int(camp.get('emails_delivered', 0)):,}",
+                        "Unique Open Rate": f"{float(camp.get('avg_unique_open_rate', 0))*100:.2f}%",
+                        "Unique Click Rate": f"{float(camp.get('avg_unique_click_rate', 0))*100:.2f}%",
+                        "% of Total Sent": f"{float(camp.get('pct_of_total_emails_sent', 0))*100:.2f}%"
+                    })
+                
+                st.dataframe(processed_table_data, use_container_width=True, hide_index=True)
         else:
-            st.info("No campaign segment distribution rows logged under this monthly block timeline.")
+            st.info("No vaulted monthly email metrics snapshot found for this property location.")
     else:
-        st.info("📨 No vaulted monthly email metrics snapshot found for this property location.")
+        st.info("📨 Please select a date range to load email performance.")
 
     # 8. EXECUTIVE BRAND SENTIMENT PULSE
     st.divider()
