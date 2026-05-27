@@ -1379,7 +1379,7 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for full ROI Audit.")
 
 # =================================================================
-# BLOCK 12: PAGE 4: MASTER FORENSIC AUDIT (v86.9 - Campaign Matrix Alignment)
+# BLOCK 12: PAGE 4: MASTER FORENSIC AUDIT (v87.0 - Value Unpacking Fixed)
 # =================================================================
 elif page == "Master Audit Report":
     # 1. PREMIUM HEADER
@@ -1400,7 +1400,7 @@ elif page == "Master Audit Report":
 
     col_date, col_export = st.columns([2, 1])
     with col_date:
-        audit_range = st.date_input("Audit Window:", value=(min_audit, max_audit), key="master_audit_v86")
+        audit_range = st.date_input("Audit Window:", value=(min_audit, max_audit), key="master_audit_v87")
 
     if isinstance(audit_range, tuple) and len(audit_range) == 2:
         s_date, e_date = audit_range
@@ -1451,15 +1451,15 @@ elif page == "Master Audit Report":
         st.divider()
         st.markdown(f"### 📨 Email Performance & Distribution Audit ({s_date} to {e_date})")
         
-        macro_email_list, campaign_list, prev_campaigns = get_aggregated_email_analytics(st.session_state.current_property_id, s_date, e_date)
+        # FIXED: Correctly unpacking all 4 variables returned by the function
+        macro_email, campaign_list, prev_email, prev_campaigns = get_aggregated_email_analytics(st.session_state.current_property_id, s_date, e_date)
         
-        if macro_email_list:
-            macro_email = macro_email_list[0]
+        if macro_email and macro_email.get('total_emails_delivered', 0) > 0:
             
             deliv_delta_fmt, open_delta_fmt, reads_delta_fmt, bounce_delta_fmt, unsub_delta_fmt = "---", "---", "---", "---", "---"
             
-            if len(macro_email_list) > 1:
-                prev_email = macro_email_list[1]
+            # Use prev_email directly as a dictionary
+            if prev_email and prev_email.get('total_emails_delivered', 0) > 0:
                 
                 curr_deliv = float(macro_email.get('total_emails_delivered', 0))
                 prev_deliv = float(prev_email.get('total_emails_delivered', 0))
