@@ -1304,7 +1304,7 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for full ROI Audit.")
 
 # =================================================================
-# BLOCK 12: PAGE 4: MASTER FORENSIC AUDIT (v86.3 - Key Error Resolved)
+# BLOCK 12: PAGE 4: MASTER FORENSIC AUDIT (v86.4 - MoM & Layout Updated)
 # =================================================================
 elif page == "Master Audit Report":
     # 1. PREMIUM HEADER
@@ -1313,26 +1313,6 @@ elif page == "Master Audit Report":
         "Forensic Ledger: Financials, Multi-Channel Attribution, & Earned Media",
         "Audit Ready"
     )
-    
-    # --- 1. SAAS INGESTION FACTORY ---
-    with st.expander("📥 Bulk Ingest Forensic Ledger (CSV)", expanded=not ledger_data):
-        st.markdown('<div style="padding: 10px;">', unsafe_allow_html=True)
-        uploaded_file = st.file_uploader("Choose CSV File", type="csv", key="vault_uploader")
-        
-        if uploaded_file:
-            try:
-                up_df = pd.read_csv(uploaded_file)
-                up_df['property_id'] = st.session_state.current_property_id
-                
-                if st.button("🚀 Commit Bulk Upload to Vault", use_container_width=True):
-                    payload = up_df.to_dict(orient='records')
-                    supabase.table("ledger").upsert(payload).execute()
-                    st.success(f"Successfully ingested {len(up_df)} records!")
-                    st.cache_data.clear()
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Ingestion Error: {e}")
-        st.markdown('</div>', unsafe_allow_html=True)
 
     if not ledger_data:
         st.warning(f"⚠️ Audit Vault for {st.session_state.current_property_name} is empty.")
@@ -1390,7 +1370,6 @@ elif page == "Master Audit Report":
         k3.metric("Ad Clicks", f"{t_clicks:,.0f}", delta=f"{mom_clicks_pct} MoM")
         k4.metric("New Members", f"{t_mems:,}", delta=f"{mom_mems_pct} MoM")
         k5.metric("Social Reach", f"{t_imps:,.0f}", delta=f"{mom_reach_pct} MoM")
-        # FIXED: Calling the locally calculated 'accuracy' variable instead of the dictionary
         k6.metric("AI Accuracy", f"{accuracy:.1f}%", delta=f"{mom_acc_pct} MoM")
 
         # --- 4. EMAIL PERFORMANCE & DISTRIBUTION AUDIT ---
@@ -1401,12 +1380,30 @@ elif page == "Master Audit Report":
         
         if macro_email_list:
             macro_email = macro_email_list[0]
+            
+            # Extract MoM variables safely
+            deliv_delta, open_delta, reads_delta, bounce_delta, unsub_delta = None, None, None, None, None
+            
+            if len(macro_email_list) > 1:
+                prev_email = macro_email_list[1]
+                deliv_delta = float(macro_email.get('total_emails_delivered', 0) - prev_email.get('total_emails_delivered', 0))
+                open_delta = float(macro_email.get('avg_unique_open_rate', 0) - prev_email.get('avg_unique_open_rate', 0)) * 100
+                reads_delta = float(macro_email.get('avg_reads_per_unique_open', 0) - prev_email.get('avg_reads_per_unique_open', 0))
+                bounce_delta = float(macro_email.get('avg_bounce_rate', 0) - prev_email.get('avg_bounce_rate', 0)) * 100
+                unsub_delta = float(macro_email.get('avg_unsubscribe_rate', 0) - prev_email.get('avg_unsubscribe_rate', 0)) * 100
+
+            fmt_deliv_delta = f"{deliv_delta:+,.0f} MoM" if deliv_delta is not None else "---"
+            fmt_open_delta = f"{open_delta:+.2f}% MoM" if open_delta is not None else "---"
+            fmt_reads_delta = f"{reads_delta:+.2f} MoM" if reads_delta is not None else "---"
+            fmt_bounce_delta = f"{bounce_delta:+.2f}% MoM" if bounce_delta is not None else "---"
+            fmt_unsub_delta = f"{unsub_delta:+.2f}% MoM" if unsub_delta is not None else "---"
+            
             ec1, ec2, ec3, ec4, ec5 = st.columns(5)
-            ec1.metric("Emails Delivered", f"{macro_email.get('total_emails_delivered', 0):,}")
-            ec2.metric("Unique Open Rate", f"{float(macro_email.get('avg_unique_open_rate', 0))*100:.2f}%")
-            ec3.metric("Reads/Open", f"{macro_email.get('avg_reads_per_unique_open', 0):.2f}")
-            ec4.metric("Bounce Rate", f"{float(macro_email.get('avg_bounce_rate', 0))*100:.2f}%")
-            ec5.metric("Unsubscribe", f"{float(macro_email.get('avg_unsubscribe_rate', 0))*100:.2f}%")
+            ec1.metric("Emails Delivered", f"{macro_email.get('total_emails_delivered', 0):,}", delta=fmt_deliv_delta)
+            ec2.metric("Unique Open Rate", f"{float(macro_email.get('avg_unique_open_rate', 0))*100:.2f}%", delta=fmt_open_delta)
+            ec3.metric("Reads/Open", f"{macro_email.get('avg_reads_per_unique_open', 0):.2f}", delta=fmt_reads_delta)
+            ec4.metric("Bounce Rate", f"{float(macro_email.get('avg_bounce_rate', 0))*100:.2f}%", delta=fmt_bounce_delta, delta_color="inverse")
+            ec5.metric("Unsubscribe", f"{float(macro_email.get('avg_unsubscribe_rate', 0))*100:.2f}%", delta=fmt_unsub_delta, delta_color="inverse")
             
             if campaign_list:
                 with st.expander("🎯 View Campaign Group Breakdown"):
@@ -1466,7 +1463,8 @@ elif page == "Master Audit Report":
             if col in df_final.columns:
                 fig_stack.add_trace(go.Scatter(x=df_final['entry_date'], y=df_final[col], name=name, stackgroup='one', line=dict(width=0.5, color=color), fill='tonexty'))
         
-        fig_stack.update_layout(height=400, template="plotly_white", margin=dict(l=10, r=10, t=10, b=10))
+        fig_stack.update_layout(height=400, template="plotly_white", margin=dict(l=10, r=10, t=10, b=10),
+                                xaxis=dict(title="Timeline Nodes"), yaxis=dict(title="Volume Flow Attribution"))
         st.plotly_chart(fig_stack, use_container_width=True)
         
         # --- 7. AI VARIANCE AUDIT ---
