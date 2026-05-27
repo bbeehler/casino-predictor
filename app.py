@@ -938,18 +938,13 @@ if page == "Executive Dashboard":
         s_date, e_date = audit_range 
         
         # Now call the function using those defined variables
-        # Note: 'macro_data' is your aggregated snapshot result
         macro_email, campaign_list, prev_email, prev_campaigns = get_aggregated_email_analytics(
             st.session_state.current_property_id, 
             s_date, 
             e_date
         )
         
-        # We check if we have data in macro_email (which is a dictionary)
         if macro_email and macro_email.get('total_emails_delivered', 0) > 0:
-            
-            # (Assuming you are using the snapshot month from the results for headers)
-            # You may need to replace this if your macro_email result doesn't contain 'snapshot_month'
             em_month_name = s_date.strftime('%B %Y')
             
             # Logic for deltas (MoM/PoP)
@@ -979,13 +974,32 @@ if page == "Executive Dashboard":
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.write(f"#### 🎯 Campaign Group Breakdown Summary ({em_month_name})")
                 
+                # Create a lookup dictionary for previous campaigns to calculate deltas
+                prev_camp_dict = {c['campaign_group_name']: c for c in prev_campaigns} if prev_campaigns else {}
+                
                 processed_table_data = []
                 for camp in campaign_list:
+                    name = str(camp.get('campaign_group_name', 'N/A'))
+                    p_camp = prev_camp_dict.get(name, {})
+                    
+                    # Current values
+                    curr_deliv = float(camp.get('emails_delivered', 0))
+                    curr_open = float(camp.get('avg_unique_open_rate', 0)) * 100
+                    curr_click = float(camp.get('avg_unique_click_rate', 0)) * 100
+                    # Assuming you want bounce in the breakdown (calculated from macro if not in camp_res)
+                    curr_bounce = float(camp.get('avg_bounce_rate', macro_email.get('avg_bounce_rate', 0))) * 100
+                    
+                    # Delta calculations
+                    vol_mom = f"{((curr_deliv - float(p_camp.get('emails_delivered', 0))) / float(p_camp.get('emails_delivered', 1)) * 100):+.1f}%" if p_camp else "N/A"
+                    open_mom = f"{(curr_open - float(p_camp.get('avg_unique_open_rate', 0)) * 100):+.2f}%" if p_camp else "N/A"
+                    
                     processed_table_data.append({
-                        "Campaign Group": str(camp.get('campaign_group_name', 'N/A')),
-                        "Emails Delivered": f"{int(camp.get('emails_delivered', 0)):,}",
-                        "Unique Open Rate": f"{float(camp.get('avg_unique_open_rate', 0))*100:.2f}%",
-                        "Unique Click Rate": f"{float(camp.get('avg_unique_click_rate', 0))*100:.2f}%",
+                        "Campaign Group": name,
+                        "Emails Delivered": f"{int(curr_deliv):,}",
+                        "Deliv. MoM": vol_mom,
+                        "Unique Open Rate": f"{curr_open:.2f}%",
+                        "Open MoM": open_mom,
+                        "Unique Click Rate": f"{curr_click:.2f}%",
                         "% of Total Sent": f"{float(camp.get('pct_of_total_emails_sent', 0))*100:.2f}%"
                     })
                 
