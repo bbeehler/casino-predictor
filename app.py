@@ -932,12 +932,24 @@ if page == "Executive Dashboard":
     # =================================================================
     st.markdown("<br>", unsafe_allow_html=True)
     st.write("### 📨 Email Performance & Distribution Audit")
-    st.caption("Detailed segment distribution tracking operational engagement metrics across active player database categories.")
+    
+    # 1. Initialize audit_range with None to prevent NameError
+    audit_range = None
+    
+    # 2. Get the date input (or define it from your earlier global widget)
+    # If this is the same widget as the one above, just reference it here.
+    # If this is a NEW widget, give it a unique key.
+    audit_range = st.date_input(
+        "Select Audit Window for Email:", 
+        value=(min_audit, max_audit), 
+        key="email_audit_window_unique"
+    )
 
+    # 3. Now it is safe to perform the check
     if isinstance(audit_range, tuple) and len(audit_range) == 2:
         s_date, e_date = audit_range 
         
-        # Now call the function using those defined variables
+        # Now call the function
         macro_email, campaign_list, prev_email, prev_campaigns = get_aggregated_email_analytics(
             st.session_state.current_property_id, 
             s_date, 
