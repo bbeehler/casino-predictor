@@ -584,6 +584,7 @@ def get_aggregated_email_analytics(property_id, s_date, e_date):
     
     def fetch_and_aggregate(start_str, end_str):
     try:
+        # Ensure target_uuid is available in the function scope
         mac_res = supabase.table("monthly_email_snapshots").select("*")\
             .eq("property_id", target_uuid).gte("snapshot_month", start_str).lte("snapshot_month", end_str).execute()
         camp_res = supabase.table("campaign_group_records").select("*")\
@@ -598,36 +599,35 @@ def get_aggregated_email_analytics(property_id, s_date, e_date):
         df = pd.DataFrame(mac_res.data)
         total_vol = df['total_emails_delivered'].sum()
         if total_vol > 0:
-            # FIXED: Using explicit sums of raw totals for absolute accuracy in custom date ranges
             m_agg = {
                 'total_emails_delivered': total_vol,
                 'avg_unique_open_rate': df['unique_email_opens'].sum() / total_vol,
                 'avg_reads_per_unique_open': df['total_email_opens'].sum() / df['unique_email_opens'].sum() if df['unique_email_opens'].sum() > 0 else 0,
-                # FIXED: Calculating bounce rate from raw counts to ensure it is never zeroed by missing DB columns
                 'avg_bounce_rate': df['total_email_bounces'].sum() / total_vol,
                 'avg_unsubscribe_rate': df['unsubscribes'].sum() / total_vol
             }
             
     if camp_res.data and m_agg:
         df_c = pd.DataFrame(camp_res.data)
-        # Group by campaign and calculate weighted averages
-        grp = df_c.groupby('campaign_group_name').apply(
-            lambda x: pd.Series({
-                'emails_delivered': x['emails_delivered'].sum(),
-                'avg_unique_open_rate': (x['avg_unique_open_rate'] * x['emails_delivered']).sum() / x['emails_delivered'].sum() if x['emails_delivered'].sum() > 0 else 0,
-                'avg_unique_click_rate': (x['avg_unique_click_rate'] * x['emails_delivered']).sum() / x['emails_delivered'].sum() if x['emails_delivered'].sum() > 0 else 0
-            })
+        
+        # FIXED: GroupBy aggregation using named aggregation (more performant and stable syntax)
+        grp = df_c.groupby('campaign_group_name').agg(
+            emails_delivered=('emails_delivered', 'sum'),
+            weighted_open=('avg_unique_open_rate', lambda x: (x * df_c.loc[x.index, 'emails_delivered']).sum() / df_c.loc[x.index, 'emails_delivered'].sum() if df_c.loc[x.index, 'emails_delivered'].sum() > 0 else 0),
+            weighted_click=('avg_unique_click_rate', lambda x: (x * df_c.loc[x.index, 'emails_delivered']).sum() / df_c.loc[x.index, 'emails_delivered'].sum() if df_c.loc[x.index, 'emails_delivered'].sum() > 0 else 0)
         ).reset_index()
         
         tot_c_vol = grp['emails_delivered'].sum()
+        
         for _, r in grp.iterrows():
             c_agg.append({
                 'campaign_group_name': r['campaign_group_name'],
                 'emails_delivered': r['emails_delivered'],
-                'avg_unique_open_rate': r['avg_unique_open_rate'],
-                'avg_unique_click_rate': r['avg_unique_click_rate'],
+                'avg_unique_open_rate': r['weighted_open'],
+                'avg_unique_click_rate': r['weighted_click'],
                 'pct_of_total_emails_sent': r['emails_delivered'] / tot_c_vol if tot_c_vol > 0 else 0
             })
+            
     return m_agg, c_agg
         
     curr_m, curr_c = fetch_and_aggregate(start_month_str, end_month_str)
