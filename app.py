@@ -934,8 +934,16 @@ if page == "Executive Dashboard":
     st.write("### 📨 Email Performance & Distribution Audit")
     st.caption("Detailed segment distribution tracking operational engagement metrics across active player database categories.")
 
-    macro_data, current_campaigns, prev_data, prev_campaigns = get_aggregated_email_analytics(st.session_state.current_property_id, s_date, e_date)
-
+    if isinstance(audit_range, tuple) and len(audit_range) == 2:
+    s_date, e_date = audit_range # These must be defined first!
+    
+    # Now call the function using those defined variables
+    macro_data, current_campaigns, prev_data, prev_campaigns = get_aggregated_email_analytics(
+        st.session_state.current_property_id, 
+        s_date, 
+        e_date
+    )
+    
     if macro_email_list:
         macro_email = macro_email_list[0]
         em_month_date = pd.to_datetime(macro_email.get('snapshot_month'))
