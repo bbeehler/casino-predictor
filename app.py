@@ -532,34 +532,48 @@ def get_aggregated_email_analytics(property_id, s_date, e_date):
         
         if mac_res.data:
             df = pd.DataFrame(mac_res.data)
+            
+            # DEFENSIVE MAPPING: Helper to find the right column name dynamically
+            def get_col(candidates):
+                for c in candidates:
+                    if c in df.columns: return c
+                return None
+
             total_vol = df['total_emails_delivered'].sum()
             if total_vol > 0:
+                # Dynamically map the columns based on what actually exists in your DB
+                col_u_opens = get_col(['unique_email_opens', 'unique_opens', 'opens'])
+                col_t_opens = get_col(['total_email_opens', 'total_opens'])
+                col_bounces = get_col(['total_email_bounces', 'bounces', 'bounce_count'])
+                col_unsubs = get_col(['unsubscribes', 'unsubscribe_count'])
+                
                 m_agg = {
                     'total_emails_delivered': total_vol,
-                    'avg_unique_open_rate': df['unique_email_opens'].sum() / total_vol,
-                    'avg_reads_per_unique_open': df['total_email_opens'].sum() / df['unique_email_opens'].sum() if df['unique_email_opens'].sum() > 0 else 0,
-                    'avg_bounce_rate': df['total_email_bounces'].sum() / total_vol,
-                    'avg_unsubscribe_rate': df['unsubscribes'].sum() / total_vol
+                    'avg_unique_open_rate': (df[col_u_opens].sum() / total_vol) if col_u_opens else 0,
+                    'avg_reads_per_unique_open': (df[col_t_opens].sum() / df[col_u_opens].sum()) if col_t_opens and col_u_opens and df[col_u_opens].sum() > 0 else 0,
+                    'avg_bounce_rate': (df[col_bounces].sum() / total_vol) if col_bounces else 0,
+                    'avg_unsubscribe_rate': (df[col_unsubs].sum() / total_vol) if col_unsubs else 0
                 }
                 
         if camp_res.data and m_agg:
             df_c = pd.DataFrame(camp_res.data)
-            # Group by campaign and calculate weighted averages
-            grp = df_c.groupby('campaign_group_name').agg(
-                emails_delivered=('emails_delivered', 'sum'),
-                weighted_open=('avg_unique_open_rate', lambda x: (x * df_c.loc[x.index, 'emails_delivered']).sum() / df_c.loc[x.index, 'emails_delivered'].sum() if df_c.loc[x.index, 'emails_delivered'].sum() > 0 else 0),
-                weighted_click=('avg_unique_click_rate', lambda x: (x * df_c.loc[x.index, 'emails_delivered']).sum() / df_c.loc[x.index, 'emails_delivered'].sum() if df_c.loc[x.index, 'emails_delivered'].sum() > 0 else 0)
-            ).reset_index()
-            
-            tot_c_vol = grp['emails_delivered'].sum()
-            for _, r in grp.iterrows():
-                c_agg.append({
-                    'campaign_group_name': r['campaign_group_name'],
-                    'emails_delivered': r['emails_delivered'],
-                    'avg_unique_open_rate': r['weighted_open'],
-                    'avg_unique_click_rate': r['weighted_click'],
-                    'pct_of_total_emails_sent': r['emails_delivered'] / tot_c_vol if tot_c_vol > 0 else 0
-                })
+            # Ensure columns exist before grouping
+            if 'emails_delivered' in df_c.columns and 'avg_unique_open_rate' in df_c.columns:
+                grp = df_c.groupby('campaign_group_name').agg(
+                    emails_delivered=('emails_delivered', 'sum'),
+                    weighted_open=('avg_unique_open_rate', lambda x: (x * df_c.loc[x.index, 'emails_delivered']).sum() / df_c.loc[x.index, 'emails_delivered'].sum() if df_c.loc[x.index, 'emails_delivered'].sum() > 0 else 0),
+                    weighted_click=('avg_unique_click_rate', lambda x: (x * df_c.loc[x.index, 'emails_delivered']).sum() / df_c.loc[x.index, 'emails_delivered'].sum() if df_c.loc[x.index, 'emails_delivered'].sum() > 0 else 0)
+                ).reset_index()
+                
+                tot_c_vol = grp['emails_delivered'].sum()
+                for _, r in grp.iterrows():
+                    c_agg.append({
+                        'campaign_group_name': r['campaign_group_name'],
+                        'emails_delivered': r['emails_delivered'],
+                        'avg_unique_open_rate': r['weighted_open'],
+                        'avg_unique_click_rate': r['weighted_click'],
+                        'pct_of_total_emails_sent': r['emails_delivered'] / tot_c_vol if tot_c_vol > 0 else 0
+                    })
         return m_agg, c_agg
         
     curr_m, curr_c = fetch_and_aggregate(start_month_str, end_month_str)
