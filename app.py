@@ -564,6 +564,76 @@ def calculate_email_attribution(segments_df, traffic_df):
     # Placeholder for the attribution logic to be fully integrated into your report
     return attribution_results
 
+def get_aggregated_email_analytics(property_id, s_date, e_date):
+    """
+    Dynamically aggregates email snapshots and campaign records across the selected date range.
+    Uses weighted averages for rates based on delivery volumes.
+    """
+    target_uuid = str(property_id)
+    
+    # Snap start date to the 1st to catch the monthly snapshot block
+    start_month_str = s_date.replace(day=1).strftime("%Y-%m-%d")
+    end_month_str = e_date.strftime("%Y-%m-%d")
+    
+    # Calculate prior period of exact same length for accurate MoM
+    days_in_range = (e_date - s_date).days + 1
+    prev_e_date = s_date - datetime.timedelta(days=1)
+    prev_s_date = prev_e_date - datetime.timedelta(days=days_in_range - 1)
+    prev_start_month_str = prev_s_date.replace(day=1).strftime("%Y-%m-%d")
+    prev_end_month_str = prev_e_date.strftime("%Y-%m-%d")
+    
+    def fetch_and_aggregate(start_str, end_str):
+        try:
+            mac_res = supabase.table("monthly_email_snapshots").select("*")\
+                .eq("property_id", target_uuid).gte("snapshot_month", start_str).lte("snapshot_month", end_str).execute()
+            camp_res = supabase.table("campaign_group_records").select("*")\
+                .eq("property_id", target_uuid).gte("snapshot_month", start_str).lte("snapshot_month", end_str).execute()
+        except Exception as e:
+            st.sidebar.caption(f"Email fetch error: {e}")
+            return {}, []
+            
+        m_agg, c_agg = {}, []
+        
+        if mac_res.data:
+            df = pd.DataFrame(mac_res.data)
+            total_vol = df['total_emails_delivered'].sum()
+            if total_vol > 0:
+                # Calculate weighted averages based on volume sent per month
+                m_agg = {
+                    'total_emails_delivered': total_vol,
+                    'avg_unique_open_rate': (df['avg_unique_open_rate'] * df['total_emails_delivered']).sum() / total_vol,
+                    'avg_reads_per_unique_open': (df['avg_reads_per_unique_open'] * df['total_emails_delivered']).sum() / total_vol,
+                    'avg_bounce_rate': (df['avg_bounce_rate'] * df['total_emails_delivered']).sum() / total_vol,
+                    'avg_unsubscribe_rate': (df['avg_unsubscribe_rate'] * df['total_emails_delivered']).sum() / total_vol
+                }
+                
+        if camp_res.data and m_agg:
+            df_c = pd.DataFrame(camp_res.data)
+            # Group by campaign and calculate weighted averages
+            grp = df_c.groupby('campaign_group_name').apply(
+                lambda x: pd.Series({
+                    'emails_delivered': x['emails_delivered'].sum(),
+                    'avg_unique_open_rate': (x['avg_unique_open_rate'] * x['emails_delivered']).sum() / x['emails_delivered'].sum() if x['emails_delivered'].sum() > 0 else 0,
+                    'avg_unique_click_rate': (x['avg_unique_click_rate'] * x['emails_delivered']).sum() / x['emails_delivered'].sum() if x['emails_delivered'].sum() > 0 else 0
+                })
+            ).reset_index()
+            
+            tot_c_vol = grp['emails_delivered'].sum()
+            for _, r in grp.iterrows():
+                c_agg.append({
+                    'campaign_group_name': r['campaign_group_name'],
+                    'emails_delivered': r['emails_delivered'],
+                    'avg_unique_open_rate': r['avg_unique_open_rate'],
+                    'avg_unique_click_rate': r['avg_unique_click_rate'],
+                    'pct_of_total_emails_sent': r['emails_delivered'] / tot_c_vol if tot_c_vol > 0 else 0
+                })
+        return m_agg, c_agg
+        
+    curr_m, curr_c = fetch_and_aggregate(start_month_str, end_month_str)
+    prev_m, prev_c = fetch_and_aggregate(prev_start_month_str, prev_end_month_str)
+    
+    return curr_m, curr_c, prev_m, prev_c
+
 # =================================================================
 # BLOCK 8: DATA HYDRATION & VAULT GUARDRAIL
 # =================================================================
@@ -1309,7 +1379,7 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for full ROI Audit.")
 
 # =================================================================
-# BLOCK 12: PAGE 4: MASTER FORENSIC AUDIT (v86.5 - True MoM Math & Date Sync)
+# BLOCK 12: PAGE 4: MASTER FORENSIC AUDIT (v86.8 - Dynamic Date Aggregation)
 # =================================================================
 elif page == "Master Audit Report":
     # 1. PREMIUM HEADER
@@ -1352,6 +1422,7 @@ elif page == "Master Audit Report":
         t_imps = df_final['ad_impressions'].sum() if 'ad_impressions' in df_final.columns else 0
         t_pred = df_final['predicted_traffic'].sum() if 'predicted_traffic' in df_final.columns else 0
         
+        # We calculate accuracy locally right here
         accuracy = (1 - (abs(t_traf - t_pred) / t_traf)) * 100 if t_traf > 0 else 0
 
         # --- DYNAMIC MoM PERCENTAGE LAYER ---
@@ -1378,80 +1449,71 @@ elif page == "Master Audit Report":
 
         # --- 3. EMAIL PERFORMANCE & DISTRIBUTION AUDIT ---
         st.divider()
-        st.markdown("### 📨 Email Performance & Distribution Audit")
+        st.markdown(f"### 📨 Email Performance & Distribution Audit ({s_date} to {e_date})")
         
-        # FIXED: Hooking the query directly into the 'e_date' of the Audit Window
-        macro_email_list, current_campaigns, prev_campaigns = get_monthly_email_analytics(st.session_state.current_property_id, e_date)
+        # FIXED: Hooking into the custom aggregation function
+        macro_email, campaign_list, prev_email, prev_campaigns = get_aggregated_email_analytics(st.session_state.current_property_id, s_date, e_date)
         
-        if macro_email_list:
-            macro_email = macro_email_list[0]
-            
-            # FIXED: Accurate Percentage MoM Math
+        if macro_email:
             deliv_delta_fmt, open_delta_fmt, reads_delta_fmt, bounce_delta_fmt, unsub_delta_fmt = "---", "---", "---", "---", "---"
             
-            if len(macro_email_list) > 1:
-                prev_email = macro_email_list[1]
-                
-                # Volume (% Change)
+            # True Period-over-Period Delta Calculations
+            if prev_email and prev_email.get('total_emails_delivered', 0) > 0:
                 curr_deliv = float(macro_email.get('total_emails_delivered', 0))
                 prev_deliv = float(prev_email.get('total_emails_delivered', 0))
-                deliv_pct = ((curr_deliv - prev_deliv) / prev_deliv * 100) if prev_deliv > 0 else 0
-                deliv_delta_fmt = f"{deliv_pct:+.1f}% MoM"
+                deliv_pct = ((curr_deliv - prev_deliv) / prev_deliv * 100)
+                deliv_delta_fmt = f"{deliv_pct:+.1f}% PoP"
                 
-                # Rates (Percentage Point Change)
                 open_pt = (float(macro_email.get('avg_unique_open_rate', 0)) - float(prev_email.get('avg_unique_open_rate', 0))) * 100
-                open_delta_fmt = f"{open_pt:+.2f}% MoM"
+                open_delta_fmt = f"{open_pt:+.2f}% PoP"
                 
                 reads_pt = float(macro_email.get('avg_reads_per_unique_open', 0)) - float(prev_email.get('avg_reads_per_unique_open', 0))
-                reads_delta_fmt = f"{reads_pt:+.2f} MoM"
+                reads_delta_fmt = f"{reads_pt:+.2f} PoP"
                 
                 bounce_pt = (float(macro_email.get('avg_bounce_rate', 0)) - float(prev_email.get('avg_bounce_rate', 0))) * 100
-                bounce_delta_fmt = f"{bounce_pt:+.2f}% MoM"
+                bounce_delta_fmt = f"{bounce_pt:+.2f}% PoP"
                 
                 unsub_pt = (float(macro_email.get('avg_unsubscribe_rate', 0)) - float(prev_email.get('avg_unsubscribe_rate', 0))) * 100
-                unsub_delta_fmt = f"{unsub_pt:+.2f}% MoM"
+                unsub_delta_fmt = f"{unsub_pt:+.2f}% PoP"
 
             ec1, ec2, ec3, ec4, ec5 = st.columns(5)
-            ec1.metric("Emails Delivered", f"{macro_email.get('total_emails_delivered', 0):,}", delta=deliv_delta_fmt)
-            ec2.metric("Unique Open Rate", f"{float(macro_email.get('avg_unique_open_rate', 0))*100:.2f}%", delta=open_delta_fmt)
-            ec3.metric("Reads/Open", f"{macro_email.get('avg_reads_per_unique_open', 0):.2f}", delta=reads_delta_fmt)
-            ec4.metric("Bounce Rate", f"{float(macro_email.get('avg_bounce_rate', 0))*100:.2f}%", delta=bounce_delta_fmt, delta_color="inverse")
-            ec5.metric("Unsubscribe", f"{float(macro_email.get('avg_unsubscribe_rate', 0))*100:.2f}%", delta=unsub_delta_fmt, delta_color="inverse")
+            ec1.metric("Total Delivered", f"{macro_email.get('total_emails_delivered', 0):,}", delta=deliv_delta_fmt)
+            ec2.metric("Avg Open Rate", f"{float(macro_email.get('avg_unique_open_rate', 0))*100:.2f}%", delta=open_delta_fmt)
+            ec3.metric("Avg Reads/Open", f"{macro_email.get('avg_reads_per_unique_open', 0):.2f}", delta=reads_delta_fmt)
+            ec4.metric("Avg Bounce Rate", f"{float(macro_email.get('avg_bounce_rate', 0))*100:.2f}%", delta=bounce_delta_fmt, delta_color="inverse")
+            ec5.metric("Avg Unsubscribe", f"{float(macro_email.get('avg_unsubscribe_rate', 0))*100:.2f}%", delta=unsub_delta_fmt, delta_color="inverse")
             
-            if current_campaigns:
-                with st.expander("🎯 View Campaign Group Breakdown", expanded=True):
-                    # Build lookup dictionary for previous month's campaigns to map MoMs
-                    prev_camp_dict = {c['campaign_group_name']: c for c in prev_campaigns}
+            if campaign_list:
+                with st.expander("🎯 View Aggregated Campaign Breakdown", expanded=True):
+                    prev_camp_dict = {c['campaign_group_name']: c for c in prev_campaigns} if prev_campaigns else {}
                     
                     processed_table_data = []
-                    for camp in current_campaigns:
+                    for camp in campaign_list:
                         camp_name = str(camp.get('campaign_group_name', 'N/A'))
                         curr_vol = float(camp.get('emails_delivered', 0))
                         curr_open = float(camp.get('avg_unique_open_rate', 0)) * 100
                         curr_pct = float(camp.get('pct_of_total_emails_sent', 0)) * 100
                         
-                        # Match to previous month for Deltas
                         p_camp = prev_camp_dict.get(camp_name, {})
                         prev_vol = float(p_camp.get('emails_delivered', 0))
                         prev_open = float(p_camp.get('avg_unique_open_rate', 0)) * 100
                         
-                        # Calculate Campaign-Level MoMs
                         vol_mom = f"{((curr_vol - prev_vol) / prev_vol * 100):+.1f}%" if prev_vol > 0 else "---"
                         open_mom = f"{(curr_open - prev_open):+.1f}%" if prev_open > 0 else "---"
                         
                         processed_table_data.append({
                             "Campaign Group": camp_name,
                             "% of Total Sent": f"{curr_pct:.2f}%",
-                            "Delivered": f"{int(curr_vol):,}",
-                            "Vol MoM": vol_mom,
-                            "Open Rate": f"{curr_open:.2f}%",
-                            "Open MoM": open_mom,
-                            "Click Rate": f"{float(camp.get('avg_unique_click_rate', 0))*100:.2f}%"
+                            "Total Delivered": f"{int(curr_vol):,}",
+                            "Vol Delta": vol_mom,
+                            "Avg Open Rate": f"{curr_open:.2f}%",
+                            "Open Delta": open_mom,
+                            "Avg Click Rate": f"{float(camp.get('avg_unique_click_rate', 0))*100:.2f}%"
                         })
                         
                     st.dataframe(processed_table_data, use_container_width=True, hide_index=True)
         else:
-            st.info("No vaulted email metrics found for this period.")
+            st.info("No vaulted email metrics found within this date selection.")
 
         # --- 4. PR & EARNED MEDIA IMPACT ---
         st.divider()
@@ -1529,6 +1591,7 @@ elif page == "Master Audit Report":
         st.divider()
         st.download_button("📥 Export Integrated Audit", data=df_final.to_csv(index=False).encode('utf-8'), 
                            file_name=f"Master_Audit_{s_date}.csv", use_container_width=True)
+
 # =================================================================
 # 13. PAGE 5: AI CALIBRATION & ENGINE WEIGHTS (v73.0 SaaS Sync)
 # =================================================================
