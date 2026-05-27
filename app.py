@@ -1313,30 +1313,6 @@ elif page == "Master Audit Report":
         "Forensic Ledger: Financials, Multi-Channel Attribution, & Earned Media",
         "Audit Ready"
     )
-    
-    # --- 1. SAAS INGESTION FACTORY ---
-    with st.expander("📥 Bulk Ingest Forensic Ledger (CSV)", expanded=not ledger_data):
-        st.markdown('<div style="padding: 10px;">', unsafe_allow_html=True)
-        uploaded_file = st.file_uploader("Choose CSV File", type="csv", key="vault_uploader")
-        
-        if uploaded_file:
-            try:
-                up_df = pd.read_csv(uploaded_file)
-                up_df['property_id'] = st.session_state.current_property_id
-                
-                if st.button("🚀 Commit Bulk Upload to Vault", use_container_width=True):
-                    payload = up_df.to_dict(orient='records')
-                    supabase.table("ledger").upsert(payload).execute()
-                    st.success(f"Successfully ingested {len(up_df)} records!")
-                    st.cache_data.clear()
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Ingestion Error: {e}")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    if not ledger_data:
-        st.warning(f"⚠️ Audit Vault for {st.session_state.current_property_name} is empty.")
-        st.stop()
 
     # --- 2. AUDIT WINDOW & DATA PREP ---
     df_audit_raw = pd.DataFrame(ledger_data)
@@ -2264,6 +2240,30 @@ elif page == "Global Admin Console":
                     st.rerun()
                 except Exception as e:
                     st.error(f"Security Matrix Sync Error: {e}")
+
+# --- 1. SAAS INGESTION FACTORY ---
+    with st.expander("📥 Bulk Ingest Forensic Ledger (CSV)", expanded=not ledger_data):
+        st.markdown('<div style="padding: 10px;">', unsafe_allow_html=True)
+        uploaded_file = st.file_uploader("Choose CSV File", type="csv", key="vault_uploader")
+        
+        if uploaded_file:
+            try:
+                up_df = pd.read_csv(uploaded_file)
+                up_df['property_id'] = st.session_state.current_property_id
+                
+                if st.button("🚀 Commit Bulk Upload to Vault", use_container_width=True):
+                    payload = up_df.to_dict(orient='records')
+                    supabase.table("ledger").upsert(payload).execute()
+                    st.success(f"Successfully ingested {len(up_df)} records!")
+                    st.cache_data.clear()
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Ingestion Error: {e}")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if not ledger_data:
+        st.warning(f"⚠️ Audit Vault for {st.session_state.current_property_name} is empty.")
+        st.stop()
 
 # =================================================================
 # 17. PAGE 9: STRATEGIC ALERTS (v60.2 - Multi-Role Response Engine)
