@@ -511,17 +511,17 @@ def get_aggregated_email_analytics(property_id, s_date, e_date):
     m_agg, c_agg, prev_m_agg, prev_c_agg = {}, [], {}, []
     
     try:
+        # Helper to dynamically find the correct columns regardless of schema
+        def get_col(df_target, candidates):
+            for c in candidates:
+                if c in df_target.columns: return c
+            return None
+
         # --- 1. GET CURRENT WINDOW ---
         mac_res = supabase.table("monthly_email_snapshots").select("*").eq("property_id", target_uuid).gte("snapshot_month", start_str).lte("snapshot_month", end_str).execute()
         camp_res = supabase.table("campaign_group_records").select("*").eq("property_id", target_uuid).gte("snapshot_month", start_str).lte("snapshot_month", end_str).execute()
         
         earliest_current = start_str
-        
-        # Helper to dynamically find the correct raw count columns
-        def get_col(df_target, candidates):
-            for c in candidates:
-                if c in df_target.columns: return c
-            return None
         
         if mac_res.data:
             df = pd.DataFrame(mac_res.data)
@@ -529,29 +529,39 @@ def get_aggregated_email_analytics(property_id, s_date, e_date):
             
             total_vol = df['total_emails_delivered'].sum() if 'total_emails_delivered' in df.columns else 0
             if total_vol > 0:
+                # 1. Try to find raw count columns
                 c_u_opens = get_col(df, ['unique_email_opens', 'unique_opens', 'opens'])
                 c_t_opens = get_col(df, ['total_email_opens', 'total_opens'])
                 c_bounces = get_col(df, ['total_email_bounces', 'bounces'])
                 c_unsubs = get_col(df, ['unsubscribes', 'unsubscribe_count'])
                 
-                # Using RAW counts to calculate the rates mathematically
+                # 2. Try to find pre-calculated rate columns (Fallback)
+                c_open_rate = get_col(df, ['avg_unique_open_rate', 'unique_open_rate', 'open_rate'])
+                c_reads_rate = get_col(df, ['avg_reads_per_unique_open', 'reads_per_open'])
+                c_bounce_rate = get_col(df, ['avg_bounce_rate', 'bounce_rate'])
+                c_unsub_rate = get_col(df, ['avg_unsubscribe_rate', 'unsubscribe_rate'])
+
+                # 3. Calculate seamlessly (Prefers raw math, falls back to averaging rates)
                 m_agg = {
                     'total_emails_delivered': total_vol,
-                    'avg_unique_open_rate': (df[c_u_opens].sum() / total_vol) if c_u_opens else 0,
-                    'avg_reads_per_unique_open': (df[c_t_opens].sum() / df[c_u_opens].sum()) if c_t_opens and c_u_opens and df[c_u_opens].sum() > 0 else 0,
-                    'avg_bounce_rate': (df[c_bounces].sum() / total_vol) if c_bounces else 0,
-                    'avg_unsubscribe_rate': (df[c_unsubs].sum() / total_vol) if c_unsubs else 0
+                    'avg_unique_open_rate': (df[c_u_opens].sum() / total_vol) if c_u_opens else (df[c_open_rate].mean() if c_open_rate else 0),
+                    'avg_reads_per_unique_open': (df[c_t_opens].sum() / df[c_u_opens].sum()) if c_t_opens and c_u_opens and df[c_u_opens].sum() > 0 else (df[c_reads_rate].mean() if c_reads_rate else 0),
+                    'avg_bounce_rate': (df[c_bounces].sum() / total_vol) if c_bounces else (df[c_bounce_rate].mean() if c_bounce_rate else 0),
+                    'avg_unsubscribe_rate': (df[c_unsubs].sum() / total_vol) if c_unsubs else (df[c_unsub_rate].mean() if c_unsub_rate else 0)
                 }
                 
         if camp_res.data and m_agg:
             df_c = pd.DataFrame(camp_res.data)
             if 'campaign_group_name' in df_c.columns:
+                c_c_open_rate = get_col(df_c, ['avg_unique_open_rate', 'open_rate'])
+                c_c_click_rate = get_col(df_c, ['avg_unique_click_rate', 'click_rate'])
+                
                 for camp_name, group in df_c.groupby('campaign_group_name'):
                     c_agg.append({
                         'campaign_group_name': camp_name,
                         'emails_delivered': group['emails_delivered'].sum() if 'emails_delivered' in df_c.columns else 0,
-                        'avg_unique_open_rate': (group['avg_unique_open_rate'] * group['emails_delivered']).sum() / group['emails_delivered'].sum() if 'avg_unique_open_rate' in df_c.columns and group['emails_delivered'].sum() > 0 else 0,
-                        'avg_unique_click_rate': (group['avg_unique_click_rate'] * group['emails_delivered']).sum() / group['emails_delivered'].sum() if 'avg_unique_click_rate' in df_c.columns and group['emails_delivered'].sum() > 0 else 0,
+                        'avg_unique_open_rate': group[c_c_open_rate].mean() if c_c_open_rate else 0,
+                        'avg_unique_click_rate': group[c_c_click_rate].mean() if c_c_click_rate else 0,
                         'pct_of_total_emails_sent': group['pct_of_total_emails_sent'].mean() if 'pct_of_total_emails_sent' in df_c.columns else 0
                     })
 
@@ -568,12 +578,17 @@ def get_aggregated_email_analytics(property_id, s_date, e_date):
                 pc_bounces = get_col(p_df, ['total_email_bounces', 'bounces'])
                 pc_unsubs = get_col(p_df, ['unsubscribes', 'unsubscribe_count'])
                 
+                pc_open_rate = get_col(p_df, ['avg_unique_open_rate', 'unique_open_rate', 'open_rate'])
+                pc_reads_rate = get_col(p_df, ['avg_reads_per_unique_open', 'reads_per_open'])
+                pc_bounce_rate = get_col(p_df, ['avg_bounce_rate', 'bounce_rate'])
+                pc_unsub_rate = get_col(p_df, ['avg_unsubscribe_rate', 'unsubscribe_rate'])
+                
                 prev_m_agg = {
                     'total_emails_delivered': p_vol,
-                    'avg_unique_open_rate': (p_df[pc_u_opens].sum() / p_vol) if pc_u_opens else 0,
-                    'avg_reads_per_unique_open': (p_df[pc_t_opens].sum() / p_df[pc_u_opens].sum()) if pc_t_opens and pc_u_opens and p_df[pc_u_opens].sum() > 0 else 0,
-                    'avg_bounce_rate': (p_df[pc_bounces].sum() / p_vol) if pc_bounces else 0,
-                    'avg_unsubscribe_rate': (p_df[pc_unsubs].sum() / p_vol) if pc_unsubs else 0
+                    'avg_unique_open_rate': (p_df[pc_u_opens].sum() / p_vol) if pc_u_opens else (p_df[pc_open_rate].mean() if pc_open_rate else 0),
+                    'avg_reads_per_unique_open': (p_df[pc_t_opens].sum() / p_df[pc_u_opens].sum()) if pc_t_opens and pc_u_opens and p_df[pc_u_opens].sum() > 0 else (p_df[pc_reads_rate].mean() if pc_reads_rate else 0),
+                    'avg_bounce_rate': (p_df[pc_bounces].sum() / p_vol) if pc_bounces else (p_df[pc_bounce_rate].mean() if pc_bounce_rate else 0),
+                    'avg_unsubscribe_rate': (p_df[pc_unsubs].sum() / p_vol) if pc_unsubs else (p_df[pc_unsub_rate].mean() if pc_unsub_rate else 0)
                 }
                 
             target_prev_month = prev_mac_res.data[0]['snapshot_month']
@@ -582,12 +597,15 @@ def get_aggregated_email_analytics(property_id, s_date, e_date):
             if prev_camp_res.data:
                 p_df_c = pd.DataFrame(prev_camp_res.data)
                 if 'campaign_group_name' in p_df_c.columns:
+                    p_c_open_rate = get_col(p_df_c, ['avg_unique_open_rate', 'open_rate'])
+                    p_c_click_rate = get_col(p_df_c, ['avg_unique_click_rate', 'click_rate'])
+                    
                     for camp_name, group in p_df_c.groupby('campaign_group_name'):
                         prev_c_agg.append({
                             'campaign_group_name': camp_name,
                             'emails_delivered': group['emails_delivered'].sum() if 'emails_delivered' in p_df_c.columns else 0,
-                            'avg_unique_open_rate': (group['avg_unique_open_rate'] * group['emails_delivered']).sum() / group['emails_delivered'].sum() if 'avg_unique_open_rate' in p_df_c.columns and group['emails_delivered'].sum() > 0 else 0,
-                            'avg_unique_click_rate': (group['avg_unique_click_rate'] * group['emails_delivered']).sum() / group['emails_delivered'].sum() if 'avg_unique_click_rate' in p_df_c.columns and group['emails_delivered'].sum() > 0 else 0
+                            'avg_unique_open_rate': group[p_c_open_rate].mean() if p_c_open_rate else 0,
+                            'avg_unique_click_rate': group[p_c_click_rate].mean() if p_c_click_rate else 0
                         })
                         
     except Exception as e:
