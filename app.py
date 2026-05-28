@@ -503,19 +503,26 @@ def get_monthly_marketing_snapshot(property_id, target_date):
 def get_aggregated_email_analytics(property_id, s_date, e_date):
     """
     Dynamically aggregates email snapshots and campaign records across the selected date range.
-    Uses weighted averages for rates based on delivery volumes.
+    Uses strict calendar month boundaries to ensure database timestamps are never missed.
     """
+    import calendar
     target_uuid = str(property_id)
     
-    # Snap start date to the 1st
+    # 1. CURRENT PERIOD: Snap to the 1st and Last day of the selected months
     start_month_str = s_date.replace(day=1).strftime("%Y-%m-%d")
-    end_month_str = e_date.strftime("%Y-%m-%d")
+    last_day_curr = calendar.monthrange(e_date.year, e_date.month)[1]
+    end_month_str = e_date.replace(day=last_day_curr).strftime("%Y-%m-%d")
     
-    # Calculate prior period for MoM
-    days_in_range = (e_date - s_date).days + 1
-    prev_e_date = s_date - datetime.timedelta(days=1)
-    prev_s_date = prev_e_date - datetime.timedelta(days=days_in_range - 1)
-    prev_start_month_str = prev_s_date.replace(day=1).strftime("%Y-%m-%d")
+    # 2. PREVIOUS PERIOD: Shift back exactly 1 calendar month
+    if s_date.month == 1:
+        prev_s_date = s_date.replace(year=s_date.year - 1, month=12, day=1)
+    else:
+        prev_s_date = s_date.replace(month=s_date.month - 1, day=1)
+        
+    last_day_prev = calendar.monthrange(prev_s_date.year, prev_s_date.month)[1]
+    prev_e_date = prev_s_date.replace(day=last_day_prev)
+    
+    prev_start_month_str = prev_s_date.strftime("%Y-%m-%d")
     prev_end_month_str = prev_e_date.strftime("%Y-%m-%d")
     
     def fetch_and_aggregate(start_str, end_str):
@@ -533,7 +540,7 @@ def get_aggregated_email_analytics(property_id, s_date, e_date):
         if mac_res.data:
             df = pd.DataFrame(mac_res.data)
             
-            # DEFENSIVE MAPPING: Helper to find the right column name dynamically
+            # Helper to find dynamic column names
             def get_col(candidates):
                 for c in candidates:
                     if c in df.columns: return c
@@ -541,7 +548,6 @@ def get_aggregated_email_analytics(property_id, s_date, e_date):
 
             total_vol = df['total_emails_delivered'].sum()
             if total_vol > 0:
-                # Dynamically map the columns based on what actually exists in your DB
                 col_u_opens = get_col(['unique_email_opens', 'unique_opens', 'opens'])
                 col_t_opens = get_col(['total_email_opens', 'total_opens'])
                 col_bounces = get_col(['total_email_bounces', 'bounces', 'bounce_count'])
@@ -557,7 +563,6 @@ def get_aggregated_email_analytics(property_id, s_date, e_date):
                 
         if camp_res.data and m_agg:
             df_c = pd.DataFrame(camp_res.data)
-            # Ensure columns exist before grouping
             if 'emails_delivered' in df_c.columns and 'avg_unique_open_rate' in df_c.columns:
                 grp = df_c.groupby('campaign_group_name').agg(
                     emails_delivered=('emails_delivered', 'sum'),
@@ -575,7 +580,7 @@ def get_aggregated_email_analytics(property_id, s_date, e_date):
                         'pct_of_total_emails_sent': r['emails_delivered'] / tot_c_vol if tot_c_vol > 0 else 0
                     })
         return m_agg, c_agg
-        
+
     curr_m, curr_c = fetch_and_aggregate(start_month_str, end_month_str)
     prev_m, prev_c = fetch_and_aggregate(prev_start_month_str, prev_end_month_str)
     
