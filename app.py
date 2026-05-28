@@ -932,24 +932,31 @@ if page == "Executive Dashboard":
     # =================================================================
     st.markdown("<br>", unsafe_allow_html=True)
     st.write("### 📨 Email Performance & Distribution Audit")
-    
-    # 1. Initialize audit_range with None to prevent NameError
-    audit_range = None
-    
-    # 2. Get the date input (or define it from your earlier global widget)
-    # If this is the same widget as the one above, just reference it here.
-    # If this is a NEW widget, give it a unique key.
+    st.caption("Detailed segment distribution tracking operational engagement metrics across active player database categories.")
+
+    # --- THE FIX: CALCULATE MIN/MAX FOR THE EXECUTIVE DASHBOARD ---
+    if 'ledger_data' in locals() and ledger_data:
+        df_tmp = pd.DataFrame(ledger_data)
+        df_tmp['entry_date'] = pd.to_datetime(df_tmp['entry_date'])
+        min_audit = df_tmp['entry_date'].min().date()
+        max_audit = df_tmp['entry_date'].max().date()
+    else:
+        import datetime
+        min_audit = datetime.date.today() - datetime.timedelta(days=30)
+        max_audit = datetime.date.today()
+    # --------------------------------------------------------------
+
+    # 1. CREATE THE DATE PICKER
     audit_range = st.date_input(
-        "Select Audit Window for Email:", 
+        "Select Audit Window:", 
         value=(min_audit, max_audit), 
-        key="email_audit_window_unique"
+        key="exec_email_panel_window"
     )
 
-    # 3. Now it is safe to perform the check
+    # 2. RUN THE DATA
     if isinstance(audit_range, tuple) and len(audit_range) == 2:
         s_date, e_date = audit_range 
         
-        # Now call the function
         macro_email, campaign_list, prev_email, prev_campaigns = get_aggregated_email_analytics(
             st.session_state.current_property_id, 
             s_date, 
@@ -986,7 +993,6 @@ if page == "Executive Dashboard":
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.write(f"#### 🎯 Campaign Group Breakdown Summary ({em_month_name})")
                 
-                # Create a lookup dictionary for previous campaigns to calculate deltas
                 prev_camp_dict = {c['campaign_group_name']: c for c in prev_campaigns} if prev_campaigns else {}
                 
                 processed_table_data = []
@@ -994,14 +1000,10 @@ if page == "Executive Dashboard":
                     name = str(camp.get('campaign_group_name', 'N/A'))
                     p_camp = prev_camp_dict.get(name, {})
                     
-                    # Current values
                     curr_deliv = float(camp.get('emails_delivered', 0))
                     curr_open = float(camp.get('avg_unique_open_rate', 0)) * 100
                     curr_click = float(camp.get('avg_unique_click_rate', 0)) * 100
-                    # Assuming you want bounce in the breakdown (calculated from macro if not in camp_res)
-                    curr_bounce = float(camp.get('avg_bounce_rate', macro_email.get('avg_bounce_rate', 0))) * 100
                     
-                    # Delta calculations
                     vol_mom = f"{((curr_deliv - float(p_camp.get('emails_delivered', 0))) / float(p_camp.get('emails_delivered', 1)) * 100):+.1f}%" if p_camp else "N/A"
                     open_mom = f"{(curr_open - float(p_camp.get('avg_unique_open_rate', 0)) * 100):+.2f}%" if p_camp else "N/A"
                     
@@ -1018,8 +1020,6 @@ if page == "Executive Dashboard":
                 st.dataframe(processed_table_data, use_container_width=True, hide_index=True)
         else:
             st.info("No vaulted monthly email metrics snapshot found for this property location.")
-    else:
-        st.info("📨 Please select a date range to load email performance.")
 
     # 8. EXECUTIVE BRAND SENTIMENT PULSE
     st.divider()
