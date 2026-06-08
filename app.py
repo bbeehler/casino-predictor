@@ -40,7 +40,7 @@ def check_permission(capability):
     perms = st.session_state.get('user_permissions', {})
     return perms.get(capability, False)
 
-def archive_sentiment_entry(text, asset_tag):
+def archive_sentiment_entry(text, asset_tag, review_date):
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         model = genai.GenerativeModel('gemini-2.5-flash') 
@@ -58,6 +58,10 @@ def archive_sentiment_entry(text, asset_tag):
         abs_score = abs(sentiment_score)
         intensity_level = "Extreme" if abs_score >= 0.8 else "Moderate" if abs_score >= 0.4 else "Low"
 
+        # Format the user-provided date to an ISO string for Supabase
+        # Appending a generic time (12:00:00) ensures it registers correctly in timestamptz columns
+        formatted_date = review_date.strftime("%Y-%m-%dT12:00:00")
+
         payload = {
             "message_id": str(uuid.uuid4()),
             "property_id": st.session_state.current_property_id,
@@ -66,7 +70,7 @@ def archive_sentiment_entry(text, asset_tag):
             "sentiment_category": sentiment_category,
             "intensity_level": intensity_level,
             "raw_text": text,
-            "timestamp": datetime.datetime.now().isoformat()
+            "timestamp": formatted_date  # <--- Now uses your selected date instead of "now()"
         }
         supabase.table("sentiment_history").insert(payload).execute()
         return True
@@ -1755,9 +1759,15 @@ elif page == "Sentiment Scoring":
             with st.expander("📝 Manual Sentiment Archival", expanded=True):
                 with st.form("manual_sentiment_form", clear_on_submit=True, border=False):
                     manual_tag = st.selectbox("Assign to Asset:", tags)
+                    
+                    # NEW: Let user pick the date of the review (defaults to today)
+                    manual_date = st.date_input("Review Date:", value=datetime.date.today(), key="manual_date")
+                    
                     f_text = st.text_area("Review Content", placeholder="Paste review text...", height=150)
                     if st.form_submit_button("🛡️ Archive & AI Score", use_container_width=True):
-                        if f_text and archive_sentiment_entry(f_text, manual_tag):
+                        
+                        # NEW: Pass the manual_date to your function
+                        if f_text and archive_sentiment_entry(f_text, manual_tag, manual_date):
                             st.success("Entry Scored & Vaulted.")
                             st.cache_data.clear()
                             st.rerun()
@@ -1767,11 +1777,18 @@ elif page == "Sentiment Scoring":
             with st.expander("📄 Intelligence Bulk Loader", expanded=True):
                 uploaded_doc = st.file_uploader("Upload .docx Source", type="docx")
                 bulk_tag = st.selectbox("Bulk Assign:", tags)
+                
+                # NEW: Let user pick a date for the bulk upload batch
+                bulk_date = st.date_input("Bulk Review Date:", value=datetime.date.today(), key="bulk_date")
+                
                 if uploaded_doc and st.button("🚀 Execute Bulk Parse", use_container_width=True):
                     doc = Document(uploaded_doc)
                     for para in doc.paragraphs:
                         if len(para.text) > 20:
-                            archive_sentiment_entry(para.text, bulk_tag)
+                            
+                            # NEW: Pass the bulk_date to your function
+                            archive_sentiment_entry(para.text, bulk_tag, bulk_date)
+                            
                     st.success("Bulk Ingestion Complete.")
                     st.cache_data.clear()
                     st.rerun()
