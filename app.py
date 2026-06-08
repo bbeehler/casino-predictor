@@ -2258,25 +2258,29 @@ elif page == "Global Admin Console":
                         st.success("File verified successfully. Click button below to run parsing matrix loops.")
                         
                         if st.button("🚀 Process & Vault Statement to Supabase", use_container_width=True):
-                            # Split macro totals row from segment lines cleanly
-                            summary_row_idx = raw_csv_df[raw_csv_df["Campaign Name"] == "Total / Average"].index
                             
-                            if len(summary_row_idx) > 0:
-                                total_idx = summary_row_idx[0]
-                                macro_row = raw_csv_df.iloc[total_idx]
-                                segments_df = raw_csv_df.iloc[0:total_idx].copy()
-                            else:
-                                macro_row = raw_csv_df.iloc[-1]
-                                segments_df = raw_csv_df.iloc[0:-1].copy()
+                            # 1. CLEAN THE DATA (Remove commas and convert to strict numbers)
+                            cols_to_clean = ["Emails Delivered", "Unique Email Opens", "Total Email Opens", "Total Email Bounces", "Unsubscribes", "Unique Email Clicks"]
+                            for col in cols_to_clean:
+                                if col in raw_csv_df.columns:
+                                    raw_csv_df[col] = pd.to_numeric(raw_csv_df[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+
+                            # 2. ISOLATE CAMPAIGNS (Filter out any existing summary rows to avoid double-counting)
+                            mask = raw_csv_df["Campaign Name"].astype(str).str.contains('Total|Average', case=False, na=False)
+                            segments_df = raw_csv_df[~mask].copy()
                                 
-                            # 1. Parse and compile Part A indicators (WITH DATABASE OVERFLOW CAPPING)
-                            mac_delivered = int(macro_row["Emails Delivered"])
+                            # 3. CALCULATE MACRO TOTALS MATHEMATICALLY
+                            mac_delivered = int(segments_df["Emails Delivered"].sum())
+                            mac_u_opens = int(segments_df["Unique Email Opens"].sum())
+                            mac_t_opens = int(segments_df["Total Email Opens"].sum())
+                            mac_bounces = int(segments_df["Total Email Bounces"].sum())
+                            mac_unsubs = int(segments_df["Unsubscribes"].sum())
                             
                             # Safe division logic and min() capping logic applied
-                            mac_open_rate = min(float(macro_row["Unique Email Opens"] / mac_delivered) if mac_delivered > 0 else 0.0, 9.9999)
-                            mac_reads = min(float(macro_row["Total Email Opens"] / macro_row["Unique Email Opens"]) if macro_row["Unique Email Opens"] > 0 else 0.0, 9.9999)
-                            mac_bounce = min(float(macro_row["Total Email Bounces"] / mac_delivered) if mac_delivered > 0 else 0.0, 9.9999)
-                            mac_unsub = min(float(macro_row["Unsubscribes"] / mac_delivered) if mac_delivered > 0 else 0.0, 9.9999)
+                            mac_open_rate = min(float(mac_u_opens / mac_delivered) if mac_delivered > 0 else 0.0, 9.9999)
+                            mac_reads = min(float(mac_t_opens / mac_u_opens) if mac_u_opens > 0 else 0.0, 9.9999)
+                            mac_bounce = min(float(mac_bounces / mac_delivered) if mac_delivered > 0 else 0.0, 9.9999)
+                            mac_unsub = min(float(mac_unsubs / mac_delivered) if mac_delivered > 0 else 0.0, 9.9999)
                             
                             macro_payload = {
                                 "property_id": str(email_prop_id),
@@ -2289,7 +2293,7 @@ elif page == "Global Admin Console":
                             }
                             supabase.table("monthly_email_snapshots").upsert(macro_payload).execute()
                             
-                            # 2. Parse and compile Part B segmentations
+                            # 4. COMPILE SEGMENT DATA
                             segments_df["Category"] = segments_df["Campaign Name"].apply(get_campaign_category)
                             
                             group_agg = segments_df.groupby("Category").agg(
@@ -2303,7 +2307,6 @@ elif page == "Global Admin Console":
                                 g_delivered = int(g_row["delivered"])
                                 if g_delivered == 0: continue
                                 
-                                # WITH DATABASE OVERFLOW CAPPING
                                 camp_payload = {
                                     "property_id": str(email_prop_id),
                                     "snapshot_month": target_date_iso,
