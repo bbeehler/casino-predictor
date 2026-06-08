@@ -2347,7 +2347,121 @@ elif page == "Global Admin Console":
                         st.write(f"**Linked Property:** {row['Property Name']}")
                         st.caption(f"Access ID: {row['id']}")
                     with c3:
-                        if st.button("
+                        if st.button("Update", key=f"upd_{row['id']}", use_container_width=True):
+                            supabase.table("user_property_access").update({"user_role": new_role}).eq("id", row['id']).execute()
+                            st.success("Synced.")
+                            st.rerun()
+                        if st.button("🗑️ Revoke", key=f"rev_{row['id']}", type="secondary", use_container_width=True):
+                            try:
+                                supabase.table("user_property_access").delete().eq("id", row['id']).execute()
+                                st.warning(f"Access Revoked for {row['user_email']}")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Deletion Error: {e}")
+        else:
+            st.info("No user access records found.")
+
+        st.divider()
+        st.subheader("➕ Assign User to Additional Property")
+        with st.form("assign_multi_prop"):
+            target_email = st.text_input("User Email (Primary Key)", placeholder="user@company.com")
+            all_p_res = supabase.table("properties").select("id, property_name").execute()
+            p_opts = {p['property_name']: p['id'] for p in all_p_res.data} if all_p_res.data else {}
+            target_prop_name = st.selectbox("Select Property to Link", list(p_opts.keys()))
+            target_role = st.selectbox("Assign Role", ["Viewer", "Manager", "Admin", "Super Admin"])
+            
+            if st.form_submit_button("🚀 Link User to Property", use_container_width=True):
+                if target_email and target_prop_name:
+                    clean_email = target_email.lower().strip()
+                    target_uuid = p_opts.get(target_prop_name)
+                    check = supabase.table("user_property_access").select("*").eq("user_email", clean_email).eq("property_id", target_uuid).execute()
+                    if check.data:
+                        st.error(f"User {clean_email} already linked to {target_prop_name}.")
+                    else:
+                        try:
+                            supabase.table("user_property_access").insert({"user_email": clean_email, "property_id": target_uuid, "user_role": target_role}).execute()
+                            st.success(f"✅ Linked {clean_email}")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Database Error: {e}")
+
+    # --- TAB 3: SYSTEM HEALTH & SECURITY MATRIX ---
+    with tabs[2]:
+        st.write("### 📊 Database Orchestration Stats")
+        try:
+            prop_res = supabase.table("properties").select("*", count="exact").execute()
+            user_res = supabase.table("user_property_access").select("*", count="exact").execute()
+            h1, h2 = st.columns(2)
+            h1.metric("Active Tenants", prop_res.count or 0)
+            h2.metric("Managed Users", user_res.count or 0)
+        except Exception as e: 
+            st.error(f"Stats Error: {e}")
+            
+        st.divider()
+        st.subheader("🛡️ Global Role Authorization Matrix")
+        target_role_config = st.selectbox("Select Role to Configure:", ["Viewer", "Manager", "Admin", "Super Admin"], key="role_selector_admin")
+        existing_perms = {}
+        try:
+            perm_fetch = supabase.table("role_permissions").select("perms").eq("role_name", target_role_config).execute()
+            if perm_fetch.data:
+                existing_perms = perm_fetch.data[0].get('perms', {})
+        except Exception as e:
+            st.caption(f"Role '{target_role_config}' not yet initialized.")
+
+        capabilities = {
+            "view_analytics": "Access Attribution & Executive Dashboards",
+            "view_ledger": "Access Daily Ledger Audit",
+            "view_pr_scorecard": "Access PR Scorecard (Earned Media Tracking)",
+            "view_reports": "Access Master Audit Reports",
+            "run_simulations": "Access Predictive Scenario Simulator",
+            "manage_alerts": "Create/Delete Strategic Watchdogs",
+            "calibrate_ai": "Change AI Coefficients & ROAS",
+            "run_experiments": "Access A/B Experimentation Vault"
+        }
+        
+        with st.form(f"perm_matrix_form_{target_role_config}"):
+            st.write(f"Adjusting capabilities for: **{target_role_config}**")
+            updated_perms = {}
+            col1, col2 = st.columns(2)
+            for i, (cap_id, cap_desc) in enumerate(capabilities.items()):
+                target_col = col1 if i % 2 == 0 else col2
+                is_checked = existing_perms.get(cap_id, False)
+                updated_perms[cap_id] = target_col.checkbox(cap_desc, value=is_checked, key=f"check_{target_role_config}_{cap_id}")
+                
+            if st.form_submit_button("💾 Save Role Configuration", use_container_width=True):
+                try:
+                    supabase.table("role_permissions").upsert({"role_name": target_role_config, "perms": updated_perms}, on_conflict="role_name").execute()
+                    st.success(f"✅ '{target_role_config}' permissions are now live.")
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Security Matrix Sync Error: {e}")
+
+# --- 1. SAAS INGESTION FACTORY ---
+    with st.expander("📥 Bulk Ingest Forensic Ledger (CSV)", expanded=not ledger_data):
+        st.markdown('<div style="padding: 10px;">', unsafe_allow_html=True)
+        uploaded_file = st.file_uploader("Choose CSV File", type="csv", key="vault_uploader")
+        
+        if uploaded_file:
+            try:
+                up_df = pd.read_csv(uploaded_file)
+                up_df['property_id'] = st.session_state.current_property_id
+                
+                if st.button("🚀 Commit Bulk Upload to Vault", use_container_width=True):
+                    payload = up_df.to_dict(orient='records')
+                    supabase.table("ledger").upsert(payload).execute()
+                    st.success(f"Successfully ingested {len(up_df)} records!")
+                    st.cache_data.clear()
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Ingestion Error: {e}")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if not ledger_data:
+        st.warning(f"⚠️ Audit Vault for {st.session_state.current_property_name} is empty.")
+        st.stop()
 
 # =================================================================
 # 17. PAGE 9: STRATEGIC ALERTS (v60.2 - Multi-Role Response Engine)
