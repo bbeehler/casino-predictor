@@ -1773,28 +1773,59 @@ elif page == "Sentiment Scoring":
                             st.rerun()
 
         with col_input2:
+            import time
             from docx import Document
             with st.expander("📄 Intelligence Bulk Loader", expanded=True):
                 uploaded_doc = st.file_uploader("Upload .docx Source", type="docx")
                 bulk_tag = st.selectbox("Bulk Assign:", tags)
-                
-                # NEW: Let user pick a date for the bulk upload batch
                 bulk_date = st.date_input("Bulk Review Date:", value=datetime.date.today(), key="bulk_date")
                 
                 if uploaded_doc and st.button("🚀 Execute Bulk Parse", use_container_width=True):
                     doc = Document(uploaded_doc)
-                    for para in doc.paragraphs:
-                        if len(para.text) > 20:
+                    
+                    # 1. Filter paragraphs first
+                    valid_paragraphs = [para.text for para in doc.paragraphs if len(para.text) > 20]
+                    total_paras = len(valid_paragraphs)
+                    
+                    if total_paras > 0:
+                        success_count = 0
+                        fail_count = 0
+                        
+                        # 2. UI Trackers
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        
+                        for idx, text in enumerate(valid_paragraphs):
+                            status_text.text(f"Analyzing & Vaulting entry {idx + 1} of {total_paras}...")
                             
-                            # NEW: Pass the bulk_date to your function
-                            archive_sentiment_entry(para.text, bulk_tag, bulk_date)
+                            # 3. Check for actual success from the backend function
+                            if archive_sentiment_entry(text, bulk_tag, bulk_date):
+                                success_count += 1
+                            else:
+                                fail_count += 1
+                                
+                            progress_bar.progress((idx + 1) / total_paras)
                             
-                    st.success("Bulk Ingestion Complete.")
-                    st.cache_data.clear()
-                    st.rerun()
-        st.divider()
-    else:
-        st.caption("🔒 Data Ingestion tools restricted to Management roles.")
+                            # 4. THE FIX: Throttle the loop so the AI API doesn't block you
+                            time.sleep(1.5) 
+                            
+                        # Clean up UI
+                        status_text.empty()
+                        progress_bar.empty()
+                        
+                        # 5. Honest Reporting
+                        if success_count > 0:
+                            st.success(f"✅ Vaulting Complete: {success_count} entries scored and saved.")
+                        if fail_count > 0:
+                            st.error(f"⚠️ {fail_count} entries failed (Check API limits or database connection).")
+                            
+                        # Only rerun if it was completely successful, giving time to read the message
+                        if success_count > 0 and fail_count == 0:
+                            time.sleep(2.5)
+                            st.cache_data.clear()
+                            st.rerun()
+                    else:
+                        st.warning("No valid text found. Paragraphs must be longer than 20 characters.")
 
     # --- 3. SENTIMENT VAULT RESEARCH (Categorical Filter) ---
     st.markdown("### 🔍 Sentiment Vault Research")
