@@ -391,7 +391,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # =================================================================
-# BLOCK 7: NAVIGATION & AI HUB (Instructional Switcher & Full Menu)
+# BLOCK 7: NAVIGATION & AI HUB (Forensic Supabase Integration)
 # =================================================================
 if 'show_ai_hub' not in st.session_state: 
     st.session_state.show_ai_hub = False
@@ -418,9 +418,8 @@ with st.sidebar:
             
             curr_v = "📊 CONSOLIDATED VIEW" if st.session_state.current_property_id == "GLOBAL" else st.session_state.current_property_name
             
-            # Replaced "label_visibility=collapsed" with visible instruction
             sel_view = st.selectbox(
-                "Select Property or View:", # This is your indicator
+                "Select Property or View:",
                 p_options, 
                 index=p_options.index(curr_v) if curr_v in p_options else 0, 
                 on_change=reset_hub_on_nav, 
@@ -440,18 +439,15 @@ with st.sidebar:
     st.caption("STRATEGIC NAVIGATION")
     nav = ["Executive Dashboard"]
     
-    # 2. FULL FEATURE MENU (Including Scenario, A/B, and Alerts)
+    # 2. FULL FEATURE MENU
     if st.session_state.current_property_id != "GLOBAL":
         if check_permission("view_ledger"): nav.append("Daily Ledger Audit")
         if check_permission("view_pr_scorecard"): nav.append("PR Scorecard")
         if check_permission("view_analytics"): nav.extend(["Attribution Analytics", "Sentiment Scoring"])
         if check_permission("view_reports"): nav.append("Master Audit Report")
-        
-        # RESTORED MISSING MODULES
         if check_permission("run_simulations"): nav.append("Scenario Simulator")
-        if check_permission("run_experiments"): nav.append("Experiment Vault") # This is your A/B page
+        if check_permission("run_experiments"): nav.append("Experiment Vault")
         if check_permission("manage_alerts"): nav.append("Strategic Alerts")
-        
         if check_permission("calibrate_ai"): nav.extend(["AI Calibration", "BL-ROAS Calculator"])
         if st.session_state.user_role == "Super Admin": nav.append("Global Admin Console")
 
@@ -467,164 +463,76 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
-# 4. GLOBAL MODAL HANDLER
+# 4. GLOBAL MODAL HANDLER WITH AUTOMATED SUPABASE CONTEXT HYDRATION
 if st.session_state.show_ai_hub:
     @st.dialog("Strategic AI Analyst Hub", width="large")
     def ai_hub_modal():
         st.markdown("### 🤖 FloorCast AI Analyst")
-        st.caption(f"Context: {st.session_state.current_property_name}")
-        q = st.text_input("Query forensic intelligence:", key="ai_q_input")
+        st.caption(f"Active Operational Context: **{st.session_state.current_property_name}**")
+        
+        q = st.text_input("Query forensic database intelligence:", placeholder="e.g., Correlate our email metrics against overall guest sentiment anomalies...", key="ai_q_input")
+        
         if st.button("Execute Analysis", use_container_width=True, key="ai_proc_btn"):
             if q: 
-                with st.spinner("Analyzing data nodes..."):
-                    st.session_state.last_ai_response = ask_omniscient_ai(q)
+                with st.spinner("Compiling cross-relational Supabase arrays into AI context layer..."):
+                    import pandas as pd
+                    
+                    # Core system background array hydration
+                    context_payload = f"PROPERTY OPERATION CONTEXT: {st.session_state.current_property_name}\n"
+                    target_pid = st.session_state.current_property_id
+                    
+                    try:
+                        # 1. Pull Sentiment History context
+                        sent_query = supabase.table("sentiment_history").select("asset, sentiment_score, sentiment_category, raw_text, timestamp")
+                        if target_pid != "GLOBAL":
+                            sent_query = sent_query.eq("property_id", target_pid)
+                        sent_res = sent_query.order("timestamp", desc=True).limit(50).execute()
+                        
+                        if sent_res.data:
+                            df_s = pd.DataFrame(sent_res.data)
+                            context_payload += f"\n--- RECENT GUEST SENTIMENT HISTORY DATA ---\n{df_s.to_string(index=False)}\n"
+                            
+                        # 2. Pull Macro Email Snapshot context
+                        email_query = supabase.table("monthly_email_snapshots").select("snapshot_month, total_emails_delivered, avg_unique_open_rate, avg_reads_per_unique_open, avg_bounce_rate")
+                        if target_pid != "GLOBAL":
+                            email_query = email_query.eq("property_id", target_pid)
+                        email_res = email_query.order("snapshot_month", desc=True).limit(6).execute()
+                        
+                        if email_res.data:
+                            df_e = pd.DataFrame(email_res.data)
+                            context_payload += f"\n--- HISTORICAL EMAIL MARKETING snapshots ---\n{df_e.to_string(index=False)}\n"
+                            
+                        # 3. Pull General Marketing Snapshot context
+                        mkt_query = supabase.table("monthly_marketing_snapshots").select("snapshot_month, ctr, cpc, impressions, social_growth_rate, engagement_rate, sentiment_score, nps_pct")
+                        if target_pid != "GLOBAL":
+                            mkt_query = mkt_query.eq("property_id", target_pid)
+                        mkt_res = mkt_query.order("snapshot_month", desc=True).limit(6).execute()
+                        
+                        if mkt_res.data:
+                            df_m = pd.DataFrame(mkt_res.data)
+                            context_payload += f"\n--- HIGH LEVEL BRAND MARKETING ARRAYS ---\n{df_m.to_string(index=False)}\n"
+                            
+                    except Exception as e:
+                        context_payload += f"\n[Context Hydration Interruption Exception: {str(e)}]\n"
+
+                    # package raw payload string directly into the omniscient analyst framework
+                    full_prompt = f"""
+                    You are an expert hospitality data forensic analyst. Below are the live structured database metrics pulled directly from the system tables. Use this exact ledger insight to cross-reference and answer the user's inquiry accurately.
+                    
+                    {context_payload}
+                    
+                    USER QUERY PROTOCOL:
+                    {q}
+                    """
+                    
+                    # Execute combined prompt via your engine template function
+                    st.session_state.last_ai_response = ask_omniscient_ai(full_prompt)
+                    
         if "last_ai_response" in st.session_state:
             st.markdown("---")
             st.markdown(st.session_state.last_ai_response)
+            
     ai_hub_modal()
-
-def get_monthly_marketing_snapshot(property_id, target_date):
-    """
-    Queries the uncapped monthly marketing snapshot table for a specific 
-    property and month. Falls back gracefully if no entry is configured.
-    """
-    try:
-        # Format date to enforce the 1st of the month string format
-        first_of_month_str = target_date.strftime('%Y-%m-01')
-        
-        res = supabase.table("monthly_marketing_snapshots")\
-            .select("*")\
-            .eq("property_id", str(property_id))\
-            .eq("snapshot_month", first_of_month_str)\
-            .execute()
-            
-        if res.data:
-            return res.data[0]
-    except Exception as e:
-        st.sidebar.caption(f"⚠️ Marketing Matrix offline: {e}")
-    return None
-
-def get_aggregated_email_analytics(property_id, s_date, e_date):
-    import pandas as pd
-    import streamlit as st
-    import calendar
-    
-    target_uuid = str(property_id)
-    
-    # 1. SNAP DATES TO MONTH BOUNDARIES
-    # This guarantees we catch the 1st-of-the-month timestamps regardless of the exact days clicked
-    start_str = s_date.replace(day=1).strftime("%Y-%m-%d")
-    last_day = calendar.monthrange(e_date.year, e_date.month)[1]
-    end_str = e_date.replace(day=last_day).strftime("%Y-%m-%d")
-    
-    m_agg, c_agg, prev_m_agg, prev_c_agg = {}, [], {}, []
-    
-    try:
-        def get_col(df_target, candidates):
-            for c in candidates:
-                if c in df_target.columns: return c
-            return None
-
-        # --- CURRENT PERIOD ---
-        mac_res = supabase.table("monthly_email_snapshots").select("*").eq("property_id", target_uuid).gte("snapshot_month", start_str).lte("snapshot_month", end_str).order("snapshot_month", desc=True).execute()
-        camp_res = supabase.table("campaign_group_records").select("*").eq("property_id", target_uuid).gte("snapshot_month", start_str).lte("snapshot_month", end_str).execute()
-        
-        if not mac_res.data:
-            return m_agg, c_agg, prev_m_agg, prev_c_agg
-            
-        df = pd.DataFrame(mac_res.data)
-        
-        # Determine exactly how many months we are dealing with (e.g., March + April = 2)
-        num_months_selected = len(df) 
-        earliest_current = df['snapshot_month'].min()
-        
-        total_vol = df['total_emails_delivered'].sum() if 'total_emails_delivered' in df.columns else 0
-        if total_vol > 0:
-            c_u_opens = get_col(df, ['unique_email_opens', 'unique_opens', 'opens'])
-            c_t_opens = get_col(df, ['total_email_opens', 'total_opens'])
-            c_bounces = get_col(df, ['total_email_bounces', 'bounces'])
-            c_unsubs = get_col(df, ['unsubscribes', 'unsubscribe_count'])
-            
-            c_open_rate = get_col(df, ['avg_unique_open_rate', 'unique_open_rate', 'open_rate'])
-            c_reads_rate = get_col(df, ['avg_reads_per_unique_open', 'reads_per_open'])
-            c_bounce_rate = get_col(df, ['avg_bounce_rate', 'bounce_rate'])
-            c_unsub_rate = get_col(df, ['avg_unsubscribe_rate', 'unsubscribe_rate'])
-
-            m_agg = {
-                'total_emails_delivered': total_vol,
-                'avg_unique_open_rate': (df[c_u_opens].sum() / total_vol) if c_u_opens else (df[c_open_rate].mean() if c_open_rate else 0),
-                'avg_reads_per_unique_open': (df[c_t_opens].sum() / df[c_u_opens].sum()) if c_t_opens and c_u_opens and df[c_u_opens].sum() > 0 else (df[c_reads_rate].mean() if c_reads_rate else 0),
-                'avg_bounce_rate': (df[c_bounces].sum() / total_vol) if c_bounces else (df[c_bounce_rate].mean() if c_bounce_rate else 0),
-                'avg_unsubscribe_rate': (df[c_unsubs].sum() / total_vol) if c_unsubs else (df[c_unsub_rate].mean() if c_unsub_rate else 0)
-            }
-            
-        if camp_res.data and m_agg:
-            df_c = pd.DataFrame(camp_res.data)
-            if 'campaign_group_name' in df_c.columns:
-                c_c_open_rate = get_col(df_c, ['avg_unique_open_rate', 'open_rate'])
-                c_c_click_rate = get_col(df_c, ['avg_unique_click_rate', 'click_rate'])
-                
-                for camp_name, group in df_c.groupby('campaign_group_name'):
-                    c_agg.append({
-                        'campaign_group_name': camp_name,
-                        'emails_delivered': group['emails_delivered'].sum() if 'emails_delivered' in df_c.columns else 0,
-                        'avg_unique_open_rate': group[c_c_open_rate].mean() if c_c_open_rate else 0,
-                        'avg_unique_click_rate': group[c_c_click_rate].mean() if c_c_click_rate else 0,
-                        'pct_of_total_emails_sent': group['pct_of_total_emails_sent'].mean() if 'pct_of_total_emails_sent' in df_c.columns else 0
-                    })
-
-        # --- PREVIOUS PERIOD (Dynamic Matching) ---
-        # Fetch exactly the same number of historical months as the user selected for the current window
-        prev_mac_res = supabase.table("monthly_email_snapshots").select("*").eq("property_id", target_uuid).lt("snapshot_month", earliest_current).order("snapshot_month", desc=True).limit(num_months_selected).execute()
-        
-        if prev_mac_res.data:
-            p_df = pd.DataFrame(prev_mac_res.data)
-            p_vol = p_df['total_emails_delivered'].sum() if 'total_emails_delivered' in p_df.columns else 0
-            
-            if p_vol > 0:
-                pc_u_opens = get_col(p_df, ['unique_email_opens', 'unique_opens', 'opens'])
-                pc_t_opens = get_col(p_df, ['total_email_opens', 'total_opens'])
-                pc_bounces = get_col(p_df, ['total_email_bounces', 'bounces'])
-                pc_unsubs = get_col(p_df, ['unsubscribes', 'unsubscribe_count'])
-                
-                pc_open_rate = get_col(p_df, ['avg_unique_open_rate', 'unique_open_rate', 'open_rate'])
-                pc_reads_rate = get_col(p_df, ['avg_reads_per_unique_open', 'reads_per_open'])
-                pc_bounce_rate = get_col(p_df, ['avg_bounce_rate', 'bounce_rate'])
-                pc_unsub_rate = get_col(p_df, ['avg_unsubscribe_rate', 'unsubscribe_rate'])
-                
-                prev_m_agg = {
-                    'total_emails_delivered': p_vol,
-                    'avg_unique_open_rate': (p_df[pc_u_opens].sum() / p_vol) if pc_u_opens else (p_df[pc_open_rate].mean() if pc_open_rate else 0),
-                    'avg_reads_per_unique_open': (p_df[pc_t_opens].sum() / p_df[pc_u_opens].sum()) if pc_t_opens and pc_u_opens and p_df[pc_u_opens].sum() > 0 else (p_df[pc_reads_rate].mean() if pc_reads_rate else 0),
-                    'avg_bounce_rate': (p_df[pc_bounces].sum() / p_vol) if pc_bounces else (p_df[pc_bounce_rate].mean() if pc_bounce_rate else 0),
-                    'avg_unsubscribe_rate': (p_df[pc_unsubs].sum() / p_vol) if pc_unsubs else (p_df[pc_unsub_rate].mean() if pc_unsub_rate else 0)
-                }
-                
-            # Fetch campaigns for this historical window safely
-            prev_earliest = p_df['snapshot_month'].min()
-            prev_latest = p_df['snapshot_month'].max()
-            
-            prev_camp_res = supabase.table("campaign_group_records").select("*").eq("property_id", target_uuid).gte("snapshot_month", prev_earliest).lte("snapshot_month", prev_latest).execute()
-            
-            if prev_camp_res.data:
-                p_df_c = pd.DataFrame(prev_camp_res.data)
-                if 'campaign_group_name' in p_df_c.columns:
-                    p_c_open_rate = get_col(p_df_c, ['avg_unique_open_rate', 'open_rate'])
-                    p_c_click_rate = get_col(p_df_c, ['avg_unique_click_rate', 'click_rate'])
-                    
-                    for camp_name, group in p_df_c.groupby('campaign_group_name'):
-                        prev_c_agg.append({
-                            'campaign_group_name': camp_name,
-                            'emails_delivered': group['emails_delivered'].sum() if 'emails_delivered' in p_df_c.columns else 0,
-                            'avg_unique_open_rate': group[p_c_open_rate].mean() if p_c_open_rate else 0,
-                            'avg_unique_click_rate': group[p_c_click_rate].mean() if p_c_click_rate else 0
-                        })
-                        
-    except Exception as e:
-        import streamlit as st
-        st.sidebar.caption(f"Email aggregation error: {e}")
-        
-    return m_agg, c_agg, prev_m_agg, prev_c_agg
 
 # =================================================================
 # BLOCK 8: DATA HYDRATION & VAULT GUARDRAIL
