@@ -1460,16 +1460,16 @@ elif page == "Master Audit Report":
                         
                         # Previous Values
                         p_camp = prev_camp_dict.get(camp_name, {})
-                        prev_vol = float(p_camp.get('emails_delivered', 0))
-                        prev_open = float(p_camp.get('avg_unique_open_rate', 0)) * 100
-                        prev_click = float(p_camp.get('avg_unique_click_rate', 0)) * 100
-                        prev_bounce = float(p_camp.get('avg_bounce_rate', 0)) * 100
+                        prev_vol = float(p_camp.get('emails_delivered', 0)) if isinstance(p_camp, dict) else 0.0
+                        prev_open = float(p_camp.get('avg_unique_open_rate', 0)) * 100 if isinstance(p_camp, dict) else 0.0
+                        prev_click = float(p_camp.get('avg_unique_click_rate', 0)) * 100 if isinstance(p_camp, dict) else 0.0
+                        prev_bounce = float(p_camp.get('avg_bounce_rate', 0)) * 100 if isinstance(p_camp, dict) else 0.0
                         
-                        # MoM Calcs
+                        # --- THE FIX: Robust MoM Calcs with explicit string fallbacks ---
                         vol_mom = f"{((curr_vol - prev_vol) / prev_vol * 100):+.1f}%" if prev_vol > 0 else "---"
-                        open_mom = f"{(curr_open - prev_open):+.2f}%" if prev_open > 0 else "---"
-                        click_mom = f"{(curr_click - prev_click):+.2f}%" if prev_click > 0 else "---"
-                        bounce_mom = f"{(curr_bounce - prev_bounce):+.2f}%" if prev_bounce > 0 else "---"
+                        open_mom = f"{(curr_open - prev_open):+.2f}%" if prev_vol > 0 else "---"
+                        click_mom = f"{(curr_click - prev_click):+.2f}%" if prev_vol > 0 else "---"
+                        bounce_mom = f"{(curr_bounce - prev_bounce):+.2f}%" if prev_vol > 0 else "---"
                         
                         # Build Table Matrix explicitly matching your reference slide columns
                         processed_table_data.append({
