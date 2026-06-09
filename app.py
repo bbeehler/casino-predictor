@@ -1337,7 +1337,7 @@ elif page == "Attribution Analytics":
         st.warning("Insufficient data for full ROI Audit.")
 
 # =================================================================
-# BLOCK 12: PAGE 4: MASTER FORENSIC AUDIT (v87.0 - Value Unpacking Fixed)
+# 12. PAGE 4: MASTER FORENSIC AUDIT (v87.1 - Dictionary Safe Mode)
 # =================================================================
 elif page == "Master Audit Report":
     # 1. PREMIUM HEADER
@@ -1409,31 +1409,32 @@ elif page == "Master Audit Report":
         st.divider()
         st.markdown(f"### 📨 Email Performance & Distribution Audit ({s_date} to {e_date})")
         
-        # FIXED: Correctly unpacking all 4 variables returned by the function
+        # Pull aggregated analytics
         macro_email, campaign_list, prev_email, prev_campaigns = get_aggregated_email_analytics(st.session_state.current_property_id, s_date, e_date)
         
         if macro_email and macro_email.get('total_emails_delivered', 0) > 0:
             
             deliv_delta_fmt, open_delta_fmt, reads_delta_fmt, bounce_delta_fmt, unsub_delta_fmt = "---", "---", "---", "---", "---"
             
-            # Use prev_email directly as a dictionary
-            if prev_email and prev_email.get('total_emails_delivered', 0) > 0:
-                
+            # Use prev_email safely with .get() default fallbacks to dictionaries
+            safe_prev_email = prev_email if isinstance(prev_email, dict) else {}
+            
+            if safe_prev_email and safe_prev_email.get('total_emails_delivered', 0) > 0:
                 curr_deliv = float(macro_email.get('total_emails_delivered', 0))
-                prev_deliv = float(prev_email.get('total_emails_delivered', 0))
+                prev_deliv = float(safe_prev_email.get('total_emails_delivered', 0))
                 deliv_pct = ((curr_deliv - prev_deliv) / prev_deliv * 100) if prev_deliv > 0 else 0
                 deliv_delta_fmt = f"{deliv_pct:+.1f}% PoP"
                 
-                open_pt = (float(macro_email.get('avg_unique_open_rate', 0)) - float(prev_email.get('avg_unique_open_rate', 0))) * 100
+                open_pt = (float(macro_email.get('avg_unique_open_rate', 0)) - float(safe_prev_email.get('avg_unique_open_rate', 0))) * 100
                 open_delta_fmt = f"{open_pt:+.2f}% PoP"
                 
-                reads_pt = float(macro_email.get('avg_reads_per_unique_open', 0)) - float(prev_email.get('avg_reads_per_unique_open', 0))
+                reads_pt = float(macro_email.get('avg_reads_per_unique_open', 0)) - float(safe_prev_email.get('avg_reads_per_unique_open', 0))
                 reads_delta_fmt = f"{reads_pt:+.2f} PoP"
                 
-                bounce_pt = (float(macro_email.get('avg_bounce_rate', 0)) - float(prev_email.get('avg_bounce_rate', 0))) * 100
+                bounce_pt = (float(macro_email.get('avg_bounce_rate', 0)) - float(safe_prev_email.get('avg_bounce_rate', 0))) * 100
                 bounce_delta_fmt = f"{bounce_pt:+.2f}% PoP"
                 
-                unsub_pt = (float(macro_email.get('avg_unsubscribe_rate', 0)) - float(prev_email.get('avg_unsubscribe_rate', 0))) * 100
+                unsub_pt = (float(macro_email.get('avg_unsubscribe_rate', 0)) - float(safe_prev_email.get('avg_unsubscribe_rate', 0))) * 100
                 unsub_delta_fmt = f"{unsub_pt:+.2f}% PoP"
 
             ec1, ec2, ec3, ec4, ec5 = st.columns(5)
@@ -1445,7 +1446,9 @@ elif page == "Master Audit Report":
             
             if campaign_list:
                 with st.expander("🎯 View Aggregated Campaign Breakdown", expanded=True):
-                    prev_camp_dict = {c['campaign_group_name']: c for c in prev_campaigns} if prev_campaigns else {}
+                    # Ensure prev_campaigns is iterable before dictionary comprehension
+                    safe_prev_campaigns = prev_campaigns if isinstance(prev_campaigns, list) else []
+                    prev_camp_dict = {c['campaign_group_name']: c for c in safe_prev_campaigns}
                     
                     processed_table_data = []
                     for camp in campaign_list:
@@ -1458,20 +1461,19 @@ elif page == "Master Audit Report":
                         curr_bounce = float(camp.get('avg_bounce_rate', 0)) * 100
                         curr_pct = float(camp.get('pct_of_total_emails_sent', 0)) * 100
                         
-                        # Previous Values
+                        # Previous Values safely pulled
                         p_camp = prev_camp_dict.get(camp_name, {})
                         prev_vol = float(p_camp.get('emails_delivered', 0)) if isinstance(p_camp, dict) else 0.0
                         prev_open = float(p_camp.get('avg_unique_open_rate', 0)) * 100 if isinstance(p_camp, dict) else 0.0
                         prev_click = float(p_camp.get('avg_unique_click_rate', 0)) * 100 if isinstance(p_camp, dict) else 0.0
                         prev_bounce = float(p_camp.get('avg_bounce_rate', 0)) * 100 if isinstance(p_camp, dict) else 0.0
                         
-                        # --- THE FIX: Robust MoM Calcs with explicit string fallbacks ---
+                        # Safe Math Checks
                         vol_mom = f"{((curr_vol - prev_vol) / prev_vol * 100):+.1f}%" if prev_vol > 0 else "---"
                         open_mom = f"{(curr_open - prev_open):+.2f}%" if prev_vol > 0 else "---"
                         click_mom = f"{(curr_click - prev_click):+.2f}%" if prev_vol > 0 else "---"
                         bounce_mom = f"{(curr_bounce - prev_bounce):+.2f}%" if prev_vol > 0 else "---"
                         
-                        # Build Table Matrix explicitly matching your reference slide columns
                         processed_table_data.append({
                             "Campaign Group": camp_name,
                             "Emails Delivered": f"{int(curr_vol):,}",
