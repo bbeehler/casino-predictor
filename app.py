@@ -136,6 +136,123 @@ def generate_ai_prediction(target_date, property_name):
         # Prevent app crash, return safe operational middle-ground
         return 4800
 
+def get_aggregated_email_analytics(property_id, s_date, e_date):
+    """Dynamic multi-month email aggregation with raw count math and rate fallbacks."""
+    import pandas as pd
+    import streamlit as st
+    import calendar
+    
+    target_uuid = str(property_id)
+    
+    # Snap dates to month boundaries
+    start_str = s_date.replace(day=1).strftime("%Y-%m-%d")
+    last_day = calendar.monthrange(e_date.year, e_date.month)[1]
+    end_str = e_date.replace(day=last_day).strftime("%Y-%m-%d")
+    
+    m_agg, c_agg, prev_m_agg, prev_c_agg = {}, [], {}, []
+    
+    try:
+        def get_col(df_target, candidates):
+            for c in candidates:
+                if c in df_target.columns: return c
+            return None
+
+        # --- CURRENT PERIOD ---
+        mac_res = supabase.table("monthly_email_snapshots").select("*").eq("property_id", target_uuid).gte("snapshot_month", start_str).lte("snapshot_month", end_str).order("snapshot_month", desc=True).execute()
+        camp_res = supabase.table("campaign_group_records").select("*").eq("property_id", target_uuid).gte("snapshot_month", start_str).lte("snapshot_month", end_str).execute()
+        
+        if not mac_res.data:
+            return m_agg, c_agg, prev_m_agg, prev_c_agg
+            
+        df = pd.DataFrame(mac_res.data)
+        num_months_selected = len(df) 
+        earliest_current = df['snapshot_month'].min()
+        
+        total_vol = df['total_emails_delivered'].sum() if 'total_emails_delivered' in df.columns else 0
+        if total_vol > 0:
+            c_u_opens = get_col(df, ['unique_email_opens', 'unique_opens', 'opens'])
+            c_t_opens = get_col(df, ['total_email_opens', 'total_opens'])
+            c_bounces = get_col(df, ['total_email_bounces', 'bounces'])
+            c_unsubs = get_col(df, ['unsubscribes', 'unsubscribe_count'])
+            
+            c_open_rate = get_col(df, ['avg_unique_open_rate', 'unique_open_rate', 'open_rate'])
+            c_reads_rate = get_col(df, ['avg_reads_per_unique_open', 'reads_per_open'])
+            c_bounce_rate = get_col(df, ['avg_bounce_rate', 'bounce_rate'])
+            c_unsub_rate = get_col(df, ['avg_unsubscribe_rate', 'unsubscribe_rate'])
+
+            m_agg = {
+                'total_emails_delivered': total_vol,
+                'avg_unique_open_rate': (df[c_u_opens].sum() / total_vol) if c_u_opens else (df[c_open_rate].mean() if c_open_rate else 0),
+                'avg_reads_per_unique_open': (df[c_t_opens].sum() / df[c_u_opens].sum()) if c_t_opens and c_u_opens and df[c_u_opens].sum() > 0 else (df[c_reads_rate].mean() if c_reads_rate else 0),
+                'avg_bounce_rate': (df[c_bounces].sum() / total_vol) if c_bounces else (df[c_bounce_rate].mean() if c_bounce_rate else 0),
+                'avg_unsubscribe_rate': (df[c_unsubs].sum() / total_vol) if c_unsubs else (df[c_unsub_rate].mean() if c_unsub_rate else 0)
+            }
+            
+        if camp_res.data and m_agg:
+            df_c = pd.DataFrame(camp_res.data)
+            if 'campaign_group_name' in df_c.columns:
+                c_c_open_rate = get_col(df_c, ['avg_unique_open_rate', 'open_rate'])
+                c_c_click_rate = get_col(df_c, ['avg_unique_click_rate', 'click_rate'])
+                
+                for camp_name, group in df_c.groupby('campaign_group_name'):
+                    c_agg.append({
+                        'campaign_group_name': camp_name,
+                        'emails_delivered': group['emails_delivered'].sum() if 'emails_delivered' in df_c.columns else 0,
+                        'avg_unique_open_rate': group[c_c_open_rate].mean() if c_c_open_rate else 0,
+                        'avg_unique_click_rate': group[c_c_click_rate].mean() if c_c_click_rate else 0,
+                        'pct_of_total_emails_sent': group['pct_of_total_emails_sent'].mean() if 'pct_of_total_emails_sent' in df_c.columns else 0
+                    })
+
+        # --- PREVIOUS PERIOD (Dynamic Matching) ---
+        prev_mac_res = supabase.table("monthly_email_snapshots").select("*").eq("property_id", target_uuid).lt("snapshot_month", earliest_current).order("snapshot_month", desc=True).limit(num_months_selected).execute()
+        
+        if prev_mac_res.data:
+            p_df = pd.DataFrame(prev_mac_res.data)
+            p_vol = p_df['total_emails_delivered'].sum() if 'total_emails_delivered' in p_df.columns else 0
+            
+            if p_vol > 0:
+                pc_u_opens = get_col(p_df, ['unique_email_opens', 'unique_opens', 'opens'])
+                pc_t_opens = get_col(p_df, ['total_email_opens', 'total_opens'])
+                pc_bounces = get_col(p_df, ['total_email_bounces', 'bounces'])
+                pc_unsubs = get_col(p_df, ['unsubscribes', 'unsubscribe_count'])
+                
+                pc_open_rate = get_col(p_df, ['avg_unique_open_rate', 'unique_open_rate', 'open_rate'])
+                pc_reads_rate = get_col(p_df, ['avg_reads_per_unique_open', 'reads_per_open'])
+                pc_bounce_rate = get_col(p_df, ['avg_bounce_rate', 'bounce_rate'])
+                pc_unsub_rate = get_col(p_df, ['avg_unsubscribe_rate', 'unsubscribe_rate'])
+                
+                prev_m_agg = {
+                    'total_emails_delivered': p_vol,
+                    'avg_unique_open_rate': (p_df[pc_u_opens].sum() / p_vol) if pc_u_opens else (p_df[pc_open_rate].mean() if pc_open_rate else 0),
+                    'avg_reads_per_unique_open': (p_df[pc_t_opens].sum() / p_df[pc_u_opens].sum()) if pc_t_opens and pc_u_opens and p_df[pc_u_opens].sum() > 0 else (p_df[pc_reads_rate].mean() if pc_reads_rate else 0),
+                    'avg_bounce_rate': (p_df[pc_bounces].sum() / p_vol) if pc_bounces else (p_df[pc_bounce_rate].mean() if pc_bounce_rate else 0),
+                    'avg_unsubscribe_rate': (p_df[pc_unsubs].sum() / p_vol) if pc_unsubs else (p_df[pc_unsub_rate].mean() if pc_unsub_rate else 0)
+                }
+                
+            prev_earliest = p_df['snapshot_month'].min()
+            prev_latest = p_df['snapshot_month'].max()
+            prev_camp_res = supabase.table("campaign_group_records").select("*").eq("property_id", target_uuid).gte("snapshot_month", prev_earliest).lte("snapshot_month", prev_latest).execute()
+            
+            if prev_camp_res.data:
+                p_df_c = pd.DataFrame(prev_camp_res.data)
+                if 'campaign_group_name' in p_df_c.columns:
+                    p_c_open_rate = get_col(p_df_c, ['avg_unique_open_rate', 'open_rate'])
+                    p_c_click_rate = get_col(p_df_c, ['avg_unique_click_rate', 'click_rate'])
+                    
+                    for camp_name, group in p_df_c.groupby('campaign_group_name'):
+                        prev_c_agg.append({
+                            'campaign_group_name': camp_name,
+                            'emails_delivered': group['emails_delivered'].sum() if 'emails_delivered' in p_df_c.columns else 0,
+                            'avg_unique_open_rate': group[p_c_open_rate].mean() if p_c_open_rate else 0,
+                            'avg_unique_click_rate': group[p_c_click_rate].mean() if p_c_click_rate else 0
+                        })
+                        
+    except Exception as e:
+        import streamlit as st
+        st.sidebar.caption(f"Email aggregation error: {e}")
+        
+    return m_agg, c_agg, prev_m_agg, prev_c_agg
+
 # =================================================================
 # BLOCK 3: GLOBAL AI ENGINES (v86.0 - PR & Total Recall)
 # =================================================================
