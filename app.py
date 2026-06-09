@@ -391,7 +391,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # =================================================================
-# BLOCK 7: NAVIGATION & AI HUB (Forensic Supabase Integration)
+# BLOCK 7: NAVIGATION & AI HUB (Uncapped Cross-Table Ingestion Engine)
 # =================================================================
 if 'show_ai_hub' not in st.session_state: 
     st.session_state.show_ai_hub = False
@@ -463,18 +463,18 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
-# 4. GLOBAL MODAL HANDLER WITH AUTOMATED SUPABASE CONTEXT HYDRATION
+# 4. GLOBAL MODAL HANDLER WITH FULL DATA CONTEXT HYDRATION
 if st.session_state.show_ai_hub:
     @st.dialog("Strategic AI Analyst Hub", width="large")
     def ai_hub_modal():
         st.markdown("### 🤖 FloorCast AI Analyst")
         st.caption(f"Active Operational Context: **{st.session_state.current_property_name}**")
         
-        q = st.text_input("Query forensic database intelligence:", placeholder="e.g., Correlate our email metrics against overall guest sentiment anomalies...", key="ai_q_input")
+        q = st.text_input("Query forensic database intelligence:", placeholder="e.g., Run a full correlation analysis across email delivery drops and guest sentiment trends...", key="ai_q_input")
         
         if st.button("Execute Analysis", use_container_width=True, key="ai_proc_btn"):
             if q: 
-                with st.spinner("Compiling cross-relational Supabase arrays into AI context layer..."):
+                with st.spinner("Compiling comprehensive relational data blocks into context layer..."):
                     import pandas as pd
                     
                     # Core system background array hydration
@@ -482,50 +482,61 @@ if st.session_state.show_ai_hub:
                     target_pid = st.session_state.current_property_id
                     
                     try:
-                        # 1. Pull Sentiment History context
-                        sent_query = supabase.table("sentiment_history").select("asset, sentiment_score, sentiment_category, raw_text, timestamp")
+                        # --- 1. FULL UNLIMIT SENTIMENT HISTORY DIGEST ---
+                        sent_query = supabase.table("sentiment_history").select("*")
                         if target_pid != "GLOBAL":
                             sent_query = sent_query.eq("property_id", target_pid)
-                        sent_res = sent_query.order("timestamp", desc=True).limit(50).execute()
+                        sent_res = sent_query.order("timestamp", desc=True).execute()
                         
                         if sent_res.data:
                             df_s = pd.DataFrame(sent_res.data)
-                            context_payload += f"\n--- RECENT GUEST SENTIMENT HISTORY DATA ---\n{df_s.to_string(index=False)}\n"
+                            context_payload += f"\n--- COMPLETE GUEST SENTIMENT HISTORY DATA RECORD ---\n{df_s.to_string(index=False)}\n"
                             
-                        # 2. Pull Macro Email Snapshot context
-                        email_query = supabase.table("monthly_email_snapshots").select("snapshot_month, total_emails_delivered, avg_unique_open_rate, avg_reads_per_unique_open, avg_bounce_rate")
+                        # --- 2. COMPLETE MACRO EMAIL SNAPSHOT DATA ---
+                        email_query = supabase.table("monthly_email_snapshots").select("*")
                         if target_pid != "GLOBAL":
                             email_query = email_query.eq("property_id", target_pid)
-                        email_res = email_query.order("snapshot_month", desc=True).limit(6).execute()
+                        email_res = email_query.order("snapshot_month", desc=True).execute()
                         
                         if email_res.data:
                             df_e = pd.DataFrame(email_res.data)
-                            context_payload += f"\n--- HISTORICAL EMAIL MARKETING snapshots ---\n{df_e.to_string(index=False)}\n"
+                            context_payload += f"\n--- COMPLETE HISTORICAL EMAIL MARKETING SNAPSHOTS ---\n{df_e.to_string(index=False)}\n"
+
+                        # --- 3. COMPLETE CAMPAIGN GROUP RECORDS DATA ---
+                        camp_query = supabase.table("campaign_group_records").select("*")
+                        if target_pid != "GLOBAL":
+                            camp_query = camp_query.eq("property_id", target_pid)
+                        camp_res = camp_query.order("snapshot_month", desc=True).execute()
+                        
+                        if camp_res.data:
+                            df_c = pd.DataFrame(camp_res.data)
+                            context_payload += f"\n--- COMPLETE INDIVIDUAL CAMPAIGN SEGMENT LEDGERS ---\n{df_c.to_string(index=False)}\n"
                             
-                        # 3. Pull General Marketing Snapshot context
-                        mkt_query = supabase.table("monthly_marketing_snapshots").select("snapshot_month, ctr, cpc, impressions, social_growth_rate, engagement_rate, sentiment_score, nps_pct")
+                        # --- 4. COMPLETE MONTHLY EXECUTIVE MARKETING SNAPSHOTS ---
+                        mkt_query = supabase.table("monthly_marketing_snapshots").select("*")
                         if target_pid != "GLOBAL":
                             mkt_query = mkt_query.eq("property_id", target_pid)
-                        mkt_res = mkt_query.order("snapshot_month", desc=True).limit(6).execute()
+                        mkt_res = mkt_query.order("snapshot_month", desc=True).execute()
                         
                         if mkt_res.data:
                             df_m = pd.DataFrame(mkt_res.data)
-                            context_payload += f"\n--- HIGH LEVEL BRAND MARKETING ARRAYS ---\n{df_m.to_string(index=False)}\n"
+                            context_payload += f"\n--- COMPLETE HIGH-LEVEL EXECUTIVE BRAND MARKETING MATRICES ---\n{df_m.to_string(index=False)}\n"
                             
                     except Exception as e:
                         context_payload += f"\n[Context Hydration Interruption Exception: {str(e)}]\n"
 
-                    # package raw payload string directly into the omniscient analyst framework
+                    # Package unified payload straight into your engine's prompt architecture
                     full_prompt = f"""
-                    You are an expert hospitality data forensic analyst. Below are the live structured database metrics pulled directly from the system tables. Use this exact ledger insight to cross-reference and answer the user's inquiry accurately.
-                    
+                    You are FloorCast AI Analyst, an expert cross-relational data analyst for the casino and hospitality industry.
+                    You have complete structural visibility into all system data tables provided below. Analyze these complete matrices to find trends, correlations, or anomalies to address the user's inquiry perfectly.
+
+                    LIVE SYSTEM DATA LEDGER:
                     {context_payload}
                     
-                    USER QUERY PROTOCOL:
+                    STRATEGIC COMMAND:
                     {q}
                     """
                     
-                    # Execute combined prompt via your engine template function
                     st.session_state.last_ai_response = ask_omniscient_ai(full_prompt)
                     
         if "last_ai_response" in st.session_state:
@@ -533,6 +544,18 @@ if st.session_state.show_ai_hub:
             st.markdown(st.session_state.last_ai_response)
             
     ai_hub_modal()
+
+
+def get_monthly_marketing_snapshot(property_id, target_date):
+    """Queries the uncapped monthly marketing snapshot table."""
+    try:
+        first_of_month_str = target_date.strftime('%Y-%m-01')
+        res = supabase.table("monthly_marketing_snapshots").select("*").eq("property_id", str(property_id)).eq("snapshot_month", first_of_month_str).execute()
+        if res.data:
+            return res.data[0]
+    except Exception as e:
+        st.sidebar.caption(f"⚠️ Marketing Matrix offline: {e}")
+    return None
 
 # =================================================================
 # BLOCK 8: DATA HYDRATION & VAULT GUARDRAIL
