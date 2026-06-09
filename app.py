@@ -1783,8 +1783,24 @@ elif page == "Sentiment Scoring":
                 if uploaded_doc and st.button("🚀 Execute Bulk Parse", use_container_width=True):
                     doc = Document(uploaded_doc)
                     
-                    # 1. Filter paragraphs first
-                    valid_paragraphs = [para.text for para in doc.paragraphs if len(para.text) > 20]
+                    # 1. Aggressive Text Extraction (Paragraphs & Tables)
+                    valid_paragraphs = []
+                    
+                    # Check standard body text
+                    for para in doc.paragraphs:
+                        clean_text = para.text.strip()
+                        if len(clean_text) > 20:
+                            valid_paragraphs.append(clean_text)
+                            
+                    # Check inside Tables (Extremely common for bulk review exports)
+                    for table in doc.tables:
+                        for row in table.rows:
+                            for cell in row.cells:
+                                clean_text = cell.text.strip()
+                                # Add it if it's long enough and we haven't already grabbed it
+                                if len(clean_text) > 20 and clean_text not in valid_paragraphs:
+                                    valid_paragraphs.append(clean_text)
+                    
                     total_paras = len(valid_paragraphs)
                     
                     if total_paras > 0:
@@ -1825,7 +1841,7 @@ elif page == "Sentiment Scoring":
                             st.cache_data.clear()
                             st.rerun()
                     else:
-                        st.warning("No valid text found. Paragraphs must be longer than 20 characters.")
+                        st.warning("No valid text found. Paragraphs or table cells must be longer than 20 characters.")
 
     # --- 3. SENTIMENT VAULT RESEARCH (Categorical Filter) ---
     st.markdown("### 🔍 Sentiment Vault Research")
