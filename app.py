@@ -1292,9 +1292,11 @@ elif page == "Daily Ledger Audit":
                 st.error(f"Sync Error: {e}")
 
 # =================================================================
-# BLOCK 11: PAGE 3: ATTRIBUTION ANALYTICS (v52.6 - Dynamic Window)
+# BLOCK 11: PAGE 3: ATTRIBUTION ANALYTICS (v52.7 - Dynamic MoM Integration)
 # =================================================================
 elif page == "Attribution Analytics":
+    import datetime
+    
     # 1. PREMIUM HEADER
     render_styled_header(
         "Marketing Attribution & ROI", 
@@ -1317,7 +1319,7 @@ elif page == "Attribution Analytics":
         st.warning("🧪 Attribution Engine returned an empty dataframe structure.")
         st.stop()
 
-    # --- 2. DYNAMIC DATE FILTER ---
+    # --- 2. DYNAMIC DATE FILTER WITH PREVIOUS PERIOD MATCHING ---
     df_full_attr['entry_date'] = pd.to_datetime(df_full_attr['entry_date'])
     min_date = df_full_attr['entry_date'].min().date()
     max_date = df_full_attr['entry_date'].max().date()
@@ -1333,17 +1335,27 @@ elif page == "Attribution Analytics":
     # Apply Filter to the calculated data
     if isinstance(audit_window, tuple) and len(audit_window) == 2:
         start_date, end_date = audit_window
+        
+        # Current Period
         mask = (df_full_attr['entry_date'].dt.date >= start_date) & (df_full_attr['entry_date'].dt.date <= end_date)
         df_attr = df_full_attr.loc[mask].copy()
+        
+        # Calculate exactly matching Previous Period
+        duration = (end_date - start_date).days + 1
+        prev_end_date = start_date - datetime.timedelta(days=1)
+        prev_start_date = start_date - datetime.timedelta(days=duration)
+        
+        prev_mask = (df_full_attr['entry_date'].dt.date >= prev_start_date) & (df_full_attr['entry_date'].dt.date <= prev_end_date)
+        prev_df_attr = df_full_attr.loc[prev_mask].copy()
     else:
         df_attr = df_full_attr.copy()
+        prev_df_attr = pd.DataFrame()
 
     if df_attr.empty:
         st.warning("No data falls within the selected window.")
         st.stop()
 
     # --- 3. DATA STRUCTURE INSURANCE: PREVENT KEYERRORS ---
-    # If background calculations fail to populate specific keys, initialize safe defaults
     required_columns = {
         'actual_traffic': 0.0,
         'baseline': 5000.0,
@@ -1351,22 +1363,43 @@ elif page == "Attribution Analytics":
         'gravity_lift': 0.0,
         'ad_clicks': 0.0
     }
+    
+    # Clean Current Period
     for col, default_val in required_columns.items():
         if col not in df_attr.columns:
             df_attr[col] = default_val
         else:
-            # Clean up potential database null values inline to protect mathematical operations
             df_attr[col] = pd.to_numeric(df_attr[col], errors='coerce').fillna(default_val)
+            
+    # Clean Previous Period
+    if not prev_df_attr.empty:
+        for col, default_val in required_columns.items():
+            if col not in prev_df_attr.columns:
+                prev_df_attr[col] = default_val
+            else:
+                prev_df_attr[col] = pd.to_numeric(prev_df_attr[col], errors='coerce').fillna(default_val)
     
-    # Calculate Component Parts (Guaranteed safe from KeyError)
+    # Calculate CURRENT Component Parts
     total_guests = df_attr['actual_traffic'].sum()
     organic_base = df_attr['baseline'].sum()
     digital_lift = df_attr['residual_lift'].sum()
     gravity_lift = df_attr['gravity_lift'].sum()
-    
-    # Brand Inertia calculation based on established weights
-    num_days = len(df_attr)
-    brand_inertia = (current_weights.get('Broadcast_Weight', 150) + current_weights.get('OOH_Weight', 100)) * num_days
+    brand_inertia = (current_weights.get('Broadcast_Weight', 150) + current_weights.get('OOH_Weight', 100)) * len(df_attr)
+
+    # Calculate PREVIOUS Component Parts
+    if not prev_df_attr.empty:
+        prev_total_guests = prev_df_attr['actual_traffic'].sum()
+        prev_digital_lift = prev_df_attr['residual_lift'].sum()
+        prev_gravity_lift = prev_df_attr['gravity_lift'].sum()
+        prev_brand_inertia = (current_weights.get('Broadcast_Weight', 150) + current_weights.get('OOH_Weight', 100)) * len(prev_df_attr)
+    else:
+        prev_total_guests = prev_digital_lift = prev_gravity_lift = prev_brand_inertia = 0
+
+    # Helper function for percentage Deltas
+    def get_mom_pct(curr, prev):
+        if prev > 0:
+            return f"{((curr - prev) / prev * 100):+.1f}%"
+        return "---"
 
     # --- 4. EXECUTIVE ATTRIBUTION SUMMARY (Responsive Grid) ---
     st.markdown("### 🕰️ Multi-Touch Attribution (Time Decay Model)")
@@ -1376,16 +1409,19 @@ elif page == "Attribution Analytics":
     mta_cols[0].metric(
         "Last-Touch (Digital)", 
         f"{digital_lift:,.0f}", 
+        delta=get_mom_pct(digital_lift, prev_digital_lift),
         help="Immediate click-to-floor conversion."
     )
     mta_cols[1].metric(
         "Assisted (Brand)", 
         f"{brand_inertia:,.0f}", 
+        delta=get_mom_pct(brand_inertia, prev_brand_inertia),
         help="OOH/Broadcast awareness priming."
     )
     mta_cols[2].metric(
         "Conversion (Gravity)", 
         f"{gravity_lift:,.0f}", 
+        delta=get_mom_pct(gravity_lift, prev_gravity_lift),
         help="Event-driven floor closure."
     )
 
@@ -1424,7 +1460,6 @@ elif page == "Attribution Analytics":
 
     # --- 6. LIFT CORRELATION ---
     st.markdown("### 📈 Signal Correlation Analysis")
-    # Trendlines require statsmodels. Enclose in error boundaries for safety.
     try:
         fig_corr = px.scatter(
             df_attr, x='ad_clicks', y='actual_traffic', 
@@ -1433,7 +1468,6 @@ elif page == "Attribution Analytics":
             color_discrete_sequence=['#0047AB']
         )
     except:
-        # Fallback plot configuration if statsmodels dependency fails in cloud containers
         fig_corr = px.scatter(
             df_attr, x='ad_clicks', y='actual_traffic', 
             labels={'ad_clicks': 'Digital Signal (Clicks)', 'actual_traffic': 'Property Traffic'},
@@ -1449,19 +1483,31 @@ elif page == "Attribution Analytics":
     
     if not df_attr.empty:
         avg_coin = float(current_weights.get('Avg_Coin_In', 112.50))
+        
+        # Current ROI Calcs
         mkt_guests = digital_lift + brand_inertia + gravity_lift
         mkt_revenue = mkt_guests * avg_coin
-        
-        # Calculate Efficiency Metrics safely
         clicks_sum = df_attr['ad_clicks'].sum()
         yield_per_click = digital_lift / clicks_sum if clicks_sum > 0 else 0.0
         pull_efficiency = (mkt_guests / total_guests) * 100 if total_guests > 0 else 0.0
         
+        # Previous ROI Calcs
+        prev_mkt_guests = prev_digital_lift + prev_brand_inertia + prev_gravity_lift
+        prev_mkt_revenue = prev_mkt_guests * avg_coin
+        prev_clicks_sum = prev_df_attr['ad_clicks'].sum() if not prev_df_attr.empty else 0
+        prev_yield_per_click = prev_digital_lift / prev_clicks_sum if prev_clicks_sum > 0 else 0.0
+        prev_pull_efficiency = (prev_mkt_guests / prev_total_guests) * 100 if prev_total_guests > 0 else 0.0
+
+        # Build Format Strings for Deltas
+        rev_delta = get_mom_pct(mkt_revenue, prev_mkt_revenue)
+        eff_delta = f"{(pull_efficiency - prev_pull_efficiency):+.1f}% Point Shift" if prev_total_guests > 0 else "---"
+        conv_delta = f"{(yield_per_click - prev_yield_per_click):+.2f}x Shift" if prev_clicks_sum > 0 else "---"
+
         # Action Cards for ROI
         c1, c2, c3 = st.columns(3)
-        c1.metric("Marketing Yield (Est. $)", f"${mkt_revenue:,.0f}")
-        c2.metric("Guest Pull Efficiency", f"{pull_efficiency:.1f}%")
-        c3.metric("Digital Conversion", f"{yield_per_click:.2f}x")
+        c1.metric("Marketing Yield (Est. $)", f"${mkt_revenue:,.0f}", delta=rev_delta)
+        c2.metric("Guest Pull Efficiency", f"{pull_efficiency:.1f}%", delta=eff_delta)
+        c3.metric("Digital Conversion", f"{yield_per_click:.2f}x", delta=conv_delta)
 
         # Premium Themed Summary Box
         st.markdown(f"""
