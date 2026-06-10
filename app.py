@@ -1292,7 +1292,7 @@ elif page == "Daily Ledger Audit":
                 st.error(f"Sync Error: {e}")
 
 # =================================================================
-# BLOCK 11: PAGE 3: ATTRIBUTION ANALYTICS (v52.5 - Ironclad Edition)
+# BLOCK 11: PAGE 3: ATTRIBUTION ANALYTICS (v52.6 - Dynamic Window)
 # =================================================================
 elif page == "Attribution Analytics":
     # 1. PREMIUM HEADER
@@ -1309,15 +1309,40 @@ elif page == "Attribution Analytics":
     # --- 1. DATA PREP & MTA ENGINE ---
     current_weights = st.session_state.get('coeffs', {})
     
-    # Safely unpacking the forensic dictionary payload
+    # Process full history FIRST so Adstock Decay calculates correctly across the timeline
     m_full = get_forensic_metrics(ledger_data, current_weights)
-    df_attr = m_full.get('df', pd.DataFrame()) if isinstance(m_full, dict) else m_full
+    df_full_attr = m_full.get('df', pd.DataFrame()) if isinstance(m_full, dict) else m_full
     
-    if df_attr.empty:
+    if df_full_attr.empty:
         st.warning("🧪 Attribution Engine returned an empty dataframe structure.")
         st.stop()
 
-    # --- DATA STRUCTURE INSURANCE: PREVENT KEYERRORS ---
+    # --- 2. DYNAMIC DATE FILTER ---
+    df_full_attr['entry_date'] = pd.to_datetime(df_full_attr['entry_date'])
+    min_date = df_full_attr['entry_date'].min().date()
+    max_date = df_full_attr['entry_date'].max().date()
+
+    col_d, _ = st.columns([1.5, 2.5])
+    with col_d:
+        audit_window = st.date_input(
+            "Select Attribution Window:", 
+            value=(min_date, max_date), 
+            key="attr_window_v52"
+        )
+
+    # Apply Filter to the calculated data
+    if isinstance(audit_window, tuple) and len(audit_window) == 2:
+        start_date, end_date = audit_window
+        mask = (df_full_attr['entry_date'].dt.date >= start_date) & (df_full_attr['entry_date'].dt.date <= end_date)
+        df_attr = df_full_attr.loc[mask].copy()
+    else:
+        df_attr = df_full_attr.copy()
+
+    if df_attr.empty:
+        st.warning("No data falls within the selected window.")
+        st.stop()
+
+    # --- 3. DATA STRUCTURE INSURANCE: PREVENT KEYERRORS ---
     # If background calculations fail to populate specific keys, initialize safe defaults
     required_columns = {
         'actual_traffic': 0.0,
@@ -1343,7 +1368,7 @@ elif page == "Attribution Analytics":
     num_days = len(df_attr)
     brand_inertia = (current_weights.get('Broadcast_Weight', 150) + current_weights.get('OOH_Weight', 100)) * num_days
 
-    # --- 2. EXECUTIVE ATTRIBUTION SUMMARY (Responsive Grid) ---
+    # --- 4. EXECUTIVE ATTRIBUTION SUMMARY (Responsive Grid) ---
     st.markdown("### 🕰️ Multi-Touch Attribution (Time Decay Model)")
     st.caption("Weighting the guest journey based on proximity to visit date (Adstock Decay).")
     
@@ -1366,7 +1391,7 @@ elif page == "Attribution Analytics":
 
     st.divider()
 
-    # --- 3. CHANNEL CONTRIBUTION VISUALS (Split Layout) ---
+    # --- 5. CHANNEL CONTRIBUTION VISUALS (Split Layout) ---
     st.markdown("### 📡 Offline-to-Online Attribution Contribution")
     col_pie, col_water = st.columns([1, 1.5])
 
@@ -1397,7 +1422,7 @@ elif page == "Attribution Analytics":
 
     st.divider()
 
-    # --- 4. LIFT CORRELATION ---
+    # --- 6. LIFT CORRELATION ---
     st.markdown("### 📈 Signal Correlation Analysis")
     # Trendlines require statsmodels. Enclose in error boundaries for safety.
     try:
@@ -1419,7 +1444,7 @@ elif page == "Attribution Analytics":
 
     st.divider()
 
-    # --- 5. STRATEGIC INTERPRETATION & ROI AUDIT ---
+    # --- 7. STRATEGIC INTERPRETATION & ROI AUDIT ---
     st.markdown("### 💎 Strategic Interpretation & ROI Audit")
     
     if not df_attr.empty:
